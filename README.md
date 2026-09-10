@@ -71,4 +71,7 @@ src/prototypes/        one file per screen; `mod.rs` holds the registry
 docs/PROTOTYPE_GUIDE.md  conventions for adding screens
 ```
 
-Glyph rules and layout conventions are in [docs/PROTOTYPE_GUIDE.md](docs/PROTOTYPE_GUIDE.md).
+## Documentation
+
+- [docs/screens/README.md](docs/screens/README.md) — screen overview, navigation map and links to a requirements file per screen.
+- [docs/PROTOTYPE_GUIDE.md](docs/PROTOTYPE_GUIDE.md) — glyph rules, palette and widget conventions for adding screens.
