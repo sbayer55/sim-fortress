@@ -1,0 +1,12 @@
+[package]
+name = "sim-fortress"
+version = "0.1.0"
+edition = "2021"
+description = "Static UI prototypes for Sim Fortress, a terminal predator/prey/evolution simulation"
+
+[dependencies]
+ratatui = "0.30"
+unicode-width = "0.2"
+
+[profile.dev]
+opt-level = 1
