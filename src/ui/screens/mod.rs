@@ -8,6 +8,9 @@ use super::app::AppState;
 use crate::widgets::util;
 
 pub mod s01_map;
+pub mod s05_charts;
+pub mod s06_ecology;
+pub mod s07_log;
 pub mod s09_worldgen;
 pub mod s10_controls;
 pub mod s11_help;
@@ -234,5 +237,51 @@ mod tests {
         // Default focus is Size (not a text field), so 'q' quits.
         let a = s.handle_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE), &mut app);
         assert!(matches!(a, Action::Quit));
+    }
+
+    #[test]
+    fn s07_chip_sets() {
+        use crate::sim::EventKind;
+        use crate::ui::screens::s07_log::ChipFilter;
+
+        let mut f = ChipFilter::new();
+        assert!(f.all);
+        // Key 2 selects births only.
+        f.toggle(2);
+        assert!(!f.all);
+        assert!(f.matches(EventKind::Birth));
+        assert!(!f.matches(EventKind::DeathPredation));
+        // Key 3 adds deaths.
+        f.toggle(3);
+        assert!(f.matches(EventKind::Birth));
+        assert!(f.matches(EventKind::DeathPredation));
+        assert!(!f.matches(EventKind::Drought));
+        // Toggling both off reverts to all.
+        f.toggle(2);
+        f.toggle(3);
+        assert!(f.all);
+        // Cycle: all → deaths+extinctions → migrations+droughts → all.
+        f.cycle();
+        assert!(f.matches(EventKind::DeathStarved));
+        assert!(f.matches(EventKind::Extinction));
+        assert!(!f.matches(EventKind::Birth));
+        f.cycle();
+        assert!(f.matches(EventKind::Migration));
+        assert!(f.matches(EventKind::DroughtEased));
+        f.cycle();
+        assert!(f.all);
+    }
+
+    #[test]
+    fn s06_status_rule() {
+        use crate::sim::params::ScarcityThresholds;
+        use crate::ui::screens::s06_ecology::region_status;
+
+        let th = ScarcityThresholds::default();
+        assert_eq!(region_status(0.30, 0, true, &th), "Scarce");
+        assert_eq!(region_status(0.38, 0, true, &th), "Strained");
+        assert_eq!(region_status(0.50, 0, true, &th), "Stable");
+        assert_eq!(region_status(0.50, 10, true, &th), "Plenty");
+        assert_eq!(region_status(0.50, 0, false, &th), "Plenty");
     }
 }

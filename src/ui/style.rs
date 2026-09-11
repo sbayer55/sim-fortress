@@ -45,6 +45,7 @@ impl EventKindStyle for EventKind {
             EventKind::Migration => glyphs::MIGRATION,
             EventKind::Extinction => glyphs::EXTINCTION,
             EventKind::Drought => glyphs::DROUGHT,
+            EventKind::DroughtEased => glyphs::DROUGHT,
             EventKind::Season => glyphs::SUMMER,
             EventKind::Note => glyphs::NOTE,
         }
@@ -60,6 +61,7 @@ impl EventKindStyle for EventKind {
             EventKind::Migration => theme::ACCENT,
             EventKind::Extinction => theme::MAGENTA,
             EventKind::Drought => theme::WARN,
+            EventKind::DroughtEased => theme::DIM,
             EventKind::Season => theme::TITLE,
             EventKind::Note => theme::TEXT,
         }

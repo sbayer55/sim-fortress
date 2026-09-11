@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::sim::params::WorldParams;
 use crate::sim::rng::Rng;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[repr(u8)]
+#[serde(rename_all = "snake_case")]
 pub enum Terrain {
     DeepWater = 0,
     ShallowWater = 1,
@@ -54,6 +55,8 @@ pub struct Cell {
     pub prey_pressure: f32,
     /// Synthetic "how many predators pass through here" 0..=1 (fixture decoration only).
     pub pred_pressure: f32,
+    /// Set to `Some(ShallowWater)` when a shallow-water cell dried to sand in a drought.
+    pub dried_from: Option<Terrain>,
 }
 
 /// A named rectangle: (name, x0, y0, x1, y1), half-open on the upper edges.
@@ -68,6 +71,8 @@ pub struct World {
     pub carcasses: Vec<(usize, usize)>,
     pub seeds: Vec<(usize, usize)>,
     pub regions: Vec<RegionRect>,
+    /// Number of water cells at generation, used as the water-level series baseline.
+    pub water_cells_at_generation: usize,
 }
 
 impl World {
@@ -146,6 +151,7 @@ impl World {
                     vegetation: 0.0,
                     prey_pressure: 0.0,
                     pred_pressure: 0.0,
+                    dried_from: None,
                 });
             }
         }
@@ -227,6 +233,8 @@ impl World {
             .clamp(0.0, 1.0);
         }
 
+        let water_cells_at_generation = cells.iter().filter(|c| c.terrain.is_water()).count();
+
         World {
             cells,
             width: w,
@@ -235,6 +243,7 @@ impl World {
             carcasses: Vec::new(),
             seeds: Vec::new(),
             regions: build_regions(w, h),
+            water_cells_at_generation,
         }
     }
 }

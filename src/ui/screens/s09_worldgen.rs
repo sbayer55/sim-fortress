@@ -9,7 +9,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
-use crate::sim::params::{CreaturesParams, Difficulty, EvolutionParams, Rainfall, TimeParams, WorldParams};
+use crate::sim::params::{CreaturesParams, Difficulty, EcologyParams, EvolutionParams, Rainfall, TimeParams, WorldParams};
 use crate::sim::{Params, Sim, SpeciesId, World};
 use crate::ui::app::AppState;
 use crate::ui::screens::s01_map::WorldMap;
@@ -33,6 +33,7 @@ struct WorldGenForm {
     season_days: u32,
     counts: [u32; 6],
     evolution: EvolutionParams,
+    regrowth_rate: f32,
     focus: usize,
     preview: World,
     dirty: bool,
@@ -54,6 +55,7 @@ impl WorldGenForm {
             season_days: params.time.season_days,
             counts,
             evolution: params.evolution.clone(),
+            regrowth_rate: params.ecology.regrowth_rate,
             // Start on Size (Width), matching the prototype's default highlight and
             // so a fresh S09 quits on `q` (FR8: `q` quits when no text field is focused).
             focus: 2,
@@ -79,6 +81,7 @@ impl WorldGenForm {
                     .collect::<BTreeMap<_, _>>(),
             },
             evolution: self.evolution.clone(),
+            ecology: EcologyParams { regrowth_rate: self.regrowth_rate, ..EcologyParams::default() },
             ..Params::default()
         }
     }
@@ -122,6 +125,7 @@ fn generate(form: &WorldGenForm, app: &mut AppState) -> Action {
     let name = form.name.clone();
     app.params = params.clone();
     app.sim = Some(Sim::new(seed, params));
+    app.viewport_origin = (0, 0);
     Action::Replace(Box::new(WorldMap::new(name)))
 }
 
@@ -283,7 +287,7 @@ fn adjust(form: &mut WorldGenForm, focus: usize, dir: i32) {
         14 => form.evolution.mutation_rate = clamp_f32(form.evolution.mutation_rate + dir as f32 * 0.01, 0.0, 0.2),
         15 => form.evolution.mutation_strength = clamp_f32(form.evolution.mutation_strength + dir as f32 * 0.01, 0.0, 0.2),
         16 => cycle_difficulty(&mut form.evolution.predation_difficulty, dir),
-        17 => form.evolution.regrowth_rate = clamp_f32(form.evolution.regrowth_rate + dir as f32 * 0.1, 0.2, 2.0),
+        17 => form.regrowth_rate = clamp_f32(form.regrowth_rate + dir as f32 * 0.1, 0.2, 2.0),
         _ => {}
     }
 }
@@ -420,7 +424,7 @@ fn form_panel(f: &mut Frame, area: Rect, form: &WorldGenForm) {
         field("Mutation rate", format!("{:.2}", form.evolution.mutation_rate), true, "per trait/birth"),
         field("Mutation strength", format!("{:.2}", form.evolution.mutation_strength), true, "mutation sd"),
         field("Predation difficulty", difficulty_name(form.evolution.predation_difficulty).to_string(), true, "easy/norm/hard"),
-        field("Regrowth rate", format!("{:.1}", form.evolution.regrowth_rate), true, "veg multiplier"),
+        field("Regrowth rate", format!("{:.1}", form.regrowth_rate), true, "veg multiplier"),
     ];
     for (i, (label, value, adjustable, hint)) in evo.iter().enumerate() {
         draw_field(f, inner, row, label.as_str(), value.as_str(), *adjustable, hint, form.focus == 14 + i);

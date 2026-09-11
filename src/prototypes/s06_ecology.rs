@@ -144,7 +144,7 @@ fn totals(f: &mut Frame, area: Rect, fx: &Fixtures) {
     veg_by.sort_by(|a, b| b.1.cmp(&a.1));
     let max_cells = veg_by[0].1 as f32;
     for (t, count, v) in &veg_by {
-        let cell = fixtures::Cell { terrain: *t, elevation: 0.5, moisture: 0.5, vegetation: *v, prey_pressure: 0.0, pred_pressure: 0.0 };
+        let cell = fixtures::Cell { terrain: *t, elevation: 0.5, moisture: 0.5, vegetation: *v, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None };
         let (g, fg, bg) = crate::widgets::map::terrain_cell(&cell, false);
         let buf = f.buffer_mut();
         buf.set_stringn(inner.x + 1, inner.y + row, g.to_string(), 1, Style::default().fg(fg).bg(bg));

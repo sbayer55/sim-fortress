@@ -11,6 +11,9 @@ use ratatui::{DefaultTerminal, Frame};
 use crate::sim::{Params, Sim};
 use crate::theme;
 
+use super::screens::s05_charts::Charts;
+use super::screens::s06_ecology::Ecology;
+use super::screens::s07_log::EventLog;
 use super::screens::s09_worldgen::WorldGen;
 use super::screens::s10_controls::Controls;
 use super::screens::s11_help::Help;
@@ -22,11 +25,21 @@ pub struct AppState {
     pub speed_idx: usize,
     pub params: Params,
     pub speed_before_alert: Option<usize>,
+    /// Map viewport origin (top-left world cell), shared so data screens can
+    /// centre the map on a region/event.
+    pub viewport_origin: (usize, usize),
 }
 
 impl AppState {
     pub fn new(params: Params) -> Self {
-        AppState { sim: None, paused: false, speed_idx: 0, params, speed_before_alert: None }
+        AppState {
+            sim: None,
+            paused: false,
+            speed_idx: 0,
+            params,
+            speed_before_alert: None,
+            viewport_origin: (0, 0),
+        }
     }
 
     pub fn speed(&self) -> u32 {
@@ -96,7 +109,10 @@ impl App {
             }
             KeyCode::Char('p') => Action::Push(Box::new(Controls::new())),
             KeyCode::Char('?') => Action::Push(Box::new(Help::new())),
-            // C1: `q`/`w` return to world generation (title flow arrives in C6).
+            KeyCode::Char('e') => Action::Push(Box::new(EventLog::new())),
+            KeyCode::Char('y') => Action::Push(Box::new(Ecology::new())),
+            KeyCode::Char('g') => Action::Push(Box::new(Charts::new())),
+            // `q`/`w` return to world generation (title flow arrives in C6).
             KeyCode::Char('q') | KeyCode::Char('w') => Action::Push(Box::new(WorldGen::new())),
             _ => Action::None,
         }

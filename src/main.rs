@@ -21,9 +21,10 @@ fn main() -> std::io::Result<()> {
     let params_file = flag_value(&args, "--params");
     let width = flag_value(&args, "--width").and_then(|s| s.parse::<usize>().ok());
     let height = flag_value(&args, "--height").and_then(|s| s.parse::<usize>().ok());
+    let csv = flag_value(&args, "--csv");
 
     if headless {
-        return run_headless(seed, ticks, params_file, width, height);
+        return run_headless(seed, ticks, params_file, width, height, csv);
     }
 
     let params = load_params(params_file, width, height)?;
@@ -39,7 +40,7 @@ fn main() -> std::io::Result<()> {
     result
 }
 
-fn run_headless(seed: u64, ticks: u64, params_file: Option<&str>, width: Option<usize>, height: Option<usize>) -> std::io::Result<()> {
+fn run_headless(seed: u64, ticks: u64, params_file: Option<&str>, width: Option<usize>, height: Option<usize>, csv: Option<&str>) -> std::io::Result<()> {
     let params = load_params(params_file, width, height)?;
 
     let mut sim = Sim::new(seed, params);
@@ -49,6 +50,10 @@ fn run_headless(seed: u64, ticks: u64, params_file: Option<&str>, width: Option<
     println!("seed={seed} ticks={ticks} checksum=0x{:016x}", sim.checksum());
     for e in sim.events.tail(5) {
         println!("Y{} D{:03} {:02}:00 {} {}", e.year, e.day, e.hour, e.kind.label(), e.text);
+    }
+    if let Some(path) = csv {
+        let names: Vec<String> = sim.world.regions.iter().map(|r| r.0.clone()).collect();
+        std::fs::write(path, sim.series.to_csv(&names))?;
     }
     Ok(())
 }

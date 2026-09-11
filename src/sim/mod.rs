@@ -1,17 +1,20 @@
 //! Pure, deterministic simulation core. No `ratatui` types may appear anywhere
 //! under `src/sim` (enforced by a test); this module only reads/writes plain data.
 
+pub mod ecology;
 pub mod events;
 pub mod params;
 pub mod rng;
 pub mod species;
+pub mod stats;
 pub mod time;
 pub mod world;
 
 pub use events::{Event, EventKind};
-pub use params::Params;
+pub use params::{Params, Rainfall};
 pub use rng::Rng;
 pub use species::{Genome, Kind, SpeciesId, TRAIT_NAMES};
+pub use stats::{Sample, Series};
 pub use time::{Season, Time};
 pub use world::{Cell, RegionRect, Terrain, World};
 
@@ -35,6 +38,9 @@ pub struct Sim {
     pub time: Time,
     pub world: World,
     pub events: EventRing,
+    pub series: Series,
+    pub drought: [bool; 8],
+    pub drought_days_below: [u32; 8],
 }
 
 impl Sim {
@@ -48,8 +54,9 @@ impl Sim {
             params.time.sunset_hour,
         );
         let events = EventRing::new(params.events.capacity);
+        let series = Series::new(params.stats.series_days);
         let rng = Rng::new(seed);
-        Sim { params, rng, time, world, events }
+        Sim { params, rng, time, world, events, series, drought: [false; 8], drought_days_below: [0; 8] }
     }
 
     /// Advance one tick and append any season-boundary event.
@@ -60,6 +67,20 @@ impl Sim {
         }
         if let Some(season) = self.time.advance() {
             self.push_season_event(season);
+        }
+        // Daily ecology update runs at midnight (hour 0).
+        if self.time.hour() == 0 {
+            crate::sim::ecology::daily_update(
+                &mut self.world,
+                &mut self.rng,
+                &self.time,
+                &mut self.events,
+                &mut self.series,
+                &mut self.drought,
+                &mut self.drought_days_below,
+                &self.params.ecology,
+                self.params.world.rainfall,
+            );
         }
         StepReport { alerts: Vec::new() }
     }
@@ -78,7 +99,8 @@ impl Sim {
     }
 
     /// FNV-1a 64 over, per cell in row-major order: terrain as u8, elevation,
-    /// moisture and vegetation bit patterns; then tick, rng state, events.len().
+    /// moisture, vegetation and `dried_from`; then tick, rng state, events.len()
+    /// and the per-region drought flags.
     pub fn checksum(&self) -> u64 {
         let mut h: u64 = 0xcbf2_9ce4_8422_2325;
         let prime: u64 = 0x100_0000_01b3;
@@ -93,10 +115,15 @@ impl Sim {
             feed(&mut h, &cell.elevation.to_bits().to_le_bytes());
             feed(&mut h, &cell.moisture.to_bits().to_le_bytes());
             feed(&mut h, &cell.vegetation.to_bits().to_le_bytes());
+            let dried = cell.dried_from.map(|t| t as u8 + 1).unwrap_or(0);
+            feed(&mut h, &[dried]);
         }
         feed(&mut h, &self.time.tick.to_le_bytes());
         feed(&mut h, &self.rng.state().to_le_bytes());
         feed(&mut h, &(self.events.len() as u64).to_le_bytes());
+        for &flagged in &self.drought {
+            feed(&mut h, &[flagged as u8]);
+        }
         h
     }
 }
@@ -146,7 +173,7 @@ mod tests {
         }
         assert_eq!(a.checksum(), b.checksum());
         // Lock the exact value so accidental algorithm changes fail loudly.
-        assert_eq!(a.checksum(), 0x1c12_45d6_13d2_2fc8);
+        assert_eq!(a.checksum(), 0x1e07_5d3a_f213_a13c);
     }
 
     #[test]

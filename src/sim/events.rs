@@ -14,6 +14,7 @@ pub enum EventKind {
     Migration,
     Extinction,
     Drought,
+    DroughtEased,
     Season,
     Note,
 }
@@ -34,6 +35,7 @@ impl EventKind {
             EventKind::Migration => "migration",
             EventKind::Extinction => "EXTINCTION",
             EventKind::Drought => "drought",
+            EventKind::DroughtEased => "eases",
             EventKind::Season => "season",
             EventKind::Note => "note",
         }
@@ -83,7 +85,7 @@ impl EventRing {
         self.buf.is_empty()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Event> {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = &Event> {
         self.buf.iter()
     }
 
