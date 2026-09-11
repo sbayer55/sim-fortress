@@ -462,8 +462,12 @@ pub fn run(terminal: &mut DefaultTerminal, params: Params, saves_dir: Option<&Pa
     let mut last_draw = Instant::now();
     let min_frame = Duration::from_millis(33);
 
+    // Draw the first frame before waiting for input, otherwise the title
+    // screen stays blank until the first key press (nothing else triggers a
+    // draw while no sim is running).
+    let mut force_draw = true;
+
     loop {
-        let mut force_draw = false;
 
         // Wait briefly for input, then drain everything queued (key repeat can
         // deliver several presses per frame) before stepping and drawing.
@@ -507,6 +511,7 @@ pub fn run(terminal: &mut DefaultTerminal, params: Params, saves_dir: Option<&Pa
             terminal.draw(|f| app.draw(f))?;
             last_draw = Instant::now();
         }
+        force_draw = false;
     }
 }
 
