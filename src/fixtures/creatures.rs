@@ -4,7 +4,6 @@
 use crate::sim::rng::Rng;
 use crate::sim::species::{Genome, Kind, SpeciesId};
 use crate::sim::world::{Terrain, World};
-use crate::ui::style::SpeciesStyle;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Sex {

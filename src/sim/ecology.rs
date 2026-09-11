@@ -1,9 +1,10 @@
 //! Daily vegetation, moisture, drought and regrowth dynamics (FR2–FR4).
 
+use crate::sim::creatures::{CreatureStore, DeathTallies};
 use crate::sim::events::{Event, EventKind, EventRing};
 use crate::sim::params::{EcologyParams, Rainfall};
 use crate::sim::rng::Rng;
-use crate::sim::stats::{Sample, Series};
+use crate::sim::stats::{census, Sample, Series};
 use crate::sim::time::Time;
 use crate::sim::world::{Terrain, World};
 
@@ -23,6 +24,8 @@ pub fn daily_update(
     drought_days_below: &mut [u32; 8],
     ecology: &EcologyParams,
     rainfall: Rainfall,
+    store: &CreatureStore,
+    deaths: &DeathTallies,
 ) {
     let season = time.season();
     let (w, h) = (world.width, world.height);
@@ -230,6 +233,7 @@ pub fn daily_update(
         region_veg[ri] = region_land_veg_mean(world, r);
         region_moist[ri] = region_display_moisture_mean(world, r);
     }
+    let c = census(store);
     series.push(Sample {
         day: time.day_index() as u32,
         biomass_total,
@@ -244,7 +248,15 @@ pub fn daily_update(
         drought_flags: *drought,
         region_veg,
         region_moist,
-        population: [0; 6],
+        population: c.population,
+        adults: c.adults,
+        juveniles: c.juveniles,
+        deaths_starved: deaths.starved,
+        deaths_thirst: deaths.thirst,
+        deaths_age: deaths.age,
+        genome_mean: c.genome_mean,
+        genome_min: c.genome_min,
+        genome_max: c.genome_max,
     });
 }
 
@@ -255,6 +267,7 @@ fn region_event(time: &Time, kind: EventKind, r: &RegionRect, text: String) -> E
         hour: time.hour(),
         kind,
         species: None,
+        subject: None,
         text,
         pos: Some(((r.1 + r.3) / 2, (r.2 + r.4) / 2)),
         detail: String::new(),
@@ -377,6 +390,7 @@ mod tests {
             .map(|&rf| {
                 let mut p = Params::default();
                 p.world.rainfall = rf;
+                p.creatures.initial_counts.clear(); // pure ecology test, no grazing
                 let mut sim = Sim::new(42, p);
                 run_days(&mut sim, 720);
                 let (s, n) = sim
@@ -439,7 +453,9 @@ mod tests {
 
     #[test]
     fn seeds_sprout_and_clear_on_dirt() {
-        let mut sim = Sim::new(42, Params::default());
+        let mut p = Params::default();
+        p.creatures.initial_counts.clear(); // pure ecology test, no grazing
+        let mut sim = Sim::new(42, p);
         for c in &mut sim.world.cells {
             if c.terrain == Terrain::Dirt {
                 c.vegetation = 0.0;

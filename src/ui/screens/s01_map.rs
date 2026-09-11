@@ -1,19 +1,22 @@
-//! S01: the live world map (variants a/b/d — default, wide, winter/night) and
-//! the S02a/b/c overlays, which are a *state* of the map.
+//! S01: the live world map (variants a/b/d — default, wide, winter/night), the
+//! S02a/b/c/e overlays, S01c look mode and S01e follow mode.
 
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
-use crate::sim::{Season, SpeciesId, World};
+use crate::sim::creatures::CreatureId;
+use crate::sim::{Season, Sim, SpeciesId, World};
 use crate::ui::screens::s06_ecology::region_status;
 use crate::ui::app::AppState;
+use crate::ui::screens::s03_inspector::Inspector;
+use crate::ui::screens::s13_zoom::Zoom;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{EventKindStyle, SeasonStyle, SpeciesStyle};
 use crate::ui::viewport::{self, GUTTER_W, MAP_CHROME_ROWS, MIN_MAP_W, SIDEBAR_W};
-use crate::widgets::map::{self, MapData, MapOptions, Overlay};
+use crate::widgets::map::{self, MapOptions, Overlay};
 use crate::widgets::{bars, panel, status, util};
 use crate::{glyphs, theme};
 
@@ -41,6 +44,18 @@ impl WorldMap {
             _ => "",
         }
     }
+
+    /// The living creature on the cursor cell, else the nearest within `cheb ≤ 1`.
+    pub fn creature_at_cursor(sim: &Sim, x: usize, y: usize) -> Option<CreatureId> {
+        if let Some(c) = sim.creatures.living().find(|c| c.alive && c.x == x && c.y == y) {
+            return Some(c.id);
+        }
+        sim.creatures
+            .living()
+            .filter(|c| c.alive && crate::sim::cheb(c.x, c.y, x, y) <= 1)
+            .min_by_key(|c| (crate::sim::cheb(c.x, c.y, x, y), c.id.0))
+            .map(|c| c.id)
+    }
 }
 
 impl Screen for WorldMap {
@@ -49,7 +64,153 @@ impl Screen for WorldMap {
     }
 
     fn handle_key(&mut self, key: KeyEvent, app: &mut AppState) -> Action {
+        // Follow mode (S01e) takes precedence.
+        if app.follow.is_some() {
+            return self.handle_follow_key(key, app);
+        }
+        // Look mode (S01c).
+        if app.look_cursor.is_some() {
+            return self.handle_look_key(key, app);
+        }
+        self.handle_plain_key(key, app)
+    }
+
+    fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
+        let Some(sim) = &app.sim else {
+            return;
+        };
+        let world = &sim.world;
+        let time = &sim.time;
+        let overlay_active = self.overlay != Overlay::None;
+        let night = !overlay_active && time.is_night();
+        let winter = !overlay_active && time.season() == Season::Winter;
+
+        let tw = area.width;
+        let th = area.height;
+        let map_rows = th.saturating_sub(MAP_CHROME_ROWS);
+        let (map_w, side_w) = if self.wide || tw < SIDEBAR_W + MIN_MAP_W {
+            (tw.saturating_sub(GUTTER_W), GUTTER_W)
+        } else {
+            (tw.saturating_sub(SIDEBAR_W), SIDEBAR_W)
+        };
+
+        let map_inner_w = map_w.saturating_sub(2) as usize;
+        let map_inner_h = map_rows.saturating_sub(2) as usize;
+        app.viewport_size.set((map_inner_w, map_inner_h));
+        let max = viewport::max_origin(world.width(), world.height(), map_inner_w, map_inner_h);
+
+        // Follow mode centres the viewport on the followed creature.
+        let mut origin = (app.viewport_origin.0.min(max.0), app.viewport_origin.1.min(max.1));
+        if let Some(id) = app.follow {
+            if let Some(c) = sim.creatures.get(id) {
+                origin = (
+                    c.x.saturating_sub(map_inner_w / 2).min(max.0),
+                    c.y.saturating_sub(map_inner_h / 2).min(max.1),
+                );
+            }
+        }
+
+        let title = if let Some(id) = app.follow {
+            let name = sim.creatures.get(id).map(|c| c.name_str()).unwrap_or("?");
+            format!("{} · following {}", self.world_name, name)
+        } else if app.look_cursor.is_some() {
+            format!("{} · look", self.world_name)
+        } else if overlay_active {
+            format!("{} · overlay: {}", self.world_name, Self::overlay_name(self.overlay))
+        } else {
+            self.world_name.clone()
+        };
+
+        let map_area = Rect::new(area.x, area.y, map_w, map_rows);
+        let map_inner = panel::draw_with_hint(f, map_area, &title, &map_hint(world, origin, map_inner_w), panel::Kind::Outer);
+
+        let opts = MapOptions {
+            overlay: self.overlay,
+            night,
+            winter,
+            cursor: app.look_cursor,
+            follow: app.follow,
+            origin,
+            creatures: true,
+            fade_creatures: overlay_active && self.overlay != Overlay::Region,
+            selected_region: if self.overlay == Overlay::Region { Some(self.region_sel) } else { None },
+        };
+        map::render(f.buffer_mut(), map_inner, sim, &opts);
+
+        if side_w == GUTTER_W {
+            let gutter = Rect::new(area.x + map_w, area.y, side_w, map_rows);
+            let inner = panel::draw(f, gutter, "", panel::Kind::Outer);
+            for (i, ch) in "«SIDEBAR»".chars().enumerate() {
+                let y = inner.y + 1 + i as u16;
+                if y < inner.bottom() {
+                    f.buffer_mut().set_stringn(inner.x, y, ch.to_string(), 1, theme::key());
+                }
+            }
+        } else {
+            let side = Rect::new(area.x + map_w, area.y, side_w, map_rows);
+            if let Some(id) = app.follow {
+                self.follow_sidebar(f, side, app, sim, id);
+            } else if app.look_cursor.is_some() {
+                self.look_sidebar(f, side, app, sim, world);
+            } else if self.overlay == Overlay::Region {
+                self.region_sidebar(f, side, app, sim);
+            } else if overlay_active {
+                self.overlay_sidebar(f, side, app, world);
+            } else {
+                self.sidebar(f, side, app, sim, world, time);
+            }
+        }
+
+        // Ticker row.
+        let ticker_row = area.y + map_rows;
+        let ticker = Rect::new(area.x, ticker_row, area.width, 1);
+        util::fill(f.buffer_mut(), ticker, Style::default().bg(theme::BG));
+        if let Some(last) = sim.events.last() {
+            util::line(
+                f,
+                ticker,
+                0,
+                Line::from(vec![
+                    Span::styled(format!(" {} ", last.kind.glyph()), Style::default().fg(last.kind.color()).bg(theme::BG).add_modifier(Modifier::BOLD)),
+                    Span::styled(last.text.clone(), Style::default().fg(theme::TEXT).bg(theme::BG)),
+                    Span::styled("   (e: full log)", Style::default().fg(theme::DIM).bg(theme::BG)),
+                ]),
+            );
+        }
+
+        // Status bar.
+        let status_row = area.y + area.height - 1;
+        let keys: &[(&str, &str)] = if app.follow.is_some() {
+            &[("n", "next"), ("i", "inspect"), ("c", "centre"), ("Esc", "stop")]
+        } else if app.look_cursor.is_some() {
+            &[("↑↓←→", "move"), ("Enter", "inspect"), ("f", "follow"), ("z", "zoom"), ("Esc", "exit look")]
+        } else if self.overlay == Overlay::Region {
+            &[("5", "regions"), ("o", "cycle"), ("↑↓", "region"), ("Enter", "jump"), ("←→", "scroll"), ("Esc", "clear"), ("Space", "pause"), ("y", "ecology")]
+        } else if overlay_active {
+            &[("1-3 5", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("+/-", "speed"), ("e", "log"), ("y", "ecology"), ("g", "charts")]
+        } else {
+            &[("k", "look"), ("Tab", "wide"), ("←→↑↓", "scroll"), ("1-3 5", "overlay"), ("Space", "pause"), ("+/-", "speed"), ("p", "controls"), ("?", "help"), ("q", "world")]
+        };
+        let sky = if night { glyphs::MOON } else { glyphs::SUN };
+        let skyname = if night { "night" } else { "day" };
+        let right = format!("{}  {} {}", time.clock_label(), sky, skyname);
+        status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, &right);
+    }
+}
+
+impl WorldMap {
+    fn region_count(&self, app: &AppState) -> usize {
+        app.sim.as_ref().map(|s| s.world.regions.len()).unwrap_or(0)
+    }
+
+    // ---- plain mode (S01a/b/d + overlays) ----
+    fn handle_plain_key(&mut self, key: KeyEvent, app: &mut AppState) -> Action {
         match key.code {
+            KeyCode::Char('k') => {
+                let (vw, vh) = app.viewport_size.get();
+                app.look_cursor = Some((app.viewport_origin.0 + vw / 2, app.viewport_origin.1 + vh / 2));
+                Action::None
+            }
             KeyCode::Tab => {
                 self.wide = !self.wide;
                 Action::None
@@ -112,7 +273,6 @@ impl Screen for WorldMap {
                 self.overlay = Overlay::Moisture;
                 Action::None
             }
-            KeyCode::Char('4') => Action::None, // sense overlay arrives in C5
             KeyCode::Char('5') => {
                 self.overlay = Overlay::Region;
                 Action::None
@@ -125,116 +285,95 @@ impl Screen for WorldMap {
         }
     }
 
-    fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
-        let Some(sim) = &app.sim else {
-            return;
-        };
-        let world = &sim.world;
-        let time = &sim.time;
-        let overlay_active = self.overlay != Overlay::None;
-        // Heatmaps ignore the night and winter tints (FR6).
-        let night = !overlay_active && time.is_night();
-        let winter = !overlay_active && time.season() == Season::Winter;
-
-        let tw = area.width;
-        let th = area.height;
-        let map_rows = th.saturating_sub(MAP_CHROME_ROWS);
-        let (map_w, side_w) = if self.wide || tw < SIDEBAR_W + MIN_MAP_W {
-            (tw.saturating_sub(GUTTER_W), GUTTER_W)
-        } else {
-            (tw.saturating_sub(SIDEBAR_W), SIDEBAR_W)
-        };
-
-        let map_inner_w = map_w.saturating_sub(2) as usize;
-        let map_inner_h = map_rows.saturating_sub(2) as usize;
-        app.viewport_size.set((map_inner_w, map_inner_h));
-        let max = viewport::max_origin(world.width(), world.height(), map_inner_w, map_inner_h);
-        let origin = (app.viewport_origin.0.min(max.0), app.viewport_origin.1.min(max.1));
-
-        let title = if overlay_active {
-            format!("{} · overlay: {}", self.world_name, Self::overlay_name(self.overlay))
-        } else {
-            self.world_name.clone()
-        };
-
-        let map_area = Rect::new(area.x, area.y, map_w, map_rows);
-        let map_inner = panel::draw_with_hint(f, map_area, &title, &map_hint(world, origin, map_inner_w), panel::Kind::Outer);
-
-        let opts = MapOptions {
-            overlay: self.overlay,
-            night,
-            winter,
-            cursor: None,
-            follow: None,
-            origin,
-            creatures: true,
-            fade_creatures: overlay_active && self.overlay != Overlay::Region,
-            selected_region: if self.overlay == Overlay::Region { Some(self.region_sel) } else { None },
-        };
-        let empty: &[map::MapCreature] = &[];
-        let data = MapData { world, creatures: empty, selected: None };
-        map::render(f.buffer_mut(), map_inner, &data, &opts);
-
-        if side_w == GUTTER_W {
-            let gutter = Rect::new(area.x + map_w, area.y, side_w, map_rows);
-            let inner = panel::draw(f, gutter, "", panel::Kind::Outer);
-            for (i, ch) in "«SIDEBAR»".chars().enumerate() {
-                let y = inner.y + 1 + i as u16;
-                if y < inner.bottom() {
-                    f.buffer_mut().set_stringn(inner.x, y, ch.to_string(), 1, theme::key());
+    // ---- look mode (S01c) ----
+    fn handle_look_key(&mut self, key: KeyEvent, app: &mut AppState) -> Action {
+        let Some(sim) = &app.sim else { return Action::None };
+        let step = if key.modifiers.contains(KeyModifiers::SHIFT) { 10 } else { 1 };
+        match key.code {
+            KeyCode::Left => {
+                if let Some((x, y)) = app.look_cursor {
+                    app.look_cursor = Some((x.saturating_sub(step), y));
                 }
+                Action::None
             }
-        } else {
-            let side = Rect::new(area.x + map_w, area.y, side_w, map_rows);
-            if self.overlay == Overlay::Region {
-                self.region_sidebar(f, side, app, sim);
-            } else if overlay_active {
-                self.overlay_sidebar(f, side, app, world);
-            } else {
-                self.sidebar(f, side, app, world, time);
+            KeyCode::Right => {
+                if let Some((x, y)) = app.look_cursor {
+                    app.look_cursor = Some(((x + step).min(sim.world.width() - 1), y));
+                }
+                Action::None
             }
+            KeyCode::Up => {
+                if let Some((x, y)) = app.look_cursor {
+                    app.look_cursor = Some((x, y.saturating_sub(step)));
+                }
+                Action::None
+            }
+            KeyCode::Down => {
+                if let Some((x, y)) = app.look_cursor {
+                    app.look_cursor = Some((x, (y + step).min(sim.world.height() - 1)));
+                }
+                Action::None
+            }
+            KeyCode::Enter => {
+                if let Some((x, y)) = app.look_cursor {
+                    if let Some(id) = Self::creature_at_cursor(sim, x, y) {
+                        return Action::Push(Box::new(Inspector::new(id)));
+                    }
+                }
+                Action::None
+            }
+            KeyCode::Char('f') => {
+                if let Some((x, y)) = app.look_cursor {
+                    if let Some(id) = Self::creature_at_cursor(sim, x, y) {
+                        app.follow = Some(id);
+                    }
+                }
+                Action::None
+            }
+            KeyCode::Char('z') => Action::Push(Box::new(Zoom::new())),
+            KeyCode::Esc => {
+                app.look_cursor = None;
+                Action::None
+            }
+            _ => Action::Unhandled,
         }
-
-        // Ticker row.
-        let ticker_row = area.y + map_rows;
-        let ticker = Rect::new(area.x, ticker_row, area.width, 1);
-        util::fill(f.buffer_mut(), ticker, Style::default().bg(theme::BG));
-        if let Some(last) = sim.events.last() {
-            util::line(
-                f,
-                ticker,
-                0,
-                Line::from(vec![
-                    Span::styled(format!(" {} ", last.kind.glyph()), Style::default().fg(last.kind.color()).bg(theme::BG).add_modifier(Modifier::BOLD)),
-                    Span::styled(last.text.clone(), Style::default().fg(theme::TEXT).bg(theme::BG)),
-                    Span::styled("   (e: full log)", Style::default().fg(theme::DIM).bg(theme::BG)),
-                ]),
-            );
-        }
-
-        // Status bar.
-        let status_row = area.y + area.height - 1;
-        let keys: &[(&str, &str)] = if self.overlay == Overlay::Region {
-            &[("5", "regions"), ("o", "cycle"), ("↑↓", "region"), ("Enter", "jump"), ("←→", "scroll"), ("Esc", "clear"), ("Space", "pause"), ("y", "ecology")]
-        } else if overlay_active {
-            &[("1-3 5", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("+/-", "speed"), ("e", "log"), ("y", "ecology"), ("g", "charts")]
-        } else {
-            &[("Tab", "wide"), ("←→↑↓", "scroll"), ("1-3 5", "overlay"), ("Space", "pause"), ("+/-", "speed"), ("p", "controls"), ("?", "help"), ("q", "world")]
-        };
-        let sky = if night { glyphs::MOON } else { glyphs::SUN };
-        let skyname = if night { "night" } else { "day" };
-        let right = format!("{}  {} {}", time.clock_label(), sky, skyname);
-        status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, &right);
     }
-}
 
-impl WorldMap {
-    fn region_count(&self, app: &AppState) -> usize {
-        app.sim.as_ref().map(|s| s.world.regions.len()).unwrap_or(0)
+    // ---- follow mode (S01e) ----
+    fn handle_follow_key(&mut self, key: KeyEvent, app: &mut AppState) -> Action {
+        match key.code {
+            KeyCode::Esc => {
+                app.follow = None;
+                app.follow_death_tick = None;
+                Action::None
+            }
+            KeyCode::Char('i') => {
+                if let Some(id) = app.follow {
+                    return Action::Push(Box::new(Inspector::new(id)));
+                }
+                Action::None
+            }
+            KeyCode::Char('c') => Action::None, // centred every frame already
+            KeyCode::Char('n') => {
+                if let Some(sim) = &app.sim {
+                    let ids = sim.creatures.living_ids();
+                    if !ids.is_empty() {
+                        let cur = app.follow.and_then(|id| ids.iter().position(|&x| x == id)).unwrap_or(0);
+                        app.follow = Some(ids[(cur + 1) % ids.len()]);
+                        app.follow_death_tick = None;
+                    }
+                }
+                Action::None
+            }
+            KeyCode::Tab => {
+                self.wide = !self.wide;
+                Action::None
+            }
+            _ => Action::Unhandled,
+        }
     }
 
     /// The `Overlays` selector shared by the heatmap and region sidebars.
-    /// Returns the row after the list.
     fn overlays_selector(&self, f: &mut Frame, inner: Rect, mut row: u16) -> u16 {
         panel::section(f, inner, row, "Overlays");
         row += 1;
@@ -256,7 +395,7 @@ impl WorldMap {
     }
 
     /// S02e sidebar: the region table, the selected region and the selector.
-    fn region_sidebar(&self, f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim) {
+    fn region_sidebar(&self, f: &mut Frame, area: Rect, app: &AppState, sim: &Sim) {
         let world = &sim.world;
         let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
         let mut row = 0u16;
@@ -339,7 +478,7 @@ impl WorldMap {
         }
     }
 
-    fn sidebar(&self, f: &mut Frame, area: Rect, app: &AppState, world: &World, time: &crate::sim::Time) {
+    fn sidebar(&self, f: &mut Frame, area: Rect, app: &AppState, sim: &Sim, world: &World, time: &crate::sim::Time) {
         let inner = panel::draw(f, area, "Status", panel::Kind::Outer);
         let mut row = 0u16;
         let night = time.is_night();
@@ -363,18 +502,38 @@ impl WorldMap {
         util::line(f, inner, row, Line::from(Span::styled(format!(" tick {}", group(time.tick)), theme::dim_text())));
         row += 2;
 
+        // Live population (FR15).
         panel::section(f, inner, row, "Population");
         row += 1;
-        for id in SpeciesId::ALL {
+        let samples = sim.series.samples();
+        let mut prey = 0u32;
+        let mut pred = 0u32;
+        for (i, id) in SpeciesId::ALL.iter().enumerate() {
+            let count = sim.creatures.living().filter(|c| c.species == *id).count() as u32;
+            if id.kind() == crate::sim::Kind::Prey {
+                prey += count;
+            } else {
+                pred += count;
+            }
+            let arrow = trend_arrow(samples, i);
+            let arrow_color = match arrow {
+                glyphs::UP => theme::GOOD,
+                glyphs::DOWN => theme::BAD,
+                _ => theme::DIM,
+            };
             util::line(f, inner, row, Line::from(vec![
                 Span::styled(format!(" {} ", id.glyph().to_ascii_uppercase()), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
                 Span::styled(format!("{:<6}", id.name()), theme::text()),
-                Span::styled(format!("{:>5} ", "—"), theme::text()),
+                Span::styled(format!("{:>5} ", count), theme::text()),
+                Span::styled(arrow.to_string(), Style::default().fg(arrow_color).bg(theme::PANEL_BG)),
+                Span::styled("  ", theme::text()),
             ]));
-            bars::sparkline(f.buffer_mut(), inner.x + 20, inner.y + row, 18, &[], id.color());
+            let spark = sparkline(samples, i);
+            bars::sparkline(f.buffer_mut(), inner.x + 20, inner.y + row, 18, &spark, id.color());
             row += 1;
         }
-        util::line(f, inner, row, Line::from(Span::styled(" prey —  pred —  ratio —:1", theme::dim_text())));
+        let ratio = prey as f32 / pred.max(1) as f32;
+        util::line(f, inner, row, Line::from(Span::styled(format!(" prey {prey}  pred {pred}  ratio {ratio:.1}:1"), theme::dim_text())));
         row += 2;
 
         panel::section(f, inner, row, "Resources");
@@ -408,7 +567,7 @@ impl WorldMap {
 
         panel::section(f, inner, row, "Notable");
         row += 1;
-        util::line(f, inner, row, Line::from(Span::styled(" no creatures yet", theme::dim_text())));
+        util::line(f, inner, row, Line::from(Span::styled(" [k] look · [e] events · [g] charts", theme::dim_text())));
         row += 2;
 
         panel::section(f, inner, row, "Legend");
@@ -435,13 +594,85 @@ impl WorldMap {
         util::line(f, inner, row, Line::from(Span::styled(" UPPER adult   lower juvenile", theme::dim_text())));
     }
 
+    /// S01c sidebar: the cursor cell readout.
+    fn look_sidebar(&self, f: &mut Frame, area: Rect, app: &AppState, sim: &Sim, world: &World) {
+        let inner = panel::draw(f, area, "Look", panel::Kind::Outer);
+        let mut row = 0u16;
+        let Some((cx, cy)) = app.look_cursor else { return };
+        let cell = world.cell(cx, cy);
+        panel::section(f, inner, row, "Cursor");
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(format!(" ({}, {})  {}", cx, cy, world.region_name(cx, cy)), theme::text())));
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(format!(" {}  elev {:.2}  veg {:.2}", cell.terrain.name(), cell.elevation, cell.vegetation), theme::dim_text())));
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(" Enter opens the creature inspector", theme::dim_text())));
+        row += 2;
+        let here = sim.creatures.living().filter(|c| c.x == cx && c.y == cy).count();
+        util::line(f, inner, row, Line::from(Span::styled(format!(" creatures here: {here}"), theme::text())));
+        row += 2;
+        panel::section(f, inner, row, "Keys");
+        row += 1;
+        for (k, v) in [("Enter", "inspect"), ("f", "follow"), ("z", "zoom"), ("Esc", "exit look")] {
+            util::line(f, inner, row, Line::from(vec![Span::styled(format!(" {k} "), theme::key()), Span::styled(v, theme::text())]));
+            row += 1;
+        }
+    }
+
+    /// S01e sidebar: followed creature vitals (or corpse summary).
+    fn follow_sidebar(&self, f: &mut Frame, area: Rect, app: &AppState, sim: &Sim, id: CreatureId) {
+        let inner = panel::draw(f, area, "Following", panel::Kind::Outer);
+        let mut row = 0u16;
+        let Some(c) = sim.creatures.get(id) else {
+            util::line(f, inner, 0, Line::from(Span::styled(" creature gone", theme::dim_text())));
+            return;
+        };
+        let state = if c.alive {
+            (c.species.name(), format!("{} {}", c.name_str(), c.tag()))
+        } else {
+            ("carcass", format!("{} {}", c.name_str(), c.tag()))
+        };
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(format!(" {} ", if c.alive { c.species.glyph().to_ascii_uppercase() } else { glyphs::CARCASS }), Style::default().fg(if c.alive { c.species.color() } else { theme::CARCASS }).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            Span::styled(state.1, theme::title()),
+        ]));
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(format!(" {}  {}", state.0, if c.adult { "adult" } else { "juvenile" }), theme::text())));
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(format!(" at ({}, {})  {}", c.x, c.y, sim.world.region_name(c.x, c.y)), theme::dim_text())));
+        row += 1;
+
+        if c.alive {
+            let goal = c.goal.label(sim.world.dens.iter().any(|&(x, y)| x == c.x && y == c.y));
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(" goal: ", theme::dim_text()),
+                Span::styled(goal, theme::text()),
+                Span::styled(format!("  {} target", glyphs::DIAMOND), theme::label()),
+            ]));
+            row += 1;
+            for (label, v, inv) in [("health", c.hp, false), ("hunger", c.hunger, true), ("thirst", c.thirst, true), ("energy", c.energy, false)] {
+                bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", label), v, bars::vital_color(v, inv), 9, 20);
+                row += 1;
+            }
+        } else {
+            let cause = c.death.map(|d| d.cause.label()).unwrap_or("unknown");
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(format!(" {} ", glyphs::DEATH), Style::default().fg(theme::BAD).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("died: {cause}"), theme::text()),
+            ]));
+            row += 1;
+            bars::labeled(f.buffer_mut(), inner, row, " decay", c.decay, theme::CARCASS, 12, 20);
+        }
+        let _ = app;
+    }
+
     fn overlay_sidebar(&self, f: &mut Frame, area: Rect, app: &AppState, world: &World) {
         let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
         let mut row = 0u16;
 
         let (name, desc1, desc2, low, high, note) = match self.overlay {
             Overlay::Vegetation => ("Vegetation density", "standing biomass per cell;", "prey graze it down, regrowth (*) restores it.", "bare", "lush", "≈ deep water  ▲ rock (not shaded)"),
-            Overlay::Pressure => ("Population pressure", "traffic of prey (x0.5) and predators (x0.7)", "no creatures yet", "quiet", "crowded", "≈ deep water  ▲ rock (not shaded)"),
+            Overlay::Pressure => ("Population pressure", "traffic of prey (x0.5) and predators (x0.7)", "prey leave pressure as they move", "quiet", "crowded", "≈ deep water  ▲ rock (not shaded)"),
             Overlay::Moisture => ("Water & moisture", "soil moisture; open water is shown saturated;", "drives regrowth and thirst.", "arid", "wet", "open water counts as 100% moisture"),
             _ => return,
         };
@@ -453,7 +684,6 @@ impl WorldMap {
         util::line(f, inner, row, Line::from(Span::styled(format!(" {}", desc2), theme::dim_text())));
         row += 1;
 
-        // Legend ramp: a 24-cell sample of the map's shade glyphs + colours.
         panel::section(f, inner, row, "Legend");
         row += 1;
         let ramp = |t: f32| -> Color {
@@ -529,6 +759,29 @@ fn mean_veg_land(world: &World) -> f32 {
     } else {
         sum / n as f32
     }
+}
+
+/// 30-day trend arrow per the FR15 rule: > +3% ↑, < −3% ↓, else ↔.
+fn trend_arrow(samples: &[crate::sim::Sample], i: usize) -> char {
+    if samples.len() < 2 {
+        return glyphs::FLAT;
+    }
+    let a = samples[samples.len().saturating_sub(30).min(samples.len() - 1)].population[i] as f32;
+    let b = samples.last().unwrap().population[i] as f32;
+    let pct = if a > 0.0 { (b - a) / a * 100.0 } else if b > 0.0 { f32::INFINITY } else { 0.0 };
+    if pct > 3.0 {
+        glyphs::UP
+    } else if pct < -3.0 {
+        glyphs::DOWN
+    } else {
+        glyphs::FLAT
+    }
+}
+
+/// Last 30 days of per-species counts, for sparklines.
+fn sparkline(samples: &[crate::sim::Sample], i: usize) -> Vec<u16> {
+    let start = samples.len().saturating_sub(30);
+    samples[start..].iter().map(|s| s.population[i].min(u16::MAX as u32) as u16).collect()
 }
 
 /// Thousands separator for tick counters.

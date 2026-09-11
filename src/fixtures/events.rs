@@ -14,7 +14,7 @@ pub fn generate(creatures: &[Creature]) -> Vec<Event> {
     let mut day = 340;
     let mut hour = 3;
     let push = |out: &mut Vec<Event>, year, day, hour, kind, species, text: String, pos, detail: String| {
-        out.push(Event { year, day, hour, kind, species, text, pos, detail });
+        out.push(Event { year, day, hour, kind, species, subject: None, text, pos, detail });
     };
     push(&mut out, 11, 331, 6, EventKind::Season, None, "Winter settles over the valley; vegetation regrowth halves".into(), None, "Seasonal modifier: vegetation regrowth ×0.5, water evaporation ×0.6, metabolism cost ×1.3 for all species.".into());
     push(&mut out, 11, 338, 12, EventKind::Extinction, Some(SpeciesId::Lynx), "The Lynx line of Sunfall Coast is extinct (last: Gloam l#088)".into(), Some((128, 7)), "Local population fell below 2 for 20 consecutive days. Lynx survive elsewhere: 5 remain in the Long Meadow and Fenlands.".into());

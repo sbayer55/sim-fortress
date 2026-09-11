@@ -9,6 +9,7 @@ use ratatui::style::Style;
 use ratatui::widgets::Paragraph;
 use ratatui::{DefaultTerminal, Frame};
 
+use crate::sim::creatures::CreatureId;
 use crate::sim::{Params, Sim};
 use crate::theme;
 
@@ -32,6 +33,12 @@ pub struct AppState {
     /// Inner size of the map viewport as of the last draw (cols, rows). Written
     /// by the map screen's `render` so key handlers can clamp scrolling.
     pub viewport_size: Cell<(usize, usize)>,
+    /// Look-mode cursor cell (S01c); `Some` means the map is in look mode.
+    pub look_cursor: Option<(usize, usize)>,
+    /// Followed creature id (S01e); `Some` means the map is in follow mode.
+    pub follow: Option<CreatureId>,
+    /// Tick at which the followed creature died (for the 3-hour grace period).
+    pub follow_death_tick: Option<u64>,
 }
 
 impl AppState {
@@ -44,6 +51,9 @@ impl AppState {
             speed_before_alert: None,
             viewport_origin: (0, 0),
             viewport_size: Cell::new((0, 0)),
+            look_cursor: None,
+            follow: None,
+            follow_death_tick: None,
         }
     }
 
@@ -105,6 +115,27 @@ impl AppState {
             for _ in 0..n {
                 let _report = sim.step();
             }
+        }
+    }
+
+    /// Follow-mode death handling (FR11): pause on death when configured, else
+    /// end follow after 3 simulated hours.
+    pub fn handle_follow(&mut self) {
+        let Some(id) = self.follow else { return };
+        let Some(sim) = &self.sim else { return };
+        if sim.creatures.get(id).map_or(true, |c| c.alive) {
+            self.follow_death_tick = None;
+            return;
+        }
+        let tick = sim.time.tick;
+        if self.follow_death_tick.is_none() {
+            self.follow_death_tick = Some(tick);
+        }
+        if self.params.ui.pause_on_follow_death {
+            self.paused = true;
+        } else if tick >= self.follow_death_tick.unwrap_or(0) + 3 {
+            self.follow = None;
+            self.follow_death_tick = None;
         }
     }
 }
@@ -225,6 +256,7 @@ pub fn run(terminal: &mut DefaultTerminal, params: Params) -> io::Result<()> {
             ticks_ran = acc.add(elapsed, tps).min(200);
             app.state.step_ticks(ticks_ran);
         }
+        app.state.handle_follow();
 
         // Redraw on key, or on a tick (throttled to ~30 fps).
         if force_draw || (ticks_ran > 0 && last_draw.elapsed() >= min_frame) {

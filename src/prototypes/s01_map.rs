@@ -60,9 +60,7 @@ pub fn map_panel(f: &mut Frame, area: Rect, title: &str, opts: &MapOptions) -> R
         format!("{}x{} cells", w, fx.world.height())
     };
     let inner = panel::draw_with_hint(f, area, title, &hint, panel::Kind::Outer);
-    let creatures = fx.map_creatures();
-    let data = map::MapData { world: &fx.world, creatures: &creatures, selected: None };
-    map::render(f.buffer_mut(), inner, &data, opts);
+    map::render(f.buffer_mut(), inner, fx, opts);
     inner
 }
 
@@ -97,7 +95,7 @@ impl Prototype for WorldMap {
             night: v == Variant::WinterNight,
             winter: v == Variant::WinterNight,
             cursor: if v == Variant::Look { Some(LOOK_CURSOR) } else { None },
-            follow: if v == Variant::Follow { Some(fx.hero_prey) } else { None },
+            follow: if v == Variant::Follow { Some(crate::sim::creatures::CreatureId(fx.creatures[fx.hero_prey].id)) } else { None },
             origin: if v == Variant::Wide { (0, 0) } else { ORIGIN },
             creatures: true,
             fade_creatures: false,

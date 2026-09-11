@@ -272,9 +272,7 @@ fn detail(f: &mut Frame, area: Rect, fx: &Fixtures, e: &Event) {
                 fade_creatures: false,
                 selected_region: None,
             };
-            let creatures = fx.map_creatures();
-            let data = map::MapData { world: &fx.world, creatures: &creatures, selected: None };
-            map::render(f.buffer_mut(), mini_inner, &data, &opts);
+            map::render(f.buffer_mut(), mini_inner, fx, &opts);
             // Nearby creatures listed beside the map.
             let lx = mini.right() + 1;
             let lw = inner.right() - lx;

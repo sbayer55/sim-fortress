@@ -1,17 +1,25 @@
-//! S07a: the live event log (chips functional, no detail pane in C2).
+//! S07: the live event log. S07a lists every event; S07b (any narrow filter)
+//! shows a detail panel with a mini-map and subject link.
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
+use ratatui::widgets::{Paragraph, Widget, Wrap};
 use ratatui::Frame;
 
-use crate::sim::{Event, EventKind};
+use crate::sim::{Event, EventKind, Sim};
 use crate::ui::app::AppState;
+use crate::ui::screens::s03_inspector::Inspector;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{EventKindStyle, SpeciesStyle};
+use crate::widgets::map::{self, MapOptions, Overlay};
 use crate::widgets::{panel, status, util};
 use crate::{glyphs, theme};
+
+const DETAIL_W: u16 = 55;
+const MINI_W: u16 = 25;
+const MINI_H: u16 = 9;
 
 /// The S07 filter-chip state. `all` is active, or a subset of the six kinds.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -75,7 +83,7 @@ impl ChipFilter {
         }
         match kind {
             EventKind::Birth => self.kinds[0],
-            EventKind::DeathStarved | EventKind::DeathPredation | EventKind::DeathAge => self.kinds[1],
+            EventKind::DeathStarved | EventKind::DeathThirst | EventKind::DeathPredation | EventKind::DeathAge => self.kinds[1],
             EventKind::Mutation => self.kinds[2],
             EventKind::Migration => self.kinds[3],
             EventKind::Extinction => self.kinds[4],
@@ -99,6 +107,10 @@ impl Default for EventLog {
 impl EventLog {
     pub fn new() -> Self {
         EventLog { filter: ChipFilter::new(), selected: 0 }
+    }
+
+    fn filtered<'a>(&self, sim: &'a Sim) -> Vec<&'a Event> {
+        sim.events.iter().rev().filter(|e| self.filter.matches(e.kind)).collect()
     }
 }
 
@@ -134,15 +146,23 @@ impl Screen for EventLog {
             }
             KeyCode::Enter => {
                 if let Some(sim) = &app.sim {
-                    let events: Vec<&Event> = sim.events.iter().rev().filter(|e| self.filter.matches(e.kind)).collect();
-                    if let Some(e) = events.get(self.selected).and_then(|e| e.pos) {
-                        let w = sim.world.width();
-                        let h = sim.world.height();
-                        app.viewport_origin = (
-                            e.0.saturating_sub(55).min(w.saturating_sub(110)),
-                            e.1.saturating_sub(20).min(h.saturating_sub(40)),
-                        );
+                    let events = self.filtered(sim);
+                    if let Some(pos) = events.get(self.selected).and_then(|e| e.pos) {
+                        app.centre_viewport_on(pos.0, pos.1);
+                        app.look_cursor = Some(pos);
+                        app.follow = None;
                         return Action::Pop;
+                    }
+                }
+                Action::None
+            }
+            KeyCode::Char('i') => {
+                if let Some(sim) = &app.sim {
+                    let events = self.filtered(sim);
+                    if let Some(subject) = events.get(self.selected).and_then(|e| e.subject) {
+                        if sim.creatures.get(subject).is_some() {
+                            return Action::Push(Box::new(Inspector::new(subject)));
+                        }
                     }
                 }
                 Action::None
@@ -156,13 +176,36 @@ impl Screen for EventLog {
         let Some(sim) = &app.sim else {
             return;
         };
-        let events: Vec<&Event> = sim.events.iter().rev().filter(|e| self.filter.matches(e.kind)).collect();
-
+        let events = self.filtered(sim);
+        let detail = !self.filter.all;
         let status_row = area.y + area.height - 1;
-        let body = Rect::new(area.x, area.y, area.width, area.height - 1);
-        let inner = panel::draw_with_hint(f, body, "Event Log", &format!("{} events", events.len()), panel::Kind::Outer);
+        let body_h = area.height - 1;
 
-        // Filter chip row.
+        let list_w = if detail { area.width - DETAIL_W } else { area.width };
+        let list_area = Rect::new(area.x, area.y, list_w, body_h);
+        let title = if detail { "Event Log — filtered" } else { "Event Log" };
+        let inner = panel::draw_with_hint(f, list_area, title, &format!("{} events", events.len()), panel::Kind::Outer);
+        self.chips(f, inner);
+        self.list(f, Rect::new(inner.x, inner.y + 2, inner.width, inner.height - 2), sim, &events, detail);
+
+        if detail {
+            let detail_area = Rect::new(area.x + list_w, area.y, DETAIL_W, body_h);
+            let selected = events.get(self.selected).copied();
+            self.detail(f, detail_area, app, sim, selected);
+        }
+
+        let right = format!("{}  {} {}", sim.time.clock_label(), glyphs::SUN, "day");
+        let keys: &[(&str, &str)] = if detail {
+            &[("↑↓", "select"), ("f", "filter"), ("Enter", "jump"), ("i", "inspect"), ("Esc", "back")]
+        } else {
+            &[("↑↓", "select"), ("1-7", "chips"), ("f", "cycle"), ("Enter", "jump"), ("Esc", "back")]
+        };
+        status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, &right);
+    }
+}
+
+impl EventLog {
+    fn chips(&self, f: &mut Frame, inner: Rect) {
         let chips: [(char, &str, EventKind); 7] = [
             ('*', " all", EventKind::Note),
             ('♥', " births", EventKind::Birth),
@@ -183,38 +226,105 @@ impl Screen for EventLog {
             buf.set_stringn(x + 1, inner.y, name, name.chars().count(), if active { theme::selected() } else { theme::text() });
             x += 1 + name.chars().count() as u16 + 1;
         }
-
-        // Column header.
         util::line(f, inner, 1, Line::from(Span::styled(" when         kind        sp  event", theme::dim_text())));
+    }
 
-        // Event rows (newest first).
-        for (i, e) in events.iter().take(inner.height as usize - 3).enumerate() {
+    fn list(&self, f: &mut Frame, area: Rect, sim: &Sim, events: &[&Event], compact: bool) {
+        let text_w = area.width.saturating_sub(1) as usize;
+        for (i, e) in events.iter().take(area.height as usize).enumerate() {
             let selected = i == self.selected;
-            let y = inner.y + 2 + i as u16;
+            let y = area.y + i as u16;
             let buf = f.buffer_mut();
-            if selected {
-                for cx in inner.x..inner.right() {
-                    if let Some(c) = buf.cell_mut((cx, y)) {
-                        c.set_bg(theme::SELECT_BG);
-                    }
+            let bg = if selected { theme::SELECT_BG } else { theme::PANEL_BG };
+            for cx in area.x..area.right().min(area.x + text_w as u16) {
+                if let Some(c) = buf.cell_mut((cx, y)) {
+                    c.set_bg(bg);
                 }
             }
             let bright = Style::default().fg(theme::TEXT_BRIGHT).bg(theme::SELECT_BG);
             let when_style = if selected { bright } else { theme::dim_text() };
-            buf.set_stringn(inner.x + 1, y, format!("{}Y{} D{:03} {:02}:00", if selected { "►" } else { " " }, e.year, e.day, e.hour), 16, when_style);
-            buf.set_stringn(inner.x + 17, y, format!("{} {:<10}", e.kind.glyph(), e.kind.label()), 14, Style::default().fg(e.kind.color()).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }).add_modifier(Modifier::BOLD));
+            buf.set_stringn(area.x + 1, y, format!("{}Y{} D{:03} {:02}:00", if selected { "►" } else { " " }, e.year, e.day, e.hour), 16, when_style);
+            buf.set_stringn(area.x + 17, y, format!("{} {:<10}", e.kind.glyph(), e.kind.label()), 14, Style::default().fg(e.kind.color()).bg(bg).add_modifier(Modifier::BOLD));
             let sp_glyph = match e.species {
                 Some(s) => s.glyph().to_ascii_uppercase().to_string(),
                 None => "-".to_string(),
             };
-            buf.set_stringn(inner.x + 32, y, sp_glyph, 1, if selected { bright } else { theme::dim_text() });
-            buf.set_stringn(inner.x + 35, y, &e.text, inner.width.saturating_sub(36) as usize, if selected { bright } else { theme::text() });
+            buf.set_stringn(area.x + 32, y, sp_glyph, 1, if selected { bright } else { theme::dim_text() });
+            let text_max = text_w.saturating_sub(35);
+            let text = if e.text.chars().count() > text_max {
+                let mut t: String = e.text.chars().take(text_max.saturating_sub(1)).collect();
+                t.push('~');
+                t
+            } else {
+                e.text.clone()
+            };
+            buf.set_stringn(area.x + 35, y, &text, text_max, if selected { bright } else { theme::text() });
         }
         if events.is_empty() {
-            util::line(f, inner, 2, Line::from(Span::styled(" no events", theme::dim_text())));
+            util::line(f, area, 0, Line::from(Span::styled(" no events", theme::dim_text())));
         }
+        let _ = sim;
+        let _ = compact;
+    }
 
-        let right = format!("{}  {} {}", sim.time.clock_label(), glyphs::SUN, "day");
-        status::render(f, Rect::new(area.x, status_row, area.width, 1), &[("↑↓", "select"), ("1-7", "chips"), ("f", "cycle"), ("Enter", "jump"), ("Esc", "back")], &right);
+    fn detail(&self, f: &mut Frame, area: Rect, app: &AppState, sim: &Sim, e: Option<&Event>) {
+        let inner = panel::draw(f, area, "Event detail", panel::Kind::Focus);
+        let bg = theme::PANEL_BG;
+        let mut row = 0u16;
+        let Some(e) = e else {
+            util::line(f, inner, 0, Line::from(Span::styled(" nothing selected", theme::dim_text())));
+            return;
+        };
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(format!(" {} ", e.kind.glyph()), Style::default().fg(e.kind.color()).bg(bg).add_modifier(Modifier::BOLD)),
+            Span::styled(e.kind.label(), Style::default().fg(e.kind.color()).bg(bg).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("   Year {}, Day {}, {:02}:00", e.year, e.day, e.hour), theme::dim_text()),
+        ]));
+        row += 1;
+        Paragraph::new(Line::from(Span::styled(e.text.clone(), Style::default().fg(theme::TEXT_BRIGHT).bg(bg).add_modifier(Modifier::BOLD))))
+            .wrap(Wrap { trim: true })
+            .render(Rect::new(inner.x + 1, inner.y + row, inner.width - 2, 3), f.buffer_mut());
+        row += 4;
+
+        // Subject creature.
+        if let Some(subject) = e.subject {
+            if let Some(c) = sim.creatures.get(subject) {
+                let state = if c.alive { "alive".to_string() } else { format!("dead: {}", c.death.map(|d| d.cause.label()).unwrap_or("?")) };
+                util::line(f, inner, row, Line::from(vec![
+                    Span::styled(format!(" {} ", if c.alive { c.species.glyph().to_ascii_uppercase() } else { glyphs::CARCASS }), Style::default().fg(c.species.color()).bg(bg).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("{} {}  ", c.name_str(), c.tag()), theme::text()),
+                    Span::styled(state, theme::dim_text()),
+                ]));
+                row += 1;
+                util::line(f, inner, row, Line::from(vec![
+                    Span::styled(" [i]", theme::key()),
+                    Span::styled(" inspect creature", theme::dim_text()),
+                ]));
+                row += 1;
+            }
+        }
+        row += 1;
+
+        // Mini-map.
+        if let Some((x, y)) = e.pos {
+            let ox = (x as i64 - MINI_W as i64 / 2).clamp(0, sim.world.width() as i64 - MINI_W as i64) as usize;
+            let oy = (y as i64 - MINI_H as i64 / 2).clamp(0, sim.world.height() as i64 - MINI_H as i64) as usize;
+            let mini = Rect::new(inner.x + 1, inner.y + row, MINI_W + 2, MINI_H + 2);
+            let mini_inner = panel::draw(f, mini, "", panel::Kind::Inner);
+            let opts = MapOptions {
+                overlay: Overlay::None,
+                night: false,
+                winter: false,
+                cursor: Some((x, y)),
+                follow: None,
+                origin: (ox, oy),
+                creatures: true,
+                fade_creatures: false,
+                selected_region: None,
+            };
+            map::render(f.buffer_mut(), mini_inner, sim, &opts);
+        }
+        let _ = row;
+        let _ = app;
     }
 }

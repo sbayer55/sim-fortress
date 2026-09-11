@@ -71,7 +71,7 @@ impl Prototype for MapOverlay {
             Variant::Vegetation => Overlay::Vegetation,
             Variant::Pressure => Overlay::Pressure,
             Variant::Moisture => Overlay::Moisture,
-            Variant::Sense => Overlay::Sense(fx.hero_pred),
+            Variant::Sense => Overlay::Sense(crate::sim::creatures::CreatureId(fx.creatures[fx.hero_pred].id)),
         };
         let opts = MapOptions {
             overlay,

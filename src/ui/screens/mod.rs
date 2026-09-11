@@ -8,12 +8,14 @@ use super::app::AppState;
 use crate::widgets::util;
 
 pub mod s01_map;
+pub mod s03_inspector;
 pub mod s05_charts;
 pub mod s06_ecology;
 pub mod s07_log;
 pub mod s09_worldgen;
 pub mod s10_controls;
 pub mod s11_help;
+pub mod s13_zoom;
 
 pub enum Action {
     None,

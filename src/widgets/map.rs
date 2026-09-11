@@ -4,6 +4,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 
+use crate::sim::creatures::CreatureId;
 use crate::sim::world::{Cell, Terrain, World};
 use crate::{glyphs, theme};
 
@@ -13,8 +14,8 @@ pub enum Overlay {
     Vegetation,
     Pressure,
     Moisture,
-    /// Sense-range rings for a creature index.
-    Sense(usize),
+    /// Sense-range rings for a creature id.
+    Sense(CreatureId),
     /// Named regions: tinted rectangles with centred labels.
     Region,
 }
@@ -25,8 +26,8 @@ pub struct MapOptions {
     pub night: bool,
     pub winter: bool,
     pub cursor: Option<(usize, usize)>,
-    /// Creature index to highlight and draw a trail for.
-    pub follow: Option<usize>,
+    /// Creature id to highlight and draw a trail for.
+    pub follow: Option<CreatureId>,
     /// Top-left world cell shown at the top-left of the area.
     pub origin: (usize, usize),
     /// Draw creatures (false for pure terrain/overlay views).
@@ -57,6 +58,7 @@ impl Default for MapOptions {
 /// type so the map renderer only depends on the data it draws.
 #[derive(Clone, Copy, Debug)]
 pub struct MapCreature<'a> {
+    pub id: CreatureId,
     pub x: usize,
     pub y: usize,
     pub alive: bool,
@@ -68,12 +70,13 @@ pub struct MapCreature<'a> {
     pub target: Option<(usize, usize)>,
 }
 
-/// The data the map renderer draws: a world plus a creature view.
-pub struct MapData<'a> {
-    pub world: &'a World,
-    pub creatures: &'a [MapCreature<'a>],
-    /// Creature index currently selected (used by later chunks' inspector flows).
-    pub selected: Option<usize>,
+/// The data the map renderer draws. Implemented by `Fixtures` and `Sim` (FR Scope).
+pub trait MapSource {
+    fn world(&self) -> &World;
+    /// All living creatures, in a stable order.
+    fn living_creatures(&self) -> Vec<MapCreature<'_>>;
+    /// One creature by id, for follow/sense highlights.
+    fn creature(&self, id: CreatureId) -> Option<MapCreature<'_>>;
 }
 
 /// Glyph and style for a bare terrain cell.
@@ -129,8 +132,8 @@ pub fn overlay_cell(cell: &Cell, overlay: Overlay) -> Option<(char, Color, Color
     Some((g, color, theme::dim(color, 0.75)))
 }
 
-pub fn render(buf: &mut Buffer, area: Rect, data: &MapData, opts: &MapOptions) {
-    let world = data.world;
+pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOptions) {
+    let world = source.world();
     let (ox, oy) = opts.origin;
     let tint = |c: Color| if opts.night { theme::night(c) } else { c };
 
@@ -182,28 +185,30 @@ pub fn render(buf: &mut Buffer, area: Rect, data: &MapData, opts: &MapOptions) {
     for &(x, y) in &world.dens {
         put(buf, x, y, glyphs::DEN, tint(theme::dim(theme::DEN, res_fade)), true);
     }
+    // Carcasses render only from `world.carcasses` (FR Scope).
     for &(x, y) in &world.carcasses {
         put(buf, x, y, glyphs::CARCASS, tint(theme::dim(theme::CARCASS, res_fade)), false);
     }
 
     // Sense rings (drawn under creatures).
-    if let Overlay::Sense(idx) = opts.overlay {
-        let c = &data.creatures[idx];
-        let r = c.sense_cells as i32;
-        for wy in (c.y as i32 - r)..=(c.y as i32 + r) {
-            for wx in (c.x as i32 - 2 * r)..=(c.x as i32 + 2 * r) {
-                if !world.in_bounds(wx, wy) {
-                    continue;
-                }
-                let dx = (wx - c.x as i32) as f32 / 2.0;
-                let dy = (wy - c.y as i32) as f32;
-                let d = (dx * dx + dy * dy).sqrt();
-                if (d - r as f32).abs() < 0.55 {
-                    put(buf, wx as usize, wy as usize, glyphs::RING, theme::ACCENT, false);
-                } else if d < r as f32 {
-                    if let Some(cell) = buf.cell_mut((area.x + (wx as usize - ox) as u16, area.y + (wy as usize - oy) as u16)) {
-                        let bg = theme::lerp(cell.bg, theme::ACCENT, 0.18);
-                        cell.set_bg(bg);
+    if let Overlay::Sense(id) = opts.overlay {
+        if let Some(c) = source.creature(id) {
+            let r = c.sense_cells as i32;
+            for wy in (c.y as i32 - r)..=(c.y as i32 + r) {
+                for wx in (c.x as i32 - 2 * r)..=(c.x as i32 + 2 * r) {
+                    if !world.in_bounds(wx, wy) {
+                        continue;
+                    }
+                    let dx = (wx - c.x as i32) as f32 / 2.0;
+                    let dy = (wy - c.y as i32) as f32;
+                    let d = (dx * dx + dy * dy).sqrt();
+                    if (d - r as f32).abs() < 0.55 {
+                        put(buf, wx as usize, wy as usize, glyphs::RING, theme::ACCENT, false);
+                    } else if d < r as f32 {
+                        if let Some(cell) = buf.cell_mut((area.x + (wx as usize - ox) as u16, area.y + (wy as usize - oy) as u16)) {
+                            let bg = theme::lerp(cell.bg, theme::ACCENT, 0.18);
+                            cell.set_bg(bg);
+                        }
                     }
                 }
             }
@@ -211,15 +216,16 @@ pub fn render(buf: &mut Buffer, area: Rect, data: &MapData, opts: &MapOptions) {
     }
 
     // Trail for the followed creature.
-    if let Some(idx) = opts.follow {
-        let c = &data.creatures[idx];
-        let n = c.trail.len().max(1) as f32;
-        for (i, &(x, y)) in c.trail.iter().enumerate() {
-            let t = (i as f32 + 1.0) / n;
-            put(buf, x, y, glyphs::TRAIL, theme::lerp(theme::dim(theme::TRAIL, 0.7), theme::TRAIL, t), false);
-        }
-        if let Some((tx, ty)) = c.target {
-            put(buf, tx, ty, glyphs::DIAMOND, theme::ACCENT, true);
+    if let Some(id) = opts.follow {
+        if let Some(c) = source.creature(id) {
+            let n = c.trail.len().max(1) as f32;
+            for (i, &(x, y)) in c.trail.iter().enumerate() {
+                let t = (i as f32 + 1.0) / n;
+                put(buf, x, y, glyphs::TRAIL, theme::lerp(theme::dim(theme::TRAIL, 0.7), theme::TRAIL, t), false);
+            }
+            if let Some((tx, ty)) = c.target {
+                put(buf, tx, ty, glyphs::DIAMOND, theme::ACCENT, true);
+            }
         }
     }
 
@@ -231,22 +237,25 @@ pub fn render(buf: &mut Buffer, area: Rect, data: &MapData, opts: &MapOptions) {
     // Creatures.
     if opts.creatures {
         let fade = if opts.overlay != Overlay::None && opts.fade_creatures { 0.55 } else { 0.0 };
-        for (i, c) in data.creatures.iter().enumerate() {
+        let mut followed_pos: Option<(usize, usize)> = None;
+        for c in source.living_creatures() {
             if !c.alive {
                 put(buf, c.x, c.y, glyphs::CARCASS, tint(theme::CARCASS), false);
                 continue;
             }
             let mut color = tint(theme::dim(c.color, fade));
-            if let Overlay::Sense(idx) = opts.overlay {
-                if idx == i {
+            if let Overlay::Sense(sid) = opts.overlay {
+                if sid == c.id {
                     color = theme::TEXT_BRIGHT;
                 }
             }
             put(buf, c.x, c.y, c.glyph, color, c.adult);
+            if opts.follow == Some(c.id) {
+                followed_pos = Some((c.x, c.y));
+            }
         }
-        if let Some(idx) = opts.follow {
-            let c = &data.creatures[idx];
-            if let Some(cell) = cell_at(buf, area, opts, c.x, c.y) {
+        if let Some((x, y)) = followed_pos {
+            if let Some(cell) = cell_at(buf, area, opts, x, y) {
                 cell.set_style(Style::default().fg(theme::CURSOR_FG).bg(theme::ACCENT).add_modifier(Modifier::BOLD));
             }
         }
@@ -366,6 +375,22 @@ mod tests {
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
 
+    struct TestSource<'a> {
+        world: &'a World,
+    }
+
+    impl<'a> MapSource for TestSource<'a> {
+        fn world(&self) -> &World {
+            self.world
+        }
+        fn living_creatures(&self) -> Vec<MapCreature<'_>> {
+            Vec::new()
+        }
+        fn creature(&self, _id: CreatureId) -> Option<MapCreature<'_>> {
+            None
+        }
+    }
+
     /// A `w`×`h` all-dirt world split into two regions down the middle.
     fn two_region_world(w: usize, h: usize) -> World {
         let cell = Cell { terrain: Terrain::Dirt, elevation: 0.5, moisture: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None };
@@ -384,8 +409,8 @@ mod tests {
     fn draw(world: &World, opts: &MapOptions, w: u16, h: u16) -> ratatui::buffer::Buffer {
         let backend = TestBackend::new(w, h);
         let mut terminal = Terminal::new(backend).unwrap();
-        let data = MapData { world, creatures: &[], selected: None };
-        terminal.draw(|f| render(f.buffer_mut(), Rect::new(0, 0, w, h), &data, opts)).unwrap();
+        let source = TestSource { world };
+        terminal.draw(|f| render(f.buffer_mut(), Rect::new(0, 0, w, h), &source, opts)).unwrap();
         terminal.backend().buffer().clone()
     }
 

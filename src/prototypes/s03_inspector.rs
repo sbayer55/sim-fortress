@@ -366,15 +366,13 @@ impl Inspector {
             night: false,
             winter: false,
             cursor: Some((c.x, c.y)),
-            follow: if c.alive { Some(idx) } else { None },
+            follow: if c.alive { Some(crate::sim::creatures::CreatureId(c.id)) } else { None },
             origin: (ox, oy),
             creatures: true,
             fade_creatures: false,
             selected_region: None,
         };
-        let creatures = fx.map_creatures();
-        let data = map::MapData { world: &fx.world, creatures: &creatures, selected: None };
-        map::render(f.buffer_mut(), mm_inner, &data, &opts);
+        map::render(f.buffer_mut(), mm_inner, fx, &opts);
 
         // Stats to the left of the mini map.
         let stats = Rect::new(inner.x, inner.y, inner.width - mm_w - 1, mm_h);

@@ -104,6 +104,14 @@ impl World {
             .unwrap_or("The Wilds")
     }
 
+    /// Index into `self.regions` covering `(x, y)`, or 0 as a fallback.
+    pub fn region_index(&self, x: usize, y: usize) -> usize {
+        self.regions
+            .iter()
+            .position(|(_, x0, y0, x1, y1)| x >= *x0 && x < *x1 && y >= *y0 && y < *y1)
+            .unwrap_or(0)
+    }
+
     /// Pure, deterministic world generation. Terrain thresholds are quantiles so
     /// the `water_pct`/`forest_pct`/`rock_pct` targets are met on any seed.
     pub fn generate(seed: u64, params: &WorldParams) -> World {

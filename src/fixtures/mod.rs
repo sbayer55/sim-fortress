@@ -14,6 +14,9 @@ pub mod world;
 
 use std::sync::OnceLock;
 
+use crate::sim::creatures::CreatureId;
+use crate::widgets::map::{MapCreature, MapSource};
+
 pub use crate::sim::{Cell, Event, EventKind, Genome, Kind, Season, SpeciesId, Terrain, World, TRAIT_NAMES};
 pub use crate::ui::style::{EventKindStyle, SeasonStyle, SpeciesStyle};
 pub use creatures::{Creature, Sex};
@@ -53,22 +56,33 @@ pub struct Fixtures {
 }
 
 impl Fixtures {
-    /// Adapt the fixture creatures into the map renderer's lightweight view.
-    pub fn map_creatures<'a>(&'a self) -> Vec<crate::widgets::map::MapCreature<'a>> {
-        self.creatures
-            .iter()
-            .map(|c| crate::widgets::map::MapCreature {
-                x: c.x,
-                y: c.y,
-                alive: c.alive,
-                adult: c.adult,
-                glyph: c.glyph(),
-                color: c.species.color(),
-                sense_cells: c.genome.sense_cells(),
-                trail: &c.trail,
-                target: c.target,
-            })
-            .collect()
+    fn view<'a>(c: &'a Creature) -> MapCreature<'a> {
+        MapCreature {
+            id: CreatureId(c.id),
+            x: c.x,
+            y: c.y,
+            alive: c.alive,
+            adult: c.adult,
+            glyph: c.glyph(),
+            color: c.species.color(),
+            sense_cells: c.genome.sense_cells(),
+            trail: &c.trail,
+            target: c.target,
+        }
+    }
+}
+
+impl MapSource for Fixtures {
+    fn world(&self) -> &World {
+        &self.world
+    }
+
+    fn living_creatures(&self) -> Vec<MapCreature<'_>> {
+        self.creatures.iter().filter(|c| c.alive).map(|c| Self::view(c)).collect()
+    }
+
+    fn creature(&self, id: CreatureId) -> Option<MapCreature<'_>> {
+        self.creatures.iter().find(|c| c.id == id.0).map(|c| Self::view(c))
     }
 }
 
@@ -79,8 +93,10 @@ pub fn get() -> &'static Fixtures {
 }
 
 fn build() -> Fixtures {
-    let world = world::generate(0xC0FFEE);
+    let mut world = world::generate(0xC0FFEE);
     let (creatures, hero_prey, hero_pred, corpse) = creatures::generate(&world, 0xBEEF);
+    // The hero corpse renders as a carcass from `world.carcasses` (FR Scope).
+    world.carcasses.push((creatures[corpse].x, creatures[corpse].y));
     let species = species::generate(&creatures);
     let series = series::generate();
     let events = events::generate(&creatures);

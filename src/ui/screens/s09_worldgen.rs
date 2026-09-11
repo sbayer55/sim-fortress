@@ -79,6 +79,7 @@ impl WorldGenForm {
                     .enumerate()
                     .map(|(i, id)| (*id, self.counts[i]))
                     .collect::<BTreeMap<_, _>>(),
+                ..CreaturesParams::default()
             },
             evolution: self.evolution.clone(),
             ecology: EcologyParams { regrowth_rate: self.regrowth_rate, ..EcologyParams::default() },

@@ -2,12 +2,14 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::sim::creatures::CreatureId;
 use crate::sim::species::SpeciesId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EventKind {
     Birth,
     DeathStarved,
+    DeathThirst,
     DeathPredation,
     DeathAge,
     Mutation,
@@ -21,7 +23,10 @@ pub enum EventKind {
 
 impl EventKind {
     pub fn is_death(self) -> bool {
-        matches!(self, EventKind::DeathStarved | EventKind::DeathPredation | EventKind::DeathAge)
+        matches!(
+            self,
+            EventKind::DeathStarved | EventKind::DeathThirst | EventKind::DeathPredation | EventKind::DeathAge
+        )
     }
 
     /// Text label, kept in `sim` (no presentation deps) for headless output.
@@ -29,6 +34,7 @@ impl EventKind {
         match self {
             EventKind::Birth => "birth",
             EventKind::DeathStarved => "starved",
+            EventKind::DeathThirst => "thirst",
             EventKind::DeathPredation => "predation",
             EventKind::DeathAge => "old age",
             EventKind::Mutation => "mutation",
@@ -49,6 +55,8 @@ pub struct Event {
     pub hour: u32,
     pub kind: EventKind,
     pub species: Option<SpeciesId>,
+    /// The creature this event is about (deaths, den notes, etc.).
+    pub subject: Option<CreatureId>,
     pub text: String,
     pub pos: Option<(usize, usize)>,
     pub detail: String,

@@ -7,6 +7,32 @@ pub const TRAIT_NAMES: [&str; 8] = [
     "Speed", "Size", "Sense", "Metabolism", "Aggression", "Camouflage", "Fertility", "Longevity",
 ];
 
+/// Prey name pool (shared by Vole, Hare and Deer; a `NameId` indexes into it).
+pub const PREY_NAMES: &[&str] = &[
+    "Clover", "Moss", "Fern", "Sorrel", "Rowan", "Willow", "Hazel", "Birch",
+    "Tansy", "Yarrow", "Nettle", "Sedge", "Rush", "Burdock", "Mallow", "Vetch", "Cress", "Dill",
+];
+
+/// Predator name pool (shared by Fox, Wolf and Lynx; a `NameId` indexes into it).
+pub const PRED_NAMES: &[&str] = &[
+    "Greymaw", "Ember", "Sable", "Rook", "Cinder", "Fenrir", "Shade", "Talon", "Brindle",
+    "Scorch", "Howl", "Umber", "Flint", "Gloam", "Rime", "Vex", "Snarl", "Dusk", "Kestrel",
+];
+
+/// The name list for a species (prey share one pool, predators another).
+pub fn names(id: SpeciesId) -> &'static [&'static str] {
+    match id.kind() {
+        Kind::Prey => PREY_NAMES,
+        Kind::Predator => PRED_NAMES,
+    }
+}
+
+/// Resolve a `NameId` against a species' name list.
+pub fn name_for(id: SpeciesId, name_id: u32) -> &'static str {
+    let list = names(id);
+    list[(name_id as usize) % list.len()]
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SpeciesId {
@@ -42,6 +68,18 @@ impl SpeciesId {
             SpeciesId::Fox => "Fox",
             SpeciesId::Wolf => "Wolf",
             SpeciesId::Lynx => "Lynx",
+        }
+    }
+
+    /// Lowercase species letter (adult/uppercase is a presentation concern).
+    pub fn glyph(self) -> char {
+        match self {
+            SpeciesId::Vole => 'v',
+            SpeciesId::Hare => 'h',
+            SpeciesId::Deer => 'd',
+            SpeciesId::Fox => 'f',
+            SpeciesId::Wolf => 'w',
+            SpeciesId::Lynx => 'l',
         }
     }
 

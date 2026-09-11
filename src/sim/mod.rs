@@ -1,23 +1,31 @@
 //! Pure, deterministic simulation core. No `ratatui` types may appear anywhere
 //! under `src/sim` (enforced by a test); this module only reads/writes plain data.
 
+pub mod behavior;
+pub mod creatures;
 pub mod ecology;
 pub mod events;
+pub mod geom;
 pub mod params;
 pub mod rng;
+pub mod spatial;
 pub mod species;
 pub mod stats;
 pub mod time;
 pub mod world;
 
+pub use creatures::{Cause, Creature, CreatureId, Death, DeathTallies, Goal, Mutation, RestReason, Sex};
 pub use events::{Event, EventKind};
+pub use geom::{cheb, dist};
 pub use params::{Params, Rainfall};
 pub use rng::Rng;
+pub use spatial::SpatialIndex;
 pub use species::{Genome, Kind, SpeciesId, TRAIT_NAMES};
-pub use stats::{Sample, Series};
+pub use stats::{census, Census, Sample, Series};
 pub use time::{Season, Time};
 pub use world::{Cell, RegionRect, Terrain, World};
 
+use creatures::CreatureStore;
 use events::EventRing;
 
 /// A notification the UI should surface (e.g. an extinction modal). Always empty
@@ -34,11 +42,18 @@ pub struct StepReport {
 
 pub struct Sim {
     pub params: Params,
+    /// Ecology RNG (rain, regrowth, droughts) — unchanged from C2.
     pub rng: Rng,
+    /// Creature RNG (placement, goals, dens), decoupled so creature behaviour
+    /// does not perturb the ecology stream.
+    pub creature_rng: Rng,
     pub time: Time,
     pub world: World,
     pub events: EventRing,
     pub series: Series,
+    pub creatures: CreatureStore,
+    pub spatial: SpatialIndex,
+    pub deaths: DeathTallies,
     pub drought: [bool; 8],
     pub drought_days_below: [u32; 8],
 }
@@ -56,10 +71,34 @@ impl Sim {
         let events = EventRing::new(params.events.capacity);
         let series = Series::new(params.stats.series_days);
         let rng = Rng::new(seed);
-        Sim { params, rng, time, world, events, series, drought: [false; 8], drought_days_below: [0; 8] }
+        let mut creature_rng = Rng::new(seed ^ 0x9E37_79B9_7F4A_7C15);
+
+        // Place founders (FR3), then build the spatial index over them.
+        let mut creatures = CreatureStore::new();
+        for c in creatures::place_founders(&world, &params.creatures, &mut creature_rng) {
+            creatures.insert(c);
+        }
+        let mut spatial = SpatialIndex::new(&world);
+        spatial.rebuild(&creatures, &world);
+
+        Sim {
+            params,
+            rng,
+            creature_rng,
+            time,
+            world,
+            events,
+            series,
+            creatures,
+            spatial,
+            deaths: DeathTallies::default(),
+            drought: [false; 8],
+            drought_days_below: [0; 8],
+        }
     }
 
-    /// Advance one tick and append any season-boundary event.
+    /// Advance one tick: season event, creature behaviour, then the daily update
+    /// at midnight. Order is fixed for determinism (FR9).
     pub fn step(&mut self) -> StepReport {
         // The initial Spring is announced at tick 0 (Year 1, Day 1, 06:00).
         if self.time.tick == 0 {
@@ -68,9 +107,32 @@ impl Sim {
         if let Some(season) = self.time.advance() {
             self.push_season_event(season);
         }
-        // Daily ecology update runs at midnight (hour 0).
+
+        // Creature behaviour and movement (perception uses the previous tick's
+        // spatial snapshot; it is rebuilt below for the next tick and the UI).
+        behavior::tick_creatures(
+            &mut self.creatures,
+            &self.spatial,
+            &mut self.world,
+            &mut self.events,
+            &self.time,
+            &self.params.creatures,
+            &self.params.ecology,
+            &mut self.creature_rng,
+            &mut self.deaths,
+        );
+
+        // Daily ecology + census at midnight (hour 0).
         if self.time.hour() == 0 {
-            crate::sim::ecology::daily_update(
+            behavior::day_boundary(
+                &mut self.creatures,
+                &mut self.world,
+                &mut self.events,
+                &self.time,
+                &self.params.creatures,
+                &mut self.deaths,
+            );
+            ecology::daily_update(
                 &mut self.world,
                 &mut self.rng,
                 &self.time,
@@ -80,8 +142,14 @@ impl Sim {
                 &mut self.drought_days_below,
                 &self.params.ecology,
                 self.params.world.rainfall,
+                &self.creatures,
+                &self.deaths,
             );
+            self.deaths = DeathTallies::default();
         }
+
+        self.spatial.rebuild(&self.creatures, &self.world);
+
         StepReport { alerts: Vec::new() }
     }
 
@@ -92,6 +160,7 @@ impl Sim {
             hour: self.time.hour(),
             kind: EventKind::Season,
             species: None,
+            subject: None,
             text: season.event_text().to_string(),
             pos: None,
             detail: String::new(),
@@ -118,8 +187,18 @@ impl Sim {
             let dried = cell.dried_from.map(|t| t as u8 + 1).unwrap_or(0);
             feed(&mut h, &[dried]);
         }
+        // Every living creature's id, x, y, hp, hunger and goal (FR9).
+        for c in self.creatures.living() {
+            feed(&mut h, &c.id.0.to_le_bytes());
+            feed(&mut h, &(c.x as u64).to_le_bytes());
+            feed(&mut h, &(c.y as u64).to_le_bytes());
+            feed(&mut h, &c.hp.to_bits().to_le_bytes());
+            feed(&mut h, &c.hunger.to_bits().to_le_bytes());
+            feed(&mut h, &[c.goal as u8]);
+        }
         feed(&mut h, &self.time.tick.to_le_bytes());
         feed(&mut h, &self.rng.state().to_le_bytes());
+        feed(&mut h, &self.creature_rng.state().to_le_bytes());
         feed(&mut h, &(self.events.len() as u64).to_le_bytes());
         for &flagged in &self.drought {
             feed(&mut h, &[flagged as u8]);
@@ -173,7 +252,16 @@ mod tests {
         }
         assert_eq!(a.checksum(), b.checksum());
         // Lock the exact value so accidental algorithm changes fail loudly.
-        assert_eq!(a.checksum(), 0x1e07_5d3a_f213_a13c);
+        assert_eq!(a.checksum(), 0x34f6_31d1_a25a_f5dc);
+    }
+
+    #[test]
+    fn checksum_includes_creatures() {
+        let mut a = Sim::new(42, Params::default());
+        let mut b = Sim::new(42, Params::default());
+        let id = b.creatures.living_ids()[0];
+        b.creatures.get_mut(id).unwrap().x += 1;
+        assert_ne!(a.checksum(), b.checksum(), "checksum must reflect creature state");
     }
 
     #[test]
