@@ -208,6 +208,8 @@ fn keys_column(f: &mut Frame, col: Rect) {
             ("3", "water & moisture"),
             ("4", "sense range"),
             ("5", "region names & bounds"),
+            ("6", "species density"),
+            ("Tab", "next species (6) / predator (4)"),
             ("Esc", "clear overlay"),
         ]),
         ("Speed", &[

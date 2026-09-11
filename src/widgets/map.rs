@@ -5,6 +5,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::sim::creatures::CreatureId;
+use crate::sim::species::SpeciesId;
 use crate::sim::world::{Cell, Terrain, World};
 use crate::{glyphs, theme};
 
@@ -18,7 +19,15 @@ pub enum Overlay {
     Sense(CreatureId),
     /// Named regions: tinted rectangles with centred labels.
     Region,
+    /// Population density of one species (S02f).
+    Species(SpeciesId),
 }
+
+/// Kernel radius (ellipse metric, cells) of one creature's contribution to the
+/// species-density field: 7 rows × 13 columns on screen.
+pub const DENSITY_RADIUS: u16 = 3;
+/// Weighted creature-equivalents within one kernel that read as 100 %.
+pub const DENSITY_CAP: f32 = 6.0;
 
 #[derive(Clone, Debug)]
 pub struct MapOptions {
@@ -36,6 +45,9 @@ pub struct MapOptions {
     pub fade_creatures: bool,
     /// Region index drawn brighter under `Overlay::Region`.
     pub selected_region: Option<usize>,
+    /// Ramp colour for `Overlay::Species` (the species' own colour; a UI concern,
+    /// so the caller supplies it).
+    pub species_color: Color,
 }
 
 impl Default for MapOptions {
@@ -50,6 +62,7 @@ impl Default for MapOptions {
             creatures: true,
             fade_creatures: false,
             selected_region: None,
+            species_color: theme::TEXT,
         }
     }
 }
@@ -63,6 +76,7 @@ pub struct MapCreature<'a> {
     pub y: usize,
     pub alive: bool,
     pub adult: bool,
+    pub species: SpeciesId,
     pub glyph: char,
     pub color: Color,
     pub sense_cells: u16,
@@ -147,10 +161,64 @@ pub fn overlay_cell(cell: &Cell, overlay: Overlay) -> Option<(char, Color, Color
     Some((g, color, theme::dim(color, 0.75)))
 }
 
+/// Species-density field (S02f): one value in 0..=1 per world cell. Every
+/// living creature of `species` adds a kernel of radius `DENSITY_RADIUS` in
+/// the 2:1 ellipse metric with linear falloff (`1 − d / (r + 1)`), and the sum
+/// is clamped against the fixed `DENSITY_CAP` so the picture is comparable
+/// across species and over time: a lone animal reads faint, a herd reads bright.
+pub fn density_field(world: &World, creatures: &[MapCreature<'_>], species: SpeciesId) -> Vec<f32> {
+    let (w, h) = (world.width(), world.height());
+    let mut field = vec![0.0f32; w * h];
+    let r = DENSITY_RADIUS as i32;
+    for c in creatures.iter().filter(|c| c.alive && c.species == species) {
+        for wy in (c.y as i32 - r)..=(c.y as i32 + r) {
+            for wx in (c.x as i32 - 2 * r)..=(c.x as i32 + 2 * r) {
+                if !world.in_bounds(wx, wy) {
+                    continue;
+                }
+                let dx = (wx - c.x as i32) as f32 / 2.0;
+                let dy = (wy - c.y as i32) as f32;
+                let d = (dx * dx + dy * dy).sqrt();
+                if d <= r as f32 {
+                    field[wy as usize * w + wx as usize] += 1.0 - d / (r as f32 + 1.0);
+                }
+            }
+        }
+    }
+    for v in &mut field {
+        *v = (*v / DENSITY_CAP).min(1.0);
+    }
+    field
+}
+
+/// Glyph and colors for a cell under the species-density overlay, given the
+/// field value `t` at that cell. Deep water and rock keep their dimmed glyphs
+/// as on the vegetation overlay.
+pub fn density_cell(cell: &Cell, t: f32, species: SpeciesId, color: Color) -> (char, Color, Color) {
+    let _ = species;
+    if cell.terrain == Terrain::DeepWater {
+        return (glyphs::DEEP_WATER, theme::dim(theme::DEEP_WATER_FG, 0.4), theme::dim(theme::DEEP_WATER_BG, 0.4));
+    }
+    if cell.terrain == Terrain::Rock {
+        return (glyphs::ROCK, theme::dim(theme::ROCK_FG, 0.5), theme::dim(theme::ROCK_BG, 0.5));
+    }
+    let c = theme::species_ramp(color, t);
+    let g = glyphs::shade(t);
+    let g = if g == ' ' { glyphs::DIRT } else { g };
+    (g, c, theme::dim(c, 0.75))
+}
+
 pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOptions) {
     let world = source.world();
     let (ox, oy) = opts.origin;
     let tint = |c: Color| if opts.night { theme::night(c) } else { c };
+    let living = source.living_creatures();
+
+    // Species-density field (S02f), computed once per frame from the living set.
+    let density = match opts.overlay {
+        Overlay::Species(sp) => Some((sp, opts.species_color, density_field(world, &living, sp))),
+        _ => None,
+    };
 
     // Terrain / overlay layer.
     for sy in 0..area.height {
@@ -163,7 +231,10 @@ pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
                 continue;
             }
             let cell = world.cell(wx, wy);
-            let (g, fg, bg) = overlay_cell(cell, opts.overlay).unwrap_or_else(|| terrain_cell(cell, opts.winter));
+            let (g, fg, bg) = match &density {
+                Some((sp, color, field)) => density_cell(cell, field[wy * world.width() + wx], *sp, *color),
+                None => overlay_cell(cell, opts.overlay).unwrap_or_else(|| terrain_cell(cell, opts.winter)),
+            };
             c.set_char(g);
             c.set_style(Style::default().fg(tint(fg)).bg(tint(bg)));
         }
@@ -261,12 +332,15 @@ pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
     if opts.creatures {
         let fade = if opts.overlay != Overlay::None && opts.fade_creatures { 0.55 } else { 0.0 };
         let mut followed_pos: Option<(usize, usize)> = None;
-        for c in source.living_creatures() {
+        for c in living {
             if !c.alive {
                 put(buf, c.x, c.y, glyphs::CARCASS, tint(theme::CARCASS), false);
                 continue;
             }
-            let mut color = tint(theme::dim(c.color, fade));
+            // Under the species overlay the shown species draws at full strength
+            // over its own density; every other species fades.
+            let own = matches!(opts.overlay, Overlay::Species(sp) if sp == c.species);
+            let mut color = tint(theme::dim(c.color, if own { 0.0 } else { fade }));
             if let Overlay::Sense(sid) = opts.overlay {
                 if sid == c.id {
                     color = theme::TEXT_BRIGHT;
@@ -400,6 +474,7 @@ mod tests {
 
     struct TestSource<'a> {
         world: &'a World,
+        creatures: Vec<MapCreature<'a>>,
     }
 
     impl<'a> MapSource for TestSource<'a> {
@@ -407,7 +482,7 @@ mod tests {
             self.world
         }
         fn living_creatures(&self) -> Vec<MapCreature<'_>> {
-            Vec::new()
+            self.creatures.clone()
         }
         fn creature(&self, _id: CreatureId) -> Option<MapCreature<'_>> {
             None
@@ -433,9 +508,54 @@ mod tests {
     fn draw(world: &World, opts: &MapOptions, w: u16, h: u16) -> ratatui::buffer::Buffer {
         let backend = TestBackend::new(w, h);
         let mut terminal = Terminal::new(backend).unwrap();
-        let source = TestSource { world };
+        let source = TestSource { world, creatures: Vec::new() };
         terminal.draw(|f| render(f.buffer_mut(), Rect::new(0, 0, w, h), &source, opts)).unwrap();
         terminal.backend().buffer().clone()
+    }
+
+    fn creature(id: u32, x: usize, y: usize, species: SpeciesId) -> MapCreature<'static> {
+        MapCreature { id: CreatureId(id), x, y, alive: true, adult: true, species, glyph: 'v', color: theme::VOLE, sense_cells: 3, trail: &[], target: None }
+    }
+
+    #[test]
+    fn density_field_peaks_under_the_creature_and_clamps() {
+        let world = two_region_world(20, 12);
+        let one = vec![creature(1, 10, 4, SpeciesId::Vole)];
+        let f = density_field(&world, &one, SpeciesId::Vole);
+        let at = |x: usize, y: usize| f[y * 20 + x];
+        assert!((at(10, 4) - 1.0 / DENSITY_CAP).abs() < 1e-6, "peak is one creature-equivalent");
+        assert!(at(10, 4) > at(12, 4) && at(12, 4) > at(14, 4), "linear falloff along the row");
+        assert_eq!(at(10, 4 + DENSITY_RADIUS as usize + 1), 0.0, "outside the kernel");
+        assert_eq!(at(0, 0), 0.0);
+        // Another species contributes nothing.
+        assert!(density_field(&world, &one, SpeciesId::Hare).iter().all(|&v| v == 0.0));
+        // Many creatures on one cell clamp at the cap.
+        let herd: Vec<_> = (0..20).map(|i| creature(i, 10, 4, SpeciesId::Vole)).collect();
+        let f = density_field(&world, &herd, SpeciesId::Vole);
+        assert_eq!(f[4 * 20 + 10], 1.0);
+        // Edge of the world: no panic, kernel truncated.
+        let _ = density_field(&world, &[creature(1, 0, 0, SpeciesId::Vole)], SpeciesId::Vole);
+    }
+
+    #[test]
+    fn species_overlay_shades_cells_and_keeps_own_species_bright() {
+        let mut world = two_region_world(20, 8);
+        world.cells[0].terrain = Terrain::DeepWater;
+        let creatures = vec![creature(1, 10, 4, SpeciesId::Vole), creature(2, 3, 4, SpeciesId::Hare)];
+        let opts = MapOptions { overlay: Overlay::Species(SpeciesId::Vole), fade_creatures: true, species_color: theme::VOLE, ..MapOptions::default() };
+        let backend = TestBackend::new(20, 8);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let source = TestSource { world: &world, creatures };
+        terminal.draw(|f| render(f.buffer_mut(), Rect::new(0, 0, 20, 8), &source, &opts)).unwrap();
+        let buf = terminal.backend().buffer().clone();
+        // Far cells are the empty shade drawn as bare dirt; the vole cell has a shaded background.
+        assert_eq!(buf[(18, 0)].symbol(), glyphs::DIRT.to_string());
+        assert_eq!(buf[(11, 4)].symbol(), glyphs::shade(1.0 / DENSITY_CAP * (1.0 - 0.5 / 4.0)).to_string());
+        // Deep water keeps its glyph.
+        assert_eq!(buf[(0, 0)].symbol(), glyphs::DEEP_WATER.to_string());
+        // The shown species is drawn at full colour; the other one is faded.
+        assert_eq!(buf[(10, 4)].fg, theme::VOLE);
+        assert_eq!(buf[(3, 4)].fg, theme::dim(theme::VOLE, 0.55));
     }
 
     #[test]

@@ -124,6 +124,12 @@ pub fn water(t: f32) -> Color {
     )
 }
 
+/// Species-density ramp (S02f): near-black through the species' own colour to
+/// a bright tint of it, so the hue names the species.
+pub fn species_ramp(species: Color, t: f32) -> Color {
+    ramp(&[dim(species, 0.85), dim(species, 0.45), species, lerp(species, TEXT_BRIGHT, 0.45)], t)
+}
+
 /// Dim a color toward the background (used for "night" and for dimming a
 /// base screen underneath a modal).
 pub fn dim(c: Color, amount: f32) -> Color {

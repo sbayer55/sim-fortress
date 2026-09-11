@@ -470,6 +470,7 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
         creatures: true,
         fade_creatures: false,
         selected_region: None,
+        species_color: crate::theme::TEXT,
     };
     map::render(f.buffer_mut(), mm_inner, sim, &opts);
 

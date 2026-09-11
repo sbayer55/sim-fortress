@@ -321,6 +321,7 @@ impl EventLog {
                 creatures: true,
                 fade_creatures: false,
                 selected_region: None,
+                species_color: crate::theme::TEXT,
             };
             map::render(f.buffer_mut(), mini_inner, sim, &opts);
         }

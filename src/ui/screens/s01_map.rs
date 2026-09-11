@@ -1,5 +1,5 @@
 //! S01: the live world map (variants a/b/d — default, wide, winter/night), the
-//! S02a/b/c/e overlays, S01c look mode and S01e follow mode.
+//! S02a/b/c/e/f overlays, S01c look mode and S01e follow mode.
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
@@ -30,22 +30,64 @@ pub struct WorldMap {
     pub region_sel: usize,
     /// Selected creature for the sense overlay (S02d).
     pub sense_id: Option<CreatureId>,
+    /// Last species shown by the species-density overlay (S02f), restored on re-entry.
+    pub species_sel: SpeciesId,
 }
 
 impl WorldMap {
     pub fn new(world_name: String) -> Self {
-        WorldMap { world_name, wide: false, overlay: Overlay::None, region_sel: 0, sense_id: None }
+        WorldMap { world_name, wide: false, overlay: Overlay::None, region_sel: 0, sense_id: None, species_sel: SpeciesId::Vole }
     }
 
-    fn overlay_name(overlay: Overlay) -> &'static str {
+    fn overlay_name(overlay: Overlay) -> String {
         match overlay {
-            Overlay::Vegetation => "vegetation",
-            Overlay::Pressure => "pressure",
-            Overlay::Moisture => "moisture",
-            Overlay::Sense(_) => "sense range",
-            Overlay::Region => "regions",
-            _ => "",
+            Overlay::Vegetation => "vegetation".into(),
+            Overlay::Pressure => "pressure".into(),
+            Overlay::Moisture => "moisture".into(),
+            Overlay::Sense(_) => "sense range".into(),
+            Overlay::Region => "regions".into(),
+            Overlay::Species(sp) => sp.plural().to_lowercase(),
+            Overlay::None => String::new(),
         }
+    }
+
+    /// S02f: the species shown when the overlay opens — the look-cursor creature's
+    /// species, else the followed creature's, else the first species with a
+    /// living population, else the last species shown.
+    fn default_species(&self, app: &AppState) -> SpeciesId {
+        let Some(sim) = app.sim.as_ref() else { return self.species_sel };
+        if let Some((x, y)) = app.look_cursor {
+            if let Some(c) = Self::creature_at_cursor(sim, x, y).and_then(|id| sim.creatures.get(id)) {
+                return c.species;
+            }
+        }
+        if let Some(c) = app.follow.and_then(|id| sim.creatures.get(id)) {
+            return c.species;
+        }
+        let alive = |sp: SpeciesId| sim.creatures.living().any(|c| c.species == sp);
+        if alive(self.species_sel) {
+            return self.species_sel;
+        }
+        SpeciesId::ALL.iter().copied().find(|&sp| alive(sp)).unwrap_or(self.species_sel)
+    }
+
+    fn open_species(&mut self, app: &AppState) {
+        let sp = self.default_species(app);
+        self.species_sel = sp;
+        self.overlay = Overlay::Species(sp);
+    }
+
+    /// `Tab` / `BackTab` with the species overlay active: show the next /
+    /// previous species in `SpeciesId::ALL` order, wrapping, extinct species
+    /// included. Returns false when the overlay is not active.
+    fn cycle_species(&mut self, backwards: bool) -> bool {
+        let Overlay::Species(sp) = self.overlay else { return false };
+        let n = SpeciesId::ALL.len();
+        let i = sp.index();
+        let next = SpeciesId::ALL[if backwards { (i + n - 1) % n } else { (i + 1) % n }];
+        self.species_sel = next;
+        self.overlay = Overlay::Species(next);
+        true
     }
 
     /// The living creature on the cursor cell, else the nearest within `cheb ≤ 1`.
@@ -195,6 +237,10 @@ impl Screen for WorldMap {
             creatures: true,
             fade_creatures: overlay_active && overlay != Overlay::Region && !matches!(overlay, Overlay::Sense(_)),
             selected_region: if overlay == Overlay::Region { Some(self.region_sel) } else { None },
+            species_color: match overlay {
+                Overlay::Species(sp) => sp.color(),
+                _ => theme::TEXT,
+            },
         };
         map::render(f.buffer_mut(), map_inner, sim, &opts);
 
@@ -217,6 +263,8 @@ impl Screen for WorldMap {
                 self.sense_sidebar(f, side, app, sim, id);
             } else if overlay == Overlay::Region {
                 self.region_sidebar(f, side, app, sim);
+            } else if let Overlay::Species(sp) = overlay {
+                self.species_sidebar(f, side, sim, sp);
             } else if overlay_active {
                 self.overlay_sidebar(f, side, app, world);
             } else {
@@ -254,10 +302,12 @@ impl Screen for WorldMap {
             &[("5", "regions"), ("o", "cycle"), ("↑↓", "region"), ("Enter", "jump"), ("←→", "scroll"), ("Esc", "clear"), ("Space", "pause"), ("y", "ecology")]
         } else if let Overlay::Sense(_) = overlay {
             &[("Tab", "next predator"), ("i", "inspect"), ("f", "follow"), ("4", "sense"), ("Esc", "clear"), ("Space", "pause")]
+        } else if let Overlay::Species(_) = overlay {
+            &[("Tab", "next species"), ("S-Tab", "previous"), ("←→↑↓", "scroll"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("s", "species")]
         } else if overlay_active {
-            &[("1-4 5", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("+/-", "speed"), ("e", "log"), ("y", "ecology"), ("g", "charts")]
+            &[("1-6", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("+/-", "speed"), ("e", "log"), ("y", "ecology"), ("g", "charts")]
         } else {
-            &[("k", "look"), ("Tab", "wide"), ("←→↑↓", "scroll"), ("1-3 5", "overlay"), ("Space", "pause"), ("+/-", "speed"), ("p", "controls"), ("?", "help"), ("q", "world")]
+            &[("k", "look"), ("Tab", "wide"), ("←→↑↓", "scroll"), ("1-3 5-6", "overlay"), ("Space", "pause"), ("+/-", "speed"), ("p", "controls"), ("?", "help"), ("q", "world")]
         };
         let sky = if night { glyphs::MOON } else { glyphs::SUN };
         let skyname = if night { "night" } else { "day" };
@@ -280,9 +330,13 @@ impl WorldMap {
                 Action::None
             }
             KeyCode::Tab => {
-                if !self.cycle_sense(app) {
+                if !self.cycle_sense(app) && !self.cycle_species(false) {
                     self.wide = !self.wide;
                 }
+                Action::None
+            }
+            KeyCode::BackTab => {
+                self.cycle_species(true);
                 Action::None
             }
             KeyCode::Left => {
@@ -342,10 +396,13 @@ impl WorldMap {
                         None => Overlay::Region,
                     },
                     Overlay::Sense(_) => Overlay::Region,
-                    Overlay::Region => Overlay::None,
+                    Overlay::Region => Overlay::Species(self.default_species(app)),
+                    Overlay::Species(_) => Overlay::None,
                 };
-                if let Overlay::Sense(id) = self.overlay {
-                    self.sense_id = Some(id);
+                match self.overlay {
+                    Overlay::Sense(id) => self.sense_id = Some(id),
+                    Overlay::Species(sp) => self.species_sel = sp,
+                    _ => {}
                 }
                 Action::None
             }
@@ -370,6 +427,10 @@ impl WorldMap {
             }
             KeyCode::Char('5') => {
                 self.overlay = Overlay::Region;
+                Action::None
+            }
+            KeyCode::Char('6') => {
+                self.open_species(app);
                 Action::None
             }
             KeyCode::Esc => {
@@ -427,7 +488,13 @@ impl WorldMap {
             }
             KeyCode::Char('z') => Action::Push(Box::new(Zoom::new())),
             KeyCode::Tab => {
-                self.cycle_sense(app);
+                if !self.cycle_sense(app) {
+                    self.cycle_species(false);
+                }
+                Action::None
+            }
+            KeyCode::BackTab => {
+                self.cycle_species(true);
                 Action::None
             }
             KeyCode::Char('4') => {
@@ -435,6 +502,10 @@ impl WorldMap {
                     self.overlay = Overlay::Sense(id);
                     self.sense_id = Some(id);
                 }
+                Action::None
+            }
+            KeyCode::Char('6') => {
+                self.open_species(app);
                 Action::None
             }
             KeyCode::Esc => {
@@ -472,9 +543,13 @@ impl WorldMap {
                 Action::None
             }
             KeyCode::Tab => {
-                if !self.cycle_sense(app) {
+                if !self.cycle_sense(app) && !self.cycle_species(false) {
                     self.wide = !self.wide;
                 }
+                Action::None
+            }
+            KeyCode::BackTab => {
+                self.cycle_species(true);
                 Action::None
             }
             KeyCode::Char('4') => {
@@ -482,6 +557,10 @@ impl WorldMap {
                     self.overlay = Overlay::Sense(id);
                     self.sense_id = Some(id);
                 }
+                Action::None
+            }
+            KeyCode::Char('6') => {
+                self.open_species(app);
                 Action::None
             }
             _ => Action::Unhandled,
@@ -498,6 +577,7 @@ impl WorldMap {
             ("3", "moisture", self.overlay == Overlay::Moisture),
             ("4", "sense", matches!(self.overlay, Overlay::Sense(_))),
             ("5", "regions", self.overlay == Overlay::Region),
+            ("6", "species", matches!(self.overlay, Overlay::Species(_))),
         ] {
             util::line(f, inner, row, Line::from(vec![
                 Span::styled(format!(" {key} "), if active { theme::selected() } else { theme::key() }),
@@ -1204,6 +1284,109 @@ impl WorldMap {
                 Span::styled(stamp, theme::dim_text()),
                 Span::styled(clip(&e.text, avail), theme::text()),
             ]));
+            row += 1;
+        }
+    }
+
+    /// S02f sidebar: what the density shows, its legend, the species' spread by
+    /// region, the species selector and reading notes.
+    fn species_sidebar(&self, f: &mut Frame, area: Rect, sim: &Sim, sp: SpeciesId) {
+        let world = &sim.world;
+        let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
+        let mut row = 0u16;
+        let color = sp.color();
+        let ramp = |t: f32| theme::species_ramp(color, t);
+
+        panel::section(f, inner, row, &format!("{} density", sp.name()));
+        row += 1;
+        for note in [
+            format!(" living {} within {} cells of a spot;", sp.plural().to_lowercase(), map::DENSITY_RADIUS),
+            " one animal reads faint, a herd bright.".to_string(),
+        ] {
+            util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
+            row += 1;
+        }
+
+        panel::section(f, inner, row, "Legend");
+        row += 1;
+        for i in 0..24 {
+            let t = (i as f32 + 0.5) / 24.0;
+            let g = glyphs::shade(t);
+            if let Some(c) = f.buffer_mut().cell_mut((inner.x + 4 + i, inner.y + row)) {
+                c.set_char(g);
+                c.set_style(Style::default().fg(ramp(t)).bg(theme::dim(ramp(t), 0.75)));
+            }
+        }
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled("  0%      25%      50%      75%      100%", theme::dim_text())));
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(" none … crowded", theme::dim_text())));
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(format!(" 100% ≈ {} together  ≈ deep water  ▲ rock", map::DENSITY_CAP as u32), theme::dim_text())));
+        row += 2;
+
+        // Per-region counts of the shown species, as a share of its population.
+        let total = sim.creatures.living().filter(|c| c.species == sp).count();
+        panel::section(f, inner, row, "By region");
+        row += 1;
+        let mut densest: Option<(usize, f32)> = None;
+        for (i, r) in world.regions.iter().enumerate() {
+            let n = sim.creatures.living().filter(|c| c.species == sp && c.x >= r.1 && c.x < r.3 && c.y >= r.2 && c.y < r.4).count();
+            let share = if total > 0 { n as f32 / total as f32 } else { 0.0 };
+            let cells = ((r.3 - r.1) * (r.4 - r.2)).max(1) as f32;
+            let per_cell = n as f32 / cells;
+            if n > 0 && densest.is_none_or(|(_, d)| per_cell > d) {
+                densest = Some((i, per_cell));
+            }
+            util::line(f, inner, row, Line::from(Span::styled(format!(" {:<16}", r.0), theme::text())));
+            bars::bar(f.buffer_mut(), inner.x + 18, inner.y + row, 12, share, ramp(0.8));
+            util::line(f, Rect::new(inner.x + 31, inner.y, inner.width.saturating_sub(31), inner.height), row, Line::from(vec![
+                Span::styled(format!("{n:>4}"), theme::text()),
+                Span::styled(format!("{:>4}%", (share * 100.0).round() as u32), theme::dim_text()),
+            ]));
+            row += 1;
+        }
+        let samples = sim.series.samples();
+        let arrow = trend_arrow(samples, sp.index());
+        let densest = densest.map(|(i, _)| world.regions[i].0.as_str()).unwrap_or("—");
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(format!(" {total} alive {arrow}"), if total == 0 { theme::dim_text() } else { theme::text() }),
+            Span::styled("  densest: ", theme::dim_text()),
+            Span::styled(densest, Style::default().fg(theme::GOOD).bg(theme::PANEL_BG)),
+        ]));
+        row += 2;
+
+        panel::section(f, inner, row, "Species");
+        row += 1;
+        for id in SpeciesId::ALL {
+            let active = id == sp;
+            let n = sim.creatures.living().filter(|c| c.species == id).count();
+            let text = if active { theme::selected() } else { theme::text() };
+            let bg = if active { theme::SELECT_BG } else { theme::PANEL_BG };
+            let status = if n == 0 { "extinct" } else { "" };
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(if active { "►" } else { " " }, text),
+                Span::styled(format!("{} ", id.glyph().to_ascii_uppercase()), Style::default().fg(id.color()).bg(bg).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{:<8}{n:>5}  ", id.name()), text),
+                Span::styled(status, Style::default().fg(theme::DIM).bg(bg)),
+            ]));
+            row += 1;
+        }
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(" Tab", theme::key()),
+            Span::styled(" next  ", theme::dim_text()),
+            Span::styled("Shift+Tab", theme::key()),
+            Span::styled(" previous", theme::dim_text()),
+        ]));
+        row += 1;
+
+        row = self.overlays_selector(f, inner, row);
+        row += 1;
+
+        panel::section(f, inner, row, "Reading the map");
+        row += 1;
+        for note in [" shown species bright, others faded", " Esc restores the plain map", " ░ <25%  ▒ <50%  ▓ <75%  █ ≥75%"] {
+            util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
             row += 1;
         }
     }

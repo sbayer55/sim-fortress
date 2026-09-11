@@ -109,6 +109,7 @@ pub fn map_creature(c: &Creature) -> MapCreature<'_> {
         y: c.y,
         alive: c.alive,
         adult: c.adult,
+        species: c.species,
         glyph: if c.adult { c.species.glyph().to_ascii_uppercase() } else { c.species.glyph() },
         color: c.species.color(),
         sense_cells: c.genome.sense_cells(),
