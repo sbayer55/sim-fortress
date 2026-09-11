@@ -101,6 +101,7 @@ impl Prototype for WorldMap {
             origin: if v == Variant::Wide { (0, 0) } else { ORIGIN },
             creatures: true,
             fade_creatures: false,
+            selected_region: None,
         };
 
         let ticker_row = area.y + MAP_ROWS;

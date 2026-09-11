@@ -82,6 +82,7 @@ impl Prototype for MapOverlay {
             origin: ORIGIN,
             creatures: true,
             fade_creatures: v != Variant::Sense,
+            selected_region: None,
         };
 
         let title = match v {

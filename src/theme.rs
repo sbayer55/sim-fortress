@@ -143,6 +143,26 @@ pub fn night(c: Color) -> Color {
     }
 }
 
+// ---------------------------------------------------------------- regions
+/// Categorical palette for the region overlay: eight muted, mutually
+/// distinguishable hues (one per fixed region). Indexed modulo the length so
+/// any region count is safe.
+pub const REGION: [Color; 8] = [
+    Color::Rgb(210, 90, 80),   // brick red
+    Color::Rgb(230, 170, 50),  // amber
+    Color::Rgb(120, 200, 90),  // leaf green
+    Color::Rgb(70, 190, 190),  // teal
+    Color::Rgb(90, 130, 230),  // cornflower blue
+    Color::Rgb(170, 110, 230), // violet
+    Color::Rgb(230, 110, 180), // rose
+    Color::Rgb(190, 190, 120), // khaki
+];
+
+/// The tint colour for region `i`.
+pub fn region(i: usize) -> Color {
+    REGION[i % REGION.len()]
+}
+
 // ---------------------------------------------------------------- styles
 pub fn text() -> Style {
     Style::default().fg(TEXT).bg(PANEL_BG)
@@ -167,4 +187,19 @@ pub fn label() -> Style {
 }
 pub fn selected() -> Style {
     Style::default().fg(TEXT_BRIGHT).bg(SELECT_BG).add_modifier(Modifier::BOLD)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn region_palette_distinct() {
+        for i in 0..REGION.len() {
+            for j in (i + 1)..REGION.len() {
+                assert_ne!(REGION[i], REGION[j], "regions {i} and {j} share a colour");
+            }
+        }
+        assert_eq!(region(8), region(0));
+    }
 }

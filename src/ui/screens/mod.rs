@@ -110,8 +110,10 @@ mod tests {
     use super::*;
     use crate::theme;
     use crate::ui::app::AppState;
+    use crate::ui::screens::s01_map::WorldMap;
     use crate::ui::screens::s09_worldgen::WorldGen;
-    use crate::sim::Params;
+    use crate::sim::{Params, Sim};
+    use crate::widgets::map::Overlay;
     use ratatui::backend::TestBackend;
     use ratatui::crossterm::event::{KeyCode, KeyModifiers};
     use ratatui::style::{Color, Style};
@@ -283,5 +285,62 @@ mod tests {
         assert_eq!(region_status(0.50, 0, true, &th), "Stable");
         assert_eq!(region_status(0.50, 10, true, &th), "Plenty");
         assert_eq!(region_status(0.50, 0, false, &th), "Plenty");
+    }
+
+    fn key(c: KeyCode) -> KeyEvent {
+        KeyEvent::new(c, KeyModifiers::NONE)
+    }
+
+    fn map_with_sim() -> (AppState, WorldMap) {
+        let mut app = state();
+        app.sim = Some(Sim::new(1, Params::default()));
+        (app, WorldMap::new("Test".into()))
+    }
+
+    #[test]
+    fn s01_key_5_and_o_cycle_reach_region_overlay() {
+        let (mut app, mut s) = map_with_sim();
+        s.handle_key(key(KeyCode::Char('5')), &mut app);
+        assert_eq!(s.overlay, Overlay::Region);
+        s.handle_key(key(KeyCode::Char('3')), &mut app);
+        s.handle_key(key(KeyCode::Char('o')), &mut app);
+        assert_eq!(s.overlay, Overlay::Region);
+        s.handle_key(key(KeyCode::Char('o')), &mut app);
+        assert_eq!(s.overlay, Overlay::None);
+    }
+
+    #[test]
+    fn s01_region_updown_wraps_and_enter_centres() {
+        let (mut app, mut s) = map_with_sim();
+        app.viewport_size.set((110, 40));
+        s.handle_key(key(KeyCode::Char('5')), &mut app);
+        let n = app.sim.as_ref().unwrap().world.regions.len();
+        s.handle_key(key(KeyCode::Up), &mut app);
+        assert_eq!(s.region_sel, n - 1);
+        s.handle_key(key(KeyCode::Down), &mut app);
+        assert_eq!(s.region_sel, 0);
+        // Up/Down select rather than scroll under the region overlay.
+        assert_eq!(app.viewport_origin, (0, 0));
+        s.region_sel = n - 1;
+        s.handle_key(key(KeyCode::Enter), &mut app);
+        let r = app.sim.as_ref().unwrap().world.regions[n - 1].clone();
+        let (cx, cy) = ((r.1 + r.3) / 2, (r.2 + r.4) / 2);
+        let (mx, my) = app.viewport_max();
+        assert_eq!(app.viewport_origin, (cx.saturating_sub(55).min(mx), cy.saturating_sub(20).min(my)));
+    }
+
+    #[test]
+    fn s01_region_overlay_renders_155x45() {
+        let (mut app, mut s) = map_with_sim();
+        s.handle_key(key(KeyCode::Char('5')), &mut app);
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| s.render(&app, f, Rect::new(0, 0, 155, 45))).unwrap();
+        let buf = terminal.backend().buffer();
+        let row = |y: u16| -> String { (0..155).map(|x| buf[(x, y)].symbol().to_string()).collect() };
+        assert!(row(0).contains("overlay: regions"), "{}", row(0));
+        let side: String = (0..45).map(row).collect::<Vec<_>>().join("\n");
+        assert!(side.contains("Fenlands"));
+        assert!(side.contains("Enter"));
     }
 }

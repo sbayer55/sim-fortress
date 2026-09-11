@@ -98,11 +98,8 @@ impl Screen for Ecology {
             KeyCode::Enter => {
                 if let Some(sim) = &app.sim {
                     let r = &sim.world.regions[self.selected];
-                    let w = sim.world.width();
-                    let h = sim.world.height();
-                    let cx = (r.1 + r.3) / 2;
-                    let cy = (r.2 + r.4) / 2;
-                    app.viewport_origin = (cx.saturating_sub(55).min(w.saturating_sub(110)), cy.saturating_sub(20).min(h.saturating_sub(40)));
+                    let (cx, cy) = ((r.1 + r.3) / 2, (r.2 + r.4) / 2);
+                    app.centre_viewport_on(cx, cy);
                 }
                 Action::Pop
             }

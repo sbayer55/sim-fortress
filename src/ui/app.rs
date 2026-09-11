@@ -66,6 +66,14 @@ impl AppState {
         self.viewport_origin = (x, y);
     }
 
+    /// Centre the map viewport on world cell `(cx, cy)`, clamped to the world
+    /// using the viewport size measured at the last draw.
+    pub fn centre_viewport_on(&mut self, cx: usize, cy: usize) {
+        let (vw, vh) = self.viewport_size.get();
+        let (mx, my) = self.viewport_max();
+        self.viewport_origin = (cx.saturating_sub(vw / 2).min(mx), cy.saturating_sub(vh / 2).min(my));
+    }
+
     pub fn speed(&self) -> u32 {
         self.params.ui.speeds[self.speed_idx]
     }
@@ -229,6 +237,20 @@ pub fn run(terminal: &mut DefaultTerminal, params: Params) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn centre_viewport_on_clamps() {
+        let mut app = AppState::new(Params::default());
+        app.sim = Some(Sim::new(1, Params::default()));
+        app.viewport_size.set((110, 40));
+        let (w, h) = (app.sim.as_ref().unwrap().world.width(), app.sim.as_ref().unwrap().world.height());
+        app.centre_viewport_on(0, 0);
+        assert_eq!(app.viewport_origin, (0, 0));
+        app.centre_viewport_on(w, h);
+        assert_eq!(app.viewport_origin, (w - 110, h - 40));
+        app.centre_viewport_on(60, 25);
+        assert_eq!(app.viewport_origin, (5.min(w - 110), 5.min(h - 40)));
+    }
 
     #[test]
     fn scroll_never_overshoots_and_up_moves_immediately() {

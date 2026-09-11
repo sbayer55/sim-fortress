@@ -15,6 +15,8 @@ pub enum Overlay {
     Moisture,
     /// Sense-range rings for a creature index.
     Sense(usize),
+    /// Named regions: tinted rectangles with centred labels.
+    Region,
 }
 
 #[derive(Clone, Debug)]
@@ -31,6 +33,8 @@ pub struct MapOptions {
     pub creatures: bool,
     /// When an overlay is active, fade creatures so the overlay reads.
     pub fade_creatures: bool,
+    /// Region index drawn brighter under `Overlay::Region`.
+    pub selected_region: Option<usize>,
 }
 
 impl Default for MapOptions {
@@ -44,6 +48,7 @@ impl Default for MapOptions {
             origin: (0, 0),
             creatures: true,
             fade_creatures: false,
+            selected_region: None,
         }
     }
 }
@@ -164,6 +169,11 @@ pub fn render(buf: &mut Buffer, area: Rect, data: &MapData, opts: &MapOptions) {
         }
     };
 
+    // Region tint (under everything else).
+    if opts.overlay == Overlay::Region {
+        region_tint(buf, area, world, opts);
+    }
+
     // Resources.
     let res_fade = if opts.overlay != Overlay::None && opts.fade_creatures { 0.5 } else { 0.0 };
     for &(x, y) in &world.seeds {
@@ -213,6 +223,11 @@ pub fn render(buf: &mut Buffer, area: Rect, data: &MapData, opts: &MapOptions) {
         }
     }
 
+    // Region labels (under creatures so a passing creature stays visible).
+    if opts.overlay == Overlay::Region {
+        region_labels(buf, area, world, opts);
+    }
+
     // Creatures.
     if opts.creatures {
         let fade = if opts.overlay != Overlay::None && opts.fade_creatures { 0.55 } else { 0.0 };
@@ -254,6 +269,66 @@ pub fn render(buf: &mut Buffer, area: Rect, data: &MapData, opts: &MapOptions) {
     }
 }
 
+/// Blend factor of the region tint over the terrain background.
+pub const REGION_TINT: f32 = 0.30;
+/// Blend factor for the selected region.
+pub const REGION_TINT_SELECTED: f32 = 0.50;
+
+/// Tint the background of every visible cell of every region toward that
+/// region's colour. Iterates the region rectangles clipped to the viewport
+/// rather than looking up a region per cell.
+fn region_tint(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions) {
+    let (ox, oy) = opts.origin;
+    let (vx1, vy1) = (ox + area.width as usize, oy + area.height as usize);
+    for (i, r) in world.regions.iter().enumerate() {
+        let (x0, y0, x1, y1) = (r.1.max(ox), r.2.max(oy), r.3.min(vx1).min(world.width()), r.4.min(vy1).min(world.height()));
+        if x0 >= x1 || y0 >= y1 {
+            continue;
+        }
+        let amount = if opts.selected_region == Some(i) { REGION_TINT_SELECTED } else { REGION_TINT };
+        let color = theme::region(i);
+        for wy in y0..y1 {
+            for wx in x0..x1 {
+                if let Some(cell) = cell_at(buf, area, opts, wx, wy) {
+                    let bg = theme::lerp(cell.bg, color, amount);
+                    cell.set_bg(bg);
+                }
+            }
+        }
+    }
+}
+
+/// Where a region's label starts in world coordinates: centred on the
+/// rectangle, clamped so the whole label stays inside it.
+pub fn region_label_origin(r: &crate::sim::RegionRect, world_w: usize) -> (usize, usize) {
+    let w = r.0.chars().count();
+    let cx = (r.1 + r.3) / 2;
+    let cy = (r.2 + r.4) / 2;
+    let x = cx.saturating_sub(w / 2).max(r.1);
+    let x = x.min(r.3.saturating_sub(w)).min(world_w.saturating_sub(w));
+    (x, cy)
+}
+
+/// Draw each region's name, bold and bright, clipped (never shifted) at the
+/// viewport edge.
+fn region_labels(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions) {
+    for (i, r) in world.regions.iter().enumerate() {
+        let (lx, ly) = region_label_origin(r, world.width());
+        let selected = opts.selected_region == Some(i);
+        for (k, ch) in r.0.chars().enumerate() {
+            if let Some(cell) = cell_at(buf, area, opts, lx + k, ly) {
+                cell.set_char(ch);
+                let st = if selected {
+                    theme::selected()
+                } else {
+                    Style::default().fg(theme::TEXT_BRIGHT).bg(cell.bg).add_modifier(Modifier::BOLD)
+                };
+                cell.set_style(st);
+            }
+        }
+    }
+}
+
 fn cell_at<'a>(buf: &'a mut Buffer, area: Rect, opts: &MapOptions, wx: usize, wy: usize) -> Option<&'a mut ratatui::buffer::Cell> {
     let (ox, oy) = opts.origin;
     if wx < ox || wy < oy {
@@ -282,4 +357,66 @@ pub fn legend() -> Vec<(char, Color, &'static str)> {
         (glyphs::CARCASS, theme::CARCASS, "carcass"),
         (glyphs::SEED, theme::SEED, "regrowth"),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sim::world::Cell;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    /// A `w`×`h` all-dirt world split into two regions down the middle.
+    fn two_region_world(w: usize, h: usize) -> World {
+        let cell = Cell { terrain: Terrain::Dirt, elevation: 0.5, moisture: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None };
+        World {
+            cells: vec![cell; w * h],
+            width: w,
+            height: h,
+            dens: vec![],
+            carcasses: vec![],
+            seeds: vec![],
+            regions: vec![("Ab".to_string(), 0, 0, w / 2, h), ("Cd".to_string(), w / 2, 0, w, h)],
+            water_cells_at_generation: 0,
+        }
+    }
+
+    fn draw(world: &World, opts: &MapOptions, w: u16, h: u16) -> ratatui::buffer::Buffer {
+        let backend = TestBackend::new(w, h);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let data = MapData { world, creatures: &[], selected: None };
+        terminal.draw(|f| render(f.buffer_mut(), Rect::new(0, 0, w, h), &data, opts)).unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    #[test]
+    fn region_overlay_tints_bg() {
+        let world = two_region_world(8, 4);
+        let opts = MapOptions { overlay: Overlay::Region, selected_region: Some(1), ..MapOptions::default() };
+        let buf = draw(&world, &opts, 8, 4);
+        // Row 0 carries no label (labels sit on row 2), so its cells show the pure tint.
+        assert_eq!(buf[(0, 0)].bg, theme::lerp(theme::DIRT_BG, theme::region(0), REGION_TINT));
+        assert_eq!(buf[(7, 0)].bg, theme::lerp(theme::DIRT_BG, theme::region(1), REGION_TINT_SELECTED));
+        // Terrain glyph is kept.
+        assert_eq!(buf[(0, 0)].symbol(), glyphs::DIRT.to_string());
+        // Label "Ab" is centred in the left region: x = (0+4)/2 - 1 = 1, y = (0+4)/2 = 2.
+        assert_eq!(buf[(1, 2)].symbol(), "A");
+        assert_eq!(buf[(2, 2)].symbol(), "b");
+        assert!(buf[(1, 2)].modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn region_labels_clip_at_viewport_edge() {
+        let world = two_region_world(8, 4);
+        // Origin x = 2 hides column 1 ("A"); the "b" must stay at world x = 2 → screen x = 0.
+        let opts = MapOptions { overlay: Overlay::Region, origin: (2, 0), ..MapOptions::default() };
+        let buf = draw(&world, &opts, 6, 4);
+        assert_eq!(buf[(0, 2)].symbol(), "b");
+        assert_eq!(buf[(1, 2)].symbol(), glyphs::DIRT.to_string());
+        // A label wider than its region is clamped inside the world, never past it.
+        let mut wide = two_region_world(8, 4);
+        wide.regions[1].0 = "Toolongname".to_string();
+        assert_eq!(region_label_origin(&wide.regions[1], wide.width()), (0, 2));
+        let _ = draw(&wide, &opts, 6, 4);
+    }
 }

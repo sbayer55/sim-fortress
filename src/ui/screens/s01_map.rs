@@ -8,6 +8,7 @@ use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
 use crate::sim::{Season, SpeciesId, World};
+use crate::ui::screens::s06_ecology::region_status;
 use crate::ui::app::AppState;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{EventKindStyle, SeasonStyle, SpeciesStyle};
@@ -22,11 +23,13 @@ pub struct WorldMap {
     pub wide: bool,
     /// Active overlay (None = plain map, S01a).
     pub overlay: Overlay,
+    /// Region highlighted under the regions overlay (S02e).
+    pub region_sel: usize,
 }
 
 impl WorldMap {
     pub fn new(world_name: String) -> Self {
-        WorldMap { world_name, wide: false, overlay: Overlay::None }
+        WorldMap { world_name, wide: false, overlay: Overlay::None, region_sel: 0 }
     }
 
     fn overlay_name(overlay: Overlay) -> &'static str {
@@ -34,6 +37,7 @@ impl WorldMap {
             Overlay::Vegetation => "vegetation",
             Overlay::Pressure => "pressure",
             Overlay::Moisture => "moisture",
+            Overlay::Region => "regions",
             _ => "",
         }
     }
@@ -59,11 +63,30 @@ impl Screen for WorldMap {
                 Action::None
             }
             KeyCode::Up => {
-                app.scroll_viewport(0, -5);
+                if self.overlay == Overlay::Region {
+                    let n = self.region_count(app);
+                    self.region_sel = (self.region_sel + n.saturating_sub(1)) % n.max(1);
+                } else {
+                    app.scroll_viewport(0, -5);
+                }
                 Action::None
             }
             KeyCode::Down => {
-                app.scroll_viewport(0, 5);
+                if self.overlay == Overlay::Region {
+                    let n = self.region_count(app);
+                    self.region_sel = (self.region_sel + 1) % n.max(1);
+                } else {
+                    app.scroll_viewport(0, 5);
+                }
+                Action::None
+            }
+            KeyCode::Enter if self.overlay == Overlay::Region => {
+                if let Some(sim) = &app.sim {
+                    if let Some(r) = sim.world.regions.get(self.region_sel) {
+                        let (cx, cy) = ((r.1 + r.3) / 2, (r.2 + r.4) / 2);
+                        app.centre_viewport_on(cx, cy);
+                    }
+                }
                 Action::None
             }
             KeyCode::Char('o') => {
@@ -71,7 +94,8 @@ impl Screen for WorldMap {
                     Overlay::None => Overlay::Vegetation,
                     Overlay::Vegetation => Overlay::Pressure,
                     Overlay::Pressure => Overlay::Moisture,
-                    Overlay::Moisture => Overlay::None,
+                    Overlay::Moisture => Overlay::Region,
+                    Overlay::Region => Overlay::None,
                     _ => Overlay::None,
                 };
                 Action::None
@@ -89,6 +113,10 @@ impl Screen for WorldMap {
                 Action::None
             }
             KeyCode::Char('4') => Action::None, // sense overlay arrives in C5
+            KeyCode::Char('5') => {
+                self.overlay = Overlay::Region;
+                Action::None
+            }
             KeyCode::Esc => {
                 self.overlay = Overlay::None;
                 Action::None
@@ -140,7 +168,8 @@ impl Screen for WorldMap {
             follow: None,
             origin,
             creatures: true,
-            fade_creatures: overlay_active,
+            fade_creatures: overlay_active && self.overlay != Overlay::Region,
+            selected_region: if self.overlay == Overlay::Region { Some(self.region_sel) } else { None },
         };
         let empty: &[map::MapCreature] = &[];
         let data = MapData { world, creatures: empty, selected: None };
@@ -157,7 +186,9 @@ impl Screen for WorldMap {
             }
         } else {
             let side = Rect::new(area.x + map_w, area.y, side_w, map_rows);
-            if overlay_active {
+            if self.overlay == Overlay::Region {
+                self.region_sidebar(f, side, app, sim);
+            } else if overlay_active {
                 self.overlay_sidebar(f, side, app, world);
             } else {
                 self.sidebar(f, side, app, world, time);
@@ -183,10 +214,12 @@ impl Screen for WorldMap {
 
         // Status bar.
         let status_row = area.y + area.height - 1;
-        let keys: &[(&str, &str)] = if overlay_active {
-            &[("1-3", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("+/-", "speed"), ("e", "log"), ("y", "ecology"), ("g", "charts")]
+        let keys: &[(&str, &str)] = if self.overlay == Overlay::Region {
+            &[("5", "regions"), ("o", "cycle"), ("↑↓", "region"), ("Enter", "jump"), ("←→", "scroll"), ("Esc", "clear"), ("Space", "pause"), ("y", "ecology")]
+        } else if overlay_active {
+            &[("1-3 5", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("+/-", "speed"), ("e", "log"), ("y", "ecology"), ("g", "charts")]
         } else {
-            &[("Tab", "wide"), ("←→↑↓", "scroll"), ("1-3", "overlay"), ("Space", "pause"), ("+/-", "speed"), ("p", "controls"), ("?", "help"), ("q", "world")]
+            &[("Tab", "wide"), ("←→↑↓", "scroll"), ("1-3 5", "overlay"), ("Space", "pause"), ("+/-", "speed"), ("p", "controls"), ("?", "help"), ("q", "world")]
         };
         let sky = if night { glyphs::MOON } else { glyphs::SUN };
         let skyname = if night { "night" } else { "day" };
@@ -196,6 +229,116 @@ impl Screen for WorldMap {
 }
 
 impl WorldMap {
+    fn region_count(&self, app: &AppState) -> usize {
+        app.sim.as_ref().map(|s| s.world.regions.len()).unwrap_or(0)
+    }
+
+    /// The `Overlays` selector shared by the heatmap and region sidebars.
+    /// Returns the row after the list.
+    fn overlays_selector(&self, f: &mut Frame, inner: Rect, mut row: u16) -> u16 {
+        panel::section(f, inner, row, "Overlays");
+        row += 1;
+        for (key, label, active) in [
+            ("1", "vegetation", self.overlay == Overlay::Vegetation),
+            ("2", "pressure", self.overlay == Overlay::Pressure),
+            ("3", "moisture", self.overlay == Overlay::Moisture),
+            ("4", "sense", false),
+            ("5", "regions", self.overlay == Overlay::Region),
+        ] {
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(format!(" {key} "), if active { theme::selected() } else { theme::key() }),
+                Span::styled(format!("{:<12}", label), if active { theme::selected() } else { theme::text() }),
+                Span::styled(if active { "►" } else { " " }, theme::text()),
+            ]));
+            row += 1;
+        }
+        row
+    }
+
+    /// S02e sidebar: the region table, the selected region and the selector.
+    fn region_sidebar(&self, f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim) {
+        let world = &sim.world;
+        let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
+        let mut row = 0u16;
+
+        panel::section(f, inner, row, "Regions");
+        row += 1;
+        for note in [" named areas of the valley; rain and", " drought are tracked per region (y)"] {
+            util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
+            row += 1;
+        }
+        row += 1;
+
+        panel::section(f, inner, row, "By region");
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(format!(" {:<2} {:<16}{:>5}{:>6}  status", "▪", "region", "veg", "moist"), theme::dim_text())));
+        row += 1;
+        let th = &app.params.ui.scarcity_thresholds;
+        let prey_configured = app.params.creatures.initial_counts.iter().filter(|(id, _)| id.kind() == crate::sim::Kind::Prey).map(|(_, n)| *n).sum::<u32>() > 0;
+        for (i, r) in world.regions.iter().enumerate() {
+            let veg = crate::sim::ecology::region_land_veg_mean(world, r);
+            let moist = crate::sim::ecology::region_display_moisture_mean(world, r);
+            let status = region_status(veg, 0, prey_configured, th);
+            let status_color = match status {
+                "Scarce" => theme::BAD,
+                "Strained" => theme::WARN,
+                "Plenty" => theme::GOOD,
+                _ => theme::TEXT,
+            };
+            let selected = i == self.region_sel;
+            let bg = if selected { theme::SELECT_BG } else { theme::PANEL_BG };
+            let text = if selected { theme::selected() } else { theme::text() };
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(if selected { "►" } else { " " }, text),
+                Span::styled(format!("{}{} ", glyphs::FULL_BLOCK, glyphs::FULL_BLOCK), Style::default().fg(theme::region(i)).bg(bg)),
+                Span::styled(format!("{:<16}", r.0), text),
+                Span::styled(format!("{:>4}%{:>5}%  ", (veg * 100.0).round() as u32, (moist * 100.0).round() as u32), text),
+                Span::styled(status, Style::default().fg(status_color).bg(bg).add_modifier(if selected { Modifier::BOLD } else { Modifier::empty() })),
+            ]));
+            row += 1;
+        }
+        row += 1;
+
+        panel::section(f, inner, row, "Selected");
+        row += 1;
+        if let Some(r) = world.regions.get(self.region_sel) {
+            let cells = (r.3 - r.1) * (r.4 - r.2);
+            let water = (r.2..r.4).flat_map(|y| (r.1..r.3).map(move |x| (x, y))).filter(|&(x, y)| world.cell(x, y).terrain.is_water()).count();
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(format!(" {}", glyphs::FULL_BLOCK), Style::default().fg(theme::region(self.region_sel)).bg(theme::PANEL_BG)),
+                Span::styled(format!(" {}", r.0), theme::title()),
+            ]));
+            row += 1;
+            util::line(f, inner, row, Line::from(Span::styled(format!(" x {}–{}  y {}–{}", r.1, r.3.saturating_sub(1), r.2, r.4.saturating_sub(1)), theme::text())));
+            row += 1;
+            util::line(f, inner, row, Line::from(Span::styled(format!(" {cells} cells, {water} water"), theme::text())));
+            row += 1;
+            let drought = sim.drought.get(self.region_sel).copied().unwrap_or(false);
+            if drought {
+                util::line(f, inner, row, Line::from(Span::styled(format!(" {} drought", glyphs::DROUGHT), Style::default().fg(theme::WARN).bg(theme::PANEL_BG))));
+            } else {
+                util::line(f, inner, row, Line::from(Span::styled(" no drought", theme::dim_text())));
+            }
+            row += 1;
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(" Enter", theme::key()),
+                Span::styled(" centres the map", theme::dim_text()),
+            ]));
+            row += 1;
+        }
+        row += 1;
+
+        row = self.overlays_selector(f, inner, row);
+        row += 1;
+
+        panel::section(f, inner, row, "Reading the map");
+        row += 1;
+        for note in [" tint = region, bright = selected", " labels are clipped at the edge", " Esc restores the plain map"] {
+            util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
+            row += 1;
+        }
+    }
+
     fn sidebar(&self, f: &mut Frame, area: Rect, app: &AppState, world: &World, time: &crate::sim::Time) {
         let inner = panel::draw(f, area, "Status", panel::Kind::Outer);
         let mut row = 0u16;
@@ -351,21 +494,7 @@ impl WorldMap {
         }
         row += 1;
 
-        panel::section(f, inner, row, "Overlays");
-        row += 1;
-        for (key, label, active) in [
-            ("1", "vegetation", self.overlay == Overlay::Vegetation),
-            ("2", "pressure", self.overlay == Overlay::Pressure),
-            ("3", "moisture", self.overlay == Overlay::Moisture),
-            ("4", "sense", false),
-        ] {
-            util::line(f, inner, row, Line::from(vec![
-                Span::styled(format!(" {key} "), if active { theme::selected() } else { theme::key() }),
-                Span::styled(format!("{:<12}", label), if active { theme::selected() } else { theme::text() }),
-                Span::styled(if active { "►" } else { " " }, theme::text()),
-            ]));
-            row += 1;
-        }
+        row = self.overlays_selector(f, inner, row);
         row += 1;
 
         panel::section(f, inner, row, "Reading the map");

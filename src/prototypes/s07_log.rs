@@ -270,6 +270,7 @@ fn detail(f: &mut Frame, area: Rect, fx: &Fixtures, e: &Event) {
                 origin: (ox, oy),
                 creatures: true,
                 fade_creatures: false,
+                selected_region: None,
             };
             let creatures = fx.map_creatures();
             let data = map::MapData { world: &fx.world, creatures: &creatures, selected: None };

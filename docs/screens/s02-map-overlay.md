@@ -18,9 +18,12 @@ starving here?", "can that wolf see the hare yet?") that the plain map cannot sh
 | S02b | population pressure                | `2`, or the second stop of the `o` cycle                                 |
 | S02c | water & moisture                   | `3`, or the third stop of the `o` cycle                                  |
 | S02d | sense range of selected predator   | `4`, or the fourth stop of the `o` cycle; needs a selected living creature |
+| S02e | regions                            | `5`, or the fifth (last) stop of the `o` cycle before the plain map     |
 
 S02a–c are **heatmaps**: every land cell is shaded by a 0–1 value. S02d is a **ring**: the map
-keeps its normal terrain colours and one creature's perception radius is drawn on top.
+keeps its normal terrain colours and one creature's perception radius is drawn on top. S02e is
+a **tint**: terrain glyphs and colours stay, every region's background is blended toward that
+region's own hue and its name is written across it.
 
 ## Layout
 Same frame split as the world map. Only the sidebar contents and the map title change.
@@ -87,6 +90,16 @@ The map panel title must append ` · overlay: vegetation` / `pressure` / `moistu
 12. The selected creature itself is drawn in bright text colour (not its species colour) and
     bold, so it stands out in the middle of the tint.
 
+### Map panel — regions (S02e)
+10. **Tint**: each region rectangle's background is blended 30 % toward the region's colour
+    (`theme::region(i)`, a categorical palette of eight hues); the selected region is blended
+    50 % so it reads brighter. Terrain glyphs and foregrounds are unchanged; creatures and
+    resources draw at full strength.
+11. **Labels**: the region name, bold and bright, centred on the rectangle and clamped inside
+    it; the selected region's label uses the selection style. Labels are drawn under creatures
+    and are clipped, not shifted, at the viewport edge.
+12. Night and winter palettes are suppressed as for the heatmaps.
+
 ### Sidebar — heatmaps (S02a–c)
 Sections from the top, in order; all fit in the 40 inner rows without scrolling.
 
@@ -116,6 +129,18 @@ Sections from the top, in order; all fit in the 40 inner rows without scrolling.
 17. **Reading the map** (7 rows): dim notes that creatures and resources are faded and `Esc`
     restores them; the shade-glyph thresholds `░ under 25%  ▒ under 50%  ▓ under 75%
     █ 75% and above`; and that `k` look mode shows the exact value.
+
+### Sidebar — regions (S02e)
+- **Regions** (3 rows): two dim lines explaining that rain and drought are tracked per region
+  and pointing at the `y` ecology screen.
+- **By region** table: header, then one row per region: a two-cell swatch in the region's
+  colour, name (16), vegetation mean and display moisture mean as percentages, and the S06
+  status word in its colour. The selected row is highlighted with a `►` marker.
+- **Selected** (5 rows): swatch and name, `x a–b  y c–d`, `N cells, M water`, `¡ drought` in
+  the warning colour or `no drought` dim, and `Enter centres the map`.
+- The same **Overlays selector** as item 16 (now five rows, `5 regions` last).
+- **Reading the map** (3 rows): tint = region, bright = selected; labels clip at the edge;
+  `Esc` restores the plain map.
 
 ### Sidebar — sense ring (S02d)
 18. **Sense range** (3 rows): a two-line explanation that the ring is how far the selected
@@ -176,6 +201,16 @@ Status-bar hints differ between the heatmaps and the sense ring.
 | `Esc`   | close the overlay, restore creature and resource colours | [S01 World Map](s01-world-map.md) |
 | `?`     | help overlay                                            | [S11 Legend & Help](s11-legend-help.md) |
 
+### S02e
+| Key     | Action                                          | Goes to |
+|---------|-------------------------------------------------|---------|
+| `o`     | next overlay (regions → plain map)              | [S01 World Map](s01-world-map.md) |
+| `1`–`5` | pick an overlay directly                        | [S02a–e](s02-map-overlay.md) |
+| `↑` `↓` | select the previous / next region (wraps)       | stays here |
+| `Enter` | centre the viewport on the selected region      | stays here |
+| `←` `→` | scroll the map                                  | stays here |
+| `Esc`   | close the overlay                               | [S01 World Map](s01-world-map.md) |
+
 ### S02d
 | Key     | Action                                          | Goes to |
 |---------|-------------------------------------------------|---------|
@@ -219,7 +254,7 @@ Global keys not listed in the bar (`s g y e w q`, `.`) keep their README meaning
   always shows the hero wolf. Options: the followed creature, the last inspected creature,
   or the nearest predator to the viewport centre. And does `4` refuse to open when the
   selection is prey?
-- Does `o` wrap from sense back to "no overlay" (a fifth stop) or back to vegetation?
+- `o` cycles vegetation → pressure → moisture → (sense, when available) → regions → plain map.
 - Does an overlay survive leaving for a data screen (`s`, `g`, …) and returning, and
   does it survive `f` follow mode? The status bar in S02d offers `f`, which implies overlay
   + follow can coexist.

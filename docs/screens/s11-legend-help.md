@@ -88,7 +88,7 @@ flowchart TB
    - **Look mode**: `k` enter look mode · arrows move the cursor · `Enter` inspect cell /
      creature · `f` follow creature · `z` local zoom view · `Esc` leave look mode.
    - **Overlays**: `o` cycle overlays · `1` vegetation density · `2` population pressure ·
-     `3` water & moisture · `4` sense range · `Esc` clear overlay.
+     `3` water & moisture · `4` sense range · `5` regions · `Esc` clear overlay.
    - **Speed**: `Space` pause / resume · `+ / -` faster / slower · `.` step one tick · `p`
      controls panel.
    - **Screens**: `s` species & traits · `g` graphs & charts · `y` ecology & regions · `e`
