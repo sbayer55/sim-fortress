@@ -1,0 +1,201 @@
+# C4 — Reproduction, genetics and evolution
+
+Back to the [roadmap](README.md). Previous: [C3](c3-herbivores.md). Next: [C5 Predators](c5-predators.md).
+
+## Goal
+Close the life cycle: adults mate, offspring inherit blended parental traits with
+mutation, juveniles mature, and populations reach a carrying capacity set by vegetation.
+Species-level statistics and lineage tracking make the evolution visible.
+
+## Checkpoint (what the user sees)
+Herbivore populations no longer collapse: they overshoot, dip when land goes bare, and
+settle into a seasonal rhythm. The species browser shows trait means drifting across
+generations (metabolism falling in a dry world), the lineage tree shows real ancestry,
+births appear in the ticker when enabled, and the population charts show real lines.
+
+## Scope
+
+### In
+- `sim::genetics`: mate eligibility and selection, pregnancy, litters, inheritance with
+  mutation, maturity, mother-following.
+- `sim::stats`: per-species `Species` record (FR5), `Lineage` store with bounded pruning.
+- Events: `Birth`, `Mutation` (notable only).
+- Live screens: **S04a/S04b**, **S08**, **S05a/S05c** population lines, S03 Offspring
+  forecast / Mutation history / Kin nearby / Legacy / Timeline, S01 Population trends,
+  **S09 Evolution fields** (`mutation_rate`, `mutation_strength`; `predation_difficulty`
+  and `regrowth_rate` are stored, the former used in C5).
+- Headless CSV gains births and mean traits per species per day.
+
+### Out
+Predators, extinction alert, phase plot, migration.
+
+## Dependencies
+- [C3](c3-herbivores.md) complete (ids, `parents`, `adult`, spatial index, census,
+  `Mutation` record, event `subject`).
+- Screen requirements: [S04](../screens/s04-species-browser.md), [S08](../screens/s08-lineage.md),
+  [S05](../screens/s05-population-charts.md), [S03](../screens/s03-creature-inspector.md).
+
+## Functional requirements
+
+### FR1 Params (`[genetics]`)
+```toml
+mutation_rate = 0.04             # per trait per birth
+mutation_strength = 0.06         # gaussian sd
+mutation_notable = 0.10          # |Δ| ≥ this emits a Mutation event
+# six-species maps; C5 only changes the predator values
+gestation_days = { vole = 3, hare = 6, deer = 30, fox = 20, wolf = 30, lynx = 30 }
+litter_max = { vole = 3, hare = 2, deer = 1, fox = 3, wolf = 2, lynx = 1 }   # litter = 1 + round(fertility × litter_max)
+mate_cooldown_days = { vole = 20, hare = 30, deer = 150, fox = 120, wolf = 180, lynx = 180 }
+mate_hunger_max = 0.3
+mate_thirst_max = 0.5
+mate_energy_min = 0.4
+mate_cell_vegetation_min = 0.3   # density dependence for Kind::Prey only: no mating on bare ground
+breeding_seasons = ["spring", "summer", "autumn"]
+follow_mother_days = 20
+newborn_hp = 0.6
+pregnancy_hunger_factor = 1.3
+max_population_soft_cap = 4000   # safety: no new pregnancies above this; Note logged once per crossing
+drift_every_generations = 2
+lineage_keep_generations = 8
+lineage_up = 3
+lineage_rows_max = 400
+```
+`adult_age_days` lives only in `params.creatures` (C3). These defaults are the starting
+point of the **balance table** (see Acceptance); the implementer may tune only the levers
+listed there and must record the final values in this section.
+
+### FR2 Mate goal
+Order: Drink → Graze → Rest → **Mate** → Wander. Eligible: adult, hunger <
+`mate_hunger_max`, thirst < `mate_thirst_max`, energy > `mate_energy_min`, `cooldown_until`
+passed, current season in `breeding_seasons`, (prey only) cell vegetation ≥ `mate_cell_vegetation_min`,
+total population < soft cap (for new pregnancies). Target = nearest eligible opposite-sex
+adult of the species within sense range (ties by id). Mating happens when `cheb ≤ 1`
+regardless of the partner's current goal: both get `cooldown_until = now + cooldown × 24`,
+the female gets `pregnant_due = now + gestation × 24` and `mate_id`. Pregnancy multiplies
+hunger by `pregnancy_hunger_factor`. On `pregnant_due` the litter is born on the mother's
+cell or 8-adjacent walkable cells: hp `newborn_hp`, hunger 0.3, thirst 0.3, energy 0.8,
+`generation = max(parents) + 1`, `parents = Some((mother, father))`, `mother`, `born_day`.
+Newborns feed themselves (no nursing). One `Birth` event per litter with `subject` =
+mother.
+
+### FR3 Inheritance
+Per trait: `child = (rand < 0.5 ? mother : father) + (rand < mutation_rate ? N(0, mutation_strength) : 0)`,
+clamped 0.02..0.98. (Random-parent inheritance preserves population variance; averaging the
+parents would halve the variance every generation and collapse the S04b histograms.) Each mutation appends `Mutation { trait_idx, delta, generation }`
+(displayed `"<Trait> {:+.2} (gen N)"`); `|delta| ≥ mutation_notable` emits a `Mutation`
+event with `subject` = child. Species drift is under selection because metabolism scales
+hunger (C3 FR1), speed scales movement, longevity scales max age, fertility scales litter.
+
+### FR4 Maturity and following
+At `adult_age_days[species]` the glyph switches to uppercase and movement speed becomes
+full (C3 FR6). While `age_days < follow_mother_days` and the mother is alive, Wander targets
+a walkable cell within 3 cells of her; other goals are unaffected.
+
+### FR5 Species record (daily, incremental)
+`count, adults, juveniles, births_today, deaths_today` (live counters reset at the day
+boundary, `yesterday` copies kept for the `/d` columns), `peak` (all-time), `first_birth_day: Option<u32>`, `generation`
+(high-water mark of the max generation among living members), `trend` (last 30 daily counts from `Series`), `mean/min/max` genome,
+`hist[8][12]` with bucket `min(floor(v × 12), 11)`, `drift` (last 12 samples of the mean
+genome, sampled when `generation` has grown by `drift_every_generations` since the last
+sample, with the sample generation stored for the S04b header). Extinct or absent species
+keep a dimmed row with count 0. The trend arrow rule is the C3 rule.
+
+### FR6 Lineage
+Node `{ id, name, tag, species, sex, generation, born_day, died_day, genome, mutations,
+parents, children, notable }` for every creature born (founders included); `notable` =
+has a notable mutation or `offspring ≥ 10`. Pruning every 7 days deletes dead nodes with
+`generation < species_max_generation − lineage_keep_generations` that are not ancestors of
+a living creature. `ancestors(id, depth)`, `descendants(id, max_depth, cap)`.
+
+### FR7 Species Browser
+S04a sorted by count; `s` cycles sort column (count → births → deaths → generation →
+name), ties by species order; `Enter` opens S04b for the selected species. Templated
+prose: Interactions (prey) `eaten by: none yet` until C5 and `competes with <other prey>
+for grass`; Notable = top 5 living by offspring then age; narrative line from the 30-day
+change (`↑ +N % — births outpaced deaths` / `↓ −N % — deaths outpaced births` / `stable`);
+Selection pressure lists traits whose drift over the last 3 samples exceeds ±0.02 as
+`§ <Trait> rising|falling (<±Δ> over <n> generations)`, else `¶ no trait moving more than
+0.02`. The comparison block is titled `Compared with other species` from now on (S04 doc
+updated accordingly).
+
+### FR8 Lineage screen (S08, key `l`)
+Focus = the inspected or followed creature, default the oldest living creature. Root =
+the ancestor `lineage_up` generations above the focus following the **mother** link
+(father named in the side panel). The tree always includes the root → focus mother chain, the focus's siblings, children
+and grandchildren; the remaining budget up to `lineage_rows_max` nodes is filled
+breadth-first from the root down to `focus.generation + 2`, with `… and N more` per
+truncated branch. Arrows move focus among drawn nodes; `Enter` opens S03 if the creature
+is still stored, else shows the lineage node's data. Side panel `kills` row shows
+`offspring` for prey.
+
+### FR9 Charts
+S05a top = prey total (drought bands from `Series.drought_flags`); bottom chart flat zero
+titled `no predators yet`; Coupling shows `–`; census values come from the species record
+(single source of truth). S05c stacks the three prey species over vegetation.
+
+### FR10 Inspector additions
+Offspring forecast from live params; Kin nearby = parents/siblings/children within 15
+cells (`geom::dist`); Legacy = offspring count, living descendants (lineage), notable
+descendants; Timeline = born, adult, each litter (from lineage children `born_day`).
+
+### FR11 Ticker and births
+`Birth` events are always appended to the ring buffer; `ui.log_births` only controls
+whether Birth kinds appear in the ticker row. `Mutation` events are ticker-suppressed the
+same way unless `log_births` is on.
+
+### FR12 Headless CSV
+Adds `births_<species>`, `<species>_generation_mean`, `<species>_generation_max` and
+`<species>_<trait>_mean` (8 traits × 3 prey) daily columns.
+
+## Acceptance criteria
+- **Blocker criteria** (seed 42, default params, 5 years headless): every prey species is
+  alive at year 5; total prey after year 1 never falls below 5 % of its all-time maximum;
+  the soft-cap Note never appears (vegetation, not the cap, limits the population);
+  `Species.generation` for voles ≥ 12 and `vole_generation_mean` ≥ 8.
+- **Target criteria** (record results, tune toward them): yearly minimum total prey ≥ 20 %
+  of yearly maximum in years 2–5; `vole_generation_mean` ≥ 20 by year 5.
+- Selection: over seeds 1..=10, a Dry world run of 5 years lowers mean vole metabolism by
+  ≥ 0.03 in at least 7 seeds.
+- Inheritance unit tests: mean of children equals the parental mean within 0.005 over
+  10 000 births; mutation frequency within ±10 % of `mutation_rate`.
+- Lineage: every living creature's parents resolve (or are `None` for founders); pruning
+  never removes an ancestor of a living creature; the S08 tree never exceeds
+  `lineage_rows_max` nodes.
+- Performance: 5 years headless < 120 s (soft target 60 s); UI ≥ 30 FPS at x25 at the
+  population the balance table produces.
+- S04a/b, S08 match their prototypes in panel structure.
+- **Balance table**: the doc's FR1 is updated with the final values of `litter_max`,
+  `mate_cooldown_days`, `mate_cell_vegetation_min`, `mate_hunger_max` and C2's `growth_k`,
+  which are the only levers the implementer may change.
+
+## Checkpoint demo script
+1. Generate the default world, `p`, enable `[b] log births`, `Esc`, x25, two years.
+   Population sparklines oscillate; `♥` births flow through the ticker.
+2. `s` → S04a; `Enter` on Vole → S04b: histograms shift over time; drift rows change.
+3. `k` on a lowercase letter, `Enter` → S03a shows parents and mutation history; `l` →
+   S08 rooted three generations up; move focus; `Enter` back to S03.
+4. `g` → S05a prey line (a drought band appears only in a dry world); `3` stacked species.
+5. `cargo run -- --headless --seed 42 --ticks 43200 --params dry.toml --csv dry.csv` with
+   `dry.toml` containing `[world] rainfall = "dry"`; compare `vole_metabolism_mean` on the
+   first and last rows.
+
+## Tests
+- `sim::genetics::tests::{mate_eligibility, mating_sets_cooldown_and_pregnancy, litter_size_from_fertility,
+  birth_placement, inheritance_mean, mutation_rate, maturity_switch, follow_mother, soft_cap_blocks_pregnancy,
+  pregnancy_hunger_factor}`
+- `sim::stats::tests::{species_record_incremental_equals_full, histogram_buckets, drift_sample_cadence,
+  lineage_prune_keeps_ancestors, lineage_root_depth_and_cap}`
+- `ui::tests::{s04_sort_cycle, s07_birth_ticker_gate}`
+- `tests/evolution.rs::{five_year_survival, no_soft_cap_hit, floor_five_percent, dry_world_selection_7_of_10,
+  performance_budget}`
+
+## Decisions made here
+- Two-parent sexual reproduction; per-trait gaussian mutation; no linkage or dominance.
+- Density-dependent mating (vegetation on the cell) is the primary stabiliser.
+- The soft cap is a safety net, asserted never to bind under defaults.
+
+## Risks
+- Balancing is the biggest tuning task; the balance table bounds what the agent may touch.
+- Lineage memory is bounded by pruning; verify the S08 cap keeps rendering under 16 ms.
+- Competitive exclusion: deer (one fawn per 180 days) share cells with voles (litter of up
+  to 4 every 20 days); if deer die out, the per-species litter/cooldown levers are the fix.

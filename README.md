@@ -73,5 +73,6 @@ docs/PROTOTYPE_GUIDE.md  conventions for adding screens
 
 ## Documentation
 
+- [docs/chunks/README.md](docs/chunks/README.md) — delivery roadmap: six sequential chunks with checkpoints, one document per chunk.
 - [docs/screens/README.md](docs/screens/README.md) — screen overview, navigation map and links to a requirements file per screen.
 - [docs/PROTOTYPE_GUIDE.md](docs/PROTOTYPE_GUIDE.md) — glyph rules, palette and widget conventions for adding screens.

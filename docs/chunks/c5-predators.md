@@ -1,0 +1,219 @@
+# C5 — Predators, predation and extinction
+
+Back to the [roadmap](README.md). Previous: [C4](c4-evolution.md). Next: [C6 Persistence and balance](c6-persistence-and-balance.md).
+
+## Goal
+Add the second trophic level. Foxes, wolves and lynxes hunt herbivores using sense
+against camouflage and cover, chase using speed, kill, eat and scavenge. Prey flee. Local
+scarcity drives migration. Species can go extinct, which raises the alert modal. The
+predator–prey phase plot and the sense overlay make the dynamics visible.
+
+## Checkpoint (what the user sees)
+Predator and prey lines chase each other with a lag; the phase plot draws an orbit; the
+sense overlay shows what a wolf can see and which hares are hidden by cover; the predator
+inspector shows hunt stats; when the lynx die out the alert modal appears and the
+simulation pauses.
+
+## Scope
+
+### In
+- `sim::predation`: `can_detect`, Hunt goal (Stalk → Chase → Kill → Eat), scavenging,
+  hunt statistics, prey preference.
+- Prey `Flee` goal with a cheap per-tick predator query; den protection.
+- `sim::behavior` migration for prey and predator groups with cooldown.
+- Extinction detection (once per species) and `StepReport` alerts; `pred_pressure`.
+- `sim::stats::peak_lag()` shared by acceptance tests, S05a Coupling and C6 summaries.
+- Events: `DeathPredation`, `Migration`, `Extinction`, `Note` (local extinction).
+- Live screens: **S02d sense overlay**, **S03b predator inspector**, **S05b phase plot**,
+  **S12 alert modal**, S03a Survival / Condition predation risk / Killer / Scavengers,
+  S04b Interactions with kill shares, S06 migration pressure line, S01 danger line.
+
+### Out
+Save/load, title, presets, tuning tooling (C6).
+
+## Dependencies
+- [C4](c4-evolution.md) complete. C1 FR6 (modals stack and render below) and C3 FR2
+  (predation fields already declared) are relied on.
+- Screen requirements: [S02](../screens/s02-map-overlay.md), [S03](../screens/s03-creature-inspector.md),
+  [S05](../screens/s05-population-charts.md), [S12](../screens/s12-alert-modal.md).
+
+## Functional requirements
+
+### FR1 Params (`[predation]`)
+```toml
+# defaults of params.creatures.initial_counts change to fox = 30, wolf = 24, lynx = 12
+detect_threshold = 0.8         # hidden when camouflage × cover ≥ sense × detect_threshold
+cover_by_terrain = { forest = 1.0, grass_dense = 1.0, grass = 0.8, grass_sparse = 0.6, dirt = 0.6, sand = 0.4, shallow_water = 0.4 }
+den_protects = true            # a resting prey on a den cell cannot be targeted
+chase_trigger_cheb = 4
+chase_max_ticks = 30           # clock starts at cheb ≤ chase_trigger_cheb, not at detection
+chase_speed_bonus = 0.5        # extra move budget per tick while chasing
+catch_distance_cheb = 1
+kill_base = 0.35  kill_speed_w = 1.0  kill_aggression_w = 0.3  kill_size_w = 0.2  kill_min = 0.05  kill_max = 0.95
+eat_hours_base = 2  eat_hours_per_size = 4          # ceil(base + per_size × prey.size)
+hunger_per_kill_base = 0.6  hunger_per_kill_per_size = 0.4
+kill_consumes_decay = 0.6      # eating advances the carcass decay by this much
+hunt_cooldown_hours = 6
+hunt_hunger_min = 0.45
+scavenge_hunger_min = 0.7
+carcass_nutrition = 0.5        # hunger −= nutrition × (1 − decay) once per scavenge visit; prey carcasses only
+scavenge_hours = 1  scavenge_consumes_decay = 0.2
+difficulty = "normal"          # easy | normal | hard — stored here, given meaning in C6 (never mutates kill_base)
+prey_preference = { fox = { vole = 0.6, hare = 0.4 }, wolf = { deer = 0.5, hare = 0.4, vole = 0.1 }, lynx = { hare = 0.6, vole = 0.4 } }
+nocturnal = ["fox", "lynx"]
+flee_distance = 8  flee_ticks = 10  flee_energy_factor = 2.0  rest_detect_factor = 0.5
+migrate_veg = 0.25  migrate_days = 6  migrate_pressure = 0.35  migrate_prey_min = 10  migrate_cooldown_days = 30
+local_extinction_min = 5
+```
+`kill_chance = clamp(kill_base + kill_speed_w × (pred.speed − prey.speed) + kill_aggression_w
+× pred.aggression − kill_size_w × prey.size, kill_min, kill_max)`.
+
+### FR2 Detection (single source of truth `predation::can_detect`)
+A predator detects a prey within its sense range (`geom::dist ≤ sense_cells`) unless
+`prey.camouflage × cover_by_terrain[prey cell] ≥ pred.sense × detect_threshold`, or the
+prey is resting on a den cell and `den_protects`. Detection is deterministic and
+distance-independent inside the ring. This rule supersedes the S02d doc's "80 % of sense"
+wording. Note: with base genomes voles (camouflage 0.60) and some hares are already hidden
+from base wolves in Forest/GrassDense; hiding is common in cover from day one — do not tune
+it away. A prey detects a predator within its own
+sense range (halved while resting, `rest_detect_factor`) when `pred.camouflage < prey.sense`.
+
+### FR3 Predator goal order
+Drink (thirst > 0.6) → Hunt (hunger > `hunt_hunger_min` and a detectable prey in range;
+choose the highest `preference / (1 + dist / 4)`; preference 0 means never targeted;
+predators never hunt predators) → Scavenge (hunger > `scavenge_hunger_min` and a prey
+carcass in range) → Mate (C4 rules; the predator values of the six-species maps in C4 FR1 apply, and the
+vegetation gate does not) → Rest (energy
+< 0.25, or `is_night()` for diurnal species, or `!is_night()` for `nocturnal`) → Patrol
+(Wander biased toward the highest `prey_pressure` cell seen).
+
+### FR4 Hunt phases
+*Stalk*: move with the `+chase_speed_bonus` budget toward the prey; the prey detecting the
+predator starts its Flee but does not start the chase clock. *Chase*: begins when `cheb ≤
+chase_trigger_cheb`; from then the predator has `chase_max_ticks` to reach contact. *Contact*: on the first tick with
+`cheb ≤ catch_distance_cheb` roll `kill_chance` once; success → prey dies
+(`DeathPredation`, `death.killer`, `death.chase_ticks`), predator enters *Eat* on the
+carcass cell for `eat_hours`, hunger −= `hunger_per_kill`, carcass `decay += kill_consumes_decay`;
+failure → the predator idles one tick and the hunt fails; the prey enters Flee for
+`flee_ticks` regardless of whether it had detected the predator. Ticks exhausted or prey out of range → fail. Every outcome records an attempt and
+starts `hunt_cooldown_hours`; per-creature stats update: `kills_by_species`, `attempts`,
+`last_kill (id, day, region)`, `chase_ticks_sum`, `chase_longest (ticks, year)`; prey
+records `chased`, `escaped`, `threats_by_species`.
+
+### FR5 Flee
+Every tick, **predator-first**: iterate living predators (ids ascending) and, with
+`spatial::within(pred, max_prey_sense_cells)`, mark each prey in range whose detection rule
+(FR2) passes as threatened by that predator. (Per-prey bucket scans are forbidden: 1 000 prey
+× 561 buckets per tick is infeasible.) On detection `Flee` pre-empts every goal: move at full budget away along the
+predator→prey vector for `flee_ticks` or until `geom::dist ≥ flee_distance`; steps cost
+`flee_energy_factor × move_cost_energy`. `predation_risk = min(1, 0.5 × cell.pred_pressure
++ 0.5 × predators_in_range / 3)` feeds S03 Condition.
+
+### FR6 Pressure
+`pred_pressure` is maintained exactly like `prey_pressure` (C3 FR8) for living predators.
+
+### FR7 Migration
+Evaluated daily per (species, region) with `migrate_cooldown_days` per pair. Prey groups
+migrate when the region's seasonal shortfall `veg_mean / season_cap[season] < migrate_veg`
+holds for `migrate_days` consecutive days (so winter alone does not trigger migration), or the mean `pred_pressure` over the cells the group occupies >
+`migrate_pressure`. Predator groups migrate when the region's prey count <
+`migrate_prey_min` for `migrate_days`. A **group** is all living members of the species in the origin region. Destination = the
+adjacent region (rectangles sharing an edge segment of positive length) maximising `mean_vegetation × (1 − mean_pred_pressure)` (prey) or `prey_count`
+(predators); `target_cell` = the walkable destination cell with the highest vegetation
+(prey) / highest `prey_pressure` (predators). Members get `Migrate(target_cell)` overriding
+Wander/Graze/Patrol for up to 2 days. Group word: ≤ 3 members `family`, prey > 3 `herd`,
+predators > 3 `pack`. One `Migration` event per group with `pos` = origin region centre.
+
+### FR8 Extinction and alerts
+At the day boundary, for each species with `initial_count > 0` and `peak > 0` that is not
+already marked extinct: if `living == 0` mark it and emit `Extinction` (text with the
+last individual's name, tag, cause, region; `pos` = its death cell) and push
+`Alert::Extinction { event_index, species, last: CreatureId }` into the tick's
+`StepReport`. Species with `initial_count == 0` never emit. Local extinction: a region
+whose count for a species drops to 0 after being ≥ `local_extinction_min` a season ago
+emits a `Note` once per (species, region) until repopulated. `Sim::step() -> StepReport
+{ alerts: Vec<Alert> }`; the `App` loop pushes one S12 per alert (in species-table order
+when several arrive the same day; popping one reveals the next), records
+`speed_before_alert`, and sets `paused` when `auto_pause_on_extinction`; when the option
+is off, the event is logged and shown in the ticker only. The last individual's death
+record is retained until the alert is dismissed, or decays normally when no modal is raised;
+`event_index` is the absolute event sequence number. S12 `years` = years since the species'
+first birth (or world start). Buttons: Continue (pop, restore speed), View lineage (pop,
+push S08 on the last individual), Pause (pop, stay paused).
+
+### FR9 Sense overlay (S02d)
+Selected creature = look cursor creature or followed creature, default the living
+predator with the most kills (ties by id); `Tab` cycles living predators by id ascending.
+Ring radius `sense_cells`; the table lists prey in range as detected/hidden/target using
+`can_detect`; for a selected prey it lists detected predators using the prey rule. If the
+selection dies the overlay reverts to the plain map.
+
+### FR10 Predator inspector (S03b) and prey additions
+Hunt stats from the per-creature counters: kills, attempts, success %, preference bars
+from actual kill shares (params shares when < 5 kills), last kill, average/longest chase,
+current target and distance. S03a Survival: `chased`, `escaped`, escape rate, threats
+seen shares; Killer/Scavengers on S03c from `death.killer` and the two nearest predators
+with Scavenge goal. S04b Interactions: kill shares, `hunted by` / `competes with`.
+
+### FR11 Phase plot (S05b) and coupling
+x = prey total, y = predator total from `Series`; last 40 days highlighted; equilibrium =
+time means. `stats::peak_lag(prey, pred) -> Option<u32>`: skip the first 360 days, smooth both with a
+30-day centred moving average, mean-subtract, Pearson correlation of `pred[t+L]` vs
+`prey[t]` for `L ∈ 0..=120`, return `argmax L` (lowest index on ties), or `None` when either
+series has fewer than 2 local maxima; a local maximum is a sample ≥ all samples within ±45
+days (lowest index on ties) and ≥ 1.15 × the series mean. S05a Coupling computes over the
+full `Series` and shows `–` on `None`.
+
+### FR12 Follow-mode danger line
+Nearest predator whose target is the followed prey, its `cheb` distance, and whether the
+prey has detected it (prey rule).
+
+## Acceptance criteria
+- Seed 42, default params, 10 years headless: all six species alive at year 5 and at
+  least five at year 10; on the smoothed series both prey and predator totals have ≥ 3
+  local maxima; `peak_lag` ∈ 5..=60.
+- Seeds 1..=10 with `initial_counts.lynx = 4`: an `Extinction` event within 3 years in at
+  least 7 seeds; no `Extinction` ever for a species with `initial_count == 0`; a species
+  emits at most once.
+- `can_detect`: hare camouflage 0.9 vs wolf sense 0.7 is hidden in Forest (0.90 ≥ 0.56)
+  and visible on Sand (0.36 < 0.56); a resting prey on a den is never targeted.
+- Hunt success per predator species over a 1-year run is between 15 % and 60 %.
+- Dry world: a `Migration` event occurs and the destination region's count for that
+  species rises within 5 days; no (species, region) pair migrates twice within the cooldown.
+- Determinism green; UI ≥ 30 FPS at x25 at the balance-table population; 10 years
+  headless < 5 min.
+- S02d, S03b, S05b, S12 match their prototypes in panel structure.
+- **Balance table**: the implementer may tune only `kill_base`, `chase_max_ticks`,
+  `chase_speed_bonus`, `hunt_cooldown_hours`, `hunger_per_kill_*` and predator
+  `initial_counts` to meet the bands above, and must record the final values in FR1.
+
+## Checkpoint demo script
+1. Default world, x25, 3 years. Predator counts fall after prey dips.
+2. `g`, `2` → phase orbit; `1` → both lines with the lag shown in Coupling.
+3. `k` on a `W`, `4` → sense overlay with detected and hidden prey; `Enter` → S03b hunt
+   stats; `f` follow through a hunt; the ticker shows the kill; `Esc`.
+4. `w` → S09, set Lynxes to 4 (species rows are live since C3), Generate, x25 until S12
+   appears; View lineage → S08 → `Esc` → map, still paused → `Space`.
+5. Dry world: a Migration event appears; `Enter` in the log opens look mode on the origin.
+
+## Tests
+- `sim::predation::tests::{can_detect_cover_table, den_protects, kill_chance_bounds, hunt_phases_and_single_roll,
+  chase_clock_starts_at_trigger, eat_reduces_hunger_and_decay, scavenge_consumes_decay, scavenge_prey_carcass_only,
+  flee_query_is_predator_first, nocturnal_rest_by_day, cheb_vs_ellipse_usage}`
+- `sim::behavior::tests::{flee_reacts_within_one_tick, flee_costs_energy, migration_destination, migration_cooldown,
+  predator_migration_on_low_prey, pressure_clamped}`
+- `sim::stats::tests::{peak_lag_on_synthetic_series, local_maxima_rule}`
+- `sim::tests::{extinction_once_and_not_for_absent_species, alert_queue_two_species_same_day}`
+- `tests/predators.rs::{six_species_five_years, oscillation_lag, forced_extinction_7_of_10, hunt_success_band,
+  migration_scenario, performance_budget}`
+
+## Decisions made here
+- Predators are solitary agents; packs are emergent.
+- One kill roll per contact with a head start on failure, so `kill_chance` is the lever.
+- Chebyshev distance for adjacency/catch/trigger; ellipse distance for perception.
+- Fox and lynx nocturnal; wolf and all prey diurnal.
+
+## Risks
+- Overkill collapse: levers are `hunt_cooldown_hours`, `eat_hours_*`, `hunger_per_kill_*`,
+  `kill_base`; the oscillation criterion bounds it.
+- Per-tick prey predator-queries: keep them bucket-bounded; measure before optimising.
