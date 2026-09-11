@@ -1,5 +1,6 @@
 //! Live application shell: shared state, screen stack and the tick loop.
 
+use std::cell::Cell;
 use std::io;
 use std::time::{Duration, Instant};
 
@@ -28,6 +29,9 @@ pub struct AppState {
     /// Map viewport origin (top-left world cell), shared so data screens can
     /// centre the map on a region/event.
     pub viewport_origin: (usize, usize),
+    /// Inner size of the map viewport as of the last draw (cols, rows). Written
+    /// by the map screen's `render` so key handlers can clamp scrolling.
+    pub viewport_size: Cell<(usize, usize)>,
 }
 
 impl AppState {
@@ -39,7 +43,27 @@ impl AppState {
             params,
             speed_before_alert: None,
             viewport_origin: (0, 0),
+            viewport_size: Cell::new((0, 0)),
         }
+    }
+
+    /// Largest valid viewport origin for the current world and last-drawn viewport.
+    pub fn viewport_max(&self) -> (usize, usize) {
+        let (vw, vh) = self.viewport_size.get();
+        match &self.sim {
+            Some(sim) => crate::ui::viewport::max_origin(sim.world.width(), sim.world.height(), vw, vh),
+            None => (0, 0),
+        }
+    }
+
+    /// Scroll the map viewport by `(dx, dy)` cells, clamped to the world so the
+    /// origin never overshoots and every key press moves the view.
+    pub fn scroll_viewport(&mut self, dx: isize, dy: isize) {
+        let (mx, my) = self.viewport_max();
+        let (x, y) = self.viewport_origin;
+        let x = x.min(mx).saturating_add_signed(dx).min(mx);
+        let y = y.min(my).saturating_add_signed(dy).min(my);
+        self.viewport_origin = (x, y);
     }
 
     pub fn speed(&self) -> u32 {
@@ -166,7 +190,11 @@ pub fn run(terminal: &mut DefaultTerminal, params: Params) -> io::Result<()> {
     loop {
         let mut force_draw = false;
 
-        if event::poll(Duration::from_millis(16))? {
+        // Wait briefly for input, then drain everything queued (key repeat can
+        // deliver several presses per frame) before stepping and drawing.
+        let mut wait = Duration::from_millis(16);
+        while event::poll(wait)? {
+            wait = Duration::ZERO;
             match event::read()? {
                 Event::Key(k) if k.kind == KeyEventKind::Press => {
                     force_draw = true;
@@ -195,5 +223,50 @@ pub fn run(terminal: &mut DefaultTerminal, params: Params) -> io::Result<()> {
             terminal.draw(|f| app.draw(f))?;
             last_draw = Instant::now();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scroll_never_overshoots_and_up_moves_immediately() {
+        let mut app = AppState::new(Params::default());
+        app.sim = Some(Sim::new(1, Params::default()));
+        // 150x40 world drawn in a 110x30 viewport → max origin (40, 10).
+        app.viewport_size.set((110, 30));
+        assert_eq!(app.viewport_max(), (40, 10));
+
+        // Hammer Down well past the bottom edge: origin must stop at the max.
+        for _ in 0..20 {
+            app.scroll_viewport(0, 5);
+        }
+        assert_eq!(app.viewport_origin, (0, 10));
+        // One Up tap moves the view at once (no hidden overshoot to burn off).
+        app.scroll_viewport(0, -5);
+        assert_eq!(app.viewport_origin, (0, 5));
+
+        for _ in 0..20 {
+            app.scroll_viewport(5, 0);
+        }
+        assert_eq!(app.viewport_origin, (40, 5));
+        app.scroll_viewport(-5, 0);
+        assert_eq!(app.viewport_origin, (35, 5));
+
+        // Never goes below zero either.
+        app.scroll_viewport(-100, -100);
+        assert_eq!(app.viewport_origin, (0, 0));
+    }
+
+    #[test]
+    fn scroll_recovers_from_stale_origin_beyond_max() {
+        let mut app = AppState::new(Params::default());
+        app.sim = Some(Sim::new(1, Params::default()));
+        app.viewport_size.set((110, 30));
+        // An origin set by another screen past the max is pulled back first.
+        app.viewport_origin = (500, 500);
+        app.scroll_viewport(0, -5);
+        assert_eq!(app.viewport_origin, (40, 5));
     }
 }

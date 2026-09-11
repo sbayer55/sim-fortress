@@ -51,19 +51,19 @@ impl Screen for WorldMap {
                 Action::None
             }
             KeyCode::Left => {
-                app.viewport_origin.0 = app.viewport_origin.0.saturating_sub(5);
+                app.scroll_viewport(-5, 0);
                 Action::None
             }
             KeyCode::Right => {
-                app.viewport_origin.0 += 5;
+                app.scroll_viewport(5, 0);
                 Action::None
             }
             KeyCode::Up => {
-                app.viewport_origin.1 = app.viewport_origin.1.saturating_sub(5);
+                app.scroll_viewport(0, -5);
                 Action::None
             }
             KeyCode::Down => {
-                app.viewport_origin.1 += 5;
+                app.scroll_viewport(0, 5);
                 Action::None
             }
             KeyCode::Char('o') => {
@@ -119,6 +119,7 @@ impl Screen for WorldMap {
 
         let map_inner_w = map_w.saturating_sub(2) as usize;
         let map_inner_h = map_rows.saturating_sub(2) as usize;
+        app.viewport_size.set((map_inner_w, map_inner_h));
         let max = viewport::max_origin(world.width(), world.height(), map_inner_w, map_inner_h);
         let origin = (app.viewport_origin.0.min(max.0), app.viewport_origin.1.min(max.1));
 
