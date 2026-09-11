@@ -1,17 +1,22 @@
-//! S05: the live charts screen (S05a/S05c — vegetation only in C2).
+//! S05: the live charts screen — S05a prey/predator lines and S05c stacked
+//! species over vegetation (C4 FR9). S05b (phase plot) arrives with predators.
 
+use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
-use ratatui::style::Style;
-use ratatui::text::{Line, Span};
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::Line;
 use ratatui::Frame;
 
-use crate::sim::SpeciesId;
+use crate::sim::{Kind, Sample, Sim, SpeciesId};
 use crate::ui::app::AppState;
+use crate::ui::screens::common::{arrow_color, day_stamp, sp, trend_arrow};
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::SpeciesStyle;
 use crate::widgets::{panel, status, util};
 use crate::{glyphs, theme};
+
+const CHART_W: u16 = 112;
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Variant {
@@ -54,6 +59,7 @@ impl Screen for Charts {
                 self.variant = Variant::Time;
                 Action::None
             }
+            KeyCode::Char('2') => Action::None, // phase plot arrives with predators
             KeyCode::Char('3') => {
                 self.variant = Variant::Stacked;
                 Action::None
@@ -61,7 +67,6 @@ impl Screen for Charts {
             KeyCode::Char('+') => {
                 self.zoom = match self.zoom {
                     60 => 240,
-                    240 => 720,
                     _ => 720,
                 };
                 Action::None
@@ -69,7 +74,6 @@ impl Screen for Charts {
             KeyCode::Char('-') => {
                 self.zoom = match self.zoom {
                     720 => 240,
-                    240 => 60,
                     _ => 60,
                 };
                 Action::None
@@ -83,96 +87,594 @@ impl Screen for Charts {
         let Some(sim) = &app.sim else {
             return;
         };
-
         let status_row = area.y + area.height - 1;
         let body_h = area.height - 1;
-        let chart_area = Rect::new(area.x, area.y, area.width * 2 / 3, body_h);
-        let side_area = Rect::new(area.x + chart_area.width, area.y, area.width - chart_area.width, body_h);
+        let chart_w = CHART_W.min(area.width.saturating_sub(20));
+        let chart_area = Rect::new(area.x, area.y, chart_w, body_h);
+        let side_area = Rect::new(area.x + chart_w, area.y, area.width - chart_w, body_h);
+        let window = Window::new(sim, self.zoom);
 
         match self.variant {
-            Variant::Time => self.time_chart(f, chart_area, side_area, sim),
-            Variant::Stacked => self.stacked_chart(f, chart_area, side_area, sim),
+            Variant::Time => {
+                time_chart(f, chart_area, sim, &window);
+                time_sidebar(f, side_area, sim, &window);
+            }
+            Variant::Stacked => {
+                stacked_chart(f, chart_area, sim, &window);
+                stacked_sidebar(f, side_area, sim, &window);
+            }
         }
 
-        let view = if self.variant == Variant::Time { "chart 1/3  vegetation" } else { "chart 3/3  stacked species" };
+        let view = match self.variant {
+            Variant::Time => "chart 1/3  populations",
+            Variant::Stacked => "chart 3/3  stacked species",
+        };
         status::render(f, Rect::new(area.x, status_row, area.width, 1), &[("g", "next chart"), ("1/3", "pick"), ("+/-", "zoom"), ("Esc", "back")], view);
     }
 }
 
-impl Charts {
-    fn time_chart(&self, f: &mut Frame, chart_area: Rect, side_area: Rect, sim: &crate::sim::Sim) {
-        let inner = panel::draw_with_hint(f, chart_area, "Vegetation (mean biomass, % of max)", &format!("last {} days", self.zoom), panel::Kind::Outer);
-        let plot = Rect::new(inner.x + 4, inner.y + 1, inner.width - 4, inner.height - 3);
-        veg_plot(f, plot, sim, self.zoom);
-        util::line(f, inner, inner.height - 1, Line::from(Span::styled(" no population data yet", theme::dim_text())));
+/// The visible slice of the daily series.
+struct Window<'a> {
+    samples: &'a [Sample],
+    season_days: u32,
+    prey: Vec<f32>,
+    veg: Vec<f32>,
+    drought: Vec<bool>,
+}
 
-        let side = panel::draw(f, side_area, "Drought", panel::Kind::Outer);
-        let mut row = 0u16;
-        panel::section(f, side, row, "Drought");
-        row += 1;
-        let droughts = sim.series.samples().iter().filter(|s| s.drought_regions >= 2).count();
-        util::line(f, side, row, Line::from(Span::styled(format!(" {} drought days (≥2 regions)", droughts), theme::text())));
-        row += 2;
-        panel::section(f, side, row, "Legend");
-        row += 1;
-        util::line(f, side, row, Line::from(vec![
-            Span::styled(" █ vegetation ", Style::default().fg(theme::VEGETATION).bg(theme::PANEL_BG)),
-            Span::styled("  ░ drought band", Style::default().fg(theme::WARN).bg(theme::PANEL_BG)),
-        ]));
+impl<'a> Window<'a> {
+    fn new(sim: &'a Sim, zoom: usize) -> Self {
+        let all = sim.series.samples();
+        let start = all.len().saturating_sub(zoom);
+        let samples = &all[start..];
+        Window {
+            samples,
+            season_days: sim.time.season_days,
+            prey: samples.iter().map(|s| (s.population[0] + s.population[1] + s.population[2]) as f32).collect(),
+            veg: samples.iter().map(|s| s.veg_mean).collect(),
+            drought: samples.iter().map(|s| s.drought_flags.iter().any(|&d| d)).collect(),
+        }
     }
 
-    fn stacked_chart(&self, f: &mut Frame, chart_area: Rect, side_area: Rect, sim: &crate::sim::Sim) {
-        let inner = panel::draw_with_hint(f, chart_area, "Stacked populations + vegetation", &format!("{} days", self.zoom), panel::Kind::Outer);
-        // Dim species legend row.
-        let mut spans = vec![Span::styled(" ", theme::dim_text())];
-        for id in SpeciesId::ALL {
-            spans.push(Span::styled(format!("█ {}  ", id.name()), Style::default().fg(id.color()).bg(theme::PANEL_BG)));
-        }
-        spans.push(Span::styled(" · vegetation biomass (right axis, % of max)", theme::dim_text()));
-        util::line(f, inner, 1, Line::from(spans));
-        let plot = Rect::new(inner.x + 4, inner.y + 3, inner.width - 4, inner.height - 6);
-        veg_plot(f, plot, sim, self.zoom);
+    fn len(&self) -> usize {
+        self.samples.len()
+    }
 
-        let side = panel::draw(f, side_area, "Composition", panel::Kind::Outer);
-        util::line(f, side, 1, Line::from(Span::styled(" no population data yet", theme::dim_text())));
+    fn day_label(&self, i: usize) -> String {
+        match self.samples.get(i) {
+            Some(s) => day_stamp(s.day as i64, self.season_days),
+            None => String::new(),
+        }
+    }
+
+    /// Column → sample index range for `cols` columns.
+    fn bin(&self, c: usize, cols: usize) -> (usize, usize) {
+        let n = self.len();
+        let a = c * n / cols;
+        let b = ((c + 1) * n / cols).max(a + 1).min(n);
+        (a, b)
+    }
+
+    fn mean_over(&self, v: &[f32], c: usize, cols: usize) -> f32 {
+        if self.len() == 0 {
+            return 0.0;
+        }
+        let (a, b) = self.bin(c, cols);
+        v[a..b].iter().sum::<f32>() / (b - a) as f32
+    }
+
+    fn drought_in(&self, c: usize, cols: usize) -> bool {
+        if self.len() == 0 {
+            return false;
+        }
+        let (a, b) = self.bin(c, cols);
+        self.drought[a..b].iter().any(|&d| d)
     }
 }
 
-/// Plot the vegetation series (0..1) into `plot`, shading drought bands.
-fn veg_plot(f: &mut Frame, plot: Rect, sim: &crate::sim::Sim, zoom: usize) {
-    let samples = sim.series.samples();
-    if samples.is_empty() {
+fn round_up(v: f32, step: f32) -> f32 {
+    ((v / step).ceil() * step).max(step)
+}
+
+// ------------------------------------------------------------------ S05a
+
+fn time_chart(f: &mut Frame, area: Rect, sim: &Sim, w: &Window) {
+    let inner = panel::draw_with_hint(f, area, "Population — prey vs predators", &format!("last {} days, 1 point per day", w.len()), panel::Kind::Outer);
+    let half = (inner.height.saturating_sub(1)) / 2;
+    let upper = Rect::new(inner.x, inner.y, inner.width, half);
+    let lower = Rect::new(inner.x, inner.y + half + 1, inner.width, inner.height - half - 1);
+    util::line(f, upper, 0, Line::from(sp(" Prey (voles + hares + deer)", Style::default().fg(theme::HARE).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD))));
+    line_chart(f, Rect::new(upper.x, upper.y + 1, upper.width, upper.height - 1), w, &w.prey, theme::HARE, 100.0);
+    panel::section(f, inner, half, "Predators (foxes + wolves + lynx)");
+    util::line(f, lower, 0, Line::from(sp(" no predators yet", theme::dim_text())));
+    let zeros = vec![0.0f32; w.len()];
+    line_chart(f, Rect::new(lower.x, lower.y + 1, lower.width, lower.height - 1), w, &zeros, theme::WOLF, 20.0);
+    let _ = sim;
+}
+
+/// One series as a half-block line with a y axis on the left, x labels below.
+fn line_chart(f: &mut Frame, area: Rect, w: &Window, series: &[f32], color: Color, step: f32) {
+    if area.height < 4 || area.width < 12 {
         return;
     }
-    // Use the most recent `zoom` samples.
-    let start = samples.len().saturating_sub(zoom);
-    let slice = &samples[start..];
-    let buf = f.buffer_mut();
+    let label_w = 6u16;
+    let plot = Rect::new(area.x + label_w, area.y, area.width - label_w - 1, area.height - 2);
+    let axis_y = plot.bottom();
     let cols = plot.width as usize;
     let rows = plot.height as usize;
-    for col in 0..cols {
-        let idx = col * slice.len() / cols;
-        let s = &slice[idx.min(slice.len() - 1)];
-        // Drought band background.
-        if s.drought_regions >= 2 {
+    let max = series.iter().cloned().fold(0.0f32, f32::max);
+    let y_max = round_up(max, step);
+    let buf = f.buffer_mut();
+    let band = theme::lerp(theme::PANEL_BG, theme::WARN, 0.22);
+    let mut band_started: Option<u16> = None;
+    for c in 0..cols {
+        let x = plot.x + c as u16;
+        let dry = w.len() > 0 && w.drought_in(c, cols);
+        if dry {
             for r in 0..rows {
-                if let Some(c) = buf.cell_mut((plot.x + col as u16, plot.y + r as u16)) {
-                    c.set_bg(theme::dim(theme::WARN, 0.78));
+                if let Some(cell) = buf.cell_mut((x, plot.y + r as u16)) {
+                    cell.set_char(' ');
+                    cell.set_style(Style::default().bg(band));
+                }
+            }
+            if band_started.is_none() {
+                band_started = Some(x);
+            }
+        }
+        if w.len() == 0 {
+            continue;
+        }
+        let v = w.mean_over(series, c, cols);
+        let halves = ((v / y_max) * (rows as f32 * 2.0)).round() as usize;
+        if halves == 0 {
+            // Flat zero: a lower half-block on the bottom row.
+            if let Some(cell) = buf.cell_mut((x, plot.y + rows as u16 - 1)) {
+                cell.set_char(glyphs::HALF_LOWER);
+                cell.set_style(Style::default().fg(color).bg(cell.bg));
+            }
+            continue;
+        }
+        let r = rows - 1 - ((halves - 1) / 2).min(rows - 1);
+        let ch = if halves % 2 == 1 { glyphs::HALF_LOWER } else { glyphs::HALF_UPPER };
+        if let Some(cell) = buf.cell_mut((x, plot.y + r as u16)) {
+            cell.set_char(ch);
+            cell.set_style(Style::default().fg(color).bg(cell.bg).add_modifier(Modifier::BOLD));
+        }
+    }
+    if let Some(bx) = band_started {
+        buf.set_stringn(bx + 1, plot.y, format!("{} drought", glyphs::DROUGHT), 10, Style::default().fg(theme::WARN).bg(band));
+    }
+    // Y labels: 0, ¼, ½, ¾, max.
+    for k in 0..=4 {
+        let y = axis_y - 1 - ((rows - 1) as f32 * k as f32 / 4.0).round() as u16;
+        let v = (y_max * k as f32 / 4.0).round() as u32;
+        buf.set_stringn(area.x, y, format!("{:>5}", v), 5, theme::dim_text());
+        buf.set_stringn(plot.x - 1, y, glyphs::CROSS.to_string(), 1, theme::border());
+    }
+    for r in 0..rows {
+        let y = plot.y + r as u16;
+        if buf.cell((plot.x - 1, y)).map(|c| c.symbol() != "┼").unwrap_or(false) {
+            buf.set_stringn(plot.x - 1, y, glyphs::V_LINE.to_string(), 1, theme::border());
+        }
+    }
+    // X axis with seven labels.
+    let axis: String = std::iter::repeat_n(glyphs::H_LINE, cols + 1).collect();
+    buf.set_stringn(plot.x - 1, axis_y, &axis, cols + 1, theme::border());
+    let n = w.len().max(1);
+    for k in 0..=6 {
+        let i = (k * (n - 1) / 6).min(n - 1);
+        let x = if k == 6 { plot.x + cols as u16 - 1 } else { plot.x + (i * cols / n) as u16 };
+        buf.set_stringn(x, axis_y, glyphs::CROSS.to_string(), 1, theme::border());
+        let label = w.day_label(i);
+        if !label.is_empty() {
+            let lx = (x as i32 - label.len() as i32 / 2).max(area.x as i32) as u16;
+            let lx = lx.min(area.right().saturating_sub(label.len() as u16 + 1));
+            buf.set_stringn(lx, axis_y + 1, &label, label.len(), theme::dim_text());
+        }
+    }
+    buf.set_stringn(plot.right() - 3, axis_y, "now", 3, Style::default().fg(theme::ACCENT).bg(theme::PANEL_BG));
+}
+
+fn stats_of(series: &[f32]) -> Option<(f32, usize, f32, usize, f32)> {
+    if series.is_empty() {
+        return None;
+    }
+    let (mut min, mut imin, mut max, mut imax) = (f32::MAX, 0, f32::MIN, 0);
+    for (i, &v) in series.iter().enumerate() {
+        if v < min {
+            min = v;
+            imin = i;
+        }
+        if v > max {
+            max = v;
+            imax = i;
+        }
+    }
+    let mean = series.iter().sum::<f32>() / series.len() as f32;
+    Some((min, imin, max, imax, mean))
+}
+
+fn pct_change(series: &[f32], days: usize) -> Option<f32> {
+    if series.len() < 2 {
+        return None;
+    }
+    let a = series[series.len().saturating_sub(days).min(series.len() - 1)];
+    let b = *series.last().unwrap();
+    if a <= 0.0 {
+        return None;
+    }
+    Some((b - a) / a * 100.0)
+}
+
+fn time_sidebar(f: &mut Frame, area: Rect, sim: &Sim, w: &Window) {
+    let inner = panel::draw(f, area, "Statistics", panel::Kind::Outer);
+    let mut row = 0u16;
+    panel::section(f, inner, row, "Current");
+    row += 1;
+    let prey_now = sim.species.iter().filter(|s| s.species.kind() == Kind::Prey).map(|s| s.count).sum::<u32>();
+    let counts: Vec<u16> = w.prey.iter().map(|v| *v as u16).collect();
+    let arrow = trend_arrow(&counts);
+    let pct = pct_change(&w.prey, 30).map(|p| format!("{:+.0}%", p)).unwrap_or_else(|| "–".into());
+    util::line(f, inner, row, Line::from(vec![
+        sp(" prey       ", theme::dim_text()),
+        sp(format!("{:>5}", prey_now), Style::default().fg(theme::HARE).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+        sp(format!("  {} {} / 30d", arrow, pct), Style::default().fg(arrow_color(arrow)).bg(theme::PANEL_BG)),
+    ]));
+    row += 1;
+    util::line(f, inner, row, Line::from(vec![
+        sp(" predators  ", theme::dim_text()),
+        sp("    0", Style::default().fg(theme::WOLF).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+        sp("  none yet", theme::dim_text()),
+    ]));
+    row += 1;
+    util::line(f, inner, row, Line::from(sp(" ratio –  (no predators)", theme::dim_text())));
+    row += 2;
+
+    panel::section(f, inner, row, "Prey");
+    row += 1;
+    match stats_of(&w.prey) {
+        Some((min, imin, max, imax, mean)) => {
+            let swing = if mean > 0.0 { (max - min) / mean * 100.0 } else { 0.0 };
+            for (k, v) in [
+                ("min", format!("{:.0}  on {}", min, w.day_label(imin))),
+                ("max", format!("{:.0}  on {}", max, w.day_label(imax))),
+                ("mean", format!("{:.0}", mean)),
+                ("swing", format!("{:.0}%  (max − min) ÷ mean", swing)),
+            ] {
+                util::line(f, inner, row, Line::from(vec![sp(format!(" {:<7}", k), theme::dim_text()), sp(v, theme::text())]));
+                row += 1;
+            }
+        }
+        None => {
+            util::line(f, inner, row, Line::from(sp(" no history yet", theme::dim_text())));
+            row += 1;
+        }
+    }
+    row += 1;
+    panel::section(f, inner, row, "Predators");
+    row += 1;
+    util::line(f, inner, row, Line::from(sp(" none yet — arrive in a later chunk", theme::dim_text())));
+    row += 2;
+    panel::section(f, inner, row, "Coupling");
+    row += 1;
+    util::line(f, inner, row, Line::from(vec![sp(" lag      ", theme::dim_text()), sp("–", theme::text())]));
+    row += 1;
+    util::line(f, inner, row, Line::from(vec![sp(" corr     ", theme::dim_text()), sp("–", theme::text())]));
+    row += 2;
+
+    let dry_days = w.drought.iter().filter(|&&d| d).count();
+    if dry_days > 0 {
+        panel::section(f, inner, row, "Drought");
+        row += 1;
+        let first = w.drought.iter().position(|&d| d).unwrap_or(0);
+        let last = w.drought.iter().rposition(|&d| d).unwrap_or(0);
+        let veg_before = w.veg.get(first.saturating_sub(1)).copied().unwrap_or(0.0);
+        let veg_min = w.veg[first..=last].iter().cloned().fold(1.0f32, f32::min);
+        let water = w.samples.get(last).map(|s| s.water_level).unwrap_or(1.0);
+        util::line(f, inner, row, Line::from(sp(format!(" {} {} drought days: {} to {}", glyphs::DROUGHT, dry_days, w.day_label(first), w.day_label(last)), Style::default().fg(theme::WARN).bg(theme::PANEL_BG))));
+        row += 1;
+        util::line(f, inner, row, Line::from(sp(format!(" vegetation {:.0}% {} {:.0}%, water x{:.2}", veg_before * 100.0, glyphs::DOWN, veg_min * 100.0, water), theme::text())));
+        row += 1;
+        let p0 = w.prey.get(first).copied().unwrap_or(0.0);
+        let p1 = w.prey.get(last).copied().unwrap_or(0.0);
+        util::line(f, inner, row, Line::from(sp(format!(" prey {:.0} at the start, {:.0} at the end", p0, p1), theme::text())));
+        row += 2;
+    }
+
+    panel::section(f, inner, row, "Map census");
+    row += 1;
+    for chunk in SpeciesId::ALL.chunks(3) {
+        let mut spans = Vec::new();
+        for id in chunk {
+            let s = &sim.species[id.index()];
+            spans.push(sp(format!(" {} ", id.glyph().to_ascii_uppercase()), Style::default().fg(if s.count == 0 { theme::DIM } else { id.color() }).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)));
+            spans.push(sp(format!("{:<5}{:>4}  ", id.name(), s.count), if s.count == 0 { theme::dim_text() } else { theme::text() }));
+        }
+        util::line(f, inner, row, Line::from(spans));
+        row += 1;
+    }
+    row += 1;
+    panel::section(f, inner, row, "Legend");
+    row += 1;
+    util::line(f, inner, row, Line::from(vec![
+        sp(format!(" {}{} ", glyphs::HALF_UPPER, glyphs::HALF_LOWER), Style::default().fg(theme::HARE).bg(theme::PANEL_BG)),
+        sp("prey (voles + hares + deer)", theme::text()),
+    ]));
+    row += 1;
+    util::line(f, inner, row, Line::from(vec![
+        sp(format!(" {}{} ", glyphs::HALF_UPPER, glyphs::HALF_LOWER), Style::default().fg(theme::WOLF).bg(theme::PANEL_BG)),
+        sp("predators (none yet)", theme::text()),
+    ]));
+    row += 1;
+    util::line(f, inner, row, Line::from(vec![
+        sp(" ░ ", Style::default().fg(theme::WARN).bg(theme::PANEL_BG)),
+        sp("drought band (any region in drought)", theme::text()),
+    ]));
+    row += 1;
+    util::line(f, inner, row, Line::from(sp(" separate y scales: prey per 100, predators per 20", theme::dim_text())));
+    row += 2;
+    panel::section(f, inner, row, "Keys");
+    row += 1;
+    util::line(f, inner, row, Line::from(sp(" [+/-] zoom 60/240/720d", theme::dim_text())));
+}
+
+// ------------------------------------------------------------------ S05c
+
+const Y_LABEL_W: u16 = 6;
+const R_AXIS_W: u16 = 6;
+
+fn shade_empty(buf: &mut Buffer, x: u16, y0: u16, y1: u16, band: Color) {
+    for y in y0..y1 {
+        if let Some(cell) = buf.cell_mut((x, y)) {
+            if cell.symbol() == " " {
+                cell.set_style(Style::default().bg(band));
+            }
+        }
+    }
+}
+
+fn stacked_chart(f: &mut Frame, area: Rect, sim: &Sim, w: &Window) {
+    let inner = panel::draw_with_hint(f, area, "Stacked populations + vegetation", &format!("{} days, three prey species", w.len()), panel::Kind::Outer);
+    let _ = sim;
+    // Legend row.
+    let mut spans = vec![sp(" ", theme::text())];
+    for id in SpeciesId::ALL.iter().take(3) {
+        spans.push(sp(glyphs::FULL_BLOCK.to_string(), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)));
+        spans.push(sp(format!(" {}   ", id.plural()), theme::text()));
+    }
+    spans.push(sp(glyphs::DOT.to_string(), Style::default().fg(theme::VEGETATION).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)));
+    spans.push(sp(" vegetation biomass (right axis, % of max)", theme::text()));
+    util::line(f, inner, 0, Line::from(spans));
+    if inner.height < 12 {
+        return;
+    }
+
+    let plot_x = inner.x + Y_LABEL_W;
+    let plot_w = inner.width - Y_LABEL_W - R_AXIS_W;
+    let plot_y = inner.y + 2;
+    let plot_h = inner.height - 7;
+    let axis_y = plot_y + plot_h;
+    let cols = plot_w as usize;
+    let n = w.len();
+
+    let mut stack: Vec<[f32; 3]> = Vec::with_capacity(cols);
+    let mut veg: Vec<f32> = Vec::with_capacity(cols);
+    for c in 0..cols {
+        let mut v = [0.0f32; 3];
+        if n > 0 {
+            let (a, b) = w.bin(c, cols);
+            for (k, item) in v.iter_mut().enumerate() {
+                *item = w.samples[a..b].iter().map(|s| s.population[k] as f32).sum::<f32>() / (b - a) as f32;
+            }
+            veg.push(w.mean_over(&w.veg, c, cols));
+        } else {
+            veg.push(0.0);
+        }
+        stack.push(v);
+    }
+    let max_total = stack.iter().map(|v| v.iter().sum::<f32>()).fold(0.0f32, f32::max);
+    let y_max = round_up(max_total, 50.0);
+    let halves = plot_h as usize * 2;
+    let band = theme::lerp(theme::PANEL_BG, theme::WARN, 0.22);
+    let buf = f.buffer_mut();
+    let mut band_x: Option<u16> = None;
+    for (c, v) in stack.iter().enumerate() {
+        let x = plot_x + c as u16;
+        let mut lower: Vec<Option<Color>> = vec![None; plot_h as usize];
+        let mut upper: Vec<Option<Color>> = vec![None; plot_h as usize];
+        let mut cum = 0.0f32;
+        for (k, id) in SpeciesId::ALL.iter().take(3).enumerate() {
+            let h0 = (cum / y_max * halves as f32).round() as usize;
+            cum += v[k];
+            let h1 = (cum / y_max * halves as f32).round() as usize;
+            for h in h0..h1.min(halves) {
+                let row = plot_h as usize - 1 - h / 2;
+                if h % 2 == 0 {
+                    lower[row] = Some(id.color());
+                } else {
+                    upper[row] = Some(id.color());
                 }
             }
         }
-        // Vegetation line (full blocks, height = veg% of plot).
-        let h = ((s.veg_mean * rows as f32).round() as usize).min(rows);
-        for r in 0..h {
-            let y = plot.y + (rows - 1 - r) as u16;
-            if let Some(c) = buf.cell_mut((plot.x + col as u16, y)) {
-                c.set_char(glyphs::FULL_BLOCK);
-                c.set_style(Style::default().fg(theme::VEGETATION).bg(c.bg));
+        let dry = n > 0 && w.drought_in(c, cols);
+        if dry && band_x.is_none() {
+            band_x = Some(x);
+        }
+        let empty_bg = if dry { band } else { theme::PANEL_BG };
+        for r in 0..plot_h as usize {
+            let y = plot_y + r as u16;
+            let Some(cell) = buf.cell_mut((x, y)) else { continue };
+            match (lower[r], upper[r]) {
+                (Some(lo), Some(up)) if lo == up => {
+                    cell.set_char(glyphs::FULL_BLOCK);
+                    cell.set_style(Style::default().fg(lo).bg(lo));
+                }
+                (Some(lo), Some(up)) => {
+                    cell.set_char(glyphs::HALF_LOWER);
+                    cell.set_style(Style::default().fg(lo).bg(up));
+                }
+                (Some(lo), None) => {
+                    cell.set_char(glyphs::HALF_LOWER);
+                    cell.set_style(Style::default().fg(lo).bg(empty_bg));
+                }
+                (None, Some(up)) => {
+                    cell.set_char(glyphs::HALF_UPPER);
+                    cell.set_style(Style::default().fg(up).bg(empty_bg));
+                }
+                (None, None) => {
+                    cell.set_char(' ');
+                    cell.set_style(Style::default().bg(empty_bg));
+                }
+            }
+        }
+        if n > 0 {
+            let vh = (veg[c].clamp(0.0, 1.0) * (plot_h as f32 - 1.0)).round() as usize;
+            let r = plot_h as usize - 1 - vh;
+            if let Some(cell) = buf.cell_mut((x, plot_y + r as u16)) {
+                let bg = match (lower[r], upper[r]) {
+                    (Some(lo), _) => lo,
+                    (None, Some(up)) => up,
+                    _ => empty_bg,
+                };
+                cell.set_char(glyphs::DOT);
+                cell.set_style(Style::default().fg(theme::VEGETATION).bg(bg).add_modifier(Modifier::BOLD));
             }
         }
     }
-    // Y-axis labels (0%, 50%, 100%).
-    util::line(f, Rect::new(plot.x.saturating_sub(4), plot.y, 4, plot.height), 0, Line::from(Span::styled("100%", theme::dim_text())));
-    util::line(f, Rect::new(plot.x.saturating_sub(4), plot.y, 4, plot.height), (plot.height - 1) / 2, Line::from(Span::styled(" 50%", theme::dim_text())));
-    util::line(f, Rect::new(plot.x.saturating_sub(4), plot.y, 4, plot.height), plot.height - 1, Line::from(Span::styled("  0%", theme::dim_text())));
+    if let Some(bx) = band_x {
+        shade_empty(buf, bx, plot_y, axis_y, band);
+        buf.set_stringn(bx + 1, plot_y, format!("{} drought", glyphs::DROUGHT), 12, Style::default().fg(theme::WARN).bg(band));
+    }
+    for r in 0..plot_h {
+        let y = plot_y + r;
+        buf.set_stringn(plot_x - 1, y, glyphs::V_LINE.to_string(), 1, theme::border());
+        buf.set_stringn(plot_x + plot_w, y, glyphs::V_LINE.to_string(), 1, theme::border());
+    }
+    for k in 0..=5 {
+        let y = axis_y - 1 - ((plot_h - 1) as f32 * k as f32 / 5.0).round() as u16;
+        let count = (y_max * k as f32 / 5.0).round() as u32;
+        buf.set_stringn(inner.x, y, format!("{:>5}", count), 5, theme::dim_text());
+        buf.set_stringn(plot_x - 1, y, glyphs::CROSS.to_string(), 1, theme::border());
+        buf.set_stringn(plot_x + plot_w, y, format!("{}{:>4}%", glyphs::CROSS, k * 20), R_AXIS_W as usize, Style::default().fg(theme::VEGETATION).bg(theme::PANEL_BG));
+    }
+    let axis: String = std::iter::repeat_n(glyphs::H_LINE, plot_w as usize + 1).collect();
+    buf.set_stringn(plot_x - 1, axis_y, &axis, plot_w as usize + 1, theme::border());
+    if n > 0 {
+        for k in 0..=6 {
+            let i = (k * (n - 1) / 6).min(n - 1);
+            let x = if k == 6 { plot_x + plot_w - 1 } else { plot_x + (i * cols / n) as u16 };
+            buf.set_stringn(x, axis_y, glyphs::CROSS.to_string(), 1, theme::border());
+            let label = w.day_label(i);
+            let lx = (x as i32 - label.len() as i32 / 2).max(inner.x as i32) as u16;
+            let lx = lx.min(inner.right().saturating_sub(label.len() as u16));
+            buf.set_stringn(lx, axis_y + 1, &label, label.len(), theme::dim_text());
+        }
+    }
+    let note_y = axis_y + 3;
+    let note = theme::dim_text();
+    let per_col = n as f32 / cols.max(1) as f32;
+    buf.set_stringn(inner.x + 1, note_y, format!("Species are stacked bottom-up in table order (voles, hares, deer); each column averages ~{:.1} days.", per_col), inner.width as usize - 2, note);
+    buf.set_stringn(inner.x + 1, note_y + 1, "The vegetation dot uses the right-hand scale; the prey stack follows the grass with a lag.", inner.width as usize - 2, note);
+}
+
+fn stacked_sidebar(f: &mut Frame, area: Rect, sim: &Sim, w: &Window) {
+    let inner = panel::draw(f, area, "Composition", panel::Kind::Outer);
+    let mut row = 0u16;
+    panel::section(f, inner, row, "Today");
+    row += 1;
+    util::line(f, inner, row, Line::from(sp("   species   count  share   240d range", theme::dim_text())));
+    row += 1;
+    let total: u32 = sim.species.iter().take(3).map(|s| s.count).sum();
+    for (k, id) in SpeciesId::ALL.iter().take(3).enumerate() {
+        let s = &sim.species[k];
+        let share = if total > 0 { s.count as f32 / total as f32 * 100.0 } else { 0.0 };
+        let series: Vec<u32> = w.samples.iter().map(|x| x.population[k]).collect();
+        let (lo, hi) = (series.iter().min().copied().unwrap_or(0), series.iter().max().copied().unwrap_or(0));
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!(" {} ", glyphs::FULL_BLOCK), Style::default().fg(id.color()).bg(theme::PANEL_BG)),
+            sp(format!("{:<8}{:>6}  {:>4.0}%   {}-{}", id.plural(), s.count, share, lo, hi), theme::text()),
+        ]));
+        row += 1;
+    }
+    let veg = w.veg.last().copied().unwrap_or(0.0);
+    util::line(f, inner, row, Line::from(sp(format!("   total   {:>6}          veg {:.0}%", total, veg * 100.0), theme::dim_text())));
+    row += 2;
+
+    panel::section(f, inner, row, "Share today");
+    row += 1;
+    {
+        let width = inner.width.saturating_sub(2) as usize;
+        let mut bar = String::new();
+        let mut used = 0usize;
+        let buf = f.buffer_mut();
+        let y = inner.y + row;
+        for (k, id) in SpeciesId::ALL.iter().take(3).enumerate() {
+            let s = &sim.species[k];
+            let cells = if k == 2 { width.saturating_sub(used) } else if total > 0 { (s.count as usize * width) / total as usize } else { 0 };
+            let seg: String = std::iter::repeat_n(glyphs::FULL_BLOCK, cells).collect();
+            buf.set_stringn(inner.x + 1 + used as u16, y, &seg, cells, Style::default().fg(id.color()).bg(theme::PANEL_BG));
+            used += cells;
+            bar.push_str(&seg);
+        }
+    }
+    row += 1;
+    util::line(f, inner, row, Line::from(sp(" prey 100%   predators 0%", theme::dim_text())));
+    row += 2;
+
+    panel::section(f, inner, row, "Peaks");
+    row += 1;
+    if let Some((min, imin, max, imax, _)) = stats_of(&w.prey) {
+        util::line(f, inner, row, Line::from(sp(format!(" largest stack  {:>5.0}  {}", max, w.day_label(imax)), theme::text())));
+        row += 1;
+        util::line(f, inner, row, Line::from(sp(format!(" smallest stack {:>5.0}  {}", min, w.day_label(imin)), theme::text())));
+        row += 1;
+    }
+    if let Some((vmin, _, vmax, _, _)) = stats_of(&w.veg) {
+        util::line(f, inner, row, Line::from(sp(format!(" vegetation     {:>4.0}% .. {:.0}%", vmin * 100.0, vmax * 100.0), Style::default().fg(theme::VEGETATION).bg(theme::PANEL_BG))));
+        row += 1;
+    }
+    row += 1;
+
+    let dry_days = w.drought.iter().filter(|&&d| d).count();
+    if dry_days > 0 {
+        panel::section(f, inner, row, "Drought");
+        row += 1;
+        let first = w.drought.iter().position(|&d| d).unwrap_or(0);
+        let last = w.drought.iter().rposition(|&d| d).unwrap_or(0);
+        util::line(f, inner, row, Line::from(sp(format!(" {} {} to {} ({} days)", glyphs::DROUGHT, w.day_label(first), w.day_label(last), dry_days), Style::default().fg(theme::WARN).bg(theme::PANEL_BG))));
+        row += 1;
+        let before = w.prey.get(first.saturating_sub(1)).copied().unwrap_or(0.0);
+        let after = w.prey.get((last + 20).min(w.len().saturating_sub(1))).copied().unwrap_or(0.0);
+        util::line(f, inner, row, Line::from(sp(format!(" stack {:.0} before, {:.0} twenty days after", before, after), theme::text())));
+        row += 2;
+    }
+
+    panel::section(f, inner, row, "30-day trend");
+    row += 1;
+    for (k, id) in SpeciesId::ALL.iter().take(3).enumerate() {
+        let s = &sim.species[k];
+        let a = s.trend.first().copied().unwrap_or(0);
+        let b = s.trend.last().copied().unwrap_or(0);
+        let arrow = trend_arrow(&s.trend);
+        let pct = s.change_pct().map(|p| format!("{:+.0}%", p)).unwrap_or_else(|| "–".into());
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!(" {} ", id.glyph().to_ascii_uppercase()), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!("{:<7}{:>5} {} {:<5}", id.plural(), a, glyphs::RIGHT, b), theme::text()),
+            sp(format!(" {} {}", arrow, pct), Style::default().fg(arrow_color(arrow)).bg(theme::PANEL_BG)),
+        ]));
+        row += 1;
+    }
+    row += 1;
+    panel::section(f, inner, row, "How to read");
+    row += 1;
+    for line in [
+        " the top edge is the whole prey population",
+        " each band is one species, voles at the bottom",
+        " the green dot is mean vegetation (right axis)",
+        " a shaded band marks days with a drought",
+        " [+/-] widens or narrows the time window",
+    ] {
+        util::line(f, inner, row, Line::from(sp(line, theme::dim_text())));
+        row += 1;
+    }
 }

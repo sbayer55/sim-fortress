@@ -21,6 +21,12 @@ const TILE_H: u16 = 3;
 
 pub struct Zoom;
 
+impl Default for Zoom {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Zoom {
     pub fn new() -> Self {
         Zoom

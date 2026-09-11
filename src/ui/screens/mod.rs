@@ -7,11 +7,14 @@ use ratatui::Frame;
 use super::app::AppState;
 use crate::widgets::util;
 
+pub mod common;
 pub mod s01_map;
 pub mod s03_inspector;
+pub mod s04_species;
 pub mod s05_charts;
 pub mod s06_ecology;
 pub mod s07_log;
+pub mod s08_lineage;
 pub mod s09_worldgen;
 pub mod s10_controls;
 pub mod s11_help;
@@ -189,6 +192,66 @@ mod tests {
         // Fractional carry is preserved.
         assert_eq!(acc.add(0.25, 2.0), 0);
         assert_eq!(acc.add(0.25, 2.0), 1);
+    }
+
+    #[test]
+    fn s04_sort_cycle() {
+        use crate::ui::screens::s04_species::{sorted_indices, SortCol, SpeciesBrowser};
+        let mut app = state();
+        app.sim = Some(Sim::new(1, Params::default()));
+        let mut s = SpeciesBrowser::new();
+        assert_eq!(s.sort, SortCol::Count);
+        let expect = [SortCol::Births, SortCol::Deaths, SortCol::Generation, SortCol::Name, SortCol::Count];
+        for want in expect {
+            s.handle_key(key(KeyCode::Char('s')), &mut app);
+            assert_eq!(s.sort, want);
+        }
+        // Count order: voles (240) before hares (180) before deer (90); absent species last in species order.
+        let sim = app.sim.as_ref().unwrap();
+        assert_eq!(sorted_indices(sim, SortCol::Count), vec![0, 1, 2, 3, 4, 5]);
+        assert_eq!(sorted_indices(sim, SortCol::Name), vec![2, 3, 1, 5, 0, 4]);
+        // Ties (all zero births) keep species order.
+        assert_eq!(sorted_indices(sim, SortCol::Births), vec![0, 1, 2, 3, 4, 5]);
+        // Enter opens the detail screen.
+        assert!(matches!(s.handle_key(key(KeyCode::Enter), &mut app), Action::Push(_)));
+    }
+
+    #[test]
+    fn s07_birth_ticker_gate() {
+        use crate::sim::{Event, EventKind};
+        let (mut app, map) = map_with_sim();
+        let sim = app.sim.as_mut().unwrap();
+        let mk = |kind: EventKind, text: &str| Event {
+            year: 1,
+            day: 1,
+            hour: 6,
+            kind,
+            species: None,
+            subject: None,
+            text: text.to_string(),
+            pos: None,
+            detail: String::new(),
+        };
+        sim.events.push(mk(EventKind::Note, "a note"));
+        sim.events.push(mk(EventKind::Birth, "a birth"));
+        let render = |app: &AppState| -> String {
+            let backend = TestBackend::new(155, 45);
+            let mut terminal = Terminal::new(backend).unwrap();
+            terminal.draw(|f| map.render(app, f, Rect::new(0, 0, 155, 45))).unwrap();
+            let buf = terminal.backend().buffer();
+            // The ticker sits directly under the map (row `height − MAP_CHROME_ROWS`).
+            let ticker_row = 45 - crate::ui::viewport::MAP_CHROME_ROWS;
+            (0..155).map(|x| buf[(x, ticker_row)].symbol().to_string()).collect::<String>()
+        };
+        app.params.ui.log_births = false;
+        let off = render(&app);
+        assert!(off.contains("a note"), "ticker should fall back to the last non-birth event: {off:?}");
+        assert!(!off.contains("a birth"));
+        app.params.ui.log_births = true;
+        let on = render(&app);
+        assert!(on.contains("a birth"), "ticker should show births when log_births is on: {on:?}");
+        // Births are always in the log itself.
+        assert!(app.sim.as_ref().unwrap().events.iter().any(|e| e.kind == EventKind::Birth));
     }
 
     #[test]

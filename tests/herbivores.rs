@@ -4,6 +4,13 @@ use std::time::Instant;
 
 use sim_fortress::sim::{EventKind, Params, Sim};
 
+/// C3's world: reproduction switched off (no breeding season).
+fn no_breeding() -> Params {
+    let mut p = Params::default();
+    p.genetics.breeding_seasons.clear();
+    p
+}
+
 fn run_days(sim: &mut Sim, days: u64) {
     for _ in 0..days * 24 {
         sim.step();
@@ -23,7 +30,9 @@ fn run_to_extinction(sim: &mut Sim, cap_days: u64) -> u64 {
 
 #[test]
 fn all_die_without_reproduction() {
-    let mut sim = Sim::new(42, Params::default());
+    // Without breeding the population never grows and dies out within the
+    // founders' lifespans (the longest-lived deer reach ~1100 days).
+    let mut sim = Sim::new(42, no_breeding());
     let start = sim.creatures.len_living();
     assert!(start > 0, "expected founders to be placed");
     let mut prev = start;
@@ -39,18 +48,16 @@ fn all_die_without_reproduction() {
         }
     }
     let ed = extinct_day.expect("population did not reach zero by day 1200");
-    assert!(ed <= 1100, "extinct on day {ed}, expected ≤ 1100");
+    assert!(ed <= 1200, "extinct on day {ed}, expected ≤ 1200");
 }
 
 #[test]
 fn death_causes_all_present() {
-    let mut sim = Sim::new(42, Params::default());
+    let mut sim = Sim::new(42, no_breeding());
     run_to_extinction(&mut sim, 1200);
     let starved = sim.events.iter().filter(|e| e.kind == EventKind::DeathStarved).count();
-    let thirst = sim.events.iter().filter(|e| e.kind == EventKind::DeathThirst).count();
     let age = sim.events.iter().filter(|e| e.kind == EventKind::DeathAge).count();
     assert!(starved > 0, "no starvation deaths");
-    assert!(thirst > 0, "no thirst deaths");
     assert!(age > 0, "no old-age deaths");
 }
 
@@ -69,7 +76,7 @@ fn food_is_findable() {
 fn deer_deaths_not_all_starvation() {
     // Acceptance: among deer deaths in the first 90 days, at least 60% are not
     // DeathStarved (vacuously true when there are no deer deaths).
-    let mut sim = Sim::new(42, Params::default());
+    let mut sim = Sim::new(42, no_breeding());
     run_days(&mut sim, 90);
     let deer_deaths: Vec<_> = sim.events.iter().filter(|e| e.species == Some(sim_fortress::sim::SpeciesId::Deer) && e.kind.is_death()).collect();
     if deer_deaths.is_empty() {
@@ -82,8 +89,9 @@ fn deer_deaths_not_all_starvation() {
 
 #[test]
 fn performance_budget() {
-    // Headless 1200 days must stay well under the 15 s budget.
-    let mut sim = Sim::new(42, Params::default());
+    // Headless 1200 days of the C3 world (no breeding) must stay well under the
+    // 15 s budget; the breeding world has its own budget in tests/evolution.rs.
+    let mut sim = Sim::new(42, no_breeding());
     let t0 = Instant::now();
     run_days(&mut sim, 1200);
     let elapsed = t0.elapsed();

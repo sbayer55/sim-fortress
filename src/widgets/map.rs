@@ -403,6 +403,7 @@ mod tests {
             seeds: vec![],
             regions: vec![("Ab".to_string(), 0, 0, w / 2, h), ("Cd".to_string(), w / 2, 0, w, h)],
             water_cells_at_generation: 0,
+            shore: vec![],
         }
     }
 

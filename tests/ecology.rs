@@ -10,7 +10,11 @@ fn run_days(sim: &mut Sim, days: u64) {
 
 #[test]
 fn yearly_cycle_ratio() {
-    let mut sim = Sim::new(42, Params::default());
+    // Pure ecology: no grazers (a breeding herd since C4 grazes winter
+    // vegetation far below the seasonal cap and would swamp the ratio).
+    let mut p = Params::default();
+    p.creatures.initial_counts.clear();
+    let mut sim = Sim::new(42, p);
     run_days(&mut sim, 720);
 
     // Every cell stays within 0..1.

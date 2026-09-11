@@ -1,9 +1,20 @@
-//! Daily time series: a ring buffer of per-day snapshots.
+//! Daily time series (a ring buffer of per-day snapshots), the per-species
+//! statistics record (C4 FR5) and the lineage store re-export.
 
 use serde::{Deserialize, Serialize};
 
-use crate::sim::creatures::CreatureStore;
-use crate::sim::species::{Genome, SpeciesId};
+use crate::sim::creatures::{CreatureStore, DeathTallies};
+use crate::sim::species::{Genome, SpeciesId, TRAIT_NAMES};
+
+pub use crate::sim::lineage::{Lineage, LineageNode, Tree, TreeItem};
+
+/// Trait histogram: 8 traits × 12 buckets.
+pub type Hist = [[u16; 12]; 8];
+
+/// Histogram bucket for a trait value: `min(floor(v × 12), 11)`.
+pub fn hist_bucket(v: f32) -> usize {
+    ((v * 12.0).floor().max(0.0) as usize).min(11)
+}
 
 /// Per-species population and genome statistics, computed from the living set.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -14,6 +25,27 @@ pub struct Census {
     pub genome_mean: [Genome; 6],
     pub genome_min: [Genome; 6],
     pub genome_max: [Genome; 6],
+    /// Trait histograms per species (C4 FR5).
+    pub hist: [Hist; 6],
+    /// Highest generation among living members.
+    pub max_generation: [u32; 6],
+    /// Sum of generations of living members (for the CSV mean).
+    pub generation_sum: [u64; 6],
+}
+
+impl Census {
+    pub fn generation_mean(&self, i: usize) -> f32 {
+        if self.population[i] == 0 {
+            0.0
+        } else {
+            self.generation_sum[i] as f32 / self.population[i] as f32
+        }
+    }
+
+    /// Total living prey (voles + hares + deer).
+    pub fn prey_total(&self) -> u32 {
+        self.population[0] + self.population[1] + self.population[2]
+    }
 }
 
 /// Count living creatures per species and reduce their genomes to mean/min/max.
@@ -24,20 +56,26 @@ pub fn census(store: &CreatureStore) -> Census {
     let mut sum = [[0.0f32; 8]; 6];
     let mut min = [[1.0f32; 8]; 6];
     let mut max = [[0.0f32; 8]; 6];
+    let mut hist = [[[0u16; 12]; 8]; 6];
+    let mut max_generation = [0u32; 6];
+    let mut generation_sum = [0u64; 6];
 
     for c in store.living() {
-        let i = SpeciesId::ALL.iter().position(|&s| s == c.species).unwrap();
+        let i = c.species.index();
         population[i] += 1;
         if c.adult {
             adults[i] += 1;
         } else {
             juveniles[i] += 1;
         }
+        max_generation[i] = max_generation[i].max(c.generation);
+        generation_sum[i] += c.generation as u64;
         for t in 0..8 {
             let v = c.genome.0[t];
             sum[i][t] += v;
             min[i][t] = min[i][t].min(v);
             max[i][t] = max[i][t].max(v);
+            hist[i][t][hist_bucket(v)] = hist[i][t][hist_bucket(v)].saturating_add(1);
         }
     }
 
@@ -55,7 +93,132 @@ pub fn census(store: &CreatureStore) -> Census {
         }
     }
 
-    Census { population, adults, juveniles, genome_mean, genome_min, genome_max }
+    Census { population, adults, juveniles, genome_mean, genome_min, genome_max, hist, max_generation, generation_sum }
+}
+
+/// One species' live record (C4 FR5). Counters are incremental during the day;
+/// the rest is refreshed from the census at the day boundary.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SpeciesStats {
+    pub species: SpeciesId,
+    pub count: u32,
+    pub adults: u32,
+    pub juveniles: u32,
+    pub births_today: u32,
+    pub deaths_today: u32,
+    pub births_yesterday: u32,
+    pub deaths_yesterday: u32,
+    /// All-time peak count.
+    pub peak: u32,
+    pub first_birth_day: Option<u32>,
+    /// High-water mark of the max generation among living members.
+    pub generation: u32,
+    /// Last 30 daily counts, oldest first.
+    pub trend: Vec<u16>,
+    pub mean: Genome,
+    pub min: Genome,
+    pub max: Genome,
+    pub hist: Hist,
+    /// Last 12 samples of the mean genome, `(generation, mean)`, oldest first.
+    pub drift: Vec<(u32, Genome)>,
+    pub last_drift_generation: u32,
+}
+
+impl SpeciesStats {
+    pub fn new(species: SpeciesId) -> Self {
+        SpeciesStats {
+            species,
+            count: 0,
+            adults: 0,
+            juveniles: 0,
+            births_today: 0,
+            deaths_today: 0,
+            births_yesterday: 0,
+            deaths_yesterday: 0,
+            peak: 0,
+            first_birth_day: None,
+            generation: 0,
+            trend: Vec::new(),
+            mean: species.base_genome(),
+            min: species.base_genome(),
+            max: species.base_genome(),
+            hist: [[0; 12]; 8],
+            drift: Vec::new(),
+            last_drift_generation: 0,
+        }
+    }
+
+    /// All six records in `SpeciesId::ALL` order, seeded from an initial census.
+    pub fn all(c: &Census, day: u32, drift_every: u32) -> [SpeciesStats; 6] {
+        let mut out = SpeciesId::ALL.map(SpeciesStats::new);
+        for (i, s) in out.iter_mut().enumerate() {
+            s.refresh(c, i, day, drift_every);
+            // The founding census is the first drift sample.
+            if s.count > 0 && s.drift.is_empty() {
+                s.drift.push((s.generation, s.mean));
+                s.last_drift_generation = s.generation;
+            }
+        }
+        out
+    }
+
+    /// 30-day change in percent (`None` when the trend has fewer than two points
+    /// or started from zero).
+    pub fn change_pct(&self) -> Option<f32> {
+        let first = *self.trend.first()? as f32;
+        let last = *self.trend.last()? as f32;
+        if self.trend.len() < 2 || first == 0.0 {
+            return None;
+        }
+        Some((last - first) / first * 100.0)
+    }
+
+    /// Refresh the census-derived fields for species index `i` on day `day`.
+    fn refresh(&mut self, c: &Census, i: usize, day: u32, drift_every: u32) {
+        self.count = c.population[i];
+        self.adults = c.adults[i];
+        self.juveniles = c.juveniles[i];
+        self.peak = self.peak.max(self.count);
+        self.generation = self.generation.max(c.max_generation[i]);
+        if self.count > 0 {
+            self.mean = c.genome_mean[i];
+            self.min = c.genome_min[i];
+            self.max = c.genome_max[i];
+        }
+        self.hist = c.hist[i];
+        self.trend.push(self.count.min(u16::MAX as u32) as u16);
+        if self.trend.len() > 30 {
+            let excess = self.trend.len() - 30;
+            self.trend.drain(0..excess);
+        }
+        if self.count > 0 && self.generation.saturating_sub(self.last_drift_generation) >= drift_every.max(1) {
+            self.drift.push((self.generation, self.mean));
+            self.last_drift_generation = self.generation;
+            if self.drift.len() > 12 {
+                let excess = self.drift.len() - 12;
+                self.drift.drain(0..excess);
+            }
+        }
+        let _ = day;
+    }
+}
+
+/// Day-boundary update of all six records: roll today's counters into
+/// `yesterday`, refresh from the census, and reset the live counters (the
+/// tallies themselves are reset by `Sim`).
+pub fn update_species_daily(stats: &mut [SpeciesStats; 6], c: &Census, tallies: &DeathTallies, day: u32, drift_every: u32) {
+    for (i, s) in stats.iter_mut().enumerate() {
+        s.births_today = tallies.births[i];
+        s.deaths_today = tallies.deaths[i];
+        if s.births_today > 0 && s.first_birth_day.is_none() {
+            s.first_birth_day = Some(day);
+        }
+        s.refresh(c, i, day, drift_every);
+        s.births_yesterday = s.births_today;
+        s.deaths_yesterday = s.deaths_today;
+        s.births_today = 0;
+        s.deaths_today = 0;
+    }
 }
 
 /// One day's snapshot of the world's ecological state.
@@ -92,6 +255,12 @@ pub struct Sample {
     pub genome_mean: [Genome; 6],
     pub genome_min: [Genome; 6],
     pub genome_max: [Genome; 6],
+    /// Per-species births during the day (C4 FR12).
+    pub births: [u32; 6],
+    /// Per-species deaths during the day (all causes).
+    pub deaths: [u32; 6],
+    pub generation_mean: [f32; 6],
+    pub generation_max: [u32; 6],
 }
 
 /// Daily ring buffer; oldest samples are evicted once `cap` is exceeded.
@@ -156,6 +325,23 @@ impl Series {
             out.push_str(&format!(",moist_{name}"));
         }
         out.push_str(",vole,hare,deer,fox,wolf,lynx,d_starved,d_thirst,d_age");
+        // C4 FR12: births, generation stats (all species) and trait means (prey).
+        for id in SpeciesId::ALL {
+            out.push_str(&format!(",births_{}", id.name().to_lowercase()));
+        }
+        for id in SpeciesId::ALL {
+            out.push_str(&format!(",deaths_{}", id.name().to_lowercase()));
+        }
+        for id in SpeciesId::ALL {
+            let n = id.name().to_lowercase();
+            out.push_str(&format!(",{n}_generation_mean,{n}_generation_max"));
+        }
+        for id in SpeciesId::ALL.iter().take(3) {
+            let n = id.name().to_lowercase();
+            for t in TRAIT_NAMES {
+                out.push_str(&format!(",{n}_{}_mean", t.to_lowercase()));
+            }
+        }
         out.push('\n');
         for s in &self.buf {
             out.push_str(&format!(
@@ -172,6 +358,20 @@ impl Series {
                 out.push_str(&format!(",{}", s.population[i]));
             }
             out.push_str(&format!(",{},{},{}", s.deaths_starved, s.deaths_thirst, s.deaths_age));
+            for i in 0..6 {
+                out.push_str(&format!(",{}", s.births[i]));
+            }
+            for i in 0..6 {
+                out.push_str(&format!(",{}", s.deaths[i]));
+            }
+            for i in 0..6 {
+                out.push_str(&format!(",{},{}", s.generation_mean[i], s.generation_max[i]));
+            }
+            for i in 0..3 {
+                for t in 0..8 {
+                    out.push_str(&format!(",{}", s.genome_mean[i].0[t]));
+                }
+            }
             out.push('\n');
         }
         out
@@ -232,6 +432,10 @@ mod tests {
             genome_mean: [Genome([0.0; 8]); 6],
             genome_min: [Genome([0.0; 8]); 6],
             genome_max: [Genome([0.0; 8]); 6],
+            births: [0; 6],
+            deaths: [0; 6],
+            generation_mean: [0.0; 6],
+            generation_max: [0; 6],
         }
     }
 
@@ -247,6 +451,177 @@ mod tests {
         assert_eq!(s.day0(), 2);
         let days: Vec<u32> = s.samples().iter().map(|s| s.day).collect();
         assert_eq!(days, vec![2, 3, 4]);
+    }
+
+    #[test]
+    fn histogram_buckets() {
+        assert_eq!(hist_bucket(0.0), 0);
+        assert_eq!(hist_bucket(0.02), 0);
+        assert_eq!(hist_bucket(1.0 / 12.0), 1);
+        assert_eq!(hist_bucket(0.5), 6);
+        assert_eq!(hist_bucket(0.98), 11);
+        assert_eq!(hist_bucket(1.0), 11);
+        let w = World::generate(7, &WorldParams::default());
+        let mut store = CreatureStore::new();
+        for c in place_founders(&w, &CreaturesParams::default(), &mut Rng::new(5)) {
+            store.insert(c);
+        }
+        let c = census(&store);
+        for i in 0..6 {
+            for t in 0..8 {
+                let n: u32 = c.hist[i][t].iter().map(|&v| v as u32).sum();
+                assert_eq!(n, c.population[i], "histogram {i}/{t} must count every living member");
+            }
+        }
+    }
+
+    #[test]
+    fn species_record_incremental_equals_full() {
+        // The incremental birth/death counters carried by the species record
+        // must equal a full recount from the event log and the daily samples.
+        let mut sim = crate::sim::Sim::new(42, crate::sim::Params::default());
+        for _ in 0..24 * 120 {
+            sim.step();
+        }
+        // Compare at a day boundary (the record is refreshed at midnight).
+        while sim.time.hour() != 0 {
+            sim.step();
+        }
+        for (i, s) in sim.species.iter().enumerate() {
+            let id = SpeciesId::ALL[i];
+            let full = census(&sim.creatures);
+            assert_eq!(s.count, full.population[i], "{:?} count", id);
+            assert_eq!(s.adults, full.adults[i], "{:?} adults", id);
+            assert_eq!(s.juveniles, full.juveniles[i], "{:?} juveniles", id);
+            assert_eq!(s.hist, full.hist[i], "{:?} histogram", id);
+            let births_series: u32 = sim.series.samples().iter().map(|x| x.births[i]).sum();
+            let deaths_series: u32 = sim.series.samples().iter().map(|x| x.deaths[i]).sum();
+            let births_events: u32 = sim
+                .events
+                .iter()
+                .filter(|e| e.kind == crate::sim::EventKind::Birth && e.species == Some(id))
+                .map(|e| e.text.split_whitespace().skip_while(|w| *w != "bore").nth(1).and_then(|w| w.parse::<u32>().ok()).unwrap_or(0))
+                .sum();
+            assert_eq!(births_series, births_events, "{:?} births: series vs events", id);
+            let last = sim.series.last().unwrap();
+            assert_eq!(s.births_yesterday, last.births[i], "{:?} births_yesterday", id);
+            assert_eq!(s.deaths_yesterday, last.deaths[i], "{:?} deaths_yesterday", id);
+            assert!(s.peak >= s.count);
+            assert!(s.generation >= full.max_generation[i]);
+            let _ = deaths_series;
+        }
+    }
+
+    #[test]
+    fn drift_sample_cadence() {
+        let w = World::generate(7, &WorldParams::default());
+        let mut store = CreatureStore::new();
+        for c in place_founders(&w, &CreaturesParams::default(), &mut Rng::new(5)) {
+            store.insert(c);
+        }
+        let c = census(&store);
+        let mut stats = SpeciesStats::all(&c, 0, 2);
+        let vole = &stats[0];
+        assert_eq!(vole.drift.len(), 1, "the founding census is the first sample");
+        assert_eq!(vole.drift[0].0, 1);
+        // Generation grows by one: no new sample; by two: a sample.
+        let tallies = DeathTallies::default();
+        let mut c2 = c;
+        c2.max_generation[0] = 2;
+        update_species_daily(&mut stats, &c2, &tallies, 1, 2);
+        assert_eq!(stats[0].drift.len(), 1);
+        c2.max_generation[0] = 3;
+        update_species_daily(&mut stats, &c2, &tallies, 2, 2);
+        assert_eq!(stats[0].drift.len(), 2);
+        assert_eq!(stats[0].drift[1].0, 3);
+        // Bounded to 12 samples.
+        for g in 0..40u32 {
+            c2.max_generation[0] = 5 + 2 * g;
+            update_species_daily(&mut stats, &c2, &tallies, 3 + g, 2);
+        }
+        assert_eq!(stats[0].drift.len(), 12);
+        assert_eq!(stats[0].trend.len(), 30, "trend keeps the last 30 daily counts");
+    }
+
+    fn lineage_creature(id: u32, gen: u32, parents: Option<(u32, u32)>, alive: bool) -> crate::sim::Creature {
+        let w = World::generate(7, &WorldParams::default());
+        let mut c = place_founders(&w, &CreaturesParams::default(), &mut Rng::new(1)).remove(0);
+        c.id = crate::sim::CreatureId(id);
+        c.generation = gen;
+        c.parents = parents.map(|(m, f)| (crate::sim::CreatureId(m), crate::sim::CreatureId(f)));
+        c.born_day = gen as i32 * 10;
+        c.alive = alive;
+        c
+    }
+
+    #[test]
+    fn lineage_prune_keeps_ancestors() {
+        let mut lin = Lineage::new();
+        let mut store = CreatureStore::new();
+        // g1: 1 (mother), 2 (father) → g2: 3 → g3: 4 (living) ; 5 is a dead g1 with no living descendants.
+        for (id, gen, parents, alive) in [(1, 1, None, false), (2, 1, None, false), (5, 1, None, false), (3, 2, Some((1, 2)), false), (4, 3, Some((3, 3)), true)] {
+            let c = lineage_creature(id, gen, parents, alive);
+            lin.record(&c, 0.1);
+            if !alive {
+                lin.record_death(c.id, 50);
+            }
+            if alive {
+                let mut cc = c.clone();
+                cc.id = crate::sim::CreatureId(0);
+                let got = store.insert(cc);
+                // The store hands out its own ids; make the living creature's id match.
+                assert_eq!(got, crate::sim::CreatureId(1));
+            }
+        }
+        // Emulate species max generation 20 with keep 8: cutoff 12 → all g1..g3 dead nodes are candidates.
+        let living_store = {
+            // Build a store whose only living creature has id 4.
+            let mut s = CreatureStore::new();
+            for _ in 0..3 {
+                let mut filler = lineage_creature(0, 1, None, false);
+                filler.alive = false;
+                s.insert(filler);
+            }
+            let alive = lineage_creature(0, 3, Some((3, 3)), true);
+            let id = s.insert(alive);
+            assert_eq!(id, crate::sim::CreatureId(4));
+            s
+        };
+        let _ = store;
+        let removed = lin.prune(&[20; 6], 8, &living_store);
+        assert_eq!(removed, 1, "only the dead node with no living descendants is pruned");
+        assert!(lin.get(crate::sim::CreatureId(5)).is_none());
+        for id in [1, 2, 3, 4] {
+            assert!(lin.get(crate::sim::CreatureId(id)).is_some(), "ancestor {id} of a living creature must survive pruning");
+        }
+    }
+
+    #[test]
+    fn lineage_root_depth_and_cap() {
+        // A mother chain 1 → 2 → 3 → 4 → 5 (focus) with many siblings per level.
+        let mut lin = Lineage::new();
+        let mut next = 100u32;
+        for id in 1..=5u32 {
+            let parents = if id == 1 { None } else { Some((id - 1, id - 1)) };
+            lin.record(&lineage_creature(id, id, parents, true), 0.1);
+            if id > 1 {
+                for _ in 0..200 {
+                    lin.record(&lineage_creature(next, id, Some((id - 1, id - 1)), true), 0.1);
+                    next += 1;
+                }
+            }
+        }
+        let tree = lin.tree(crate::sim::CreatureId(5), 3, 400).unwrap();
+        assert_eq!(tree.root, crate::sim::CreatureId(2), "root is 3 generations up the mother line");
+        assert!(tree.node_count <= 400, "tree has {} nodes", tree.node_count);
+        let ids = tree.node_ids();
+        for id in [2, 3, 4, 5] {
+            assert!(ids.contains(&crate::sim::CreatureId(id)), "chain node {id} missing");
+        }
+        assert!(tree.items.iter().any(|it| matches!(it, TreeItem::More { .. })), "truncated branches show `… and N more`");
+        // A shallow chain stops early.
+        let t2 = lin.tree(crate::sim::CreatureId(2), 3, 400).unwrap();
+        assert_eq!(t2.root, crate::sim::CreatureId(1));
     }
 
     #[test]

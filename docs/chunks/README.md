@@ -115,9 +115,9 @@ Rules that hold for every chunk:
 
 | Chunk | Doc status | Validation | Implementation |
 |-------|------------|------------|----------------|
-| C1 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | not started |
-| C2 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | not started |
-| C3 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | not started |
-| C4 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | not started |
+| C1 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | implemented |
+| C2 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | implemented |
+| C3 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | implemented |
+| C4 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | implemented (balance table recorded in the doc) |
 | C5 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | not started |
 | C6 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | not started |

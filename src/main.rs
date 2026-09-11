@@ -48,6 +48,7 @@ fn run_headless(seed: u64, ticks: u64, params_file: Option<&str>, width: Option<
         sim.step();
     }
     println!("seed={seed} ticks={ticks} checksum=0x{:016x}", sim.checksum());
+    println!("living={} lineage_nodes={} soft_cap_notes={}", sim.creatures.len_living(), sim.lineage.len(), sim.soft_cap_crossings);
     for e in sim.events.tail(5) {
         println!("Y{} D{:03} {:02}:00 {} {}", e.year, e.day, e.hour, e.kind.label(), e.text);
     }

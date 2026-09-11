@@ -60,6 +60,11 @@ impl SpeciesId {
         SpeciesId::Lynx,
     ];
 
+    /// Position in `SpeciesId::ALL` (the index used by every per-species array).
+    pub fn index(self) -> usize {
+        self as usize
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             SpeciesId::Vole => "Vole",
@@ -157,5 +162,9 @@ impl Genome {
     /// Sense range in map cells.
     pub fn sense_cells(&self) -> u16 {
         2 + (self.sense() * 10.0) as u16
+    }
+    /// Trait values live in `0.02..=0.98` (founders and inheritance alike).
+    pub fn clamp_trait(v: f32) -> f32 {
+        v.clamp(0.02, 0.98)
     }
 }

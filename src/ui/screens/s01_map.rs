@@ -165,7 +165,10 @@ impl Screen for WorldMap {
         let ticker_row = area.y + map_rows;
         let ticker = Rect::new(area.x, ticker_row, area.width, 1);
         util::fill(f.buffer_mut(), ticker, Style::default().bg(theme::BG));
-        if let Some(last) = sim.events.last() {
+        // C4 FR11: births and mutations reach the ticker only when `log_births` is on.
+        let log_births = app.params.ui.log_births;
+        let last = sim.events.iter().rev().find(|e| log_births || !matches!(e.kind, crate::sim::EventKind::Birth | crate::sim::EventKind::Mutation));
+        if let Some(last) = last {
             util::line(
                 f,
                 ticker,

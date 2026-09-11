@@ -65,7 +65,7 @@ flowchart LR
             D2["per-generation means table"]
             D3["Population"]
             D4["Selection pressure"]
-            D5["Compared with other predators"]
+            D5["Compared with other species"]
             D1 --> D2 --> D3 --> D4 --> D5
         end
     end
@@ -208,9 +208,10 @@ classDiagram
     <arrow> over 30 days`.
 20. **Selection pressure.** Two or three `§`/`¶` lines explaining which traits are moving
     and why (for example aggression rising, camouflage falling, longevity flat).
-21. **Compared with other predators (mean x100).** Header `Spd Siz Sen Met Agg Cam Fer Lon
-    count gen`, then one row per species of the same kind: glyph, name (title style for
-    the selected species), eight means in trait colours, count and generation.
+21. **Compared with other species (mean x100).** Header `Spd Siz Sen Met Agg Cam Fer Lon
+    count gen`, then one row per species (all six, absent ones dimmed): glyph, name (title
+    style for the selected species), eight means in trait colours, count and generation.
+    (C4 renamed the block from "Compared with other predators".)
 
 ### Status bar
 22. S04a: `[↑↓] select  [Enter] detail  [s] sort  [Esc] back`; right text `sorted by
@@ -256,9 +257,9 @@ screen). `g y e w` keep their global meaning and replace S04 with the other data
 - **Young world.** The 240-day series is shorter than 240 days and the drift has fewer
   than 12 samples; the chart must stretch what exists and the generation header must not
   divide by zero when `generation = 1`.
-- **Prey species selected.** Interactions must show predators-of instead of prey-of;
-  "Compared with other predators" becomes "Compared with other prey"; notable individuals
-  need a prey ranking.
+- **Prey species selected.** Interactions show `eaten by: none yet` (until C5) and
+  `competes with <other prey> for grass`; the comparison block is titled "Compared with
+  other species" for every kind; notable individuals are ranked by offspring, then age.
 - **Regions with no members** still appear in the habitat list with an empty bar.
 - **Paused simulation.** Static; `births today` / `deaths today` freeze.
 - **Long diet text** would overflow the 155-column row; diets are limited to the fixed

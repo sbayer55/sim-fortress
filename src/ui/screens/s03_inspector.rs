@@ -1,5 +1,6 @@
 //! S03: the live creature inspector (S03a prey / S03c corpse; S03b predator is
-//! placeholder until C5). Mirrors the prototype three-column layout with live data.
+//! placeholder until C5). Mirrors the prototype three-column layout with live
+//! data; C4 adds family names, offspring forecast, kin, legacy and timeline.
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
@@ -8,8 +9,10 @@ use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
 use crate::sim::creatures::{Creature, CreatureId, Goal};
-use crate::sim::{census, SpeciesId, TRAIT_NAMES};
+use crate::sim::{SpeciesId, TRAIT_NAMES};
 use crate::ui::app::AppState;
+use crate::ui::screens::common::day_stamp;
+use crate::ui::screens::s08_lineage::LineageScreen;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{EventKindStyle, SpeciesStyle};
 use crate::widgets::map::{self, MapOptions, Overlay};
@@ -51,6 +54,7 @@ impl Screen for Inspector {
                 }
                 Action::None
             }
+            KeyCode::Char('l') => Action::Push(Box::new(LineageScreen::new(self.id))),
             KeyCode::Esc => Action::Pop,
             _ => Action::Unhandled,
         }
@@ -74,7 +78,7 @@ impl Screen for Inspector {
         status::render(
             f,
             Rect::new(area.x, status_row, area.width, 1),
-            &[("f", "follow"), ("Tab", "next creature"), ("Esc", "back")],
+            &[("f", "follow"), ("l", "lineage"), ("Tab", "next creature"), ("Esc", "back")],
             &right_text,
         );
     }
@@ -137,14 +141,22 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
     panel::section(f, inner, row, "Family");
     row += 1;
     let (mother, father) = match c.parents {
-        Some((m, f)) => (format!("{}", m.0), format!("{}", f.0)),
-        None => ("unknown".to_string(), "unknown".to_string()),
+        Some((m, fa)) => (kin_name(sim, m), kin_name(sim, fa)),
+        None => ("founder".to_string(), "founder".to_string()),
     };
     util::line(f, inner, row, Line::from(vec![
         sp(" mother  ", theme::dim_text()),
-        sp(mother, theme::text()),
-        sp("    father  ", theme::dim_text()),
+        sp(format!("{:<18}", mother), theme::text()),
+        sp(" father  ", theme::dim_text()),
         sp(father, theme::text()),
+    ]));
+    row += 1;
+    let pregnant = c.pregnant_due.map(|d| format!("   pregnant, due in {} h", d.saturating_sub(sim.time.tick))).unwrap_or_default();
+    util::line(f, inner, row, Line::from(vec![
+        sp(" offspring  ", theme::dim_text()),
+        sp(format!("{}", c.offspring), theme::text()),
+        sp(pregnant, Style::default().fg(theme::GOOD).bg(theme::PANEL_BG)),
+        sp(format!("    {} lineage: [l]", glyphs::NOTE), theme::dim_text()),
     ]));
     row += 2;
 
@@ -202,16 +214,23 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
 
         panel::section(f, inner, row, "Behaviour");
         row += 1;
-        let (need, value) = match c.goal {
-            Goal::Drink => ("thirst", c.thirst),
-            Goal::Graze => ("hunger", c.hunger),
-            Goal::Rest => ("energy", c.energy),
-            _ => ("wander", 0.0),
+        let line = match c.goal {
+            Goal::Drink => format!(" {} because thirst = {:.2}", c.goal.label(false), c.thirst),
+            Goal::Graze => format!(" {} because hunger = {:.2}", c.goal.label(false), c.hunger),
+            Goal::Rest => format!(" {} because energy = {:.2}", c.goal.label(false), c.energy),
+            Goal::Mate => match c.mate_id {
+                Some(m) => format!(" {} — heading for {}", c.goal.label(false), kin_name(sim, m)),
+                None => format!(" {}", c.goal.label(false)),
+            },
+            _ => {
+                if !c.adult && c.mother.is_some_and(|m| sim.creatures.get(m).is_some_and(|m| m.alive)) && c.age_days(sim.time.day_index()) < sim.params.genetics.follow_mother_days {
+                    " wandering near its mother".to_string()
+                } else {
+                    format!(" {}", c.goal.label(false))
+                }
+            }
         };
-        util::line(f, inner, row, Line::from(sp(
-            format!(" {} because {} = {:.2}", c.goal.label(false), need, value),
-            theme::text(),
-        )));
+        util::line(f, inner, row, Line::from(sp(line, theme::text())));
     } else {
         panel::section(f, inner, row, "Death");
         row += 1;
@@ -219,7 +238,7 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
         let age = c.age_days(sim.time.day_index());
         util::line(f, inner, row, Line::from(vec![
             sp(format!(" {} ", glyphs::DEATH), Style::default().fg(theme::BAD).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-            sp(format!("{cause}"), theme::text()),
+            sp(cause.to_string(), theme::text()),
         ]));
         row += 1;
         util::line(f, inner, row, Line::from(vec![
@@ -235,15 +254,73 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
             sp(format!("   {kg} kg of meat remaining; gone in ~{gone_in} days"), theme::dim_text()),
         ]));
     }
+    row += 2;
+
+    // Timeline (C4 FR10): born, adult, each litter, death.
+    panel::section(f, inner, row, "Timeline");
+    row += 1;
+    let season_days = sim.time.season_days;
+    let mut events: Vec<(char, Color, i64, String)> = Vec::new();
+    let born_text = match c.parents {
+        Some((m, fa)) => format!("born to {} and {}", kin_name(sim, m), kin_name(sim, fa)),
+        None => "placed as a founder".to_string(),
+    };
+    events.push((glyphs::BIRTH, theme::GOOD, c.born_day as i64, born_text));
+    let adult_day = c.born_day as i64 + sim.params.creatures.adult_age(c.species) as i64;
+    if c.adult && adult_day >= 0 {
+        events.push((glyphs::UP, theme::INFO, adult_day, "reached adulthood".to_string()));
+    }
+    if let Some(node) = sim.lineage.get(c.id) {
+        let mut litters: Vec<(i64, usize)> = Vec::new();
+        for k in &node.children {
+            if let Some(kn) = sim.lineage.get(*k) {
+                let d = kn.born_day as i64;
+                match litters.iter_mut().find(|l| l.0 == d) {
+                    Some(l) => l.1 += 1,
+                    None => litters.push((d, 1)),
+                }
+            }
+        }
+        for (d, n) in litters {
+            events.push((glyphs::BIRTH, theme::GOOD, d, format!("litter of {n}")));
+        }
+    }
+    if let Some(d) = c.death {
+        events.push((glyphs::DEATH, theme::BAD, d.day as i64, format!("died of {}", d.cause.label())));
+    }
+    events.sort_by_key(|e| e.2);
+    let max_rows = inner.height.saturating_sub(row) as usize;
+    let skip = events.len().saturating_sub(max_rows);
+    for (g, color, d, text) in events.into_iter().skip(skip) {
+        if row >= inner.height {
+            break;
+        }
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!(" {} ", g), Style::default().fg(color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!("{:<9} ", day_stamp(d, season_days)), theme::dim_text()),
+            sp(text, theme::text()),
+        ]));
+        row += 1;
+    }
+}
+
+/// `Name tag` for a relative, from the store or the lineage.
+fn kin_name(sim: &crate::sim::Sim, id: CreatureId) -> String {
+    if let Some(c) = sim.creatures.get(id) {
+        return format!("{} {}", c.name_str(), c.tag());
+    }
+    match sim.lineage.get(id) {
+        Some(n) => format!("{} {}", n.name_str(), n.tag),
+        None => format!("#{}", id.0),
+    }
 }
 
 fn genome(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, c: &Creature) {
     let inner = panel::draw_with_hint(f, area, "Genome", &format!("vs {} mean", c.species.plural()), panel::Kind::Outer);
-    let cen = census(&sim.creatures);
-    let i = SpeciesId::ALL.iter().position(|&s| s == c.species).unwrap();
-    let mean = cen.genome_mean[i];
-    let min = cen.genome_min[i];
-    let max = cen.genome_max[i];
+    let stats = &sim.species[c.species.index()];
+    let mean = stats.mean;
+    let min = stats.min;
+    let max = stats.max;
     let mut row = 0u16;
     util::line(f, inner, row, Line::from(vec![
         sp(" trait       individual", theme::dim_text()),
@@ -273,7 +350,11 @@ fn genome(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, c: &Creature) {
         util::line(f, inner, row, Line::from(sp(format!(" {} {} {:+.2} (gen {})", glyphs::MUTATION, TRAIT_NAMES[m.trait_idx], m.delta, m.generation), theme::text())));
         row += 1;
     }
-    row += 1;
+    util::line(f, inner, row, Line::from(sp(
+        format!(" from {} lines; rate {:.2} per trait per birth", c.generation, sim.params.genetics.mutation_rate),
+        theme::dim_text(),
+    )));
+    row += 2;
 
     panel::section(f, inner, row, "Derived");
     row += 1;
@@ -283,12 +364,37 @@ fn genome(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, c: &Creature) {
         ("move speed".into(), format!("{:.1} cells/tick", 0.5 + g.speed() * 2.0)),
         ("daily food need".into(), format!("{:.2} biomass", 24.0 * sim.params.creatures.hunger_per_hour(g.size(), g.metabolism(), 1.0))),
         ("max lifespan".into(), format!("{} days", c.max_age_days(&sim.params.creatures))),
+        ("litter size".into(), format!("{} (fertility {:.2})", sim.params.genetics.litter_size(c.species, g.fertility()), g.fertility())),
+        ("mate cooldown".into(), format!("{} days", sim.params.genetics.cooldown(c.species))),
     ];
     for (k, v) in derived {
         util::line(f, inner, row, Line::from(vec![
             sp(format!(" {:<18}", k), theme::dim_text()),
             sp(v, theme::text()),
         ]));
+        row += 1;
+    }
+    row += 1;
+
+    // Offspring forecast (C4 FR10): with an average mate, each trait is drawn
+    // from either parent and mutates with sd `mutation_strength`.
+    panel::section(f, inner, row, "Offspring forecast (with an average mate)");
+    row += 1;
+    let sd = sim.params.genetics.mutation_strength;
+    for t in 0..8 {
+        if row >= inner.height {
+            break;
+        }
+        let a = c.genome.0[t];
+        let b = mean.0[t];
+        let centre = (a + b) / 2.0;
+        let lo = a.min(b) - sd;
+        let hi = a.max(b) + sd;
+        let y = inner.y + row;
+        let buf = f.buffer_mut();
+        buf.set_stringn(inner.x, y, format!(" {:<12}", TRAIT_NAMES[t]), 13, theme::text());
+        bars::range(buf, inner.x + 13, y, 22, lo.max(0.0), centre, hi.min(1.0), trait_color(t));
+        buf.set_stringn(inner.x + 36, y, format!("{:.2}..{:.2}", lo.max(0.0), hi.min(1.0)), 12, theme::dim_text());
         row += 1;
     }
 }
@@ -330,10 +436,87 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
     }
     row += mm_h + 1;
 
+    // Legacy (C4 FR10).
+    panel::section(f, inner, row, "Legacy");
+    row += 1;
+    let (living_desc, notable_desc) = sim.lineage.living_descendants(id, 5000);
+    util::line(f, inner, row, Line::from(vec![
+        sp(format!(" {} offspring, {} living descendants, {} notable", c.offspring, living_desc, notable_desc), theme::text()),
+    ]));
+    row += 1;
+    if let Some(node) = sim.lineage.get(id) {
+        // A mutation carried on by descendants: the first notable one among them.
+        let carried = sim
+            .lineage
+            .descendants(id, u32::MAX, 500)
+            .into_iter()
+            .filter_map(|d| sim.lineage.get(d))
+            .find_map(|d| d.mutations.iter().find(|m| m.delta.abs() >= sim.params.genetics.mutation_notable).map(|m| (d.name_str(), d.tag.clone(), *m)));
+        match carried {
+            Some((name, tag, m)) => {
+                util::line(f, inner, row, Line::from(sp(format!(" {} {} {} carries {} {:+.2}", glyphs::MUTATION, name, tag, TRAIT_NAMES[m.trait_idx], m.delta), theme::dim_text())));
+            }
+            None if node.children.is_empty() => {
+                util::line(f, inner, row, Line::from(sp(" no descendants yet", theme::dim_text())));
+            }
+            None => {
+                util::line(f, inner, row, Line::from(sp(" no notable mutations among descendants", theme::dim_text())));
+            }
+        }
+        row += 1;
+    }
+    if !c.alive {
+        util::line(f, inner, row, Line::from(sp(" carcass feeds: scavengers arrive with predators", theme::dim_text())));
+        row += 1;
+    }
+    row += 1;
+
+    // Kin nearby (C4 FR10): parents, siblings and children within 15 cells.
+    panel::section(f, inner, row, "Kin nearby");
+    row += 1;
+    let mut kin: Vec<(f32, &Creature, &str)> = Vec::new();
+    let sibling_of = |o: &Creature| c.parents.is_some() && o.parents.is_some() && (o.parents.map(|p| p.0) == c.parents.map(|p| p.0) || o.parents.map(|p| p.1) == c.parents.map(|p| p.1));
+    for o in sim.creatures.living().filter(|o| o.id != id && o.species == c.species) {
+        let rel = if c.parents.is_some_and(|p| p.0 == o.id) {
+            "mother"
+        } else if c.parents.is_some_and(|p| p.1 == o.id) {
+            "father"
+        } else if o.parents.is_some_and(|p| p.0 == id || p.1 == id) {
+            "child"
+        } else if sibling_of(o) {
+            "sibling"
+        } else {
+            continue;
+        };
+        let d = crate::sim::dist(c.x, c.y, o.x, o.y);
+        if d <= 15.0 {
+            kin.push((d, o, rel));
+        }
+    }
+    kin.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.id.cmp(&b.1.id)));
+    if kin.is_empty() {
+        util::line(f, inner, row, Line::from(sp(" no kin within 15 cells", theme::dim_text())));
+        row += 1;
+    }
+    for (d, o, rel) in kin.iter().take(5) {
+        if row >= inner.height {
+            break;
+        }
+        let dir = compass(c.x, c.y, o.x, o.y);
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!(" {} ", if o.adult { o.species.glyph().to_ascii_uppercase() } else { o.species.glyph() }), species_style(o.species)),
+            sp(format!("{:<8}{:<7}", o.name_str(), o.tag()), theme::text()),
+            sp(format!("{:>3.0} cells {:<2} ", d, dir), theme::dim_text()),
+            sp(rel.to_string(), theme::label()),
+        ]));
+        row += 1;
+    }
+    row += 1;
+
     // Recent events filtered by subject.
     panel::section(f, inner, row, "Recent events");
     row += 1;
-    let evs: Vec<_> = sim.events.iter().rev().filter(|e| e.subject == Some(id)).take(10).collect();
+    let evs: Vec<_> = sim.events.iter().rev().filter(|e| e.subject == Some(id)).take(6).collect();
     if evs.is_empty() {
         util::line(f, inner, row, Line::from(sp(" no events for this creature", theme::dim_text())));
         row += 1;
@@ -350,6 +533,25 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
         row += 1;
     }
     let _ = app;
+}
+
+/// Compass direction from `(x, y)` to `(tx, ty)` (map cells are 2:1).
+fn compass(x: usize, y: usize, tx: usize, ty: usize) -> &'static str {
+    let dx = tx as i64 - x as i64;
+    let dy = (ty as i64 - y as i64) * 2;
+    let ns = if dy < -1 { "N" } else if dy > 1 { "S" } else { "" };
+    let ew = if dx < -1 { "W" } else if dx > 1 { "E" } else { "" };
+    match (ns, ew) {
+        ("", "") => "here",
+        ("N", "") => "N",
+        ("S", "") => "S",
+        ("", "E") => "E",
+        ("", "W") => "W",
+        ("N", "E") => "NE",
+        ("N", "W") => "NW",
+        ("S", "E") => "SE",
+        _ => "SW",
+    }
 }
 
 fn local_forage(sim: &crate::sim::Sim, x: usize, y: usize) -> f32 {

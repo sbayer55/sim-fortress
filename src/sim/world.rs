@@ -73,9 +73,46 @@ pub struct World {
     pub regions: Vec<RegionRect>,
     /// Number of water cells at generation, used as the water-level series baseline.
     pub water_cells_at_generation: usize,
+    /// Per cell: 8-adjacent to water (a drinking spot). Refreshed by
+    /// `refresh_shore` whenever water terrain changes; empty means "compute".
+    pub shore: Vec<bool>,
 }
 
 impl World {
+    /// Is `(x, y)` 8-adjacent to a water cell?
+    pub fn is_shore(&self, x: usize, y: usize) -> bool {
+        if self.shore.len() == self.cells.len() {
+            return self.shore[y * self.width + x];
+        }
+        self.compute_shore(x, y)
+    }
+
+    fn compute_shore(&self, x: usize, y: usize) -> bool {
+        for dy in -1i32..=1 {
+            for dx in -1i32..=1 {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+                let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                if self.in_bounds(nx, ny) && self.cell(nx as usize, ny as usize).terrain.is_water() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Recompute the shore cache (call after any water terrain change).
+    pub fn refresh_shore(&mut self) {
+        let mut shore = Vec::with_capacity(self.cells.len());
+        for y in 0..self.height {
+            for x in 0..self.width {
+                shore.push(self.compute_shore(x, y));
+            }
+        }
+        self.shore = shore;
+    }
+
     pub fn cell(&self, x: usize, y: usize) -> &Cell {
         &self.cells[y * self.width + x]
     }
@@ -243,7 +280,7 @@ impl World {
 
         let water_cells_at_generation = cells.iter().filter(|c| c.terrain.is_water()).count();
 
-        World {
+        let mut world = World {
             cells,
             width: w,
             height: h,
@@ -252,7 +289,10 @@ impl World {
             seeds: Vec::new(),
             regions: build_regions(w, h),
             water_cells_at_generation,
-        }
+            shore: Vec::new(),
+        };
+        world.refresh_shore();
+        world
     }
 }
 

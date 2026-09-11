@@ -180,7 +180,7 @@ impl Screen for Controls {
         row += 1;
         let toggles: [(&str, bool, &str); 3] = [
             ("a", app.params.ui.auto_pause_on_extinction, "auto-pause on extinction"),
-            ("b", app.params.ui.log_births, "log births to the event log"),
+            ("b", app.params.ui.log_births, "show births in the map ticker"),
             ("c", app.params.ui.pause_on_follow_death, "pause when a followed creature dies"),
         ];
         for (key, on, label) in toggles {

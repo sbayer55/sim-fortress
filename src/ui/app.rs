@@ -13,9 +13,11 @@ use crate::sim::creatures::CreatureId;
 use crate::sim::{Params, Sim};
 use crate::theme;
 
+use super::screens::s04_species::SpeciesBrowser;
 use super::screens::s05_charts::Charts;
 use super::screens::s06_ecology::Ecology;
 use super::screens::s07_log::EventLog;
+use super::screens::s08_lineage::LineageScreen;
 use super::screens::s09_worldgen::WorldGen;
 use super::screens::s10_controls::Controls;
 use super::screens::s11_help::Help;
@@ -123,7 +125,7 @@ impl AppState {
     pub fn handle_follow(&mut self) {
         let Some(id) = self.follow else { return };
         let Some(sim) = &self.sim else { return };
-        if sim.creatures.get(id).map_or(true, |c| c.alive) {
+        if sim.creatures.get(id).is_none_or(|c| c.alive) {
             self.follow_death_tick = None;
             return;
         }
@@ -175,6 +177,15 @@ impl App {
             KeyCode::Char('e') => Action::Push(Box::new(EventLog::new())),
             KeyCode::Char('y') => Action::Push(Box::new(Ecology::new())),
             KeyCode::Char('g') => Action::Push(Box::new(Charts::new())),
+            KeyCode::Char('s') => Action::Push(Box::new(SpeciesBrowser::new())),
+            KeyCode::Char('l') => {
+                // Lineage of the followed creature, else the oldest living one.
+                let focus = self.state.follow.or_else(|| self.state.sim.as_ref().and_then(|s| s.oldest_living()));
+                match focus {
+                    Some(id) => Action::Push(Box::new(LineageScreen::new(id))),
+                    None => Action::None,
+                }
+            }
             // `q`/`w` return to world generation (title flow arrives in C6).
             KeyCode::Char('q') | KeyCode::Char('w') => Action::Push(Box::new(WorldGen::new())),
             _ => Action::None,

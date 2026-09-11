@@ -5,7 +5,9 @@ pub mod behavior;
 pub mod creatures;
 pub mod ecology;
 pub mod events;
+pub mod genetics;
 pub mod geom;
+pub mod lineage;
 pub mod params;
 pub mod rng;
 pub mod spatial;
@@ -21,7 +23,9 @@ pub use params::{Params, Rainfall};
 pub use rng::Rng;
 pub use spatial::SpatialIndex;
 pub use species::{Genome, Kind, SpeciesId, TRAIT_NAMES};
-pub use stats::{census, Census, Sample, Series};
+pub use lineage::{Lineage, LineageNode, Tree, TreeItem};
+pub use params::GeneticsParams;
+pub use stats::{census, Census, Sample, Series, SpeciesStats};
 pub use time::{Season, Time};
 pub use world::{Cell, RegionRect, Terrain, World};
 
@@ -56,6 +60,15 @@ pub struct Sim {
     pub deaths: DeathTallies,
     pub drought: [bool; 8],
     pub drought_days_below: [u32; 8],
+    /// Per-species live statistics (C4 FR5), `SpeciesId::ALL` order.
+    pub species: [SpeciesStats; 6],
+    /// Ancestry of every creature born (C4 FR6), pruned weekly.
+    pub lineage: Lineage,
+    /// The soft-cap Note has been logged for the current crossing.
+    pub soft_cap_noted: bool,
+    /// How many times the soft-cap Note has been logged (acceptance: 0).
+    pub soft_cap_crossings: u32,
+    soft_cap_counted: bool,
 }
 
 impl Sim {
@@ -80,6 +93,11 @@ impl Sim {
         }
         let mut spatial = SpatialIndex::new(&world);
         spatial.rebuild(&creatures, &world);
+        let mut lineage = Lineage::new();
+        for c in creatures.living() {
+            lineage.record(c, params.genetics.mutation_notable);
+        }
+        let species = SpeciesStats::all(&census(&creatures), 0, params.genetics.drift_every_generations);
 
         Sim {
             params,
@@ -94,7 +112,27 @@ impl Sim {
             deaths: DeathTallies::default(),
             drought: [false; 8],
             drought_days_below: [0; 8],
+            species,
+            lineage,
+            soft_cap_noted: false,
+            soft_cap_crossings: 0,
+            soft_cap_counted: false,
         }
+    }
+
+    /// Births so far today for species index `i` (the live counter).
+    pub fn births_today(&self, i: usize) -> u32 {
+        self.deaths.births[i]
+    }
+
+    /// Deaths so far today for species index `i` (the live counter).
+    pub fn deaths_today(&self, i: usize) -> u32 {
+        self.deaths.deaths[i]
+    }
+
+    /// The oldest living creature (lowest born_day, ties by id), if any.
+    pub fn oldest_living(&self) -> Option<CreatureId> {
+        self.creatures.living().min_by_key(|c| (c.born_day, c.id)).map(|c| c.id)
     }
 
     /// Advance one tick: season event, creature behaviour, then the daily update
@@ -118,9 +156,22 @@ impl Sim {
             &self.time,
             &self.params.creatures,
             &self.params.ecology,
+            &self.params.genetics,
             &mut self.creature_rng,
             &mut self.deaths,
+            &mut self.lineage,
+            &mut self.soft_cap_noted,
         );
+        if self.soft_cap_noted {
+            if !self.soft_cap_counted {
+                self.soft_cap_crossings += 1;
+                self.soft_cap_counted = true;
+            }
+            if (self.creatures.len_living() as u32) < self.params.genetics.max_population_soft_cap {
+                self.soft_cap_noted = false; // re-arm for the next crossing
+                self.soft_cap_counted = false;
+            }
+        }
 
         // Daily ecology + census at midnight (hour 0).
         if self.time.hour() == 0 {
@@ -131,7 +182,11 @@ impl Sim {
                 &self.time,
                 &self.params.creatures,
                 &mut self.deaths,
+                &mut self.lineage,
             );
+            let c = census(&self.creatures);
+            let day = self.time.day_index() as u32;
+            stats::update_species_daily(&mut self.species, &c, &self.deaths, day, self.params.genetics.drift_every_generations);
             ecology::daily_update(
                 &mut self.world,
                 &mut self.rng,
@@ -142,10 +197,13 @@ impl Sim {
                 &mut self.drought_days_below,
                 &self.params.ecology,
                 self.params.world.rainfall,
-                &self.creatures,
+                &c,
                 &self.deaths,
             );
             self.deaths = DeathTallies::default();
+            if day.is_multiple_of(7) {
+                self.lineage.prune(&c.max_generation, self.params.genetics.lineage_keep_generations, &self.creatures);
+            }
         }
 
         self.spatial.rebuild(&self.creatures, &self.world);
@@ -252,12 +310,12 @@ mod tests {
         }
         assert_eq!(a.checksum(), b.checksum());
         // Lock the exact value so accidental algorithm changes fail loudly.
-        assert_eq!(a.checksum(), 0x34f6_31d1_a25a_f5dc);
+        assert_eq!(a.checksum(), 0x46aa_875f_107c_0e5b);
     }
 
     #[test]
     fn checksum_includes_creatures() {
-        let mut a = Sim::new(42, Params::default());
+        let a = Sim::new(42, Params::default());
         let mut b = Sim::new(42, Params::default());
         let id = b.creatures.living_ids()[0];
         b.creatures.get_mut(id).unwrap().x += 1;

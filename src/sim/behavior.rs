@@ -1,27 +1,29 @@
 //! Creature behaviour: perception, goal selection (with hysteresis), fractional
-//! movement, grazing/drinking/resting, den creation, death and the day boundary.
+//! movement, grazing/drinking/resting, mating (C4), den creation, death and the
+//! day boundary.
 
 use crate::sim::creatures::{Cause, Creature, CreatureId, CreatureStore, Death, DeathTallies, Goal, RestReason};
 use crate::sim::events::{Event, EventKind, EventRing};
+use crate::sim::genetics::{self, TickView, OFF8};
 use crate::sim::geom;
-use crate::sim::params::{CreaturesParams, EcologyParams};
+use crate::sim::lineage::Lineage;
+use crate::sim::params::{CreaturesParams, EcologyParams, GeneticsParams};
 use crate::sim::rng::Rng;
 use crate::sim::spatial::SpatialIndex;
 use crate::sim::time::Time;
 use crate::sim::world::{Terrain, World};
 
-/// What a creature can see at a replan. Creature ids are collected for C5.
+/// What a creature can see at a replan. Creature ids feed mate selection (C4)
+/// and predation (C5).
 pub struct Perception {
     pub nearest_water: Option<(usize, usize)>,
     pub best_graze: Option<((usize, usize), f32)>,
     pub nearest_den: Option<(usize, usize)>,
-    #[allow(dead_code)]
     pub creatures: Vec<CreatureId>,
 }
 
-const OFF8: [(i32, i32); 8] = [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)];
-
-/// Advance every living creature one tick, in slot order (FR9).
+/// Advance every living creature one tick, in slot order (FR9), then run the
+/// two C4 passes: consummation of adjacent mating pairs and deliveries.
 #[allow(clippy::too_many_arguments)]
 pub fn tick_creatures(
     store: &mut CreatureStore,
@@ -31,12 +33,18 @@ pub fn tick_creatures(
     time: &Time,
     cp: &CreaturesParams,
     ep: &EcologyParams,
+    gp: &GeneticsParams,
     rng: &mut Rng,
     tallies: &mut DeathTallies,
+    lineage: &mut Lineage,
+    soft_cap_noted: &mut bool,
 ) {
+    let view = TickView::build(store, time, world, gp);
     for c in store.living_mut() {
-        update_one(c, spatial, world, events, time, cp, ep, rng, tallies);
+        update_one(c, spatial, world, events, time, cp, ep, gp, &view, rng, tallies, lineage);
     }
+    genetics::consummate(store, time, gp, events, &view, soft_cap_noted);
+    genetics::deliver(store, world, events, time, gp, cp, rng, tallies, lineage);
 }
 
 /// The day-boundary step: age death, adult re-evaluation, carcass decay/free and
@@ -48,6 +56,7 @@ pub fn day_boundary(
     time: &Time,
     cp: &CreaturesParams,
     tallies: &mut DeathTallies,
+    lineage: &mut Lineage,
 ) {
     let day_index = time.day_index();
 
@@ -56,7 +65,7 @@ pub fn day_boundary(
         let age = c.age_days(day_index);
         c.adult = age >= cp.adult_age(c.species);
         if age >= c.max_age_days(cp) {
-            kill(c, Cause::Age, world, events, time, tallies);
+            kill(c, Cause::Age, world, events, time, tallies, lineage);
         }
     }
 
@@ -82,6 +91,7 @@ pub fn day_boundary(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn update_one(
     c: &mut Creature,
     spatial: &SpatialIndex,
@@ -90,8 +100,11 @@ fn update_one(
     time: &Time,
     cp: &CreaturesParams,
     ep: &EcologyParams,
+    gp: &GeneticsParams,
+    view: &TickView,
     rng: &mut Rng,
     tallies: &mut DeathTallies,
+    lineage: &mut Lineage,
 ) {
     // Goal satisfied → replan now.
     if goal_satisfied(c, time) {
@@ -99,16 +112,16 @@ fn update_one(
     }
     // Replan when due.
     if time.tick >= c.replan_at {
-        replan(c, spatial, world, time, cp, rng);
+        replan(c, spatial, world, time, cp, gp, view, rng);
     }
     // Move toward the target.
     move_toward(c, world, time, cp);
     // Act on the goal at the current location.
     act(c, world, events, time, cp, rng);
     // Needs and hp.
-    needs(c, world, time, cp, ep);
+    needs(c, world, time, cp, ep, gp);
     // Death.
-    maybe_die(c, world, events, time, tallies);
+    maybe_die(c, world, events, time, tallies, lineage);
     // Pressure.
     pressure(c, world, cp);
 }
@@ -124,13 +137,30 @@ fn goal_satisfied(c: &Creature, time: &Time) -> bool {
             None => true,
         },
         Goal::Wander => c.target.is_none(),
+        // Mated (cooldown just set) or the partner is gone.
+        Goal::Mate => c.mate_id.is_none() || c.cooldown_until > time.tick,
         _ => false,
     }
 }
 
-fn replan(c: &mut Creature, spatial: &SpatialIndex, world: &World, time: &Time, cp: &CreaturesParams, rng: &mut Rng) {
+#[allow(clippy::too_many_arguments)]
+fn replan(
+    c: &mut Creature,
+    spatial: &SpatialIndex,
+    world: &World,
+    time: &Time,
+    cp: &CreaturesParams,
+    gp: &GeneticsParams,
+    view: &TickView,
+    rng: &mut Rng,
+) {
     let tick = time.tick;
     let next = tick + cp.replan_ticks;
+    // A mate target only survives while the goal is Mate; a pregnant female
+    // keeps the father's id until delivery.
+    if c.pregnant_due.is_none() {
+        c.mate_id = None;
+    }
 
     // Forced rest overrides every other need (FR5).
     if c.energy <= 0.0 {
@@ -150,7 +180,7 @@ fn replan(c: &mut Creature, spatial: &SpatialIndex, world: &World, time: &Time, 
             c.rest_reason = None;
             c.target = Some(water);
         } else {
-            wander(c, world, time, rng);
+            wander(c, world, time, view, gp, rng);
         }
         c.replan_at = next;
         return;
@@ -174,7 +204,17 @@ fn replan(c: &mut Creature, spatial: &SpatialIndex, world: &World, time: &Time, 
                     Some(cell)
                 };
             }
-            None => c.target = None, // graze in place (region may be bare)
+            None => {
+                // Nothing edible in sight. Graze in place if this cell has any
+                // vegetation, otherwise keep moving (a bare patch wider than the
+                // sense range would otherwise starve the creature where it stands).
+                if world.cell(c.x, c.y).vegetation >= cp.graze_min_vegetation {
+                    c.target = None;
+                } else {
+                    wander(c, world, time, view, gp, rng);
+                    c.goal = Goal::Graze;
+                }
+            }
         }
         c.replan_at = next;
         return;
@@ -193,14 +233,33 @@ fn replan(c: &mut Creature, spatial: &SpatialIndex, world: &World, time: &Time, 
         return;
     }
 
-    // 4. Wander.
-    wander(c, world, time, rng);
+    // 4. Mate (C4 FR2): eligible adults seek the nearest eligible partner.
+    if view.cap_ok && genetics::eligible(c, time, world, gp) {
+        if let Some((mate, pos)) = genetics::pick_mate(c, &p.creatures, view) {
+            c.goal = Goal::Mate;
+            c.rest_reason = None;
+            c.mate_id = Some(mate);
+            c.target = Some(pos);
+            c.replan_at = next;
+            return;
+        }
+    }
+
+    // 5. Wander.
+    wander(c, world, time, view, gp, rng);
     c.replan_at = next;
 }
 
-fn wander(c: &mut Creature, world: &World, _time: &Time, rng: &mut Rng) {
+fn wander(c: &mut Creature, world: &World, time: &Time, view: &TickView, gp: &GeneticsParams, rng: &mut Rng) {
     c.goal = Goal::Wander;
     c.rest_reason = None;
+    // C4 FR4: juveniles stay near their living mother.
+    if !c.adult {
+        if let Some(t) = genetics::follow_target(c, view, world, time, gp, rng) {
+            c.target = Some(t);
+            return;
+        }
+    }
     // Keep the current heading with p = 0.7, else choose a new direction.
     let mut dir = random_dir(rng);
     if let Some((tx, ty)) = c.target {
@@ -228,7 +287,7 @@ fn random_dir(rng: &mut Rng) -> (i32, i32) {
 }
 
 /// The nearest walkable cell within a small radius (wander fallback).
-fn find_walkable_near(x: usize, y: usize, world: &World) -> Option<(usize, usize)> {
+pub(crate) fn find_walkable_near(x: usize, y: usize, world: &World) -> Option<(usize, usize)> {
     for r in 1i32..=8 {
         for dy in -r..=r {
             for dx in -r..=r {
@@ -247,27 +306,38 @@ fn perceive(c: &Creature, spatial: &SpatialIndex, world: &World, cp: &CreaturesP
     let r_i = r as i32;
     let r_f = r as f32;
     let (cx, cy) = (c.x, c.y);
-    let x0 = (cx as i32 - 2 * r_i).max(0) as usize;
     let y0 = (cy as i32 - r_i).max(0) as usize;
-    let x1 = ((cx as i32 + 2 * r_i + 1).min(world.width as i32)).max(0) as usize;
     let y1 = ((cy as i32 + r_i + 1).min(world.height as i32)).max(0) as usize;
 
     let mut nearest_water: Option<(usize, usize)> = None;
     let mut nearest_water_d = f32::INFINITY;
     let mut best_graze: Option<((usize, usize), f32)> = None;
     let mut best_score = f32::NEG_INFINITY;
+    let use_shore = world.shore.len() == world.cells.len();
 
+    // Visit only the rows of the ellipse; each row's cell span is contiguous.
     for y in y0..y1 {
-        for x in x0..x1 {
-            let cell = world.cell(x, y);
+        let dy = y as f32 - cy as f32;
+        let half = 2.0 * (r_f * r_f - dy * dy).max(0.0).sqrt();
+        let x0 = ((cx as f32 - half).ceil() as i32).max(0) as usize;
+        let x1 = (((cx as f32 + half).floor() as i32) + 1).min(world.width as i32).max(0) as usize;
+        if x0 >= x1 {
+            continue;
+        }
+        let row = y * world.width;
+        let cells = &world.cells[row + x0..row + x1];
+        for (i, cell) in cells.iter().enumerate() {
+            let x = x0 + i;
             if cell.terrain.is_water() {
                 continue;
             }
-            let d = geom::dist(cx, cy, x, y);
+            let dx = (x as f32 - cx as f32) / 2.0;
+            let d = (dx * dx + dy * dy).sqrt();
             if d > r_f {
                 continue;
             }
-            if adjacent_to_water(x, y, world) && d < nearest_water_d {
+            let shore = if use_shore { world.shore[row + x] } else { world.is_shore(x, y) };
+            if shore && d < nearest_water_d {
                 nearest_water_d = d;
                 nearest_water = Some((x, y));
             }
@@ -295,18 +365,9 @@ fn perceive(c: &Creature, spatial: &SpatialIndex, world: &World, cp: &CreaturesP
     Perception { nearest_water, best_graze, nearest_den, creatures }
 }
 
-fn adjacent_to_water(x: usize, y: usize, world: &World) -> bool {
-    for &(dx, dy) in &OFF8 {
-        let (nx, ny) = (x as i32 + dx, y as i32 + dy);
-        if world.in_bounds(nx, ny) && world.cell(nx as usize, ny as usize).terrain.is_water() {
-            return true;
-        }
-    }
-    false
-}
-
 fn move_toward(c: &mut Creature, world: &World, time: &Time, cp: &CreaturesParams) {
     if c.target.is_none() {
+        c.path.clear();
         return;
     }
     let speed = cp.move_speed_base + cp.move_speed_per_trait * c.genome.speed();
@@ -315,12 +376,40 @@ fn move_toward(c: &mut Creature, world: &World, time: &Time, cp: &CreaturesParam
     while c.move_budget >= 1.0 {
         let Some(target) = c.target else { break };
         if (c.x, c.y) == target {
+            c.path.clear();
             if c.goal == Goal::Wander {
                 c.target = None; // waypoint reached
             }
             break;
         }
-        match step_toward(c.x, c.y, target, world) {
+        // A planned step (from a path search) takes precedence when still valid.
+        let planned = match c.path.last() {
+            Some(&(nx, ny)) if geom::cheb(c.x, c.y, nx, ny) == 1 && world.cell(nx, ny).terrain.walkable() => {
+                c.path.pop();
+                Some((nx, ny))
+            }
+            Some(_) => {
+                c.path.clear();
+                None
+            }
+            None => None,
+        };
+        let next = match planned.or_else(|| step_toward(c.x, c.y, target, world)) {
+            Some(n) => Some(n),
+            None => {
+                // Greedy stalled at an obstacle (FR6 fallback): plan around it.
+                match bfs_path((c.x, c.y), target, world, PATH_KEEP) {
+                    Some(mut path) => {
+                        path.reverse();
+                        let first = path.pop();
+                        c.path = path;
+                        first
+                    }
+                    None => None,
+                }
+            }
+        };
+        match next {
             Some((nx, ny)) => {
                 c.x = nx;
                 c.y = ny;
@@ -332,15 +421,19 @@ fn move_toward(c: &mut Creature, world: &World, time: &Time, cp: &CreaturesParam
                 }
                 if (c.x, c.y) == target && c.goal == Goal::Wander {
                     c.target = None;
+                    c.path.clear();
                     break;
                 }
             }
             None => {
-                // Arrived or blocked; for non-wander goals mark unreachable and replan.
-                if (c.x, c.y) != target {
-                    c.target = None;
-                    c.replan_at = time.tick;
+                // Unreachable: drop the target and replan. A remembered water
+                // spot that cannot be reached is forgotten.
+                c.target = None;
+                c.path.clear();
+                if c.goal == Goal::Drink {
+                    c.last_water = None;
                 }
+                c.replan_at = time.tick;
                 break;
             }
         }
@@ -350,7 +443,8 @@ fn move_toward(c: &mut Creature, world: &World, time: &Time, cp: &CreaturesParam
 }
 
 /// One 8-neighbour step toward `target` (FR6). Returns `None` when already there
-/// or when no walkable neighbour improves the distance.
+/// or when no walkable neighbour strictly reduces the distance (a local minimum
+/// such as a rock face or lake shore), which hands over to `bfs_path`.
 fn step_toward(x: usize, y: usize, target: (usize, usize), world: &World) -> Option<(usize, usize)> {
     let (tx, ty) = target;
     let cur_d = geom::dist(x, y, tx, ty);
@@ -370,13 +464,77 @@ fn step_toward(x: usize, y: usize, target: (usize, usize), world: &World) -> Opt
     if best_d < cur_d {
         return best;
     }
+    None
+}
 
-    // Fallback: no walkable neighbour strictly reduces the distance (a local
-    // minimum, typically a lake shore or concave obstacle). Take the least-bad
-    // walkable neighbour — the one that minimizes distance to the target even if
-    // it does not strictly reduce it — so the creature skirts obstacles instead
-    // of stalling. Ties keep the lowest row-major index.
-    best
+/// Planned steps kept after a path search; the greedy step resumes afterwards.
+const PATH_KEEP: usize = 24;
+/// Padding (cells) around the start/target bounding box searched by `bfs_path`.
+const PATH_PAD_X: i32 = 16;
+const PATH_PAD_Y: i32 = 8;
+
+/// Bounded breadth-first search over walkable cells inside the padded bounding
+/// box of `from` and `target`. Returns the path (excluding `from`, including
+/// `target`) truncated to `keep` steps, or `None` when unreachable in the box.
+fn bfs_path(from: (usize, usize), target: (usize, usize), world: &World, keep: usize) -> Option<Vec<(usize, usize)>> {
+    let (fx, fy) = (from.0 as i32, from.1 as i32);
+    let (tx, ty) = (target.0 as i32, target.1 as i32);
+    if !world.in_bounds(tx, ty) {
+        return None;
+    }
+    let x0 = (fx.min(tx) - PATH_PAD_X).max(0);
+    let y0 = (fy.min(ty) - PATH_PAD_Y).max(0);
+    let x1 = (fx.max(tx) + PATH_PAD_X + 1).min(world.width as i32);
+    let y1 = (fy.max(ty) + PATH_PAD_Y + 1).min(world.height as i32);
+    let bw = (x1 - x0) as usize;
+    let bh = (y1 - y0) as usize;
+    let idx = |x: i32, y: i32| ((y - y0) as usize) * bw + (x - x0) as usize;
+    // Parent index per box cell; u32::MAX = unvisited.
+    let mut parent = vec![u32::MAX; bw * bh];
+    let mut queue: Vec<(i32, i32)> = Vec::with_capacity(bw * bh / 4);
+    let start = idx(fx, fy);
+    parent[start] = start as u32;
+    queue.push((fx, fy));
+    let mut head = 0;
+    let mut found = false;
+    while head < queue.len() {
+        let (x, y) = queue[head];
+        head += 1;
+        if (x, y) == (tx, ty) {
+            found = true;
+            break;
+        }
+        for &(dx, dy) in &OFF8 {
+            let (nx, ny) = (x + dx, y + dy);
+            if nx < x0 || ny < y0 || nx >= x1 || ny >= y1 {
+                continue;
+            }
+            let ni = idx(nx, ny);
+            if parent[ni] != u32::MAX {
+                continue;
+            }
+            if !world.cell(nx as usize, ny as usize).terrain.walkable() {
+                continue;
+            }
+            parent[ni] = idx(x, y) as u32;
+            queue.push((nx, ny));
+        }
+    }
+    if !found {
+        return None;
+    }
+    // Walk back from the target to the start.
+    let mut full: Vec<(usize, usize)> = Vec::new();
+    let mut cur = idx(tx, ty);
+    while cur != start {
+        let cx = (cur % bw) as i32 + x0;
+        let cy = (cur / bw) as i32 + y0;
+        full.push((cx as usize, cy as usize));
+        cur = parent[cur] as usize;
+    }
+    full.reverse();
+    full.truncate(keep);
+    Some(full)
 }
 
 fn act(c: &mut Creature, world: &mut World, events: &mut EventRing, time: &Time, cp: &CreaturesParams, rng: &mut Rng) {
@@ -396,7 +554,7 @@ fn graze(c: &mut Creature, world: &mut World, cp: &CreaturesParams) {
 }
 
 fn drink(c: &mut Creature, world: &World, cp: &CreaturesParams) {
-    if adjacent_to_water(c.x, c.y, world) {
+    if world.is_shore(c.x, c.y) {
         c.thirst = (c.thirst - cp.drink_per_hour).max(0.0);
         c.last_water = Some((c.x, c.y));
     }
@@ -431,9 +589,10 @@ fn maybe_make_den(c: &mut Creature, world: &mut World, events: &mut EventRing, t
     }
 }
 
-fn needs(c: &mut Creature, world: &World, time: &Time, cp: &CreaturesParams, ep: &EcologyParams) {
+pub(crate) fn needs(c: &mut Creature, world: &World, time: &Time, cp: &CreaturesParams, ep: &EcologyParams, gp: &GeneticsParams) {
     let season_metabolism = ep.season_metabolism.get(&time.season()).copied().unwrap_or(1.0);
-    c.hunger = (c.hunger + cp.hunger_per_hour(c.genome.size(), c.genome.metabolism(), season_metabolism)).min(2.0);
+    let pregnancy = if c.pregnant_due.is_some() { gp.pregnancy_hunger_factor } else { 1.0 };
+    c.hunger = (c.hunger + cp.hunger_per_hour(c.genome.size(), c.genome.metabolism(), season_metabolism) * pregnancy).min(2.0);
     c.thirst = (c.thirst + cp.thirst_per_hour).min(2.0);
 
     if is_resting(c) {
@@ -450,7 +609,7 @@ fn needs(c: &mut Creature, world: &World, time: &Time, cp: &CreaturesParams, ep:
     }
 }
 
-fn maybe_die(c: &mut Creature, world: &mut World, events: &mut EventRing, time: &Time, tallies: &mut DeathTallies) {
+fn maybe_die(c: &mut Creature, world: &mut World, events: &mut EventRing, time: &Time, tallies: &mut DeathTallies, lineage: &mut Lineage) {
     if c.alive && c.hp <= 0.0 {
         let cause = if c.thirst >= 1.0 {
             Cause::Thirst
@@ -459,7 +618,7 @@ fn maybe_die(c: &mut Creature, world: &mut World, events: &mut EventRing, time: 
         } else {
             Cause::Injury
         };
-        kill(c, cause, world, events, time, tallies);
+        kill(c, cause, world, events, time, tallies, lineage);
     }
 }
 
@@ -479,12 +638,16 @@ fn in_den(c: &Creature, world: &World) -> bool {
 }
 
 /// Mark a creature dead, add a carcass, record the tally and emit the event.
-fn kill(c: &mut Creature, cause: Cause, world: &mut World, events: &mut EventRing, time: &Time, tallies: &mut DeathTallies) {
+#[allow(clippy::too_many_arguments)]
+fn kill(c: &mut Creature, cause: Cause, world: &mut World, events: &mut EventRing, time: &Time, tallies: &mut DeathTallies, lineage: &mut Lineage) {
     c.alive = false;
     c.hp = 0.0;
     c.target = None;
+    c.pregnant_due = None;
     c.death = Some(Death { cause, day: time.day_index() as u32, killer: None, chase_ticks: 0 });
     world.carcasses.push((c.x, c.y));
+    tallies.deaths[c.species.index()] += 1;
+    lineage.record_death(c.id, time.day_index() as u32);
 
     let kind = match cause {
         Cause::Starved => {
@@ -533,7 +696,7 @@ fn kill(c: &mut Creature, cause: Cause, world: &mut World, events: &mut EventRin
 mod tests {
     use super::*;
     use crate::sim::creatures::{place_founders, CreatureStore, Sex};
-    use crate::sim::params::{CreaturesParams, EcologyParams, WorldParams};
+    use crate::sim::params::{CreaturesParams, EcologyParams, GeneticsParams, WorldParams};
     use crate::sim::species::SpeciesId;
     use crate::sim::{Params, Sim};
 
@@ -568,9 +731,11 @@ mod tests {
             mutations: Vec::new(),
             last_water: None,
             move_budget: 0.0,
+            path: Vec::new(),
             rest_reason: None,
             pregnant_due: None,
             cooldown_until: 0,
+            mate_id: None,
             mother: None,
             offspring: 0,
             kills: 0,
@@ -588,6 +753,10 @@ mod tests {
         SpatialIndex::new(world)
     }
 
+    fn plan(c: &mut Creature, idx: &SpatialIndex, w: &World, t: &Time, cp: &CreaturesParams, rng: &mut Rng) {
+        replan(c, idx, w, t, cp, &GeneticsParams::default(), &TickView::empty(), rng);
+    }
+
     fn day_time(hour: u32) -> Time {
         // start_hour 6: hour = (tick + 6) % 24.
         let tick = (hour + 24 - 6) % 24;
@@ -602,6 +771,7 @@ mod tests {
             c.terrain = Terrain::Grass;
             c.vegetation = 0.5;
         }
+        w.refresh_shore();
         w
     }
 
@@ -613,7 +783,7 @@ mod tests {
         c.last_water = Some((74, 20));
         let idx = empty_index(&w);
         let mut rng = Rng::new(1);
-        replan(&mut c, &idx, &w, &day_time(12), &CreaturesParams::default(), &mut rng);
+        plan(&mut c, &idx, &w, &day_time(12), &CreaturesParams::default(), &mut rng);
         assert_eq!(c.goal, Goal::Drink);
     }
 
@@ -626,17 +796,17 @@ mod tests {
 
         let mut c = test_creature(75, 20);
         c.hunger = 0.6;
-        replan(&mut c, &idx, &w, &day_time(12), &cp, &mut rng);
+        plan(&mut c, &idx, &w, &day_time(12), &cp, &mut rng);
         assert_eq!(c.goal, Goal::Graze, "hunger 0.6 should graze");
 
         // Still above the exit threshold (0.2) but below the entry (0.5): stay grazing.
         c.hunger = 0.3;
-        replan(&mut c, &idx, &w, &day_time(12), &cp, &mut rng);
+        plan(&mut c, &idx, &w, &day_time(12), &cp, &mut rng);
         assert_eq!(c.goal, Goal::Graze, "hysteresis should keep grazing at hunger 0.3");
 
         // Below the exit threshold: leave Graze.
         c.hunger = 0.1;
-        replan(&mut c, &idx, &w, &day_time(12), &cp, &mut rng);
+        plan(&mut c, &idx, &w, &day_time(12), &cp, &mut rng);
         assert_ne!(c.goal, Goal::Graze, "hunger 0.1 should stop grazing");
     }
 
@@ -649,7 +819,7 @@ mod tests {
         c.thirst = 0.3;
         let idx = empty_index(&w);
         let mut rng = Rng::new(1);
-        replan(&mut c, &idx, &w, &day_time(22), &CreaturesParams::default(), &mut rng);
+        plan(&mut c, &idx, &w, &day_time(22), &CreaturesParams::default(), &mut rng);
         assert_eq!(c.goal, Goal::Rest);
         assert_eq!(c.rest_reason, Some(RestReason::Night));
     }
@@ -663,7 +833,7 @@ mod tests {
         c.thirst = 0.9;
         let idx = empty_index(&w);
         let mut rng = Rng::new(1);
-        replan(&mut c, &idx, &w, &day_time(12), &CreaturesParams::default(), &mut rng);
+        plan(&mut c, &idx, &w, &day_time(12), &CreaturesParams::default(), &mut rng);
         assert_eq!(c.goal, Goal::Rest);
         assert_eq!(c.rest_reason, Some(RestReason::Forced));
     }
@@ -692,7 +862,7 @@ mod tests {
         let before_h = c.hunger;
         let before_t = c.thirst;
         let before_e = c.energy;
-        needs(&mut c, &w, &t, &cp, &ep);
+        needs(&mut c, &w, &t, &cp, &ep, &GeneticsParams::default());
         let season = ep.season_metabolism.get(&t.season()).copied().unwrap_or(1.0);
         let expect = cp.hunger_per_hour(c.genome.size(), c.genome.metabolism(), season);
         assert!((c.hunger - before_h - expect).abs() < 1e-6);
@@ -711,7 +881,7 @@ mod tests {
         starved.hp = 0.0;
         starved.hunger = 1.5;
         starved.thirst = 0.2;
-        maybe_die(&mut starved, &mut w, &mut events, &t, &mut tallies);
+        maybe_die(&mut starved, &mut w, &mut events, &t, &mut tallies, &mut Lineage::new());
         assert!(!starved.alive);
         assert_eq!(starved.death.unwrap().cause, Cause::Starved);
         assert_eq!(tallies.starved, 1);
@@ -720,7 +890,7 @@ mod tests {
         thirsty.hp = 0.0;
         thirsty.hunger = 0.2;
         thirsty.thirst = 1.5;
-        maybe_die(&mut thirsty, &mut w, &mut events, &t, &mut tallies);
+        maybe_die(&mut thirsty, &mut w, &mut events, &t, &mut tallies, &mut Lineage::new());
         assert_eq!(thirsty.death.unwrap().cause, Cause::Thirst);
         assert_eq!(tallies.thirst, 1);
     }
@@ -735,7 +905,7 @@ mod tests {
         let mut events = EventRing::new(100);
         let mut tallies = DeathTallies::default();
         let t = day_time(0);
-        day_boundary(&mut store, &mut w, &mut events, &t, &CreaturesParams::default(), &mut tallies);
+        day_boundary(&mut store, &mut w, &mut events, &t, &CreaturesParams::default(), &mut tallies, &mut Lineage::new());
         let c = store.get(id).unwrap();
         assert!(!c.alive);
         assert_eq!(c.death.unwrap().cause, Cause::Age);
@@ -755,7 +925,7 @@ mod tests {
         let id = store.insert(c);
         let mut events = EventRing::new(100);
         let mut tallies = DeathTallies::default();
-        day_boundary(&mut store, &mut w, &mut events, &day_time(0), &CreaturesParams::default(), &mut tallies);
+        day_boundary(&mut store, &mut w, &mut events, &day_time(0), &CreaturesParams::default(), &mut tallies, &mut Lineage::new());
         assert!(store.get(id).is_none(), "decayed carcass slot should be freed");
         assert!(!w.carcasses.contains(&(75, 20)));
     }
@@ -806,6 +976,50 @@ mod tests {
     }
 
     #[test]
+    fn path_search_rounds_an_obstacle() {
+        let mut w = all_grass_world();
+        // A rock wall at x = 10 spanning rows 2..=8 with a gap at row 9.
+        for y in 2..=8 {
+            w.cell_mut(10, y).terrain = Terrain::Rock;
+        }
+        let mut c = test_creature(8, 5);
+        c.target = Some((12, 5));
+        c.goal = Goal::Drink;
+        let cp = CreaturesParams { move_speed_base: 1.0, move_speed_per_trait: 0.0, ..CreaturesParams::default() };
+        for _ in 0..30 {
+            move_toward(&mut c, &w, &day_time(12), &cp);
+            if (c.x, c.y) == (12, 5) {
+                break;
+            }
+        }
+        assert_eq!((c.x, c.y), (12, 5), "creature should route around the wall via the gap");
+        assert!(c.target.is_some(), "target is kept for non-wander goals");
+    }
+
+    #[test]
+    fn unreachable_target_is_dropped() {
+        let mut w = all_grass_world();
+        // Fully enclose the target.
+        for dy in -1i32..=1 {
+            for dx in -1i32..=1 {
+                if dx != 0 || dy != 0 {
+                    w.cell_mut((30 + dx) as usize, (5 + dy) as usize).terrain = Terrain::Rock;
+                }
+            }
+        }
+        let mut c = test_creature(20, 5);
+        c.target = Some((30, 5));
+        c.goal = Goal::Drink;
+        c.last_water = Some((30, 5));
+        let cp = CreaturesParams { move_speed_base: 1.0, move_speed_per_trait: 0.0, ..CreaturesParams::default() };
+        for _ in 0..40 {
+            move_toward(&mut c, &w, &day_time(12), &cp);
+        }
+        assert!(c.target.is_none(), "unreachable target must be dropped");
+        assert!(c.last_water.is_none(), "an unreachable water memory is forgotten");
+    }
+
+    #[test]
     fn movement_never_impassable() {
         let mut sim = Sim::new(42, Params::default());
         for _ in 0..24 * 120 {
@@ -836,7 +1050,7 @@ mod tests {
         w.cell_mut(50, 10).prey_pressure = 1.0;
         w.cell_mut(50, 10).pred_pressure = 0.0;
         let cp = CreaturesParams::default();
-        day_boundary(&mut store, &mut w, &mut events, &day_time(0), &cp, &mut tallies);
+        day_boundary(&mut store, &mut w, &mut events, &day_time(0), &cp, &mut tallies, &mut Lineage::new());
         assert!((w.cell(50, 10).prey_pressure - cp.pressure_decay_per_day).abs() < 1e-6);
     }
 }

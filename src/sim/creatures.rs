@@ -61,6 +61,10 @@ pub struct DeathTallies {
     pub thirst: u32,
     pub age: u32,
     pub predation: u32,
+    /// Births per species today (C4 FR5), `SpeciesId::ALL` order.
+    pub births: [u32; 6],
+    /// Deaths per species today (C4 FR5), `SpeciesId::ALL` order.
+    pub deaths: [u32; 6],
 }
 
 impl Goal {
@@ -132,7 +136,7 @@ pub struct Mutation {
     pub generation: u32,
 }
 
-/// The full creature record (FR2). C4/C5 fields are declared now but unused.
+/// The full creature record (FR2). C5 fields are declared now but unused.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Creature {
     pub id: CreatureId,
@@ -164,11 +168,17 @@ pub struct Creature {
     pub last_water: Option<(usize, usize)>,
     /// Fractional movement accumulator (FR6).
     pub move_budget: f32,
+    /// Remaining planned steps (next step last) when the greedy step stalled
+    /// at an obstacle and a bounded path search took over.
+    pub path: Vec<(usize, usize)>,
     /// Present while resting, and the reason (FR5).
     pub rest_reason: Option<RestReason>,
-    // ---- C4/C5 fields declared now, unused in C3 ----
+    // ---- C4 reproduction / C5 predation fields ----
     pub pregnant_due: Option<u64>,
     pub cooldown_until: u64,
+    /// Intended partner while the goal is `Mate`; after mating the female keeps
+    /// the father's id (S03 "mate"), the male's is cleared.
+    pub mate_id: Option<CreatureId>,
     pub mother: Option<CreatureId>,
     pub offspring: u32,
     pub kills: u32,
@@ -278,7 +288,7 @@ impl CreatureStore {
     }
 
     pub fn len_living(&self) -> usize {
-        self.slots.iter().filter(|s| s.as_ref().map_or(false, |c| c.alive)).count()
+        self.slots.iter().filter(|s| s.as_ref().is_some_and(|c| c.alive)).count()
     }
 
     /// Living ids in ascending order (deterministic iteration).
@@ -318,7 +328,7 @@ pub fn place_founders(world: &World, params: &CreaturesParams, rng: &mut Rng) ->
 
             let mut genome = base;
             for v in genome.0.iter_mut() {
-                *v = (*v + rng.gauss(0.0, 0.12)).clamp(0.02, 0.98);
+                *v = Genome::clamp_trait(*v + rng.gauss(0.0, 0.12));
             }
             let max_age = params.max_age_base + (genome.longevity() * params.max_age_per_longevity as f32) as u32;
             let adult = rng.chance(0.7);
@@ -357,9 +367,11 @@ pub fn place_founders(world: &World, params: &CreaturesParams, rng: &mut Rng) ->
                 mutations: Vec::new(),
                 last_water: None,
                 move_budget: 0.0,
+                path: Vec::new(),
                 rest_reason: None,
                 pregnant_due: None,
                 cooldown_until: 0,
+                mate_id: None,
                 mother: None,
                 offspring: 0,
                 kills: 0,
