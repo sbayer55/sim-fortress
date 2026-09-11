@@ -234,7 +234,7 @@ impl Screen for WorldGen {
             KeyCode::Up | KeyCode::Down if focus == 2 => {
                 let dir: i64 = if code == KeyCode::Up { 1 } else { -1 };
                 let w = &mut form.world;
-                w.height = clamp_i64(w.height as i64 + dir * 5, 30, 60) as usize;
+                w.height = clamp_i64(w.height as i64 + dir * 5, 30, 1000) as usize;
                 form.dirty = true;
                 Action::None
             }
@@ -270,7 +270,7 @@ fn adjust(form: &mut WorldGenForm, focus: usize, dir: i32) {
     let w = &mut form.world;
     match focus {
         // Size: Left/Right adjusts width; Up/Down (handled by the caller) adjusts height.
-        2 => w.width = clamp_i64(w.width as i64 + d * 10, 100, 200) as usize,
+        2 => w.width = clamp_i64(w.width as i64 + d * 10, 100, 1000) as usize,
         3 => w.water_pct = clamp_i64(w.water_pct as i64 + d, 0, 60) as u8,
         4 => w.forest_pct = clamp_i64(w.forest_pct as i64 + d, 0, 50) as u8,
         5 => w.rock_pct = clamp_i64(w.rock_pct as i64 + d, 0, 30) as u8,
@@ -493,7 +493,8 @@ fn difficulty_name(d: Difficulty) -> &'static str {
 
 fn preview_panel(f: &mut Frame, area: Rect, form: &WorldGenForm) {
     let world = &form.preview;
-    let scale = (2..=4).find(|&k| world.width().div_ceil(k) <= 75 && world.height().div_ceil(k) <= 20).unwrap_or(4);
+    // Smallest zoom-out (at least 1:2) at which the whole world fits 75x20.
+    let scale = world.width().div_ceil(75).max(world.height().div_ceil(20)).max(2);
     let hint = format!("seed {}, {}x{} at 1:{}", form.seed_text, world.width(), world.height(), scale);
     let inner = panel::draw_with_hint(f, area, "Preview", &hint, panel::Kind::Outer);
 

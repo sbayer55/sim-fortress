@@ -203,11 +203,28 @@ mod tests {
         s.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE), &mut app);
         s.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
         let p = s.form_params();
-        assert_eq!(p.world.height, (h0 + 5).min(60));
-        assert_eq!(p.world.width, (w0 + 10).min(200));
+        assert_eq!(p.world.height, (h0 + 5).min(1000));
+        assert_eq!(p.world.width, (w0 + 10).min(1000));
         s.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE), &mut app);
         s.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE), &mut app);
-        assert_eq!(s.form_params().world.height, (h0 + 5).min(60).saturating_sub(10).max(30));
+        assert_eq!(s.form_params().world.height, (h0 + 5).min(1000).saturating_sub(10).max(30));
+    }
+
+    #[test]
+    fn s09_max_size_preview_renders() {
+        let mut app = state();
+        let mut s = WorldGen::new();
+        for _ in 0..100 {
+            s.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
+        }
+        for _ in 0..200 {
+            s.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE), &mut app);
+        }
+        let p = s.form_params();
+        assert_eq!((p.world.width, p.world.height), (1000, 1000));
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| s.render(&app, f, Rect::new(0, 0, 155, 45))).unwrap();
     }
 
     #[test]

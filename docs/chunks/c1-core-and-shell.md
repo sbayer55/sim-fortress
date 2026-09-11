@@ -161,9 +161,9 @@ unused), preset }`, plus a preview `World`. Tab order: 8 world fields → 6 spec
 (stored in `params.creatures.initial_counts`; the rows become functional in C3) → 4
 evolution fields (stored; live in C4) → presets (inert until C6) → 3 buttons; the panel hint reads
 `field N of 26`. The Regrowth rate evolution field is live from C2. `Size` is one focusable field:
-`←`/`→` adjust Width 100–200 step 10, `↑`/`↓` adjust Height 30–60 step 5. Seed accepts `0x`-prefixed hex or decimal u64; invalid text shows `invalid seed`
+`←`/`→` adjust Width 100–1000 step 10, `↑`/`↓` adjust Height 30–1000 step 5. Seed accepts `0x`-prefixed hex or decimal u64; invalid text shows `invalid seed`
 in the hint in WARN colour and Generate is refused. Name ≤ 23 characters. The preview
-regenerates at most once per frame after a change; scale = smallest of 1:2, 1:3, 1:4 that
+regenerates at most once per frame after a change; scale = smallest zoom-out (at least 1:2) that
 fits 75×20, reported in the hint. Capacity/placement lines keep the prototype formulas.
 Generate creates `Sim::new` and replaces the stack with S01. `Esc`/`[ Back ]` returns to
 the running map if one exists, otherwise quits. If regeneration of a 200×60 preview
