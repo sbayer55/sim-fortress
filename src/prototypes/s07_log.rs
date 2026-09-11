@@ -1,6 +1,8 @@
 //! S07: the event log. S07a lists every event newest first; S07b filters to
 //! deaths and extinctions and shows a detail panel with a mini-map.
 
+#[allow(unused_imports)]
+use crate::fixtures::{EventKindStyle as _, SeasonStyle as _, SpeciesStyle as _};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -269,7 +271,9 @@ fn detail(f: &mut Frame, area: Rect, fx: &Fixtures, e: &Event) {
                 creatures: true,
                 fade_creatures: false,
             };
-            map::render(f.buffer_mut(), mini_inner, fx, &opts);
+            let creatures = fx.map_creatures();
+            let data = map::MapData { world: &fx.world, creatures: &creatures, selected: None };
+            map::render(f.buffer_mut(), mini_inner, &data, &opts);
             // Nearby creatures listed beside the map.
             let lx = mini.right() + 1;
             let lw = inner.right() - lx;

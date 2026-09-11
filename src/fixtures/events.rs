@@ -1,82 +1,10 @@
-//! Event log entries.
+//! Synthetic event log for the prototype viewer.
+
+use crate::sim::rng::Rng;
+use crate::sim::species::SpeciesId;
+use crate::sim::{Event, EventKind, TRAIT_NAMES};
 
 use super::creatures::Creature;
-use super::rng::Rng;
-use super::species::SpeciesId;
-use crate::{glyphs, theme};
-use ratatui::style::Color;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EventKind {
-    Birth,
-    DeathStarved,
-    DeathPredation,
-    DeathAge,
-    Mutation,
-    Migration,
-    Extinction,
-    Drought,
-    Season,
-    Note,
-}
-
-impl EventKind {
-    pub fn glyph(self) -> char {
-        match self {
-            EventKind::Birth => glyphs::BIRTH,
-            EventKind::DeathStarved | EventKind::DeathPredation | EventKind::DeathAge => glyphs::DEATH,
-            EventKind::Mutation => glyphs::MUTATION,
-            EventKind::Migration => glyphs::MIGRATION,
-            EventKind::Extinction => glyphs::EXTINCTION,
-            EventKind::Drought => glyphs::DROUGHT,
-            EventKind::Season => glyphs::SUMMER,
-            EventKind::Note => glyphs::NOTE,
-        }
-    }
-    pub fn color(self) -> Color {
-        match self {
-            EventKind::Birth => theme::GOOD,
-            EventKind::DeathStarved => theme::WARN,
-            EventKind::DeathPredation => theme::BAD,
-            EventKind::DeathAge => theme::DIM,
-            EventKind::Mutation => theme::INFO,
-            EventKind::Migration => theme::ACCENT,
-            EventKind::Extinction => theme::MAGENTA,
-            EventKind::Drought => theme::WARN,
-            EventKind::Season => theme::TITLE,
-            EventKind::Note => theme::TEXT,
-        }
-    }
-    pub fn label(self) -> &'static str {
-        match self {
-            EventKind::Birth => "birth",
-            EventKind::DeathStarved => "starved",
-            EventKind::DeathPredation => "predation",
-            EventKind::DeathAge => "old age",
-            EventKind::Mutation => "mutation",
-            EventKind::Migration => "migration",
-            EventKind::Extinction => "EXTINCTION",
-            EventKind::Drought => "drought",
-            EventKind::Season => "season",
-            EventKind::Note => "note",
-        }
-    }
-    pub fn is_death(self) -> bool {
-        matches!(self, EventKind::DeathStarved | EventKind::DeathPredation | EventKind::DeathAge)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Event {
-    pub year: u32,
-    pub day: u32,
-    pub hour: u32,
-    pub kind: EventKind,
-    pub species: Option<SpeciesId>,
-    pub text: String,
-    pub pos: Option<(usize, usize)>,
-    pub detail: String,
-}
 
 pub fn generate(creatures: &[Creature]) -> Vec<Event> {
     let mut rng = Rng::new(0xE7E7);
@@ -130,7 +58,7 @@ pub fn generate(creatures: &[Creature]) -> Vec<Event> {
             let delta = rng.gauss(0.0, 0.06);
             (
                 EventKind::Mutation,
-                format!("{} {} born with {} {:+.2}", c.name, c.tag(), super::creatures::TRAIT_NAMES[t], delta),
+                format!("{} {} born with {} {:+.2}", c.name, c.tag(), TRAIT_NAMES[t], delta),
                 format!("Mutation rate 0.04/trait/birth. Parent mean {:.2} → offspring {:.2}.", c.genome.0[t], (c.genome.0[t] + delta).clamp(0.0, 1.0)),
             )
         } else if r < 0.90 {

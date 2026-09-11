@@ -18,6 +18,7 @@ pub mod s10_controls;
 pub mod s11_help;
 pub mod s12_alert;
 pub mod s13_zoom;
+pub mod viewer;
 
 pub trait Prototype {
     fn id(&self) -> &'static str;

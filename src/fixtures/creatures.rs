@@ -1,31 +1,10 @@
 //! Individual creatures placed on the world, including three "hero"
 //! individuals with hand-written detail for the inspector screens.
 
-use super::rng::Rng;
-use super::species::{Kind, SpeciesId};
-use super::world::{Terrain, World, H, W};
-
-pub const TRAIT_NAMES: [&str; 8] = [
-    "Speed", "Size", "Sense", "Metabolism", "Aggression", "Camouflage", "Fertility", "Longevity",
-];
-
-#[derive(Clone, Copy, Debug)]
-pub struct Genome(pub [f32; 8]);
-
-impl Genome {
-    pub fn speed(&self) -> f32 { self.0[0] }
-    pub fn size(&self) -> f32 { self.0[1] }
-    pub fn sense(&self) -> f32 { self.0[2] }
-    pub fn metabolism(&self) -> f32 { self.0[3] }
-    pub fn aggression(&self) -> f32 { self.0[4] }
-    pub fn camouflage(&self) -> f32 { self.0[5] }
-    pub fn fertility(&self) -> f32 { self.0[6] }
-    pub fn longevity(&self) -> f32 { self.0[7] }
-    /// Sense range in map cells.
-    pub fn sense_cells(&self) -> u16 {
-        2 + (self.sense() * 10.0) as u16
-    }
-}
+use crate::sim::rng::Rng;
+use crate::sim::species::{Genome, Kind, SpeciesId};
+use crate::sim::world::{Terrain, World};
+use crate::ui::style::SpeciesStyle;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Sex {
@@ -97,6 +76,7 @@ fn goals_for(kind: Kind, rng: &mut Rng) -> &'static str {
 }
 
 pub fn generate(world: &World, seed: u64) -> (Vec<Creature>, usize, usize, usize) {
+    let (w, h) = (world.width(), world.height());
     let mut rng = Rng::new(seed);
     let mut out = Vec::new();
     let mut next_id: u32 = 1;
@@ -116,8 +96,8 @@ pub fn generate(world: &World, seed: u64) -> (Vec<Creature>, usize, usize, usize
         let mut tries = 0;
         while placed < n && tries < 4000 {
             tries += 1;
-            let x = rng.below(W);
-            let y = rng.below(H);
+            let x = rng.below(w);
+            let y = rng.below(h);
             let cell = world.cell(x, y);
             if !cell.terrain.walkable() || cell.terrain.is_water() {
                 continue;

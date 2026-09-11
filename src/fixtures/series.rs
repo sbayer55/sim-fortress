@@ -1,6 +1,6 @@
 //! Synthetic time series: population per species, vegetation, water.
 
-use super::species::SpeciesId;
+use crate::sim::species::SpeciesId;
 
 pub const LEN: usize = 240;
 
@@ -36,7 +36,7 @@ pub fn generate() -> Series {
     let mut veg = Vec::with_capacity(LEN);
     let mut water = Vec::with_capacity(LEN);
     let mut carc = Vec::with_capacity(LEN);
-    let mut rng = super::rng::Rng::new(0x7E57);
+    let mut rng = crate::sim::rng::Rng::new(0x7E57);
     for i in 0..LEN {
         let season = ((i as f32 / 90.0) * std::f32::consts::TAU).sin();
         let drought = if (150..190).contains(&i) { 0.55 } else { 1.0 };

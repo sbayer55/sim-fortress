@@ -1,6 +1,8 @@
 //! S01: the main world-map view and its variants. `render_base` is reused
 //! by the overlay/modal prototypes (S10-S12) as the dimmed backdrop.
 
+#[allow(unused_imports)]
+use crate::fixtures::{EventKindStyle as _, SeasonStyle as _, SpeciesStyle as _};
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -58,7 +60,9 @@ pub fn map_panel(f: &mut Frame, area: Rect, title: &str, opts: &MapOptions) -> R
         format!("{}x{} cells", w, fx.world.height())
     };
     let inner = panel::draw_with_hint(f, area, title, &hint, panel::Kind::Outer);
-    map::render(f.buffer_mut(), inner, fx, opts);
+    let creatures = fx.map_creatures();
+    let data = map::MapData { world: &fx.world, creatures: &creatures, selected: None };
+    map::render(f.buffer_mut(), inner, &data, opts);
     inner
 }
 

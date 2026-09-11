@@ -1,5 +1,7 @@
 //! S10: simulation controls modal drawn over the dimmed world map.
 
+#[allow(unused_imports)]
+use crate::fixtures::{EventKindStyle as _, SeasonStyle as _, SpeciesStyle as _};
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -18,7 +20,7 @@ pub fn all() -> Vec<Box<dyn Prototype>> {
 }
 
 const SPEEDS: [u8; 5] = [1, 2, 5, 10, 25];
-const STEPS: [&str; 3] = ["1 tick", "1 hour", "1 day"];
+const STEPS: [&str; 3] = ["1 tick", "6 hours", "1 day"];
 
 impl Prototype for Controls {
     fn id(&self) -> &'static str {
@@ -102,7 +104,7 @@ impl Prototype for Controls {
         ]));
         row += 1;
         util::line(f, inner, row, Line::from(Span::styled(
-            format!(" 24 ticks = 1 hour   1 day = 576 ticks   x{} = {} ticks/s", c.speed, 24 * c.speed as u32),
+            format!(" 1 tick = 1 hour   1 day = 24 ticks   x{} = {} ticks/s", c.speed, 2 * c.speed as u32),
             theme::dim_text(),
         )));
         row += 2;

@@ -1,5 +1,7 @@
 //! S09: world generation form with a live preview.
 
+#[allow(unused_imports)]
+use crate::fixtures::{EventKindStyle as _, SeasonStyle as _, SpeciesStyle as _};
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -281,12 +283,13 @@ fn preview(f: &mut Frame, area: Rect, fx: &Fixtures) {
             }
         }
         // Region labels overlaid on the preview.
-        for (name, x0, y0, x1, y1) in &world.regions {
+        for r in &world.regions {
+            let (name, x0, y0, x1, y1) = (&r.0, r.1, r.2, r.3, r.4);
             let cx = px + ((x0 + x1) / 4) as u16;
             let cy = py + ((y0 + y1) / 4) as u16;
             let w = name.chars().count() as u16;
             let x = cx.saturating_sub(w / 2).max(px).min(px + PREVIEW_W - w);
-            buf.set_stringn(x, cy, name, w as usize, Style::default().fg(theme::TEXT_BRIGHT).bg(theme::dim(theme::BG, 0.0)).add_modifier(Modifier::BOLD));
+            buf.set_stringn(x, cy, name.as_str(), w as usize, Style::default().fg(theme::TEXT_BRIGHT).bg(theme::dim(theme::BG, 0.0)).add_modifier(Modifier::BOLD));
         }
         // Frame corners around the preview.
         let frame_style = theme::border();

@@ -1,6 +1,8 @@
 //! S02: map overlays (vegetation, pressure, moisture heatmaps and the
 //! sense-range ring for the selected predator) with an explanatory sidebar.
 
+#[allow(unused_imports)]
+use crate::fixtures::{EventKindStyle as _, SeasonStyle as _, SpeciesStyle as _};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -227,7 +229,8 @@ impl MapOverlay {
         panel::section(f, inner, row, "By region");
         row += 1;
         let mut region_stats: Vec<(&str, f32)> = Vec::new();
-        for &(name, x0, y0, x1, y1) in &fx.world.regions {
+        for r in &fx.world.regions {
+            let (name, x0, y0, x1, y1) = (&r.0, r.1, r.2, r.3, r.4);
             let mut sum = 0.0f32;
             let mut n = 0usize;
             for y in y0..y1 {
@@ -236,7 +239,7 @@ impl MapOverlay {
                     n += 1;
                 }
             }
-            region_stats.push((name, if n > 0 { sum / n as f32 } else { 0.0 }));
+            region_stats.push((name.as_str(), if n > 0 { sum / n as f32 } else { 0.0 }));
         }
         let bar_color = (sp.ramp)(0.8);
         for (name, mean) in &region_stats {

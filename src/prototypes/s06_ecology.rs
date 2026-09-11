@@ -1,6 +1,8 @@
 //! S06: resources / ecology overview. Totals with sparklines, the season
 //! table, and a per-region table with vegetation, moisture and population.
 
+#[allow(unused_imports)]
+use crate::fixtures::{EventKindStyle as _, SeasonStyle as _, SpeciesStyle as _};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -313,8 +315,8 @@ struct RegionStats {
     pressure: f32,
 }
 
-fn region_stats(fx: &Fixtures, r: &(&str, usize, usize, usize, usize)) -> RegionStats {
-    let (_, x0, y0, x1, y1) = *r;
+fn region_stats(fx: &Fixtures, r: &(String, usize, usize, usize, usize)) -> RegionStats {
+    let (_, x0, y0, x1, y1) = (&r.0, r.1, r.2, r.3, r.4);
     let world = &fx.world;
     let mut cells = 0usize;
     let mut water = 0usize;
@@ -419,8 +421,8 @@ fn regions(f: &mut Frame, area: Rect, fx: &Fixtures) {
         sp(format!("   mean pressure {:.2}   ratio {:.1}:1   (map sample)", totals.pressure / n, totals.prey as f32 / totals.pred.max(1) as f32), theme::DIM),
     ]));
     row += 1;
-    let scarce: Vec<&str> = fx.world.regions.iter().filter(|r| status_of(&region_stats(fx, r)).0 == "Scarce").map(|r| r.0).collect();
-    let best = fx.world.regions.iter().max_by(|a, b| region_stats(fx, a).veg.partial_cmp(&region_stats(fx, b).veg).unwrap()).map(|r| r.0).unwrap_or("-");
+    let scarce: Vec<&str> = fx.world.regions.iter().filter(|r| status_of(&region_stats(fx, r)).0 == "Scarce").map(|r| r.0.as_str()).collect();
+    let best = fx.world.regions.iter().max_by(|a, b| region_stats(fx, a).veg.partial_cmp(&region_stats(fx, b).veg).unwrap()).map(|r| r.0.as_str()).unwrap_or("-");
     util::line(f, inner, row, Line::from(vec![
         sp(format!(" {} ", glyphs::MIGRATION), theme::ACCENT),
         sp("migration pressure: ", theme::TEXT),

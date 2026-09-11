@@ -1,5 +1,7 @@
 //! S04: species browser table and per-species detail.
 
+#[allow(unused_imports)]
+use crate::fixtures::{EventKindStyle as _, SeasonStyle as _, SpeciesStyle as _};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -373,7 +375,7 @@ fn summary(f: &mut Frame, area: Rect, fx: &Fixtures) {
     row += 2;
     panel::section(f, right, row, "Habitat (living individuals by region)");
     row += 1;
-    let mut per_region: Vec<(&str, usize)> = fx.world.regions.iter().map(|r| (r.0, 0usize)).collect();
+    let mut per_region: Vec<(&str, usize)> = fx.world.regions.iter().map(|r| (r.0.as_str(), 0usize)).collect();
     for c in fx.creatures.iter().filter(|c| c.alive && c.species == s.id) {
         let name = fx.world.region_name(c.x, c.y);
         if let Some(e) = per_region.iter_mut().find(|e| e.0 == name) {

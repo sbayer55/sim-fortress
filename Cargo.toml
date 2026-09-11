@@ -7,6 +7,8 @@ description = "Static UI prototypes for Sim Fortress, a terminal predator/prey/e
 [dependencies]
 ratatui = "0.30"
 unicode-width = "0.2"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
 
 [profile.dev]
 opt-level = 1

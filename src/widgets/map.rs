@@ -4,7 +4,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 
-use crate::fixtures::{Cell, Fixtures, Terrain};
+use crate::sim::world::{Cell, Terrain, World};
 use crate::{glyphs, theme};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -46,6 +46,29 @@ impl Default for MapOptions {
             fade_creatures: false,
         }
     }
+}
+
+/// A lightweight view of one creature, decoupled from any concrete creature
+/// type so the map renderer only depends on the data it draws.
+#[derive(Clone, Copy, Debug)]
+pub struct MapCreature<'a> {
+    pub x: usize,
+    pub y: usize,
+    pub alive: bool,
+    pub adult: bool,
+    pub glyph: char,
+    pub color: Color,
+    pub sense_cells: u16,
+    pub trail: &'a [(usize, usize)],
+    pub target: Option<(usize, usize)>,
+}
+
+/// The data the map renderer draws: a world plus a creature view.
+pub struct MapData<'a> {
+    pub world: &'a World,
+    pub creatures: &'a [MapCreature<'a>],
+    /// Creature index currently selected (used by later chunks' inspector flows).
+    pub selected: Option<usize>,
 }
 
 /// Glyph and style for a bare terrain cell.
@@ -101,8 +124,8 @@ pub fn overlay_cell(cell: &Cell, overlay: Overlay) -> Option<(char, Color, Color
     Some((g, color, theme::dim(color, 0.75)))
 }
 
-pub fn render(buf: &mut Buffer, area: Rect, fx: &Fixtures, opts: &MapOptions) {
-    let world = &fx.world;
+pub fn render(buf: &mut Buffer, area: Rect, data: &MapData, opts: &MapOptions) {
+    let world = data.world;
     let (ox, oy) = opts.origin;
     let tint = |c: Color| if opts.night { theme::night(c) } else { c };
 
@@ -155,8 +178,8 @@ pub fn render(buf: &mut Buffer, area: Rect, fx: &Fixtures, opts: &MapOptions) {
 
     // Sense rings (drawn under creatures).
     if let Overlay::Sense(idx) = opts.overlay {
-        let c = &fx.creatures[idx];
-        let r = c.genome.sense_cells() as i32;
+        let c = &data.creatures[idx];
+        let r = c.sense_cells as i32;
         for wy in (c.y as i32 - r)..=(c.y as i32 + r) {
             for wx in (c.x as i32 - 2 * r)..=(c.x as i32 + 2 * r) {
                 if !world.in_bounds(wx, wy) {
@@ -179,7 +202,7 @@ pub fn render(buf: &mut Buffer, area: Rect, fx: &Fixtures, opts: &MapOptions) {
 
     // Trail for the followed creature.
     if let Some(idx) = opts.follow {
-        let c = &fx.creatures[idx];
+        let c = &data.creatures[idx];
         let n = c.trail.len().max(1) as f32;
         for (i, &(x, y)) in c.trail.iter().enumerate() {
             let t = (i as f32 + 1.0) / n;
@@ -193,21 +216,21 @@ pub fn render(buf: &mut Buffer, area: Rect, fx: &Fixtures, opts: &MapOptions) {
     // Creatures.
     if opts.creatures {
         let fade = if opts.overlay != Overlay::None && opts.fade_creatures { 0.55 } else { 0.0 };
-        for (i, c) in fx.creatures.iter().enumerate() {
+        for (i, c) in data.creatures.iter().enumerate() {
             if !c.alive {
                 put(buf, c.x, c.y, glyphs::CARCASS, tint(theme::CARCASS), false);
                 continue;
             }
-            let mut color = tint(theme::dim(c.species.color(), fade));
+            let mut color = tint(theme::dim(c.color, fade));
             if let Overlay::Sense(idx) = opts.overlay {
                 if idx == i {
                     color = theme::TEXT_BRIGHT;
                 }
             }
-            put(buf, c.x, c.y, c.glyph(), color, c.adult);
+            put(buf, c.x, c.y, c.glyph, color, c.adult);
         }
         if let Some(idx) = opts.follow {
-            let c = &fx.creatures[idx];
+            let c = &data.creatures[idx];
             if let Some(cell) = cell_at(buf, area, opts, c.x, c.y) {
                 cell.set_style(Style::default().fg(theme::CURSOR_FG).bg(theme::ACCENT).add_modifier(Modifier::BOLD));
             }

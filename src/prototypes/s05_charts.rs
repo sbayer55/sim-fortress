@@ -1,6 +1,8 @@
 //! S05: population charts. Three variants: stacked prey/predator line charts,
 //! a predator-prey phase plot, and a hand-drawn stacked area of all species.
 
+#[allow(unused_imports)]
+use crate::fixtures::{EventKindStyle as _, SeasonStyle as _, SpeciesStyle as _};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};

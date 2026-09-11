@@ -1,5 +1,7 @@
 //! S03: creature inspector (prey, predator, corpse variants).
 
+#[allow(unused_imports)]
+use crate::fixtures::{EventKindStyle as _, SeasonStyle as _, SpeciesStyle as _};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -369,7 +371,9 @@ impl Inspector {
             creatures: true,
             fade_creatures: false,
         };
-        map::render(f.buffer_mut(), mm_inner, fx, &opts);
+        let creatures = fx.map_creatures();
+        let data = map::MapData { world: &fx.world, creatures: &creatures, selected: None };
+        map::render(f.buffer_mut(), mm_inner, &data, &opts);
 
         // Stats to the left of the mini map.
         let stats = Rect::new(inner.x, inner.y, inner.width - mm_w - 1, mm_h);

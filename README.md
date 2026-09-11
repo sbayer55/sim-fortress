@@ -1,22 +1,25 @@
 # Sim Fortress
 
 A terminal predator / prey / evolution / resource-scarcity simulation with a
-Dwarf-Fortress-inspired text UI. **This repository currently contains static UI
-prototypes only** — fixed fixture data, no simulation loop — so layouts, glyphs and
-colors can be reviewed before any simulation code is written.
+Dwarf-Fortress-inspired text UI. C1 is implemented: a deterministic `src/sim` core
+(seed → terrain → clock → seasons → events) and a `src/ui` app shell with the live
+world-generation form, world map, controls modal and help overlay. The static UI
+prototypes remain available behind `--prototypes` for side-by-side comparison.
 
-## Running the prototypes
+## Running
 
-Requirements: Rust (stable) and a terminal at least **155 columns × 45 rows** with
-truecolor support. Any monospace font works — every glyph is from code page 437.
+Requirements: Rust (stable) and a terminal with truecolor support. Any monospace font
+works — every glyph is from code page 437. The live application adapts to any terminal
+size; **155×45** is the reference layout (resize to it to compare against the
+prototypes, which are drawn at a fixed 155×45).
 
 ```bash
-printf '\e[8;45;155t'   # resize most terminals to 155x45
-cargo run               # start at the first prototype
-cargo run -- S03b       # start at a specific prototype id
+cargo run                                        # live app (opens the world-generation form)
+cargo run -- --headless --seed 42 --ticks 4320   # headless: prints a checksum + last events
+cargo run -- --prototypes S01a                   # static prototype viewer (fixed 155x45)
 ```
 
-Row 0 of the screen always shows the prototype id and name.
+The prototype viewer shows the prototype id and name on row 0.
 
 | Key                      | Action                              |
 |--------------------------|-------------------------------------|
@@ -61,13 +64,16 @@ Row 0 of the screen always shows the prototype id and name.
 ## Code layout
 
 ```
-src/main.rs            terminal setup / teardown
-src/app.rs             event loop, fixed 155x45 frame, resize guard, screen cycling
+src/lib.rs             crate root: pub mod sim; pub mod ui; pub mod widgets; …
+src/main.rs            CLI dispatch: --headless | --prototypes | live app
+src/sim/               pure, deterministic core (params, rng, time, world, events, Sim)
+src/ui/                app shell: AppState, screen stack, viewport, live S01/S09/S10/S11
 src/theme.rs           truecolor palette and color ramps
 src/glyphs.rs          named CP437 glyph constants (+ test that every glyph is CP437)
-src/fixtures/          deterministic fixture data: world, creatures, species, series, events, lineage
+src/fixtures/          prototype fixture data (re-exports the `sim` data types)
 src/widgets/           shared widgets: header, panel, bars, status bar, map renderer
-src/prototypes/        one file per screen; `mod.rs` holds the registry
+src/prototypes/        one file per screen; `mod.rs` holds the registry + viewer
+tests/                 integration tests (lib-level determinism, params round-trip)
 docs/PROTOTYPE_GUIDE.md  conventions for adding screens
 ```
 

@@ -1,11 +1,18 @@
-//! Tiny deterministic PRNG (xorshift64*) so fixtures are stable across runs.
+//! Tiny deterministic PRNG (xorshift64*) so runs are stable across executions.
 
-#[derive(Clone)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rng(u64);
 
 impl Rng {
     pub fn new(seed: u64) -> Self {
         Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1)
+    }
+
+    /// The raw internal state, used by `Sim::checksum`.
+    pub fn state(&self) -> u64 {
+        self.0
     }
 
     pub fn next_u64(&mut self) -> u64 {

@@ -1,104 +1,10 @@
-//! Species table and per-species trait statistics.
+//! Per-species population statistics for the prototype viewer.
 
-use ratatui::style::Color;
+use crate::sim::rng::Rng;
+use crate::sim::species::{Genome, Kind, SpeciesId};
+use crate::glyphs;
 
-use super::creatures::{Creature, Genome};
-use crate::{glyphs, theme};
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum SpeciesId {
-    Vole,
-    Hare,
-    Deer,
-    Fox,
-    Wolf,
-    Lynx,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Kind {
-    Prey,
-    Predator,
-}
-
-impl SpeciesId {
-    pub const ALL: [SpeciesId; 6] = [
-        SpeciesId::Vole,
-        SpeciesId::Hare,
-        SpeciesId::Deer,
-        SpeciesId::Fox,
-        SpeciesId::Wolf,
-        SpeciesId::Lynx,
-    ];
-    pub fn name(self) -> &'static str {
-        match self {
-            SpeciesId::Vole => "Vole",
-            SpeciesId::Hare => "Hare",
-            SpeciesId::Deer => "Deer",
-            SpeciesId::Fox => "Fox",
-            SpeciesId::Wolf => "Wolf",
-            SpeciesId::Lynx => "Lynx",
-        }
-    }
-    pub fn plural(self) -> &'static str {
-        match self {
-            SpeciesId::Vole => "Voles",
-            SpeciesId::Hare => "Hares",
-            SpeciesId::Deer => "Deer",
-            SpeciesId::Fox => "Foxes",
-            SpeciesId::Wolf => "Wolves",
-            SpeciesId::Lynx => "Lynxes",
-        }
-    }
-    pub fn glyph(self) -> char {
-        match self {
-            SpeciesId::Vole => glyphs::VOLE,
-            SpeciesId::Hare => glyphs::HARE,
-            SpeciesId::Deer => glyphs::DEER,
-            SpeciesId::Fox => glyphs::FOX,
-            SpeciesId::Wolf => glyphs::WOLF,
-            SpeciesId::Lynx => glyphs::LYNX,
-        }
-    }
-    pub fn color(self) -> Color {
-        match self {
-            SpeciesId::Vole => theme::VOLE,
-            SpeciesId::Hare => theme::HARE,
-            SpeciesId::Deer => theme::DEER,
-            SpeciesId::Fox => theme::FOX,
-            SpeciesId::Wolf => theme::WOLF,
-            SpeciesId::Lynx => theme::LYNX,
-        }
-    }
-    pub fn kind(self) -> Kind {
-        match self {
-            SpeciesId::Vole | SpeciesId::Hare | SpeciesId::Deer => Kind::Prey,
-            _ => Kind::Predator,
-        }
-    }
-    pub fn diet(self) -> &'static str {
-        match self {
-            SpeciesId::Vole => "seeds, roots",
-            SpeciesId::Hare => "grass, bark",
-            SpeciesId::Deer => "grass, leaves",
-            SpeciesId::Fox => "voles, hares",
-            SpeciesId::Wolf => "deer, hares",
-            SpeciesId::Lynx => "hares, voles",
-        }
-    }
-    /// Baseline genome around which individuals vary.
-    pub fn base_genome(self) -> Genome {
-        // speed, size, sense, metabolism, aggression, camouflage, fertility, longevity
-        match self {
-            SpeciesId::Vole => Genome([0.45, 0.10, 0.40, 0.75, 0.05, 0.60, 0.90, 0.20]),
-            SpeciesId::Hare => Genome([0.80, 0.25, 0.65, 0.60, 0.10, 0.55, 0.75, 0.35]),
-            SpeciesId::Deer => Genome([0.65, 0.80, 0.55, 0.40, 0.20, 0.35, 0.35, 0.70]),
-            SpeciesId::Fox => Genome([0.70, 0.35, 0.80, 0.55, 0.60, 0.50, 0.50, 0.45]),
-            SpeciesId::Wolf => Genome([0.75, 0.70, 0.70, 0.50, 0.85, 0.25, 0.40, 0.60]),
-            SpeciesId::Lynx => Genome([0.72, 0.50, 0.90, 0.45, 0.75, 0.70, 0.30, 0.55]),
-        }
-    }
-}
+use super::creatures::Creature;
 
 #[derive(Clone, Debug)]
 pub struct Species {
@@ -122,7 +28,7 @@ pub struct Species {
 }
 
 pub fn generate(creatures: &[Creature]) -> Vec<Species> {
-    let mut rng = super::rng::Rng::new(0x5EED_5EED);
+    let mut rng = Rng::new(0x5EED_5EED);
     SpeciesId::ALL
         .iter()
         .map(|&id| {
@@ -174,7 +80,7 @@ pub fn generate(creatures: &[Creature]) -> Vec<Species> {
             let mut trend = Vec::with_capacity(30);
             let mut v = count as f32 * (0.8 + rng.f32() * 0.4);
             for i in 0..30 {
-                let phase = (i as f32 / 30.0 * 6.28 + id as usize as f32).sin();
+                let phase = (i as f32 / 30.0 * std::f32::consts::TAU + id as usize as f32).sin();
                 v = (v * 0.92 + count as f32 * 0.08 + phase * count as f32 * 0.08 + rng.gauss(0.0, 2.0)).max(0.0);
                 trend.push(v as u16);
             }

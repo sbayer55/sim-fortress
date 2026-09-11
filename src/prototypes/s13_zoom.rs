@@ -1,6 +1,8 @@
 //! S13: local zoom view. Every world cell around the look cursor is drawn as
 //! a 3x3 tile so terrain, resources and creatures can be read individually.
 
+#[allow(unused_imports)]
+use crate::fixtures::{EventKindStyle as _, SeasonStyle as _, SpeciesStyle as _};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};

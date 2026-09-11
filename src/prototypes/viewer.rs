@@ -1,4 +1,7 @@
 //! Event loop and screen cycling for the prototype viewer.
+//!
+//! This is the pre-C1 prototype cycler, kept available behind `--prototypes`
+//! for side-by-side comparison against the live screens until C6 removes it.
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::layout::Rect;
@@ -7,7 +10,7 @@ use ratatui::text::Line;
 use ratatui::widgets::{Paragraph, Widget};
 use ratatui::{DefaultTerminal, Frame};
 
-use crate::prototypes::{self, Prototype};
+use super::Prototype;
 use crate::theme;
 use crate::widgets::header;
 
@@ -20,9 +23,15 @@ pub struct App {
     pub current: usize,
 }
 
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl App {
     pub fn new() -> Self {
-        Self { screens: prototypes::all(), current: 0 }
+        Self { screens: super::all(), current: 0 }
     }
 
     fn next(&mut self) {
@@ -44,15 +53,9 @@ impl App {
     pub fn draw(&self, f: &mut Frame) {
         let size = f.area();
         // Paint the whole terminal with the UI background first.
-        f.render_widget(
-            Paragraph::new("").style(Style::default().bg(theme::BG)),
-            size,
-        );
+        f.render_widget(Paragraph::new("").style(Style::default().bg(theme::BG)), size);
         if size.width < WIDTH || size.height < HEIGHT {
-            let msg = format!(
-                "Resize terminal to {}x{} (now {}x{})",
-                WIDTH, HEIGHT, size.width, size.height
-            );
+            let msg = format!("Resize terminal to {}x{} (now {}x{})", WIDTH, HEIGHT, size.width, size.height);
             let y = size.height / 2;
             let x = size.width.saturating_sub(msg.len() as u16) / 2;
             let area = Rect::new(x, y, msg.len().min(size.width as usize) as u16, 1);
@@ -70,11 +73,10 @@ impl App {
     }
 }
 
-pub fn run(terminal: &mut DefaultTerminal) -> std::io::Result<()> {
+pub fn run(terminal: &mut DefaultTerminal, start_id: Option<&str>) -> std::io::Result<()> {
     let mut app = App::new();
-    // Optional: start at a screen id given on the command line, e.g. `S03b`.
-    if let Some(arg) = std::env::args().nth(1) {
-        if let Some(i) = app.screens.iter().position(|s| s.id().eq_ignore_ascii_case(&arg)) {
+    if let Some(arg) = start_id {
+        if let Some(i) = app.screens.iter().position(|s| s.id().eq_ignore_ascii_case(arg)) {
             app.current = i;
         }
     }
