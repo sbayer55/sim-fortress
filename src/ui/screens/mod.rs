@@ -195,6 +195,22 @@ mod tests {
     }
 
     #[test]
+    fn s09_size_field_arrows_adjust_width_and_height() {
+        let mut app = state();
+        let mut s = WorldGen::new();
+        let (w0, h0) = (app.params.world.width, app.params.world.height);
+        // Default focus is Size: Left/Right change width, Up/Down change height.
+        s.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE), &mut app);
+        s.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
+        let p = s.form_params();
+        assert_eq!(p.world.height, (h0 + 5).min(60));
+        assert_eq!(p.world.width, (w0 + 10).min(200));
+        s.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE), &mut app);
+        s.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE), &mut app);
+        assert_eq!(s.form_params().world.height, (h0 + 5).min(60).saturating_sub(10).max(30));
+    }
+
+    #[test]
     fn s09_q_quits_when_no_text_focus() {
         let mut app = state();
         let mut s = WorldGen::new();

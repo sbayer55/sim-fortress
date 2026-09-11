@@ -157,11 +157,11 @@ from S09.
 
 ### FR9 World generation screen (S09)
 Form state `WorldGenForm { name, seed, world: WorldParams, initial_counts, evolution: (stored,
-unused), preset }`, plus a preview `World`. Tab order: 9 world fields (Size counts as two) → 6 species rows
+unused), preset }`, plus a preview `World`. Tab order: 8 world fields → 6 species rows
 (stored in `params.creatures.initial_counts`; the rows become functional in C3) → 4
 evolution fields (stored; live in C4) → presets (inert until C6) → 3 buttons; the panel hint reads
-`field N of 27`. The Regrowth rate evolution field is live from C2. `Size` is two focusable fields on one row: Width 100–200 step 10, Height 30–60
-step 5. Seed accepts `0x`-prefixed hex or decimal u64; invalid text shows `invalid seed`
+`field N of 26`. The Regrowth rate evolution field is live from C2. `Size` is one focusable field:
+`←`/`→` adjust Width 100–200 step 10, `↑`/`↓` adjust Height 30–60 step 5. Seed accepts `0x`-prefixed hex or decimal u64; invalid text shows `invalid seed`
 in the hint in WARN colour and Generate is refused. Name ≤ 23 characters. The preview
 regenerates at most once per frame after a change; scale = smallest of 1:2, 1:3, 1:4 that
 fits 75×20, reported in the hint. Capacity/placement lines keep the prototype formulas.
