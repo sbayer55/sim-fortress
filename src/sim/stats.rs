@@ -406,7 +406,7 @@ pub fn peak_lag(prey: &[f32], pred: &[f32]) -> Option<u32> {
             break;
         }
         let corr = pearson(&ps, &qs, l as usize);
-        if best.map_or(true, |b| corr > b.1) {
+        if best.is_none_or(|b| corr > b.1) {
             best = Some((l, corr));
         }
     }
@@ -769,9 +769,7 @@ mod tests {
             prey[i] = ((i as f32 / 60.0).sin() + 1.0) * 100.0;
         }
         let mut pred = vec![0.0f32; n];
-        for i in 20..n {
-            pred[i] = prey[i - 20];
-        }
+        pred[20..n].copy_from_slice(&prey[..n - 20]);
         assert_eq!(peak_lag(&prey, &pred), Some(20));
 
         // Fewer than two local maxima → None.

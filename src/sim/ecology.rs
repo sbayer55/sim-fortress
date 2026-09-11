@@ -436,7 +436,11 @@ mod tests {
 
     #[test]
     fn water_dries_and_refills_with_marker() {
-        let mut sim = Sim::new(42, Params::default());
+        // Ecology only: creatures (grazing, and since C5 predation) perturb the
+        // vegetation the rain stream is drawn against, so keep the world empty.
+        let mut p = Params::default();
+        p.creatures.initial_counts.clear();
+        let mut sim = Sim::new(42, p);
         for c in &mut sim.world.cells {
             if !c.terrain.is_water() {
                 c.moisture = 0.0;

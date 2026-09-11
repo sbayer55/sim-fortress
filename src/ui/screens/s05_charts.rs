@@ -647,6 +647,22 @@ fn phase_sidebar(f: &mut Frame, area: Rect, sim: &Sim, w: &Window) {
             row += 1;
         }
     }
+    row += 1;
+
+    panel::section(f, inner, row, "Legend");
+    row += 1;
+    for (glyph, desc, color) in [
+        ("•", "older days", theme::DIM),
+        ("▀▄", "last 40 days", theme::ACCENT),
+        ("█", "today", theme::TEXT_BRIGHT),
+        ("·", "equilibrium axes (time means)", theme::DIM),
+    ] {
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!(" {:<3}", glyph), Style::default().fg(color).bg(theme::PANEL_BG)),
+            sp(desc, theme::text()),
+        ]));
+        row += 1;
+    }
     let _ = sim;
 }
 

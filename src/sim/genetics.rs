@@ -329,6 +329,7 @@ pub fn deliver(
                 predation_risk: 0.0,
                 migrate_until: 0,
                 migrate_target: None,
+                path_for: None,
             };
             let id = store.insert(child);
             let child = store.get(id).expect("just inserted");
@@ -515,6 +516,7 @@ mod tests {
             predation_risk: 0.0,
             migrate_until: 0,
             migrate_target: None,
+            path_for: None,
         }
     }
 

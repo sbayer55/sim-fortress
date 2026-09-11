@@ -119,5 +119,5 @@ Rules that hold for every chunk:
 | C2 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | implemented |
 | C3 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | implemented |
 | C4 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | implemented (balance table recorded in the doc) |
-| C5 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | not started |
+| C5 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | implemented (population bands open — see the status note in the doc) |
 | C6 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | not started |

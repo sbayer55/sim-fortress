@@ -219,7 +219,23 @@ fn season(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, time: &crate::sim::T
     let frost = if season == Season::Winter { " frost now".to_string() } else { format!(" frost in {} days", days_to_frost) };
     util::line(f, inner, row, Line::from(Span::styled(frost, theme::text())));
     row += 1;
-    util::line(f, inner, row, Line::from(Span::styled(" forage line 0.25 — regions below it start migrations".to_string(), theme::dim_text())));
+    let pp = &sim.params.predation;
+    util::line(f, inner, row, Line::from(Span::styled(
+        format!(" forage line {:.2} — prey herds leave after {} days below it", pp.migrate_veg, pp.migrate_days),
+        theme::dim_text(),
+    )));
+    row += 1;
+    util::line(f, inner, row, Line::from(Span::styled(
+        format!(" pressure line {:.2} — herds leave; packs leave at <{} prey", pp.migrate_pressure, pp.migrate_prey_min),
+        theme::dim_text(),
+    )));
+    row += 1;
+    let year = time.year();
+    let migrations = sim.events.iter().filter(|e| e.kind == crate::sim::EventKind::Migration && e.year == year).count();
+    util::line(f, inner, row, Line::from(vec![
+        Span::styled(format!(" {} ", glyphs::MIGRATION), Style::default().fg(theme::ACCENT).bg(theme::PANEL_BG)),
+        Span::styled(format!("{migrations} migrations this year"), theme::text()),
+    ]));
     row += 1;
     if let Some(e) = sim.events.iter().rev().find(|e| e.kind == crate::sim::EventKind::Drought || e.kind == crate::sim::EventKind::DroughtEased) {
         util::line(f, inner, row, Line::from(vec![

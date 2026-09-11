@@ -60,20 +60,21 @@ impl WorldMap {
             .map(|c| c.id)
     }
 
-    /// FR9: the default sense-overlay subject — the followed/look-cursor creature
-    /// when a living predator, else the living predator with the most kills (ties by id).
+    /// FR9: the default sense-overlay subject — the look-cursor creature, else the
+    /// followed creature (prey or predator), else the living predator with the
+    /// most kills (ties by id).
     fn default_sense(app: &AppState) -> Option<CreatureId> {
         let sim = app.sim.as_ref()?;
-        if let Some(id) = app.follow {
-            if sim.creatures.get(id).is_some_and(|c| c.alive && c.species.kind() == crate::sim::Kind::Predator) {
-                return Some(id);
-            }
-        }
         if let Some((x, y)) = app.look_cursor {
             if let Some(id) = Self::creature_at_cursor(sim, x, y) {
-                if sim.creatures.get(id).is_some_and(|c| c.alive && c.species.kind() == crate::sim::Kind::Predator) {
+                if sim.creatures.get(id).is_some_and(|c| c.alive) {
                     return Some(id);
                 }
+            }
+        }
+        if let Some(id) = app.follow {
+            if sim.creatures.get(id).is_some_and(|c| c.alive) {
+                return Some(id);
             }
         }
         sim.creatures
@@ -81,6 +82,18 @@ impl WorldMap {
             .filter(|c| c.species.kind() == crate::sim::Kind::Predator)
             .max_by_key(|c| (c.kills, std::cmp::Reverse(c.id.0)))
             .map(|c| c.id)
+    }
+
+    /// `Tab` with the sense overlay active: select the next living predator
+    /// (FR9). Returns false when the overlay is not active so the caller can
+    /// give `Tab` its plain-map meaning.
+    fn cycle_sense(&mut self, app: &AppState) -> bool {
+        let Overlay::Sense(id) = self.overlay else { return false };
+        if let Some(next) = Self::next_predator(app, id) {
+            self.overlay = Overlay::Sense(next);
+            self.sense_id = Some(next);
+        }
+        true
     }
 
     /// The next living predator by id ascending, wrapping (FR9).
@@ -267,12 +280,7 @@ impl WorldMap {
                 Action::None
             }
             KeyCode::Tab => {
-                if let Overlay::Sense(id) = self.overlay {
-                    if let Some(next) = Self::next_predator(app, id) {
-                        self.overlay = Overlay::Sense(next);
-                        self.sense_id = Some(next);
-                    }
-                } else {
+                if !self.cycle_sense(app) {
                     self.wide = !self.wide;
                 }
                 Action::None
@@ -309,6 +317,18 @@ impl WorldMap {
                         let (cx, cy) = ((r.1 + r.3) / 2, (r.2 + r.4) / 2);
                         app.centre_viewport_on(cx, cy);
                     }
+                }
+                Action::None
+            }
+            // S02d: the status bar offers [i] inspect / [f] follow for the sense subject.
+            KeyCode::Char('i') if matches!(self.overlay, Overlay::Sense(_)) => {
+                let Overlay::Sense(id) = self.overlay else { return Action::None };
+                Action::Push(Box::new(Inspector::new(id)))
+            }
+            KeyCode::Char('f') if matches!(self.overlay, Overlay::Sense(_)) => {
+                if let Overlay::Sense(id) = self.overlay {
+                    app.follow = Some(id);
+                    app.follow_death_tick = None;
                 }
                 Action::None
             }
@@ -406,6 +426,17 @@ impl WorldMap {
                 Action::None
             }
             KeyCode::Char('z') => Action::Push(Box::new(Zoom::new())),
+            KeyCode::Tab => {
+                self.cycle_sense(app);
+                Action::None
+            }
+            KeyCode::Char('4') => {
+                if let Some(id) = Self::default_sense(app) {
+                    self.overlay = Overlay::Sense(id);
+                    self.sense_id = Some(id);
+                }
+                Action::None
+            }
             KeyCode::Esc => {
                 app.look_cursor = None;
                 Action::None
@@ -441,7 +472,16 @@ impl WorldMap {
                 Action::None
             }
             KeyCode::Tab => {
-                self.wide = !self.wide;
+                if !self.cycle_sense(app) {
+                    self.wide = !self.wide;
+                }
+                Action::None
+            }
+            KeyCode::Char('4') => {
+                if let Some(id) = Self::default_sense(app) {
+                    self.overlay = Overlay::Sense(id);
+                    self.sense_id = Some(id);
+                }
                 Action::None
             }
             _ => Action::Unhandled,
@@ -594,9 +634,9 @@ impl WorldMap {
         row += 1;
         bars::labeled(f.buffer_mut(), inner, row, " sense", c.genome.sense(), theme::ACCENT, 20, 20);
         row += 1;
-        let r = c.genome.sense_cells() as u16;
+        let r = c.genome.sense_cells();
         util::line(f, inner, row, Line::from(Span::styled(
-            format!(" radius {} cells   ring {}×{} on screen", r, 4 * r as u16 + 1, 2 * r as u16 + 1),
+            format!(" radius {} cells   ring {}×{} on screen", r, 4 * r + 1, 2 * r + 1),
             theme::dim_text(),
         )));
         row += 2;
@@ -666,17 +706,27 @@ impl WorldMap {
         )));
         row += 2;
 
-        // Detected prey table.
-        panel::section(f, inner, row, "Detected prey");
+        // Detected prey table (predator subject) or detected predators (prey
+        // subject, FR9: the prey rule, halved range while resting).
+        let subject_is_prey = c.species.kind() == crate::sim::Kind::Prey;
+        panel::section(f, inner, row, if subject_is_prey { "Detected predators" } else { "Detected prey" });
         row += 1;
         util::line(f, inner, row, Line::from(Span::styled(" tag name        dist camo status", theme::dim_text())));
         row += 1;
         let mut rows: Vec<(f32, &crate::sim::Creature, &'static str)> = Vec::new();
         for o in sim.creatures.living() {
-            if o.species.kind() != crate::sim::Kind::Prey || crate::sim::dist(c.x, c.y, o.x, o.y) > r_f {
+            if o.species.kind() == c.species.kind() || crate::sim::dist(c.x, c.y, o.x, o.y) > r_f {
                 continue;
             }
-            let status = if o.id == c.hunt_target.unwrap_or(crate::sim::CreatureId(u32::MAX)) {
+            let status = if subject_is_prey {
+                if o.hunt_target == Some(c.id) {
+                    "hunting me"
+                } else if crate::sim::predation::prey_detects_pred(c, o, pp) {
+                    "seen"
+                } else {
+                    "hidden"
+                }
+            } else if o.id == c.hunt_target.unwrap_or(crate::sim::CreatureId(u32::MAX)) {
                 "target"
             } else if crate::sim::predation::can_detect(c, o, &sim.world, pp) {
                 "seen"
@@ -687,13 +737,14 @@ impl WorldMap {
         }
         rows.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.id.cmp(&b.1.id)));
         if rows.is_empty() {
-            util::line(f, inner, row, Line::from(Span::styled(" no prey within range", theme::dim_text())));
+            util::line(f, inner, row, Line::from(Span::styled(if subject_is_prey { " no predators within range" } else { " no prey within range" }, theme::dim_text())));
             row += 1;
         }
         for (d, o, status) in rows.iter().take(8) {
             let st = match *status {
                 "hidden" => theme::dim_text(),
                 "target" => Style::default().fg(theme::ACCENT).bg(theme::PANEL_BG),
+                "hunting me" => Style::default().fg(theme::BAD).bg(theme::PANEL_BG),
                 _ => Style::default().fg(theme::GOOD).bg(theme::PANEL_BG),
             };
             util::line(f, inner, row, Line::from(vec![
@@ -903,7 +954,7 @@ impl WorldMap {
                 let mut nearest: Option<(usize, &crate::sim::Creature)> = None;
                 for p in sim.creatures.living().filter(|p| p.species.kind() == crate::sim::Kind::Predator && p.hunt_target == Some(id)) {
                     let d = crate::sim::cheb(c.x, c.y, p.x, p.y);
-                    if nearest.map_or(true, |n| d < n.0) {
+                    if nearest.is_none_or(|n| d < n.0) {
                         nearest = Some((d, p));
                     }
                 }

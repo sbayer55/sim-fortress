@@ -255,6 +255,8 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
         util::line(f, inner, row, Line::from(vec![
             sp(format!("   {kg} kg of meat remaining; gone in ~{gone_in} days"), theme::dim_text()),
         ]));
+        row += 2;
+        row = killer_and_scavengers(f, inner, row, sim, c);
     }
     row += 2;
 
@@ -307,6 +309,52 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
 }
 
 /// `Name tag` for a relative, from the store or the lineage.
+/// S03c (prototype items 10–11, Identity & Death panel): the killer from
+/// `death.killer` and the two nearest living predators with the Scavenge goal.
+fn killer_and_scavengers(f: &mut Frame, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
+    if let Some(killer_id) = c.death.and_then(|d| d.killer) {
+        panel::section(f, inner, row, "Killer");
+        row += 1;
+        let kname = sim
+            .creatures
+            .get(killer_id)
+            .map(|k| format!("{} {}", k.name_str(), k.tag()))
+            .or_else(|| sim.lineage.get(killer_id).map(|n| format!("{} {}", n.name_str(), n.tag)))
+            .unwrap_or_else(|| format!("#{}", killer_id.0));
+        let kglyph = sim.creatures.get(killer_id).map(|k| k.species.glyph().to_ascii_uppercase()).unwrap_or('?');
+        let kcolor = sim.creatures.get(killer_id).map(|k| k.species.color()).unwrap_or(theme::DIM);
+        let kills = sim.creatures.get(killer_id).map(|k| k.kills).unwrap_or(0);
+        let chase = c.death.map(|d| d.chase_ticks).unwrap_or(0);
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!(" {} ", kglyph), Style::default().fg(kcolor).bg(theme::PANEL_BG)),
+            sp(kname, theme::title()),
+            sp(format!("  {} kills  chase {} ticks", kills, chase), theme::text()),
+        ]));
+        row += 2;
+    }
+    panel::section(f, inner, row, "Scavengers nearby");
+    row += 1;
+    let mut scav: Vec<(f32, &Creature)> = sim
+        .creatures
+        .living()
+        .filter(|o| o.species.kind() == Kind::Predator && o.goal == Goal::Scavenge)
+        .map(|o| (crate::sim::dist(c.x, c.y, o.x, o.y), o))
+        .collect();
+    scav.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.id.cmp(&b.1.id)));
+    if scav.is_empty() {
+        util::line(f, inner, row, Line::from(sp(" none", theme::dim_text())));
+        row += 1;
+    }
+    for (d, o) in scav.iter().take(2) {
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!(" {} ", o.species.glyph().to_ascii_uppercase()), Style::default().fg(o.species.color()).bg(theme::PANEL_BG)),
+            sp(format!("{:<9}{:<7} {:>3.0} cells {}  {}", o.name_str(), o.tag(), d, compass(c.x, c.y, o.x, o.y), o.goal.plain()), theme::text()),
+        ]));
+        row += 1;
+    }
+    row
+}
+
 fn kin_name(sim: &crate::sim::Sim, id: CreatureId) -> String {
     if let Some(c) = sim.creatures.get(id) {
         return format!("{} {}", c.name_str(), c.tag());
@@ -457,17 +505,25 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
                     sim.params.predation.preference(c.species, *prey_id)
                 };
                 bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", prey_id.plural()), share, prey_id.color(), 16, 16);
+                f.buffer_mut().set_stringn(
+                    inner.x + 40,
+                    inner.y + row,
+                    format!("{} kills", c.kills_by_species[prey_id.index()]),
+                    12,
+                    theme::dim_text(),
+                );
                 row += 1;
             }
             let last_kill = match c.last_kill {
-                Some((victim, day, _)) => {
+                Some((victim, day, region)) => {
                     let vname = sim
                         .creatures
                         .get(victim)
                         .map(|v| format!("{} {}", v.name_str(), v.tag()))
                         .or_else(|| sim.lineage.get(victim).map(|n| format!("{} {}", n.name_str(), n.tag)))
                         .unwrap_or_else(|| format!("#{}", victim.0));
-                    format!("{}  {}", vname, day_stamp(day as i64, sim.time.season_days))
+                    let region_name = sim.world.regions.get(region as usize).map(|r| r.0.as_str()).unwrap_or("?");
+                    format!("{}  {}, {}", vname, day_stamp(day as i64, sim.time.season_days), region_name)
                 }
                 None => "none".to_string(),
             };
@@ -498,16 +554,16 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
             panel::section(f, inner, row, "Threats seen");
             row += 1;
             let mut any = false;
+            let total_threats: u32 = c.threats_by_species.iter().sum();
             for pred_id in SpeciesId::ALL.iter().filter(|s| s.kind() == Kind::Predator) {
                 let n = c.threats_by_species[pred_id.index()];
                 if n == 0 {
                     continue;
                 }
                 any = true;
-                util::line(f, inner, row, Line::from(vec![
-                    sp(format!(" {} ", pred_id.glyph().to_ascii_uppercase()), Style::default().fg(pred_id.color()).bg(theme::PANEL_BG)),
-                    sp(format!("{:<8}{} ", pred_id.name(), n), theme::text()),
-                ]));
+                let share = n as f32 / total_threats.max(1) as f32;
+                bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", pred_id.plural()), share, pred_id.color(), 16, 16);
+                f.buffer_mut().set_stringn(inner.x + 40, inner.y + row, format!("{n} times"), 12, theme::dim_text());
                 row += 1;
             }
             if !any {
@@ -516,47 +572,6 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
             }
             row += 1;
         }
-    } else {
-        // S03c Killer + scavengers nearby.
-        if let Some(killer_id) = c.death.and_then(|d| d.killer) {
-            panel::section(f, inner, row, "Killer");
-            row += 1;
-            let kname = sim
-                .creatures
-                .get(killer_id)
-                .map(|k| format!("{} {}", k.name_str(), k.tag()))
-                .or_else(|| sim.lineage.get(killer_id).map(|n| format!("{} {}", n.name_str(), n.tag)))
-                .unwrap_or_else(|| format!("#{}", killer_id.0));
-            let kills = sim.creatures.get(killer_id).map(|k| k.kills).unwrap_or(0);
-            let chase = c.death.map(|d| d.chase_ticks).unwrap_or(0);
-            util::line(f, inner, row, Line::from(vec![
-                sp(" ", theme::text()),
-                sp(kname, theme::title()),
-                sp(format!("  {} kills  chase {} ticks", kills, chase), theme::text()),
-            ]));
-            row += 2;
-        }
-        panel::section(f, inner, row, "Scavengers nearby");
-        row += 1;
-        let mut scav: Vec<(f32, &Creature)> = sim
-            .creatures
-            .living()
-            .filter(|o| o.species.kind() == Kind::Predator && o.goal == Goal::Scavenge)
-            .map(|o| (crate::sim::dist(c.x, c.y, o.x, o.y), o))
-            .collect();
-        scav.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.id.cmp(&b.1.id)));
-        if scav.is_empty() {
-            util::line(f, inner, row, Line::from(sp(" none", theme::dim_text())));
-            row += 1;
-        }
-        for (d, o) in scav.iter().take(2) {
-            util::line(f, inner, row, Line::from(vec![
-                sp(format!(" {} ", o.species.glyph().to_ascii_uppercase()), Style::default().fg(o.species.color()).bg(theme::PANEL_BG)),
-                sp(format!("{:<9}{:<7} {:>3.0} cells", o.name_str(), o.tag(), d), theme::text()),
-            ]));
-            row += 1;
-        }
-        row += 1;
     }
 
     // Legacy (C4 FR10).

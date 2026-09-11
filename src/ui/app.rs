@@ -159,6 +159,9 @@ impl AppState {
     /// The current S12 modal was dismissed. Restore speed only when the whole
     /// queue is drained (Continue on the last alert).
     pub fn dismiss_alert(&mut self, restore_speed: bool) {
+        if let (Some(Alert::Extinction { species, .. }), Some(sim)) = (self.alert_shown.take(), self.sim.as_mut()) {
+            sim.dismiss_extinction(species);
+        }
         self.alert_shown = None;
         if restore_speed && self.alert_queue.is_empty() {
             if let Some(s) = self.speed_before_alert.take() {

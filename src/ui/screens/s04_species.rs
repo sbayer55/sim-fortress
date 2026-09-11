@@ -306,11 +306,28 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     row += 2;
     panel::section(f, left, row, "Interactions");
     row += 1;
+    // Kill shares from every predator's `kills_by_species` (living and carcasses);
+    // params preference stands in while fewer than 5 kills are recorded.
+    let mut kills = [[0u32; 6]; 6]; // [predator][prey]
+    for c in sim.creatures.living().chain(sim.creatures.carcasses()) {
+        if c.species.kind() == Kind::Predator {
+            for (i, k) in c.kills_by_species.iter().enumerate() {
+                kills[c.species.index()][i] += k;
+            }
+        }
+    }
     if id.kind() == Kind::Prey {
+        let by_pred: u32 = SpeciesId::ALL.iter().map(|p| kills[p.index()][id.index()]).sum();
         let hunters: Vec<String> = SpeciesId::ALL
             .iter()
-            .filter(|p| p.kind() == Kind::Predator && sim.params.predation.preference(**p, id) > 0.0)
-            .map(|p| format!("{} {}", p.glyph().to_ascii_uppercase(), p.name()))
+            .filter(|p| p.kind() == Kind::Predator && (sim.params.predation.preference(**p, id) > 0.0 || kills[p.index()][id.index()] > 0))
+            .map(|p| {
+                if by_pred >= 5 {
+                    format!("{} {} {:.0}%", p.glyph().to_ascii_uppercase(), p.name(), kills[p.index()][id.index()] as f32 / by_pred as f32 * 100.0)
+                } else {
+                    format!("{} {}", p.glyph().to_ascii_uppercase(), p.name())
+                }
+            })
             .collect();
         if hunters.is_empty() {
             util::line(f, left, row, Line::from(vec![sp(" eaten by: ", theme::dim_text()), sp("none", theme::text())]));
@@ -330,24 +347,39 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         ]));
         row += 1;
     } else {
+        let total: u32 = kills[id.index()].iter().sum();
         let prey: Vec<String> = SpeciesId::ALL
             .iter()
-            .filter(|p| p.kind() == Kind::Prey && sim.params.predation.preference(id, **p) > 0.0)
-            .map(|p| format!("{} {}", p.glyph().to_ascii_uppercase(), p.name()))
+            .filter(|p| p.kind() == Kind::Prey && (sim.params.predation.preference(id, **p) > 0.0 || kills[id.index()][p.index()] > 0))
+            .map(|p| {
+                let share = if total >= 5 {
+                    kills[id.index()][p.index()] as f32 / total as f32
+                } else {
+                    sim.params.predation.preference(id, *p)
+                };
+                format!("{} {} {:.0}%", p.glyph().to_ascii_uppercase(), p.name(), share * 100.0)
+            })
             .collect();
         util::line(f, left, row, Line::from(vec![
             sp(" hunts ", theme::dim_text()),
             sp(if prey.is_empty() { "nothing".to_string() } else { prey.join(", ") }, theme::text()),
+            sp(if total >= 5 { format!("  ({total} kills)") } else { "  (preference)".to_string() }, theme::dim_text()),
         ]));
         row += 1;
+        // Rivals share at least one prey species.
         let rivals: Vec<String> = SpeciesId::ALL
             .iter()
-            .filter(|o| o.kind() == Kind::Predator && **o != id)
+            .filter(|o| {
+                o.kind() == Kind::Predator
+                    && **o != id
+                    && SpeciesId::ALL.iter().any(|p| sim.params.predation.preference(id, *p) > 0.0 && sim.params.predation.preference(**o, *p) > 0.0)
+            })
             .map(|o| format!("{} {}", o.glyph().to_ascii_uppercase(), o.name()))
             .collect();
         util::line(f, left, row, Line::from(vec![
             sp(" competes with ", theme::dim_text()),
-            sp(rivals.join(" and "), theme::text()),
+            sp(if rivals.is_empty() { "no one".to_string() } else { rivals.join(" and ") }, theme::text()),
+            sp(" for prey", theme::dim_text()),
         ]));
         row += 1;
     }

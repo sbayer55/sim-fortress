@@ -41,7 +41,7 @@ Save/load, title, presets, tuning tooling (C6).
 
 ### FR1 Params (`[predation]`)
 ```toml
-# defaults of params.creatures.initial_counts change to fox = 30, wolf = 24, lynx = 12
+# defaults of params.creatures.initial_counts change to fox = 8, wolf = 6, lynx = 4 (balance table; spec start 30/24/12)
 detect_threshold = 0.8         # hidden when camouflage × cover ≥ sense × detect_threshold
 cover_by_terrain = { forest = 1.0, grass_dense = 1.0, grass = 0.8, grass_sparse = 0.6, dirt = 0.6, sand = 0.4, shallow_water = 0.4 }
 den_protects = true            # a resting prey on a den cell cannot be targeted
@@ -51,7 +51,7 @@ chase_speed_bonus = 0.5        # extra move budget per tick while chasing
 catch_distance_cheb = 1
 kill_base = 0.35  kill_speed_w = 1.0  kill_aggression_w = 0.3  kill_size_w = 0.2  kill_min = 0.05  kill_max = 0.95
 eat_hours_base = 2  eat_hours_per_size = 4          # ceil(base + per_size × prey.size)
-hunger_per_kill_base = 0.6  hunger_per_kill_per_size = 0.4
+hunger_per_kill_base = 4.0  hunger_per_kill_per_size = 0.4   # balance table; spec start 0.6 (a kill feeds a fox ~25 days)
 kill_consumes_decay = 0.6      # eating advances the carcass decay by this much
 hunt_cooldown_hours = 6
 hunt_hunger_min = 0.45
@@ -187,21 +187,38 @@ prey has detected it (prey rule).
   `chase_speed_bonus`, `hunt_cooldown_hours`, `hunger_per_kill_*` and predator
   `initial_counts` to meet the bands above, and must record the final values in FR1.
 
-  **Implementation status (balance not yet met).** The C5 code is complete and all
-  non-balance acceptance tests pass (`forced_extinction_7_of_10`, `migration_scenario`,
-  `performance_budget`, determinism), but the "six species alive at year 5" band is
-  still open. Diagnosis: the fox–vole pair has **no refuge** — fox sense 0.80 defeats
-  vole camouflage 0.60 even in maximum cover (`0.60 × 1.0 < 0.80 × 0.8`), so foxes
-  detect voles everywhere; and `kill_chance` (fox→vole ≈ 76 % from
-  `kill_speed_w`/`kill_aggression_w`, which the balance table forbids touching) plus
-  the fox's fast reproduction (8 founders → 42 in year 1, 565 voles killed) drive
-  voles extinct, after which the foxes starve. Flee also suppresses prey
-  mating/drinking (deer die of thirst; prey births halve from ~1729 to ~843/year on
-  seed 42). The C5-only levers (`kill_base`, `chase_max_ticks`, `chase_speed_bonus`,
-  `hunt_cooldown_hours`, `hunger_per_kill_*`, predator `initial_counts`) have not
-  produced a stable orbit; re-tuning the C4 prey reproduction or a predator
-  reproduction damper appears necessary. The three balance-dependent tests are
-  `#[ignore]`d in `tests/predators.rs`.
+  **Implementation status (second pass, Sept 2026).** All C5 mechanics, screens and
+  spec-listed unit tests are in place; `forced_extinction_7_of_10`, `migration_scenario`
+  (destination rises within 5 days, cooldown honoured) and `performance_budget` pass. The
+  three population bands (`six_species_five_years`, `oscillation_lag`, `hunt_success_band`)
+  remain `#[ignore]`d with the measured numbers in their messages. Four mechanism defects
+  found while tuning were fixed first, since no lever mattered before them:
+  - prey fled from *every* detected predator within sense range on every tick, exhausted
+    themselves (flee steps cost double) and died of thirst in forced rest — a threat is now
+    a detected predator that is hunting this prey or is hungry and within
+    `chase_trigger_cheb`, and a failed kill roll's forced flee is retained for `flee_ticks`;
+  - satiated predators camped on the highest-`prey_pressure` cell (the water hole) — Patrol
+    is a biased wander again;
+  - a path searched for one target was followed toward the next (flee vector → water);
+  - hunt stats died with the carcass (`DeathTallies::hunt_*` now accumulate).
+
+  With those fixed, the population bands still fail for a structural reason the levers do
+  not reach: **foxes have no refuge from voles and voles are the marginal C4 species.**
+  Fox sense 0.80 defeats vole camouflage 0.60 in every cover (`0.60 × 1.0 < 0.64`),
+  `kill_chance` fox→vole is 0.76 (0.56 at `kill_base` 0.15), and a satiated fox is
+  always mate-eligible, so 8 foxes become 25–60 in a year and take the ~250 voles to zero;
+  the foxes then thin out on hares while wolves and lynxes, spread thin over the map, die of
+  old age without meeting a mate. Sweeps of the allowed levers (`hunger_per_kill_base`
+  0.6–6.0, `hunt_cooldown_hours` 6–72, `kill_base` 0.35–0.15, `chase_*`, founders
+  30/24/12 down to 4/3/2) and of the fallback lever (predator `mate_cooldown_days` 120–360,
+  predator `litter_max` 3–1, vole `litter_max` 0–1) all end with voles extinct in year
+  1–3 and predators gone by year 5; the best outcomes keep three species (hares, deer and a
+  few foxes) at year 5. Recorded FR1 values are the best spec-only point found.
+  Reaching the bands needs a design change rather than a value: a vole refuge (cover or a
+  `detect_threshold` per prey size), a predator mate-seeking range or a den-based pack so
+  wolves and lynxes can find mates, and a reproduction gate on predators tied to recent
+  kills rather than hunger alone. `examples/bench_c5.rs` runs any lever set headless and
+  prints the per-year table, kill counts and `peak_lag`.
 
 ## Checkpoint demo script
 1. Default world, x25, 3 years. Predator counts fall after prey dips.

@@ -30,7 +30,6 @@ pub use stats::{census, Census, Sample, Series, SpeciesStats};
 pub use time::{Season, Time};
 pub use world::{Cell, RegionRect, Terrain, World};
 
-use serde::{Deserialize, Serialize};
 
 use creatures::CreatureStore;
 use events::EventRing;
@@ -46,20 +45,7 @@ pub enum Alert {
     },
 }
 
-/// The retained death record of a species' last individual (C5 FR8): kept so the
-/// S12 modal can name the last individual even after its carcass slot is freed.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ExtinctionRecord {
-    pub species: SpeciesId,
-    pub last: CreatureId,
-    pub name: String,
-    pub tag: String,
-    pub cause: Cause,
-    pub day: u32,
-    pub age: u32,
-    pub region: String,
-    pub pos: (usize, usize),
-}
+pub use creatures::ExtinctionRecord;
 
 pub struct StepReport {
     pub alerts: Vec<Alert>,
@@ -99,8 +85,8 @@ pub struct Sim {
     pub migration_cooldown_until: [u64; 48],
     /// Consecutive days the migration trigger has held, per (species, region).
     pub migration_days_below: [u32; 48],
-    /// A (species, region) has ever reached `local_extinction_min` recently.
-    pub local_was_min: [bool; 48],
+    /// Last day a (species, region) count was ≥ `local_extinction_min`.
+    pub local_min_day: [Option<u32>; 48],
     /// A local-extinction Note has been emitted for this pair (until repopulated).
     pub local_noted: [bool; 48],
 }
@@ -155,7 +141,7 @@ impl Sim {
             last_extinct: [None, None, None, None, None, None],
             migration_cooldown_until: [0; 48],
             migration_days_below: [0; 48],
-            local_was_min: [false; 48],
+            local_min_day: [None; 48],
             local_noted: [false; 48],
         }
     }
@@ -243,7 +229,7 @@ impl Sim {
                 &c,
                 &self.deaths,
             );
-            self.deaths = DeathTallies::default();
+            self.deaths = self.deaths.next_day();
             if day.is_multiple_of(7) {
                 self.lineage.prune(&c.max_generation, self.params.genetics.lineage_keep_generations, &self.creatures);
             }
@@ -282,7 +268,9 @@ impl Sim {
                 let peak = self.species[i].peak;
                 if initial > 0 && peak > 0 && self.species[i].count == 0 {
                     self.extinct[i] = true;
-                    let record = self.last_individual(*id);
+                    // The last individual is the species' most recent death,
+                    // recorded by `behavior::kill` (survives carcass freeing).
+                    let record = self.deaths.last_death[i].clone();
                     let last_id = record.as_ref().map(|r| r.last);
                     let text = match &record {
                         Some(r) => format!(
@@ -317,16 +305,20 @@ impl Sim {
                 }
             }
 
-            // Local extinction (FR8): once per (species, region) until repopulated.
+            // Local extinction (FR8): a region whose count drops to 0 after being
+            // ≥ `local_extinction_min` within the last season (90 days) emits a
+            // Note once per (species, region) until repopulated.
+            let today = self.time.day_index() as u32;
             for ri in 0..8 {
                 let key = i * 8 + ri;
                 let count = region_counts[i][ri];
                 if count >= self.params.predation.local_extinction_min {
-                    self.local_was_min[key] = true;
+                    self.local_min_day[key] = Some(today);
                 }
+                let recent_min = self.local_min_day[key].is_some_and(|d| today.saturating_sub(d) <= 90);
                 if count > 0 {
                     self.local_noted[key] = false; // re-arm once repopulated
-                } else if self.local_was_min[key] && !self.local_noted[key] {
+                } else if recent_min && !self.local_noted[key] {
                     self.local_noted[key] = true;
                     let r = &self.world.regions[ri];
                     self.events.push(Event {
@@ -345,36 +337,10 @@ impl Sim {
         }
     }
 
-    /// The most recently deceased individual of `species`, from the carcass store
-    /// (ties by id), with enough detail for the S12 modal.
-    fn last_individual(&self, species: SpeciesId) -> Option<ExtinctionRecord> {
-        let mut best: Option<&Creature> = None;
-        for c in self.creatures.carcasses() {
-            if c.species != species {
-                continue;
-            }
-            let day = c.death.map(|d| d.day).unwrap_or(0);
-            match best {
-                None => best = Some(c),
-                Some(b) => {
-                    let bday = b.death.map(|d| d.day).unwrap_or(0);
-                    if day > bday || (day == bday && c.id > b.id) {
-                        best = Some(c);
-                    }
-                }
-            }
-        }
-        best.map(|c| ExtinctionRecord {
-            species,
-            last: c.id,
-            name: c.name_str().to_string(),
-            tag: c.tag(),
-            cause: c.death.map(|d| d.cause).unwrap_or(Cause::Age),
-            day: c.death.map(|d| d.day).unwrap_or(0),
-            age: c.age_days(self.time.day_index()),
-            region: self.world.region_name(c.x, c.y).to_string(),
-            pos: (c.x, c.y),
-        })
+    /// C5 FR8: the S12 alert for `species` was dismissed — release the retained
+    /// death record of its last individual.
+    pub fn dismiss_extinction(&mut self, species: SpeciesId) {
+        self.last_extinct[species.index()] = None;
     }
 
     fn push_season_event(&mut self, season: Season) {
@@ -492,7 +458,7 @@ mod tests {
         }
         assert_eq!(a.checksum(), b.checksum());
         // Lock the exact value so accidental algorithm changes fail loudly.
-        assert_eq!(a.checksum(), 0x5663_3e8d_ad5c_43d6);
+        assert_eq!(a.checksum(), 0x05ee_94ba_f7cb_d4d7);
     }
 
     #[test]
@@ -564,8 +530,8 @@ mod tests {
         let alerts = step_to_midnight(&mut sim);
         let species: Vec<SpeciesId> = alerts
             .iter()
-            .filter_map(|a| match a {
-                Alert::Extinction { species, .. } => Some(*species),
+            .map(|a| match a {
+                Alert::Extinction { species, .. } => *species,
             })
             .collect();
         assert_eq!(species, vec![SpeciesId::Vole, SpeciesId::Hare], "species-table order on the same day");

@@ -63,8 +63,25 @@ pub enum RestReason {
     Forced,
 }
 
-/// Daily death tallies, reset after each census.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// The retained death record of a species' most recent death (C5 FR8): the
+/// S12 modal names the last individual from it even after the carcass slot is
+/// freed, and it is cleared when the alert is dismissed.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExtinctionRecord {
+    pub species: SpeciesId,
+    pub last: CreatureId,
+    pub name: String,
+    pub tag: String,
+    pub cause: Cause,
+    pub day: u32,
+    pub age: u32,
+    pub region: String,
+    pub pos: (usize, usize),
+}
+
+/// Daily death tallies, reset after each census. The C5 fields (`hunt_*`,
+/// `last_death`) are cumulative and survive the daily reset (see `Sim::step`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeathTallies {
     pub starved: u32,
     pub thirst: u32,
@@ -74,6 +91,24 @@ pub struct DeathTallies {
     pub births: [u32; 6],
     /// Deaths per species today (C4 FR5), `SpeciesId::ALL` order.
     pub deaths: [u32; 6],
+    /// Cumulative hunt attempts per predator species (C5; survives carcass freeing).
+    pub hunt_attempts: [u32; 6],
+    /// Cumulative kills per predator species (C5).
+    pub hunt_kills: [u32; 6],
+    /// The most recent death per species (C5 FR8).
+    pub last_death: [Option<ExtinctionRecord>; 6],
+}
+
+impl DeathTallies {
+    /// A fresh daily tally that keeps the cumulative C5 fields.
+    pub fn next_day(&self) -> DeathTallies {
+        DeathTallies {
+            hunt_attempts: self.hunt_attempts,
+            hunt_kills: self.hunt_kills,
+            last_death: self.last_death.clone(),
+            ..DeathTallies::default()
+        }
+    }
 }
 
 impl Goal {
@@ -180,6 +215,8 @@ pub struct Creature {
     /// Remaining planned steps (next step last) when the greedy step stalled
     /// at an obstacle and a bounded path search took over.
     pub path: Vec<(usize, usize)>,
+    /// The target `path` was searched for; a different target invalidates it.
+    pub path_for: Option<(usize, usize)>,
     /// Present while resting, and the reason (FR5).
     pub rest_reason: Option<RestReason>,
     // ---- C4 reproduction / C5 predation fields ----
@@ -425,6 +462,7 @@ pub fn place_founders(world: &World, params: &CreaturesParams, rng: &mut Rng) ->
                 predation_risk: 0.0,
                 migrate_until: 0,
                 migrate_target: None,
+                path_for: None,
             });
             placed += 1;
         }

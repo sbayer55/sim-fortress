@@ -172,7 +172,7 @@ pub struct CreaturesParams {
 impl Default for CreaturesParams {
     fn default() -> Self {
         CreaturesParams {
-            initial_counts: counts([240, 180, 90, 30, 24, 12]),
+            initial_counts: counts([240, 180, 90, 8, 6, 4]),
             adult_age_days: counts([30, 60, 180, 90, 120, 120]),
             hunger_base: 0.004,
             hunger_per_size: 0.008,
@@ -308,7 +308,7 @@ impl Default for PredationParams {
             kill_max: 0.95,
             eat_hours_base: 2.0,
             eat_hours_per_size: 4.0,
-            hunger_per_kill_base: 0.6,
+            hunger_per_kill_base: 4.0,
             hunger_per_kill_per_size: 0.4,
             kill_consumes_decay: 0.6,
             hunt_cooldown_hours: 6,
