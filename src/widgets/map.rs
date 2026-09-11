@@ -220,7 +220,15 @@ pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
                     if (d - r as f32).abs() < 0.55 {
                         put(buf, wx as usize, wy as usize, glyphs::RING, theme::ACCENT, false);
                     } else if d < r as f32 {
-                        if let Some(cell) = buf.cell_mut((area.x + (wx as usize - ox) as u16, area.y + (wy as usize - oy) as u16)) {
+                        let (wx, wy) = (wx as usize, wy as usize);
+                        if wx < ox || wy < oy {
+                            continue;
+                        }
+                        let (sx, sy) = ((wx - ox) as u16, (wy - oy) as u16);
+                        if sx >= area.width || sy >= area.height {
+                            continue;
+                        }
+                        if let Some(cell) = buf.cell_mut((area.x + sx, area.y + sy)) {
                             let bg = theme::lerp(cell.bg, theme::ACCENT, 0.18);
                             cell.set_bg(bg);
                         }

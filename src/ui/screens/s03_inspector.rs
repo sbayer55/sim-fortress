@@ -311,7 +311,7 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
 /// `Name tag` for a relative, from the store or the lineage.
 /// S03c (Identity & Death panel): the killer from
 /// `death.killer` and the two nearest living predators with the Scavenge goal.
-fn killer_and_scavengers(f: &mut Frame, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
+pub(crate) fn killer_and_scavengers(f: &mut Frame, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
     if let Some(killer_id) = c.death.and_then(|d| d.killer) {
         panel::section(f, inner, row, "Killer");
         row += 1;
@@ -355,7 +355,7 @@ fn killer_and_scavengers(f: &mut Frame, inner: Rect, mut row: u16, sim: &crate::
     row
 }
 
-fn kin_name(sim: &crate::sim::Sim, id: CreatureId) -> String {
+pub(crate) fn kin_name(sim: &crate::sim::Sim, id: CreatureId) -> String {
     if let Some(c) = sim.creatures.get(id) {
         return format!("{} {}", c.name_str(), c.tag());
     }
@@ -670,7 +670,7 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
 }
 
 /// Compass direction from `(x, y)` to `(tx, ty)` (map cells are 2:1).
-fn compass(x: usize, y: usize, tx: usize, ty: usize) -> &'static str {
+pub(crate) fn compass(x: usize, y: usize, tx: usize, ty: usize) -> &'static str {
     let dx = tx as i64 - x as i64;
     let dy = (ty as i64 - y as i64) * 2;
     let ns = if dy < -1 { "N" } else if dy > 1 { "S" } else { "" };
@@ -688,7 +688,7 @@ fn compass(x: usize, y: usize, tx: usize, ty: usize) -> &'static str {
     }
 }
 
-fn local_forage(sim: &crate::sim::Sim, x: usize, y: usize) -> f32 {
+pub(crate) fn local_forage(sim: &crate::sim::Sim, x: usize, y: usize) -> f32 {
     let (mut sum, mut n) = (0.0f32, 0usize);
     for dy in -3i32..=3 {
         for dx in -3i32..=3 {
@@ -726,7 +726,7 @@ fn delta_style(d: f32) -> Style {
     Style::default().fg(c).bg(theme::PANEL_BG)
 }
 
-fn clip(text: &str, max: usize) -> String {
+pub(crate) fn clip(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         text.to_string()
     } else {
