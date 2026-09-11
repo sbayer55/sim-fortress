@@ -26,7 +26,7 @@ pub fn can_detect(pred: &Creature, prey: &Creature, world: &World, p: &Predation
         return false;
     }
     let cover = p.cover_by_terrain.get(&world.cell(prey.x, prey.y).terrain).copied().unwrap_or(0.0);
-    let hidden = prey.genome.camouflage() * cover >= pred.genome.sense() * p.detect_threshold;
+    let hidden = prey.genome.camouflage() * cover >= pred.genome.sense() * p.effective_detect_threshold();
     !hidden
 }
 
@@ -40,7 +40,7 @@ pub fn can_detect_peer(pred: &Creature, px: usize, py: usize, cam: f32, resting:
         return false;
     }
     let cover = p.cover_by_terrain.get(&world.cell(px, py).terrain).copied().unwrap_or(0.0);
-    cam * cover < pred.genome.sense() * p.detect_threshold
+    cam * cover < pred.genome.sense() * p.effective_detect_threshold()
 }
 
 /// FR2 (prey rule): a prey detects a predator within its own sense range

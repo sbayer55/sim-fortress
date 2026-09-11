@@ -1,0 +1,45 @@
+ S03c  Creature Inspector — corpse                                                                                13/27  [ ] prev/next   0-9 jump   q quit 
+╔ Identity & Death ════════════════════════════════╗╔ Genome ════════════════════════════ vs Deer mean ╗╔ Life ═══════════════════════════════════════════╗
+║ D Thistle  d#133  DEAD                           ║║ trait       individual             delta  species║║ days alive  866          ┌ Surroundings ───────┐║
+║   Deer  ♂ male  adult  diet: grass, leaves       ║║ Speed      [███████░░░░░]    61% ±-0.03 [░░░▒█▒░]║║ escapes     10           │♣♣♣♣♣""""""""""""""""│║
+║                                                  ║║                              0.61  0.52/0.64/0.77║║ offspring   6            │♠♠♠♠♣♣"""""""""""""""│║
+║ age  [██████████████░░░░]    79% 866 / 1100 days ║║ Size       [██████████░░]    84% ±+0.05 [░░░░▒█▒]║║ grandkids   15           │♠♠♠♠♣♣♣""╬"╬♣♣"""""L"│║
+║       2.4 years old   generation 31              ║║                              0.84  0.69/0.79/0.93║║ mates       3            │♣♠♠♠♣♣♣♣♣♣%♣♣♣~~~~···│║
+║                                                  ║║ Sense      [██████░░░░░░]    49% ±-0.07 [░░░█▒░░]║║ distance    6062 cells   │♣♣♣♣♣♣♣♠♠╬♠╬♠♠♠♠·····│║
+║─ Family ─────────────────────────────────────────║║                              0.49  0.50/0.56/0.63║║ regions     5 visited    │♣♣♣♣♠♠♠♠♠♠♠♠♠♠♠♠♠♠♠♠·│║
+║ mother  Fern d#101    father  Willow d#097       ║║ Metabolism [█████░░░░░░░]    38% ±-0.05 [░░▒█░░░]║║                          │♠♣♣♣♠♠♠♠♠♠♠h♠♠♠H♠F♠♠♠│║
+║ offspring 6   ¶ lineage: [l]                     ║║                              0.38  0.31/0.43/0.55║║                          └─────────────────────┘║
+║                                                  ║║ Aggression [███░░░░░░░░░]    24% ±+0.02 [░█▒░░░░]║║                                                 ║
+║─ Location ───────────────────────────────────────║║                              0.24  0.15/0.22/0.28║║─ Legacy ────────────────────────────────────────║
+║ (80, 33)  Fenlands   ♣ meadow                    ║║ Camouflage [████░░░░░░░░]    31% ±-0.03 [░▒█░░░░]║║ 6 offspring alive, 13 descendants               ║
+║ carcass marked % on the map                      ║║                              0.31  0.23/0.34/0.41║║ Size +0.08 mutation carried by 4 descendants    ║
+║                                                  ║║ Fertility  [████░░░░░░░░]    33% ±-0.02 [░░█▒░░░]║║ carcass feeds: wolves 1  foxes 2  soil regrowth ║
+║─ Death ──────────────────────────────────────────║║                              0.33  0.25/0.35/0.45║║                                                 ║
+║ x killed by Ashfang w#042 (Year 12, Day 2)       ║║ Longevity  [█████████░░░]    72% ±+0.00 [░░░░█▒░]║║─ Recent events ─────────────────────────────────║
+║   died 2 days ago  (Year 12, Day 2, 13:00)       ║║                              0.72  0.60/0.72/0.85║║ ♥ Y12 D2   05h Sorrel h#058 gave birth to 3 yo· ║
+║   lived 866 of 1100 days (79% of lifespan)       ║║ 3 traits above species mean, 5 below             ║║ § Y12 D2   05h Yarrow v#033 born with Sense -0· ║
+║                                                  ║║ most divergent: Sense -0.07                      ║║ ¡ Y12 D2   06h Drought deepens in Ashen Ridge;· ║
+║ decay      [████████░░░░░░░░░░░░░░]    35%       ║║─ Mutation history ───────────────────────────────║║ ♥ Y12 D2   09h Clover v#031 gave birth to 4 yo· ║
+║ nutrition  [██████████████░░░░░░░░]    65%       ║║ § Size +0.08 (gen 29)                            ║║ x Y12 D2   12h Sorrel h#074 starved in Northma· ║
+║   66 kg of meat remaining; gone in ~4 days       ║║   from 3 lines; rate 0.04 per trait per birth    ║║ → Y12 D2   14h Lynx pair l#120 migrated from N· ║
+║                                                  ║║─ Derived ────────────────────────────────────────║║ § Y12 D2   16h Sable f#099 born with Aggressio· ║
+║─ Scavengers nearby ──────────────────────────────║║ sense range       6 cells                        ║║ ♥ Y12 D2   21h Sorrel v#040 gave birth to 1 yo· ║
+║ F Rime     f#098  5 cells SE   hunting           ║║ move speed        2.0 cells/tick                 ║║ x Y12 D4   13h Thistle d#133 was killed by Ash· ║
+║ F Rime     f#102  8 cells NE   stalking          ║║ daily food need   0.84 biomass                   ║║ ¶ Y12 D4   14h Ashfang w#042 is stalking Bramb· ║
+║ ¶ crows circling (3 within sight)                ║║ max lifespan      1100 days                      ║║   [e] open full log filtered to this creature   ║
+║                                                  ║║ litter size       2 young                        ║║                                                 ║
+║─ Killer ─────────────────────────────────────────║║ detection chance  69% at 5 cells                 ║║─ Kin nearby ────────────────────────────────────║
+║ W Ashfang w#042  61 kills, chase 41 ticks        ║║                                                  ║║ d Burdock  d#087    4 cells N    sibling        ║
+║                                                  ║║─ Offspring forecast (with an average mate) ──────║║ D Burdock  d#086   12 cells N    offspring      ║
+║                                                  ║║ Speed       [░░░░░░░░░░░▒█▒░░░░░░] 0.63 ±0.06    ║║ D Vetch    d#091   13 cells N    cousin         ║
+║─ Timeline ───────────────────────────────────────║║ Size        [░░░░░░░░░░░░░░▒█▒▒░░] 0.82 ±0.06    ║║ D Burdock  d#093   20 cells SE   unrelated      ║
+║ ♥ Y9 D218  born to Fern d#101 and Willow d#097   ║║ Sense       [░░░░░░░░░▒█▒░░░░░░░░] 0.53 ±0.06    ║║ d Burdock  d#094   23 cells NW   offspring      ║
+║ ↑ Y9 D308  reached adulthood                     ║║ Metabolism  [░░░░░░░▒█▒░░░░░░░░░░] 0.40 ±0.06    ║║                                                 ║
+║ ♥ Y10 D18  first litter (1 young)                ║║ Aggression  [░░░▒█▒░░░░░░░░░░░░░░] 0.23 ±0.06    ║║                                                 ║
+║ ! Y10 D68  escaped a fox in the Long Meadow      ║║ Camouflage  [░░░░░▒█▒░░░░░░░░░░░░] 0.32 ±0.06    ║║                                                 ║
+║ → Y10 D291 migrated to Fenlands                  ║║ Fertility   [░░░░░▒█▒▒░░░░░░░░░░░] 0.34 ±0.06    ║║                                                 ║
+║ x Y12 D2   killed by Ashfang w#042               ║║ Longevity   [░░░░░░░░░░░░░▒█▒░░░░] 0.72 ±0.06    ║║                                                 ║
+║                                                  ║║                                                  ║║                                                 ║
+║                                                  ║║                                                  ║║                                                 ║
+╚══════════════════════════════════════════════════╝╚══════════════════════════════════════════════════╝╚═════════════════════════════════════════════════╝
+ [f] follow  [l] lineage  [Tab] next creature  [Esc] back                                                   Thistle d#133  Year 12, Day 4 of Autumn  14:00 

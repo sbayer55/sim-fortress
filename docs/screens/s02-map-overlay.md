@@ -2,6 +2,8 @@
 
 Back to the [screen overview](README.md).
 
+Live since: C2
+
 ## Purpose
 An overlay recolours the world map so one hidden quantity can be read at a glance across the
 whole valley: how much forage is standing, where animals have been crowding, where water and

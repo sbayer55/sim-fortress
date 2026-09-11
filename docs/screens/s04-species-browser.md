@@ -2,6 +2,8 @@
 
 Back to the [screen overview](README.md).
 
+Live since: C4
+
 ## Purpose
 The population-level view. The table variant ranks every species by headcount with its
 demographics, today's births and deaths, a 30-day trend and its mean genome, so the

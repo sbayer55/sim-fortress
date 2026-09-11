@@ -1,0 +1,45 @@
+ S03b  Creature Inspector — predator (Wolf)                                                                       12/27  [ ] prev/next   0-9 jump   q quit 
+╔ Identity & Vitals ═══════════════════════════════╗╔ Genome ══════════════════════════ vs Wolves mean ╗╔ Life ═══════════════════════════════════════════╗
+║ W Ashfang  w#042  predator                       ║║ trait       individual             delta  species║║ days alive  1103         ┌ Surroundings ───────┐║
+║   Wolf  ♂ male  adult  diet: deer, hares         ║║ Speed      [██████████░░]    81% ±+0.06 [░░░░▒█░]║║ kills       61           │♠d♠♠♠♠♠♠♠♠♠♠·♠♠♠♠♠♠♠♠│║
+║                                                  ║║                              0.81  0.66/0.75/0.81║║ offspring   14           │♠♠V♠♠♠v♠♠♠♠♠♠♠♠♠♠♠♠♠♠│║
+║ age  [██████████████░░░░]    76% 1103 / 1460 days║║ Size       [█████████░░░]    74% ±+0.04 [░░░░█▒░]║║ grandkids   30           │♠♠♠♠♠♠♠♠♠╬♠╬♠♠♠♠♠♠♠♠♠│║
+║       3.1 years old   generation 23              ║║                              0.74  0.59/0.70/0.78║║ mates       5            │F♠♠♠♠♠♠♠♠~W♠♠♠Ω♠♠♠♠♠♠│║
+║                                                  ║║ Sense      [█████████░░░]    77% ±+0.07 [░░░░█▒░]║║ distance    7721 cells   │~♣♣V♠♠♠♠♠╬≈╬♠F♠♠♠♠♠♠♠│║
+║─ Family ─────────────────────────────────────────║║                              0.77  0.60/0.70/0.79║║ regions     5 visited    │""♣♣♣♣♠♠♠♠≈≈≈≈·♠♠♠♠♠♠│║
+║ mother  Greymaw w#017    father  Sable w#021     ║║ Metabolism [██████░░░░░░]    52% ±+0.03 [░░▒█░░░]║║                          │"""♣♣"♣♣♠♠♠≈♠♠~≈♠♠♠♠♠│║
+║ offspring 14   ¶ lineage: [l]                    ║║                              0.52  0.41/0.49/0.55║║                          └─────────────────────┘║
+║                                                  ║║ Aggression [███████████░]    91% ±+0.06 [░░░░░█▒]║║                                                 ║
+║─ Location ───────────────────────────────────────║║                              0.91  0.76/0.85/0.97║║─ Hunt stats ────────────────────────────────────║
+║ (68, 15)  The Long Meadow   ♠ forest             ║║ Camouflage [██░░░░░░░░░░]    19% ±-0.10 [░▒█░░░░]║║ kills 61  attempts 158  success 39%             ║
+║ goal    stalking Bramble h#217                   ║║                              0.19  0.19/0.29/0.37║║ success rate [███████░░░░░░░░░░░]    39%        ║
+║ target  ♦ (77, 21)  8 cells SE                   ║║ Fertility  [████░░░░░░░░]    36% ±-0.02 [░░█▒░░░]║║ preferred prey                                  ║
+║ trail   (67,15) (67,14) (66,14) (65,14) (65,13)  ║║                              0.36  0.28/0.38/0.50║║  D Deer  [█████████░░░░░░░░░]  48%  29 kills    ║
+║                                                  ║║ Longevity  [████████░░░░]    66% ±+0.05 [░░░▒█░░]║║  H Hare  [███████░░░░░░░░░░░]  39%  24 kills    ║
+║─ Vitals ─────────────────────────────────────────║║                              0.66  0.53/0.61/0.66║║  V Vole  [██░░░░░░░░░░░░░░░░]  13%  8 kills     ║
+║ health  [███████████████░░░░░░░]    67%healthy   ║║ 6 traits above species mean, 2 below             ║║ last kill  Thistle d#133  2 days ago, Fenlands  ║
+║ hunger  [████████████████░░░░░░]    74%starving  ║║ most divergent: Camouflage -0.10                 ║║ ♦ current target: Bramble h#217, 11 cells       ║
+║ thirst  [█████░░░░░░░░░░░░░░░░░]    22%fine      ║║─ Mutation history ───────────────────────────────║║   avg chase 23 ticks; longest 71 ticks (Year 9) ║
+║ energy  [████████████░░░░░░░░░░]    55%tiring    ║║ § Aggression +0.09 (gen 19)                      ║║                                                 ║
+║                                                  ║║ § Sense +0.05 (gen 21)                           ║║─ Recent events ─────────────────────────────────║
+║─ Condition ──────────────────────────────────────║║ § Camouflage -0.07 (gen 23)                      ║║ ♥ Y11 D354 09h Ashfang w#042 gave birth to 3 y· ║
+║ predation risk  [███░░░░░░░░░░░]    18%          ║║   from 5 lines; rate 0.04 per trait per birth    ║║ § Y12 D2   05h Yarrow v#033 born with Sense -0· ║
+║ local forage    [██████████░░░░]    70%          ║║─ Derived ────────────────────────────────────────║║ ¡ Y12 D2   06h Drought deepens in Ashen Ridge;· ║
+║ nearest water 4 cells   nearest den 3 cells      ║║ sense range       9 cells                        ║║ ♥ Y12 D2   09h Clover v#031 gave birth to 4 yo· ║
+║                                                  ║║ move speed        2.5 cells/tick                 ║║ x Y12 D2   12h Sorrel h#074 starved in Northma· ║
+║─ Behaviour ──────────────────────────────────────║║ daily food need   0.91 biomass                   ║║ → Y12 D2   14h Lynx pair l#120 migrated from N· ║
+║ ! stalking: closing on Bramble h#217             ║║ max lifespan      1460 days                      ║║ § Y12 D2   16h Sable f#099 born with Aggressio· ║
+║   target undetected (camo .19 vs sense .71)      ║║ litter size       2 young                        ║║ ♥ Y12 D2   21h Sorrel v#040 gave birth to 1 yo· ║
+║   will strike within 6 cells; energy 55% ok      ║║ detection chance  81% at 5 cells                 ║║ x Y12 D4   13h Thistle d#133 was killed by Ash· ║
+║ ¶ hunger 74% drives aggressive pursuit           ║║                                                  ║║ ¶ Y12 D4   14h Ashfang w#042 is stalking Bramb· ║
+║                                                  ║║─ Offspring forecast (with an average mate) ──────║║   [e] open full log filtered to this creature   ║
+║                                                  ║║ Speed       [░░░░░░░░░░░░░░▒█▒░░░] 0.78 ±0.06    ║║                                                 ║
+║─ Timeline ───────────────────────────────────────║║ Size        [░░░░░░░░░░░░░▒█▒░░░░] 0.72 ±0.06    ║║─ Kin nearby ────────────────────────────────────║
+║ ♥ Y8 D341  born to Greymaw w#017 and Sable w#021 ║║ Sense       [░░░░░░░░░░░░░▒█▒░░░░] 0.73 ±0.06    ║║ w Umber    w#108    4 cells SE   sibling        ║
+║ ↑ Y9 D71   reached adulthood                     ║║ Metabolism  [░░░░░░░░▒▒█▒░░░░░░░░] 0.50 ±0.06    ║║ W Brindle  w#110   10 cells NE   offspring      ║
+║ x Y9 D121  first kill (a vole)                   ║║ Aggression  [░░░░░░░░░░░░░░░░▒█▒░] 0.88 ±0.06    ║║ w Fenrir   w#109   16 cells NE   cousin         ║
+║ ♥ Y9 D141  first litter (3 young)                ║║ Camouflage  [░░░▒▒█▒░░░░░░░░░░░░░] 0.24 ±0.06    ║║ w Vex      w#113   24 cells SE   unrelated      ║
+║ → Y10 D172 migrated to The Long Meadow           ║║ Fertility   [░░░░░░▒█▒░░░░░░░░░░░] 0.37 ±0.06    ║║ W Flint    w#112   27 cells NE   offspring      ║
+║ ♦ Y10 D321 became pack leader                    ║║ Longevity   [░░░░░░░░░░░▒█▒░░░░░░] 0.63 ±0.06    ║║                                                 ║
+╚══════════════════════════════════════════════════╝╚══════════════════════════════════════════════════╝╚═════════════════════════════════════════════════╝
+ [f] follow  [l] lineage  [Tab] next creature  [Esc] back                                                   Ashfang w#042  Year 12, Day 4 of Autumn  14:00 

@@ -2,6 +2,8 @@
 
 Back to the [screen overview](README.md).
 
+Live since: C4
+
 ## Purpose
 Shows where a creature came from and what it left behind: its ancestors, siblings,
 children and descendants as an indented tree, with the mutation each individual was born

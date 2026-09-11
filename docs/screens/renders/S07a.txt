@@ -1,0 +1,45 @@
+ S07a  Event Log — full log                                                                                       20/27  [ ] prev/next   0-9 jump   q quit 
+╔ Event Log ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ 74 events, 2 today ╗
+║ filter:  all   ♥ births   x deaths   § mutations   → migrations   ‼ extinctions   ¡ droughts    [f] cycles, [1-7] toggles                               ║
+║ when           kind          sp  event                                                                                                                  ║
+║►Y12 D004 14:00  ¶ note       W   Ashfang w#042 is stalking Bramble h#217                                                                               █║
+║ Y12 D004 13:00  x predation  D   Thistle d#133 was killed by Ashfang w#042 in the Fenlands                                                   ( 80,33)  █║
+║ Y12 D002 21:00  ♥ birth      V   Sorrel v#040 gave birth to 1 young in Southern Thicket                                                      ( 31,35)  █║
+║ Y12 D002 16:00  § mutation   F   Sable f#099 born with Aggression -0.02                                                                      ( 58,15)  █║
+║ Y12 D002 14:00  → migration  L   Lynx pair l#120 migrated from Northmarch toward The Long Meadow                                             ( 39,11)  █║
+║ Y12 D002 12:00  x starved    H   Sorrel h#074 starved in Northmarch                                                                          ( 15, 2)  █║
+║ Y12 D002 09:00  ♥ birth      V   Clover v#031 gave birth to 4 young in Reedwater Vale                                                        (  9,27)  █║
+║ Y12 D002 06:00  ¡ drought    H   Drought deepens in Ashen Ridge; 3 water cells dried up                                                      ( 51,37)  █║
+║ Y12 D002 05:00  § mutation   V   Yarrow v#033 born with Sense -0.06                                                                          ( 43,37)  █║
+║ Y12 D002 05:00  ♥ birth      H   Sorrel h#058 gave birth to 3 young in The Long Meadow                                                       ( 64,19)  █║
+║ Y12 D002 02:00  ♥ birth      V   Vetch v#013 gave birth to 1 young in Northmarch                                                             ( 32, 6)  █║
+║ Y12 D002 02:00  ¶ note       V   Clover v#044 discovered a new den site in Southern Thicket                                                  ( 35,33)  █║
+║ Y12 D001 21:00  ¡ drought    H   Drought deepens in Ashen Ridge; 3 water cells dried up                                                      ( 15, 2)  █║
+║ Y11 D360 23:00  ♥ birth      H   Sorrel h#052 gave birth to 1 young in Sunfall Coast                                                         (107, 4)  █║
+║ Y11 D360 18:00  ♥ birth      H   Willow h#056 gave birth to 4 young in Southern Thicket                                                      ( 28,37)  █║
+║ Y11 D360 15:00  x starved    H   Sorrel h#058 starved in The Long Meadow                                                                     ( 64,19)  █║
+║ Y11 D360 15:00  ¶ note       F   Scorch f#100 discovered a new den site in The Long Meadow                                                   ( 71,16)  █║
+║ Y11 D360 13:00  § mutation   H   Mallow h#078 born with Sense +0.04                                                                          (113, 1)  █║
+║ Y11 D360 11:00  x starved    D   Yarrow d#080 starved in Reedwater Vale                                                                      ( 18,18)  █║
+║ Y11 D360 10:00  ¶ note       V   Moss v#023 discovered a new den site in Lakeshore                                                           (125,36)  █║
+║ Y11 D360 04:00  → migration  W   Wolf herd w#110 migrated from The Long Meadow toward The Long Meadow                                        ( 88,13)  █║
+║ Y11 D360 04:00  x predation  H   Rowan h#045 was killed by a lynx near Reedwater Vale                                                        ( 30,17)  ░║
+║ Y11 D359 20:00  ¡ drought    D   Drought deepens in Ashen Ridge; 3 water cells dried up                                                      (132,31)  ░║
+║ Y11 D359 03:00  ♥ birth      H   Clover h#051 gave birth to 3 young in Fenlands                                                              ( 51,37)  ░║
+║ Y11 D358 13:00  → migration  H   Hare herd h#052 migrated from Sunfall Coast toward Northmarch                                               (107, 4)  ░║
+║ Y11 D358 09:00  → migration  V   Vole family v#006 migrated from Southern Thicket toward Northmarch                                          ( 23,35)  ░║
+║ Y11 D358 03:00  x starved    V   Vetch v#005 starved in Southern Thicket                                                                     ( 30,35)  ░║
+║ Y11 D358 00:00  x starved    V   Yarrow v#022 starved in Southern Thicket                                                                    ( 48,28)  ░║
+║ Y11 D357 20:00  x starved    F   Sable f#099 starved in The Long Meadow                                                                      ( 58,15)  ░║
+║ Y11 D357 19:00  ♥ birth      D   Burdock d#086 gave birth to 4 young in The Long Meadow                                                      ( 80,21)  ░║
+║ Y11 D356 18:00  ♥ birth      D   Yarrow d#080 gave birth to 3 young in Reedwater Vale                                                        ( 18,18)  ░║
+║ Y11 D355 16:00  → migration  H   Hare pair h#064 migrated from Northmarch toward Reedwater Vale                                              ( 16, 6)  ░║
+║ Y11 D354 09:00  ♥ birth      W   Ashfang w#042 gave birth to 3 young in The Long Meadow                                                      ( 68,15)  ░║
+║ Y11 D354 04:00  ♥ birth      D   Nettle d#082 gave birth to 1 young in Reedwater Vale                                                        ( 22,17)  ░║
+║ Y11 D353 21:00  ♥ birth      V   Burdock v#009 gave birth to 1 young in Southern Thicket                                                     ( 29,31)  ░║
+║ Y11 D353 00:00  § mutation   V   Willow v#011 born with Sense +0.04                                                                          ( 90,29)  ░║
+║ Y11 D352 19:00  ♥ birth      V   Willow v#026 gave birth to 1 young in Fenlands                                                              ( 80,37)  ░║
+║ Y11 D352 16:00  x predation  V   Yarrow v#022 was killed by a wolf near Southern Thicket                                                     ( 48,28)  ░║
+║ Y11 D352 15:00  § mutation   V   Nettle v#027 born with Camouflage -0.01                                                                     (135, 3)  ░║
+╚════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ 35 more ↓ ══╝
+ [↑↓] select  [f] filter  [Enter] jump  [Esc] back                                                                         Year 12, Day 4 of Autumn  14:00 

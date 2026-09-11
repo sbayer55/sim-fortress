@@ -1,88 +1,99 @@
 # Sim Fortress
 
 A terminal predator / prey / evolution / resource-scarcity simulation with a
-Dwarf-Fortress-inspired text UI. C1 is implemented: a deterministic `src/sim` core
-(seed → terrain → clock → seasons → events) and a `src/ui` app shell with the live
-world-generation form, world map, controls modal and help overlay. The static UI
-prototypes remain available behind `--prototypes` for side-by-side comparison.
+Dwarf-Fortress-inspired text UI. Six species — voles, hares, deer, foxes, wolves
+and lynxes — are born, graze, drink, hunt, breed, mutate and die by the numbers
+in their genomes across a procedurally generated world of forests, meadows,
+rivers and rock. You watch it run, follow individual creatures, inspect their
+traits and lineages, and tune the balance from TOML files without recompiling.
 
 ## Running
 
-Requirements: Rust (stable) and a terminal with truecolor support. Any monospace font
-works — every glyph is from code page 437. The live application adapts to any terminal
-size; **155×45** is the reference layout (resize to it to compare against the
-prototypes, which are drawn at a fixed 155×45).
+Requirements: Rust (stable) and a terminal with truecolor support. Any monospace
+font works — every glyph is from code page 437. The live application adapts to any
+terminal size; **155×45** is the reference layout.
 
 ```bash
-cargo run                                        # live app (opens the world-generation form)
-cargo run -- --width 200 --height 50             # live app, pre-fill the world size
+cargo run                                        # live app (title → New World → play)
+cargo run -- --width 200 --height 50             # pre-fill the world size
 cargo run -- --headless --seed 42 --ticks 4320   # headless: prints a checksum + last events
-cargo run -- --headless --seed 42 --ticks 4320 --width 200 --height 50 --params world.toml
-cargo run -- --prototypes S01a                   # static prototype viewer (fixed 155x45)
+cargo run -- --headless --seed 42 --years 5      # run N years (overrides --ticks)
+cargo run -- --dump-params                       # defaults with one comment per field
 ```
 
-The world size is configurable in the S09 form (Width 100–200, Height 30–60), via the
-`--width`/`--height` flags, or via a `[world] width = … / height = …` table in a
-`--params` TOML file. The prototype viewer shows the prototype id and name on row 0.
+The game starts on the **title screen**: `New World`, `Load World`, `Options`,
+`Quit`. On the world map, `F5` saves the current world, `F9` quick-loads the
+newest save for it, and `q` returns to the title (prompting if there are unsaved
+changes). `p` opens the controls/options modal; `?` opens the legend & help.
 
-| Key                      | Action                              |
-|--------------------------|-------------------------------------|
-| `]` `PgDn` `→` `l`       | next prototype                      |
-| `[` `PgUp` `←` `h`       | previous prototype                  |
-| `0`–`9`                  | jump to screen S0n                  |
-| `Home` / `End`           | first / last prototype              |
-| `q` `Esc` `Ctrl-C`       | quit                                |
+## Saving and loading
 
-## Prototype screens
+Saves are binary `SIMF` files in `saves/` (override with `--saves-dir DIR`),
+created on first save. Filenames are the world name lowercased and slugified plus
+the tick: `the-valley-of-sunfall-4320.simf`; autosaves are
+`the-valley-of-sunfall-autosave.simf`. `Load World` lists saves newest first;
+`Enter` loads, `Del` deletes (with confirmation). Autosave runs every
+`ui.autosave_days` days (see Options; 0 = off).
 
-| Id   | Screen                 | Variant                                             |
-|------|------------------------|-----------------------------------------------------|
-| S00a | Title / Main Menu      | default                                             |
-| S01a | World Map              | default: map + sidebar + ticker + status bar        |
-| S01b | World Map              | wide map, sidebar collapsed                         |
-| S01c | World Map              | look / cursor mode with floating tooltip            |
-| S01d | World Map              | winter season, night palette                        |
-| S01e | World Map              | following a creature (trail, target, vitals)        |
-| S02a | Map Overlay            | vegetation density heatmap                          |
-| S02b | Map Overlay            | population / predator pressure                      |
-| S02c | Map Overlay            | water & moisture                                    |
-| S02d | Map Overlay            | sense range of the selected predator                |
-| S03a | Creature Inspector     | prey (Bramble the hare)                             |
-| S03b | Creature Inspector     | predator (Ashfang the wolf)                         |
-| S03c | Creature Inspector     | corpse (Thistle the deer)                           |
-| S04a | Species Browser        | species table                                       |
-| S04b | Species Browser        | species detail: trait histograms and drift          |
-| S05a | Population Charts      | prey vs predator over time                          |
-| S05b | Population Charts      | predator–prey phase plot                            |
-| S05c | Population Charts      | stacked species + vegetation biomass                |
-| S06a | Resources / Ecology    | totals, season modifiers, per-region scarcity       |
-| S07a | Event Log              | full log with filter chips                          |
-| S07b | Event Log              | deaths & extinctions with detail pane               |
-| S08a | Lineage / Family Tree  | Ashfang w#042                                       |
-| S09a | World Generation       | new world form with preview                         |
-| S10a | Simulation Controls    | modal over the world map                            |
-| S11a | Legend & Help          | overlay over the world map                          |
-| S12a | Alert Modal            | extinction event                                    |
-| S13a | Local Zoom View        | 3×1 tiles around the cursor                         |
+## Parameters and presets
+
+Every tunable lives in `src/sim/params.rs` with a documented default. A
+`params.toml` in the working directory is applied automatically; `--params FILE`
+is an additional overlay (partial TOML tables deep-merge over the defaults). When
+you load a save the saved parameters win and `--params` is ignored. The
+world-generation form offers five presets — Balanced, Harsh winter, Lush,
+Archipelago and Fast evolution — that write their values into the form.
+
+```bash
+cargo run -- --dump-params > params.toml   # a commented starting point
+cargo run -- --params params.toml          # play with those parameters
+```
+
+UI options (auto-pause, log births, follow-death pause, autosave interval,
+day/night tint) are a separate file: `~/.config/sim-fortress/ui.toml`
+(`$XDG_CONFIG_HOME/sim-fortress/ui.toml` when set).
+
+## Headless experiments
+
+```bash
+cargo run --release -- --headless --seed 1 --years 10 --summary         # one summary row
+cargo run --release -- --seeds 1-20 --years 10 --summary                # in-process sweep
+scripts/sweep.sh 1 20 10                                                # parallel sweep → summary.csv
+cargo run --release -- --headless --seed 1 --ticks 100000 --profile     # per-system timings
+```
+
+`summary.csv` columns: `seed, years,` then final counts × 6, `extinctions`,
+`lag_days` (predator–prey lag) and `mean_speed_by_species` × 6.
+`scripts/sweep.sh <first> <last> <years>` runs each seed as its own process with
+`xargs -P $(nproc)`.
+
+## Flame Graph
+
+```bash
+cargo install flamegraph
+CARGO_PROFILE_RELEASE_DEBUG=true cargo flamegraph --root -- --headless --seed 1 --ticks 12000
+open ./flamegraph.svg
+rm ./flamegraph.svg
+```
 
 ## Code layout
 
 ```
-src/lib.rs             crate root: pub mod sim; pub mod ui; pub mod widgets; …
-src/main.rs            CLI dispatch: --headless | --prototypes | live app
-src/sim/               pure, deterministic core (params, rng, time, world, events, Sim)
-src/ui/                app shell: AppState, screen stack, viewport, live S01/S09/S10/S11
+src/lib.rs             crate root: pub mod sim; pub mod ui; pub mod widgets;
+src/main.rs            CLI dispatch: --headless | --seeds | --summary | --profile | live app
+src/sim/               pure, deterministic core (params, rng, time, world, behavior, save, Sim)
+src/ui/                app shell: AppState, screen stack, viewport, S00/S01/S09/S10/S11 + data screens
 src/theme.rs           truecolor palette and color ramps
 src/glyphs.rs          named CP437 glyph constants (+ test that every glyph is CP437)
-src/fixtures/          prototype fixture data (re-exports the `sim` data types)
-src/widgets/           shared widgets: header, panel, bars, status bar, map renderer
-src/prototypes/        one file per screen; `mod.rs` holds the registry + viewer
-tests/                 integration tests (lib-level determinism, params round-trip)
-docs/PROTOTYPE_GUIDE.md  conventions for adding screens
+src/widgets/           shared widgets: panel, bars, status bar, map renderer
+tests/                 integration tests (determinism, ecology, evolution, predators, sweep)
+docs/                  roadmap chunks, screen requirements and rendered prototype snapshots
 ```
 
 ## Documentation
 
-- [docs/chunks/README.md](docs/chunks/README.md) — delivery roadmap: six sequential chunks with checkpoints, one document per chunk.
-- [docs/screens/README.md](docs/screens/README.md) — screen overview, navigation map and links to a requirements file per screen.
-- [docs/PROTOTYPE_GUIDE.md](docs/PROTOTYPE_GUIDE.md) — glyph rules, palette and widget conventions for adding screens.
+- [docs/chunks/README.md](docs/chunks/README.md) — the six-chunk delivery roadmap.
+- [docs/screens/README.md](docs/screens/README.md) — screen overview and navigation map.
+- [docs/chunks/c6-persistence-and-balance.md](docs/chunks/c6-persistence-and-balance.md) — save/load, title flow, presets, headless tooling.
+- [docs/PERFORMANCE.md](docs/PERFORMANCE.md) — measured performance budget and method.
+- [docs/screens/renders/](docs/screens/renders/) — text snapshots of every screen.

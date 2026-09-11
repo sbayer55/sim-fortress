@@ -2,6 +2,8 @@
 
 Back to the [screen overview](README.md).
 
+Live since: C1
+
 ## Purpose
 A single reference card that explains every glyph, colour and key the game uses, drawn over
 the dimmed map so the player can compare a symbol on the map with its legend entry without

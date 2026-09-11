@@ -1,0 +1,45 @@
+ S05b  Population Charts — predator-prey phase plot                                                               17/27  [ ] prev/next   0-9 jump   q quit 
+╔ Phase plot — predators against prey ════════════════════════════════════════════ one point per day, 240 days ╗╔ Phase ══════════════════════════════════╗
+║ 120│predators                        •                                                                       ║║─ Now ───────────────────────────────────║
+║    │ II  few prey, many predators: hunters starve                I  many prey, many predators: prey crash    ║║ prey  180  ↑ +16 / 7d                   ║
+║    │                                 •                                                                       ║║ pred    7  ↑ +2 / 7d                    ║
+║    │                                 •♦ equilibrium (128, 47)                                                ║║ quadrant IV  predators booming          ║
+║    │                                 •                                                                       ║║ moving up-right (both growing)          ║
+║    │                                 •              •• • • • • • •  • • •  ••                                ║║                                         ║
+║    │                                 •       • • • •                          •• •                           ║║─ Equilibrium estimate ──────────────────║
+║    │                                 •  • • •                                     •••                        ║║ prey*   128   (time-mean of prey)       ║
+║    │                              •••• •                                              ••                     ║║ pred*    47   (time-mean of predators)  ║
+║  90│                         •••••   •                                                  ••                   ║║ For Lotka-Volterra dynamics the time    ║
+║    │                      ••••       •                                                    ••                 ║║ average of an orbit equals its centre.  ║
+║    │                   ••••          •                                                       •               ║║ orbit radius now 94%  of centre         ║
+║    │                 ••              •                                                        •              ║║ period > 240 days  (peak to peak)       ║
+║    │                ••               •                                                         ••            ║║                                         ║
+║    │                 ••              •                                                          ••           ║║─ Quadrants ─────────────────────────────║
+║    │                 ••              •                                                           •           ║║ I   upper-right                         ║
+║    │                ••               •                                                           ••          ║║     many prey, many predators. Hunting  ║
+║    │                 •               •                                                           •           ║║     is easy; prey numbers start to      ║
+║  60│                •                •                                                            •          ║║     fall.                               ║
+║    │               ••                •                                                           ••          ║║ II  upper-left                          ║
+║    │               •                 •                                                                       ║║     few prey, many predators. Hunters   ║
+║    │•••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••║║     starve; predator numbers fall.      ║
+║    │               ••                •                                                                       ║║ III lower-left                          ║
+║    │              ••                 •                                                                       ║║     few of both. With little pressure   ║
+║    │              ••                 •                                                                       ║║     the prey recover first.             ║
+║    │               •                 •                                                                       ║║ IV  lower-right                         ║
+║    │               ••                •                                                                       ║║     many prey, few predators. Litters   ║
+║  30│                ••               •                                                                       ║║     grow; predators boom.               ║
+║    │               ••                •                                                                       ║║                                         ║
+║    │               ••••              •                                                                       ║║─ Recent path (every 10 days) ───────────║
+║    │                 ••              •                                                                       ║║   day        prey   pred   quadrant     ║
+║    │                 •••             •                                                                       ║║   Y11 D323    104      6   III          ║
+║    │                   •••••         •                                                                       ║║   Y11 D333    120      7   III          ║
+║    │                        •••▄▀▀██▄▄           ▄▄█                                                         ║║   Y11 D343    138      5   IV           ║
+║    │ III  few of both: prey recover  ██▀▀▀▀▀▀▀▀▀▀               IV  many prey, few predators: hunters boom   ║║   Y11 D353    156      5   IV           ║
+║   0│                                 •                                                             prey total║║   Y12 D003    180      7   IV           ║
+║    └─────────────────────────────────────────────────────────────────────────────────────────────────────────║║                                         ║
+║    0                         80              160              240              320                        400║║─ Legend ────────────────────────────────║
+║─ Reading the orbit ──────────────────────────────────────────────────────────────────────────────────────────║║ • days 1-200        ▀▄ last 40 days     ║
+║ The system circles counter-clockwise around the equilibrium: prey grow (right), predators follow (up),       ║║ █ today             • equilibrium axes  ║
+║ prey collapse (left), predators starve (down). ▀▄ last 40 days   █ today   • older days                      ║║                                         ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝╚═════════════════════════════════════════╝
+ [g] next chart  [1-3] pick  [+/-] zoom  [Esc] back                                                                                  chart 2/3  phase plot 

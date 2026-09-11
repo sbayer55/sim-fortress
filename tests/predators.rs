@@ -23,11 +23,11 @@ fn run(seed: u64, params: Params, ticks: u64) -> Sim {
 
 /// All six species alive at year 5 (seed 42, default params).
 ///
-/// `#[ignore]`d: measured on seed 42 with the FR1 balance table, voles are gone in
-/// year 1–2 (foxes have no refuge from them) and every predator by year 5; see the
-/// status note in docs/chunks/c5-predators.md. Run with `--ignored` for the counts.
+/// `#[ignore]`d: measured on seed 42 with the default balance table, voles are gone in
+/// year 1–2 (foxes have no refuge from them) and every predator by year 5; see the C6
+/// balance status note in docs/chunks/c6-persistence-and-balance.md.
 #[test]
-#[ignore = "balance band open: voles extinct by year 2, predators by year 5 on seed 42 (see C5 doc status note)"]
+#[ignore = "balance pass open (C6): voles extinct by year 2, predators by year 5 on seed 42"]
 fn six_species_five_years() {
     let sim = run(42, Params::default(), FIVE_YEARS);
     for id in SpeciesId::ALL {
@@ -39,7 +39,7 @@ fn six_species_five_years() {
 
 /// Oscillation: `peak_lag` in 5..=60 and ≥ 3 local maxima on both smoothed totals.
 #[test]
-#[ignore = "balance band open: the prey/predator totals collapse instead of orbiting (see C5 doc status note)"]
+#[ignore = "balance pass open (C6): the prey/predator totals collapse instead of orbiting"]
 fn oscillation_lag() {
     let sim = run(42, Params::default(), TEN_YEARS);
     let alive = SpeciesId::ALL.iter().filter(|id| sim.species[id.index()].count > 0).count();
@@ -92,7 +92,7 @@ fn forced_extinction_7_of_10() {
 
 /// Hunt success per predator species over a 1-year run is between 15 % and 60 %.
 #[test]
-#[ignore = "balance band open: measured fox 43–66 %, wolf 47–53 %, lynx 48–58 % on seed 42; fox exceeds 60 % on most lever sets"]
+#[ignore = "balance pass open (C6): fox exceeds 60 % on most lever sets"]
 fn hunt_success_band() {
     let sim = run(42, Params::default(), 360 * 24);
     for id in [SpeciesId::Fox, SpeciesId::Wolf, SpeciesId::Lynx] {

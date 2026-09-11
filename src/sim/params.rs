@@ -97,6 +97,10 @@ pub struct UiParams {
     pub auto_pause_on_extinction: bool,
     pub log_births: bool,
     pub pause_on_follow_death: bool,
+    /// Autosave every N days (0 = off), C6 FR1/FR5.
+    pub autosave_days: u32,
+    /// Apply the blue night tint to the map (C6 FR5).
+    pub day_night_tint: bool,
     pub scarcity_thresholds: ScarcityThresholds,
 }
 
@@ -108,6 +112,8 @@ impl Default for UiParams {
             auto_pause_on_extinction: true,
             log_births: false,
             pause_on_follow_death: true,
+            autosave_days: 0,
+            day_night_tint: true,
             scarcity_thresholds: ScarcityThresholds::default(),
         }
     }
@@ -339,10 +345,32 @@ impl Default for PredationParams {
 }
 
 impl PredationParams {
+    /// `kill_base + {easy +0.10, normal 0, hard −0.10}` (C6 FR7). The stored
+    /// `kill_base`/`detect_threshold` are never mutated, so save → load cannot
+    /// double-apply the difficulty modifier.
+    pub fn effective_kill_base(&self) -> f32 {
+        let d = match self.difficulty {
+            Difficulty::Easy => 0.10,
+            Difficulty::Normal => 0.0,
+            Difficulty::Hard => -0.10,
+        };
+        self.kill_base + d
+    }
+
+    /// `detect_threshold + {easy −0.1, normal 0, hard +0.1}` (C6 FR7).
+    pub fn effective_detect_threshold(&self) -> f32 {
+        let d = match self.difficulty {
+            Difficulty::Easy => -0.1,
+            Difficulty::Normal => 0.0,
+            Difficulty::Hard => 0.1,
+        };
+        self.detect_threshold + d
+    }
+
     /// `clamp(kill_base + kill_speed_w × (pred.speed − prey.speed) + kill_aggression_w
     /// × pred.aggression − kill_size_w × prey.size, kill_min, kill_max)` (FR1).
     pub fn kill_chance(&self, pred_speed: f32, prey_speed: f32, pred_aggression: f32, prey_size: f32) -> f32 {
-        (self.kill_base + self.kill_speed_w * (pred_speed - prey_speed) + self.kill_aggression_w * pred_aggression
+        (self.effective_kill_base() + self.kill_speed_w * (pred_speed - prey_speed) + self.kill_aggression_w * pred_aggression
             - self.kill_size_w * prey_size)
             .clamp(self.kill_min, self.kill_max)
     }
@@ -548,6 +576,242 @@ impl Params {
     pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
         toml::to_string_pretty(self)
     }
+
+    /// Deep-merge a partial TOML overlay onto `self` (C6 FR6). Unknown keys are
+    /// still rejected by `deny_unknown_fields`; missing keys keep their value.
+    pub fn apply_overlay(&mut self, s: &str) -> Result<(), String> {
+        let base = toml::Value::try_from(self.clone()).map_err(|e| e.to_string())?;
+        let overlay: toml::Value = toml::from_str(s).map_err(|e| e.to_string())?;
+        let merged = deep_merge(base, overlay);
+        *self = merged.try_into().map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Dump the defaults as TOML with one `#` comment per leaf (C6 FR6).
+    pub fn dump_toml() -> String {
+        let default = Params::default();
+        let text = toml::to_string_pretty(&default).unwrap_or_default();
+        let mut doc: toml_edit::DocumentMut = match text.parse() {
+            Ok(d) => d,
+            Err(_) => return text,
+        };
+        for (path, comment) in Params::field_docs() {
+            attach_comment(&mut doc, path, comment);
+        }
+        doc.to_string()
+    }
+
+    /// `(path, doc)` for every leaf parameter (C6 FR6). One entry per struct
+    /// field that is not itself a nested `*Params` struct.
+    pub fn field_docs() -> &'static [(&'static str, &'static str)] {
+        &[
+            // ---- world
+            ("world.width", "World width in cells."),
+            ("world.height", "World height in cells."),
+            ("world.water_pct", "Target percentage of water cells (lakes + rivers)."),
+            ("world.forest_pct", "Target percentage of forest cells."),
+            ("world.rock_pct", "Target percentage of impassable rock cells."),
+            ("world.rainfall", "Climate: dry | normal | wet."),
+            // ---- time
+            ("time.season_days", "Days per season (a year is four seasons)."),
+            ("time.ticks_per_day", "Ticks per day (one tick is one simulated hour)."),
+            ("time.start_hour", "Hour of day at tick 0."),
+            ("time.sunrise_hour", "First daylight hour."),
+            ("time.sunset_hour", "First night hour."),
+            // ---- ui
+            ("ui.speeds", "Speed multipliers offered by the UI."),
+            ("ui.base_ticks_per_second", "Ticks per real second at x1 speed."),
+            ("ui.auto_pause_on_extinction", "Pause when a species goes extinct."),
+            ("ui.log_births", "Show births in the map ticker."),
+            ("ui.pause_on_follow_death", "Pause when the followed creature dies."),
+            ("ui.autosave_days", "Autosave every N days (0 = off)."),
+            ("ui.day_night_tint", "Apply the blue night tint to the map."),
+            ("ui.scarcity_thresholds.scarce", "Vegetation below this fraction is Scarce."),
+            ("ui.scarcity_thresholds.strained", "Vegetation below this fraction is Strained."),
+            ("ui.scarcity_thresholds.plenty", "Vegetation above this fraction (with prey) is Plenty."),
+            ("ui.scarcity_thresholds.plenty_min_prey", "Prey count a region needs to reach Plenty."),
+            ("ui.scarcity_thresholds.crowded_prey_per_veg", "Prey-per-vegetation ratio that reads as Crowded."),
+            // ---- events
+            ("events.capacity", "Event ring buffer size."),
+            // ---- stats
+            ("stats.series_days", "Days of daily samples retained."),
+            // ---- creatures
+            ("creatures.initial_counts", "Founding population per species."),
+            ("creatures.adult_age_days", "Days to adulthood per species."),
+            ("creatures.hunger_base", "Base hourly hunger accumulation."),
+            ("creatures.hunger_per_size", "Extra hunger per unit of body size."),
+            ("creatures.hunger_metabolism_k", "Metabolism multiplier on hunger."),
+            ("creatures.thirst_per_hour", "Hourly thirst accumulation."),
+            ("creatures.energy_awake_per_hour", "Energy spent per waking hour."),
+            ("creatures.energy_rest_per_hour", "Energy recovered per resting hour."),
+            ("creatures.den_rest_bonus", "Rest multiplier inside a den."),
+            ("creatures.graze_per_hour", "Vegetation eaten per grazing hour."),
+            ("creatures.graze_nutrition", "Hunger relief per vegetation eaten."),
+            ("creatures.graze_min_vegetation", "Minimum vegetation to graze."),
+            ("creatures.drink_per_hour", "Thirst relief per drinking hour."),
+            ("creatures.hp_loss_per_hour", "HP lost per hour while starving or thirsting."),
+            ("creatures.hp_regen_per_hour", "HP regained per hour while comfortable."),
+            ("creatures.max_age_base", "Base maximum lifespan in days."),
+            ("creatures.max_age_per_longevity", "Extra lifespan days per longevity trait."),
+            ("creatures.carcass_decay_days", "Days for a carcass to fully decay."),
+            ("creatures.trail_len", "Remembered trail length."),
+            ("creatures.move_speed_base", "Base movement speed."),
+            ("creatures.move_speed_per_trait", "Extra speed per speed trait."),
+            ("creatures.move_cost_energy", "Energy cost per move."),
+            ("creatures.replan_ticks", "Ticks between goal replans."),
+            ("creatures.pressure_per_creature_tick", "Prey pressure added per passing creature."),
+            ("creatures.pressure_decay_per_day", "Daily prey-pressure decay."),
+            ("creatures.den_create_chance_per_rest_hour", "Chance to dig a den per rest hour."),
+            ("creatures.max_dens_per_region", "Maximum dens per region."),
+            // ---- genetics
+            ("genetics.mutation_rate", "Per-trait mutation chance per birth."),
+            ("genetics.mutation_strength", "Standard deviation of a mutation."),
+            ("genetics.mutation_notable", "|mutation| that emits a Mutation event."),
+            ("genetics.gestation_days", "Pregnancy length per species."),
+            ("genetics.litter_max", "Maximum litter per species."),
+            ("genetics.mate_cooldown_days", "Days between pregnancies per species."),
+            ("genetics.mate_hunger_max", "Hunger threshold to mate."),
+            ("genetics.mate_thirst_max", "Thirst threshold to mate."),
+            ("genetics.mate_energy_min", "Energy threshold to mate."),
+            ("genetics.mate_cell_vegetation_min", "Vegetation required on the mating cell."),
+            ("genetics.breeding_seasons", "Seasons in which mating is allowed."),
+            ("genetics.follow_mother_days", "Days a juvenile follows its mother."),
+            ("genetics.newborn_hp", "HP of a newborn."),
+            ("genetics.pregnancy_hunger_factor", "Hunger multiplier while pregnant."),
+            ("genetics.max_population_soft_cap", "Soft cap on total population."),
+            ("genetics.drift_every_generations", "Generations between drift samples."),
+            ("genetics.lineage_keep_generations", "Generations kept in the lineage store."),
+            ("genetics.lineage_up", "Generations up the S08 tree root."),
+            ("genetics.lineage_rows_max", "Maximum S08 tree rows."),
+            // ---- ecology
+            ("ecology.regrowth_rate", "Vegetation regrowth multiplier."),
+            ("ecology.growth_k", "Vegetation growth rate."),
+            ("ecology.dieback_k", "Vegetation die-back rate."),
+            ("ecology.evap_k", "Evaporation rate."),
+            ("ecology.rain_amount", "Moisture added per rain event."),
+            ("ecology.seed_sprout_chance_per_day", "Chance a seed sprouts per day."),
+            ("ecology.drought_moisture", "Moisture below which a drought flags."),
+            ("ecology.drought_days", "Days before a drought is declared."),
+            ("ecology.drought_recover_margin", "Recovery margin above the drought line."),
+            ("ecology.water_dry_region_moisture", "Moisture at which a water cell dries."),
+            ("ecology.water_refill_region_moisture", "Moisture at which a dry cell refills."),
+            ("ecology.water_changes_per_region_per_day", "Water cells changed per region per day."),
+            ("ecology.max_vegetation", "Maximum vegetation per terrain."),
+            ("ecology.season_cap", "Seasonal vegetation cap."),
+            ("ecology.season_regrowth", "Seasonal regrowth multiplier."),
+            ("ecology.season_evaporation", "Seasonal evaporation multiplier."),
+            ("ecology.season_metabolism", "Seasonal metabolism multiplier."),
+            ("ecology.rain_chance_per_day", "Rain chance per climate."),
+            // ---- predation
+            ("predation.detect_threshold", "Prey hidden when camouflage x cover >= sense x this."),
+            ("predation.cover_by_terrain", "Cover bonus per terrain."),
+            ("predation.den_protects", "Resting prey on a den cell cannot be targeted."),
+            ("predation.chase_trigger_cheb", "Chebyshev distance that starts the chase clock."),
+            ("predation.chase_max_ticks", "Maximum chase length."),
+            ("predation.chase_speed_bonus", "Extra move budget while chasing."),
+            ("predation.catch_distance_cheb", "Contact distance for a kill roll."),
+            ("predation.kill_base", "Base kill chance."),
+            ("predation.kill_speed_w", "Speed advantage weight in the kill chance."),
+            ("predation.kill_aggression_w", "Aggression weight in the kill chance."),
+            ("predation.kill_size_w", "Prey size penalty weight in the kill chance."),
+            ("predation.kill_min", "Minimum kill chance."),
+            ("predation.kill_max", "Maximum kill chance."),
+            ("predation.eat_hours_base", "Base hours spent eating a kill."),
+            ("predation.eat_hours_per_size", "Extra eating hours per prey size."),
+            ("predation.hunger_per_kill_base", "Base hunger relief per kill."),
+            ("predation.hunger_per_kill_per_size", "Extra hunger relief per prey size."),
+            ("predation.kill_consumes_decay", "Decay added to a carcass per kill."),
+            ("predation.hunt_cooldown_hours", "Hours between hunts."),
+            ("predation.hunt_hunger_min", "Hunger threshold to start hunting."),
+            ("predation.scavenge_hunger_min", "Hunger threshold to scavenge."),
+            ("predation.carcass_nutrition", "Hunger relief per scavenge visit."),
+            ("predation.scavenge_hours", "Hours spent scavenging."),
+            ("predation.scavenge_consumes_decay", "Decay added per scavenge visit."),
+            ("predation.difficulty", "Predation difficulty: easy | normal | hard."),
+            ("predation.prey_preference", "Per-predator prey preference shares."),
+            ("predation.nocturnal", "Species active at night."),
+            ("predation.flee_distance", "Distance a prey flees."),
+            ("predation.flee_ticks", "Ticks a prey flees."),
+            ("predation.flee_energy_factor", "Energy cost multiplier while fleeing."),
+            ("predation.rest_detect_factor", "Sense multiplier while resting."),
+            ("predation.migrate_veg", "Vegetation-to-cap shortfall that triggers migration."),
+            ("predation.migrate_days", "Days a migration trigger must persist."),
+            ("predation.migrate_pressure", "Pressure that triggers migration."),
+            ("predation.migrate_prey_min", "Prey per region below which prey migrate."),
+            ("predation.migrate_cooldown_days", "Days before a pair can migrate again."),
+            ("predation.local_extinction_min", "Population that defines a local line."),
+        ]
+    }
+}
+
+/// A named parameter preset (C6 FR7). `overlay` is a partial TOML table merged
+/// over the current parameters; empty for Balanced (the defaults).
+#[derive(Clone, Copy, Debug)]
+pub struct Preset {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub overlay: &'static str,
+}
+
+pub const PRESETS: [Preset; 5] = [
+    Preset { name: "Balanced", description: "default values, gentle seasons", overlay: "" },
+    Preset {
+        name: "Harsh winter",
+        description: "180-day seasons, regrowth 0.6",
+        overlay: "time.season_days = 180\necology.regrowth_rate = 0.6\n",
+    },
+    Preset {
+        name: "Lush",
+        description: "forest 30%, regrowth 1.4, predation hard",
+        overlay: "world.forest_pct = 30\necology.regrowth_rate = 1.4\npredation.difficulty = \"hard\"\n",
+    },
+    Preset { name: "Archipelago", description: "water 55%, islands isolate lineages", overlay: "world.water_pct = 55\n" },
+    Preset {
+        name: "Fast evolution",
+        description: "mutation rate 0.10, strength 0.12",
+        overlay: "genetics.mutation_rate = 0.10\ngenetics.mutation_strength = 0.12\n",
+    },
+];
+
+/// Recursively merge `overlay` onto `base`: tables deep-merge, anything else is
+/// replaced by the overlay value.
+fn deep_merge(base: toml::Value, overlay: toml::Value) -> toml::Value {
+    match (base, overlay) {
+        (toml::Value::Table(mut b), toml::Value::Table(o)) => {
+            for (k, v) in o {
+                match b.remove(&k) {
+                    Some(existing) => b.insert(k, deep_merge(existing, v)),
+                    None => b.insert(k, v),
+                };
+            }
+            toml::Value::Table(b)
+        }
+        (_, overlay) => overlay,
+    }
+}
+
+/// Attach a `# comment` before the leaf key at `path` in a `toml_edit` document.
+fn attach_comment(doc: &mut toml_edit::DocumentMut, path: &str, comment: &str) {
+    let parts: Vec<&str> = path.split('.').collect();
+    let (tables, leaf) = parts.split_at(parts.len().saturating_sub(1));
+    let Some(leaf) = leaf.first() else { return };
+    let mut table = doc.as_table_mut();
+    for part in tables {
+        match table.get_mut(part).and_then(|i| i.as_table_mut()) {
+            Some(t) => table = t,
+            None => return,
+        }
+    }
+    let decor = format!("# {comment}\n");
+    if let Some(item) = table.get_mut(leaf) {
+        if let Some(t) = item.as_table_mut() {
+            t.decor_mut().set_prefix(decor);
+            return;
+        }
+    }
+    if let Some(mut key) = table.key_mut(leaf) {
+        key.leaf_decor_mut().set_prefix(decor);
+    }
 }
 
 #[cfg(test)]
@@ -577,5 +841,92 @@ mod tests {
         assert_eq!(p.time.season_days, 90);
         assert_eq!(p.events.capacity, 5000);
         assert_eq!(p.ecology.growth_k, 0.18);
+    }
+
+    #[test]
+    fn unknown_key_errors() {
+        let err = Params::from_toml("[world]\nrainfall = \"dry\"\nbogus = 1\n").unwrap_err();
+        assert!(err.to_string().contains("bogus"), "error should name the key: {err}");
+        let mut p = Params::default();
+        let e = p.apply_overlay("[predation]\nkill_bogus = 1\n").unwrap_err();
+        assert!(e.contains("kill_bogus"), "overlay error should name the key: {e}");
+    }
+
+    #[test]
+    fn dump_params_round_trip() {
+        let dump = Params::dump_toml();
+        assert!(dump.contains("# "), "dump should carry comments");
+        let parsed = Params::from_toml(&dump).unwrap();
+        assert_eq!(parsed, Params::default());
+    }
+
+    #[test]
+    fn preset_overlay_merge() {
+        let mut p = Params::default();
+        p.apply_overlay(PRESETS[1].overlay).unwrap(); // Harsh winter
+        assert_eq!(p.time.season_days, 180);
+        assert_eq!(p.ecology.regrowth_rate, 0.6);
+
+        let mut p = Params::default();
+        p.apply_overlay(PRESETS[2].overlay).unwrap(); // Lush
+        assert_eq!(p.world.forest_pct, 30);
+        assert_eq!(p.ecology.regrowth_rate, 1.4);
+        assert_eq!(p.predation.difficulty, Difficulty::Hard);
+
+        let mut p = Params::default();
+        p.apply_overlay(PRESETS[3].overlay).unwrap(); // Archipelago
+        assert_eq!(p.world.water_pct, 55);
+
+        let mut p = Params::default();
+        p.apply_overlay(PRESETS[4].overlay).unwrap(); // Fast evolution
+        assert_eq!(p.genetics.mutation_rate, 0.10);
+        assert_eq!(p.genetics.mutation_strength, 0.12);
+
+        assert_eq!(PRESETS[0].overlay, "", "Balanced is the defaults");
+    }
+
+    #[test]
+    fn field_docs_complete() {
+        let value = toml::Value::try_from(Params::default()).unwrap();
+        let docs: std::collections::BTreeMap<&str, &str> = Params::field_docs().iter().copied().collect();
+        let map_fields: &[&str] = &[
+            "creatures.initial_counts",
+            "creatures.adult_age_days",
+            "genetics.gestation_days",
+            "genetics.litter_max",
+            "genetics.mate_cooldown_days",
+            "predation.cover_by_terrain",
+            "predation.prey_preference",
+            "ecology.max_vegetation",
+            "ecology.season_cap",
+            "ecology.season_regrowth",
+            "ecology.season_evaporation",
+            "ecology.season_metabolism",
+            "ecology.rain_chance_per_day",
+        ];
+        let mut leaves: Vec<String> = Vec::new();
+        collect_leaves(&value, "", map_fields, &mut leaves);
+        for leaf in &leaves {
+            assert!(docs.contains_key(leaf.as_str()), "missing doc for {leaf}");
+        }
+        for path in docs.keys() {
+            assert!(leaves.iter().any(|l| l == path), "stale doc for {path}");
+        }
+    }
+
+    fn collect_leaves(v: &toml::Value, prefix: &str, map_fields: &[&str], out: &mut Vec<String>) {
+        let join = |p: &str, k: &str| if p.is_empty() { k.to_string() } else { format!("{p}.{k}") };
+        match v {
+            toml::Value::Table(t) => {
+                if !prefix.is_empty() && map_fields.contains(&prefix) {
+                    out.push(prefix.to_string());
+                    return;
+                }
+                for (k, val) in t {
+                    collect_leaves(val, &join(prefix, k), map_fields, out);
+                }
+            }
+            _ => out.push(prefix.to_string()),
+        }
     }
 }

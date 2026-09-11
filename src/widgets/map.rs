@@ -107,6 +107,21 @@ pub fn terrain_cell(cell: &Cell, winter: bool) -> (char, Color, Color) {
     }
 }
 
+/// Glyph and colors for a serialised terrain code (0..=8), summer/day palette
+/// (used by the S00 title-screen decorative strips, C6 FR1).
+pub fn terrain_code_cell(code: u8) -> (char, Color, Color) {
+    let cell = Cell {
+        terrain: Terrain::from_code(code),
+        elevation: 0.5,
+        moisture: 0.5,
+        vegetation: 0.0,
+        prey_pressure: 0.0,
+        pred_pressure: 0.0,
+        dried_from: None,
+    };
+    terrain_cell(&cell, false)
+}
+
 /// Glyph and colors for a cell under an overlay (before creatures are drawn).
 pub fn overlay_cell(cell: &Cell, overlay: Overlay) -> Option<(char, Color, Color)> {
     let (t, color) = match overlay {

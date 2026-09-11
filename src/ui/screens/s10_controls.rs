@@ -1,4 +1,5 @@
-//! S10: simulation controls modal drawn over the dimmed world map.
+//! S10 / Options modal (C6 FR5): drawn over the dimmed world map (or the title
+//! screen). The Options section is five rows and persists to `ui.toml`.
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
@@ -7,6 +8,7 @@ use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
 use crate::ui::app::AppState;
+use crate::ui::config;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::SeasonStyle;
 use crate::widgets::{panel, status, util};
@@ -28,6 +30,13 @@ impl Default for Controls {
 impl Controls {
     pub fn new() -> Self {
         Controls { step_idx: 0 }
+    }
+}
+
+/// Persist the current UI options to `ui.toml` (best-effort; failures only log).
+fn persist(app: &AppState) {
+    if let Err(e) = config::save_ui(&app.params.ui) {
+        eprintln!("ui.toml write error: {e}");
     }
 }
 
@@ -88,14 +97,32 @@ impl Screen for Controls {
             }
             KeyCode::Char('a') => {
                 app.params.ui.auto_pause_on_extinction = !app.params.ui.auto_pause_on_extinction;
+                persist(app);
                 Action::None
             }
             KeyCode::Char('b') => {
                 app.params.ui.log_births = !app.params.ui.log_births;
+                persist(app);
                 Action::None
             }
             KeyCode::Char('c') => {
                 app.params.ui.pause_on_follow_death = !app.params.ui.pause_on_follow_death;
+                persist(app);
+                Action::None
+            }
+            KeyCode::Char('t') => {
+                app.params.ui.day_night_tint = !app.params.ui.day_night_tint;
+                persist(app);
+                Action::None
+            }
+            KeyCode::Left => {
+                app.params.ui.autosave_days = app.params.ui.autosave_days.saturating_sub(1);
+                persist(app);
+                Action::None
+            }
+            KeyCode::Right => {
+                app.params.ui.autosave_days = app.params.ui.autosave_days.saturating_add(1).min(365);
+                persist(app);
                 Action::None
             }
             _ => Action::Unhandled,
@@ -103,12 +130,7 @@ impl Screen for Controls {
     }
 
     fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
-        let Some(sim) = &app.sim else {
-            return;
-        };
-        let time = &sim.time;
-
-        let modal = util::centered(area, 60.min(area.width.saturating_sub(2)), 18.min(area.height.saturating_sub(2)));
+        let modal = util::centered(area, 60.min(area.width.saturating_sub(2)), 20.min(area.height.saturating_sub(2)));
         let inner = panel::draw_with_hint(f, modal, "Simulation Controls", "Esc closes", panel::Kind::Focus);
         let mut row = 0u16;
 
@@ -156,32 +178,38 @@ impl Screen for Controls {
 
         panel::section(f, inner, row, "Clock");
         row += 1;
-        let season = time.season();
-        util::line(f, inner, row, Line::from(vec![
-            Span::styled(" tick ", theme::dim_text()),
-            Span::styled(crate::ui::screens::s01_map::group(time.tick), theme::text()),
-            Span::styled("    day ", theme::dim_text()),
-            Span::styled(format!("{}", time.day_of_season()), theme::text()),
-            Span::styled(format!(" of {} ", season.name()), theme::dim_text()),
-            Span::styled(season.glyph().to_string(), Style::default().fg(season.color()).bg(theme::PANEL_BG)),
-            Span::styled("    year ", theme::dim_text()),
-            Span::styled(format!("{}", time.year()), theme::text()),
-            Span::styled(format!("    {} {}", time.hour_label(), glyphs::SUN), theme::text()),
-        ]));
-        row += 1;
-        let ticks_per_day = app.params.time.ticks_per_day;
-        util::line(f, inner, row, Line::from(Span::styled(
-            format!(" 1 tick = 1 hour   1 day = {ticks_per_day} ticks   x{} = {} ticks/s", app.speed(), 2 * app.speed()),
-            theme::dim_text(),
-        )));
+        if let Some(sim) = &app.sim {
+            let time = &sim.time;
+            let season = time.season();
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(" tick ", theme::dim_text()),
+                Span::styled(crate::ui::screens::s01_map::group(time.tick), theme::text()),
+                Span::styled("    day ", theme::dim_text()),
+                Span::styled(format!("{}", time.day_of_season()), theme::text()),
+                Span::styled(format!(" of {} ", season.name()), theme::dim_text()),
+                Span::styled(season.glyph().to_string(), Style::default().fg(season.color()).bg(theme::PANEL_BG)),
+                Span::styled("    year ", theme::dim_text()),
+                Span::styled(format!("{}", time.year()), theme::text()),
+                Span::styled(format!("    {} {}", time.hour_label(), glyphs::SUN), theme::text()),
+            ]));
+            row += 1;
+            util::line(f, inner, row, Line::from(Span::styled(
+                format!(" 1 tick = 1 hour   1 day = {} ticks   x{} = {} ticks/s", app.params.time.ticks_per_day, app.speed(), 2 * app.speed()),
+                theme::dim_text(),
+            )));
+        } else {
+            util::line(f, inner, row, Line::from(Span::styled(" no world loaded", theme::dim_text())));
+            row += 1;
+        }
         row += 2;
 
         panel::section(f, inner, row, "Options");
         row += 1;
-        let toggles: [(&str, bool, &str); 3] = [
+        let toggles: [(&str, bool, &str); 4] = [
             ("a", app.params.ui.auto_pause_on_extinction, "auto-pause on extinction"),
-            ("b", app.params.ui.log_births, "show births in the map ticker"),
+            ("b", app.params.ui.log_births, "log births to the event log"),
             ("c", app.params.ui.pause_on_follow_death, "pause when a followed creature dies"),
+            ("t", app.params.ui.day_night_tint, "day/night tint"),
         ];
         for (key, on, label) in toggles {
             let mark = if on { "[x]" } else { "[ ]" };
@@ -198,6 +226,16 @@ impl Screen for Controls {
             ]));
             row += 1;
         }
+        // Autosave row: `◄ N ►` days.
+        let n = app.params.ui.autosave_days;
+        let n_label = if n == 0 { "off".to_string() } else { format!("{n} days") };
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(" ", theme::text()),
+            Span::styled(format!(" {} ", glyphs::REWIND), theme::key()),
+            Span::styled(format!("autosave every {:<8}", n_label), theme::text()),
+            Span::styled(format!(" {} ", glyphs::PLAY), theme::key()),
+            Span::styled("[←→]", theme::key()),
+        ]));
 
         let hint_row = inner.height - 1;
         util::line(f, inner, hint_row, Line::from(vec![
@@ -215,9 +253,15 @@ impl Screen for Controls {
         // Repaint the status bar undimmed.
         let status_row = area.y + area.height - 1;
         util::fill(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1), Style::default().bg(theme::STATUS_BG));
-        let keys: &[(&str, &str)] = &[("Space", "pause"), ("+/-", "speed"), ("1-5", "set speed"), (".", "step"), ("a/b/c", "toggle"), ("Esc", "close")];
-        let sky = if time.is_night() { glyphs::MOON } else { glyphs::SUN };
-        let right = format!("{}  {} {}", time.clock_label(), sky, if time.is_night() { "night" } else { "day" });
+        let keys: &[(&str, &str)] = &[("Space", "pause"), ("+/-", "speed"), ("1-5", "set speed"), (".", "step"), ("a/b/c/t", "toggle"), ("Esc", "close")];
+        let right = match &app.sim {
+            Some(sim) => {
+                let t = &sim.time;
+                let sky = if t.is_night() { glyphs::MOON } else { glyphs::SUN };
+                format!("{}  {} {}", t.clock_label(), sky, if t.is_night() { "night" } else { "day" })
+            }
+            None => "options".to_string(),
+        };
         status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, &right);
     }
 }

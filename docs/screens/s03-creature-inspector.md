@@ -2,6 +2,8 @@
 
 Back to the [screen overview](README.md).
 
+Live since: C3
+
 ## Purpose
 Everything the simulation knows about one individual, on one screen: who it is, how it
 is doing right now, what its genome says and how that genome differs from its species,

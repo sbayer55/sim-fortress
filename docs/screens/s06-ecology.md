@@ -2,6 +2,8 @@
 
 Back to the [screen overview](README.md).
 
+Live since: C2
+
 ## Purpose
 The ecology screen answers "can the valley feed what lives in it?". It summarises the
 world's resources (vegetation, water, carcasses, dens, regrowth sites) with their recent

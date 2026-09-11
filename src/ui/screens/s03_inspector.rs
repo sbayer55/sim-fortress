@@ -1,5 +1,5 @@
 //! S03: the live creature inspector (S03a prey / S03c corpse; S03b predator is
-//! placeholder until C5). Mirrors the prototype three-column layout with live
+//! placeholder until C5). Mirrors the three-column layout with live
 //! data; C4 adds family names, offspring forecast, kin, legacy and timeline.
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
@@ -309,7 +309,7 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
 }
 
 /// `Name tag` for a relative, from the store or the lineage.
-/// S03c (prototype items 10–11, Identity & Death panel): the killer from
+/// S03c (Identity & Death panel): the killer from
 /// `death.killer` and the two nearest living predators with the Scavenge goal.
 fn killer_and_scavengers(f: &mut Frame, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
     if let Some(killer_id) = c.death.and_then(|d| d.killer) {

@@ -2,6 +2,8 @@
 
 Back to the [screen overview](README.md).
 
+Live since: C1
+
 ## Purpose
 The "new world" form. The player names the world, chooses a seed, sets the terrain mix,
 climate, starting populations and evolution parameters (or picks a preset), and watches a

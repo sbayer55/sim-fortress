@@ -2,6 +2,8 @@
 
 Back to the [screen overview](README.md).
 
+Live since: C2
+
 ## Purpose
 The event log is the valley's history, newest first: births, deaths, mutations,
 migrations, extinctions, droughts, season changes and narrative notes. The player uses it

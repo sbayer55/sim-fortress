@@ -1,1 +1,7 @@
 /target
+/saves
+/summary.csv
+/.cargo-home
+
+/cargo-flamegraph.trace
+/flamegraph.svg

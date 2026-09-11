@@ -1,0 +1,45 @@
+ S04a  Species Browser — species table                                                                            14/27  [ ] prev/next   0-9 jump   q quit 
+╔ Species ════════════════════════════════════════════════════════════════════════════════════════════════════════════════ 6 species, 3 prey / 3 predator ╗
+║   Species Kind   Count Adults   Juv Birth/d Death/d  Peak  Gen  30-day trend             Spd Siz Sen Met Agg Cam Fer Lon   Diet                         ║
+║                                                                                                                                                         ║
+║ V Vole    prey     267    174    93       6       1   331   44  ███████▓▓▓▓▒▒▒░░░░░▒ ↑    44  11  40  73   7  61  90  20   seeds, roots                 ║
+║ H Hare    prey     211    150    61       7       6   339   59  ███▓▓▓▒▒▒░░░░░░░░▒▒▓ ↑    79  25  65  60  10  55  76  34   grass, bark                  ║
+║ D Deer    prey     109     66    43       8       3   175   41  ▓▒▒▒▒░░░░░░░▒▒▒▓▓██▓ ↑    64  79  56  43  22  34  35  72   grass, leaves                ║
+║ F Fox     pred      35     24    11       2       1    57   24  ░░░░░░░░▒▒▒▓▓▓▓████▓ ↔    70  33  79  55  60  49  51  47   voles, hares                 ║
+║►W Wolf    pred      27     18     9       2       1    41   26  ░░░░▒▒▒▒▓▓▓▓█████▓▓▓ ↓    75  70  70  49  85  29  38  61   deer, hares                  ║
+║ L Lynx    pred      17      9     8       0       1    32   19  ░░░░▒▓▓▓█████▓▒▒▒░░▒ ↓    72  49  93  48  72  72  25  56   hares, voles                 ║
+║                                                                                                                                                         ║
+║   totals           666   prey 587  pred 79  ratio 7.4:1   births 25  deaths 13   net +12 today      trait columns are species means x100                ║
+║                                                                                                                                                         ║
+╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+╔ Selected: Wolf ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ Enter for full detail ╗
+║ W Wolves   predator   diet: deer, hares                         ─ Population, last 240 days ────────────────────────────────────────────────────────────║
+║ 27 alive  18 adults  9 juveniles  generation 26  peak 41          35  ░░░░░░░▄▄▄█████████▄▄▄▄▄░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+║                                                                       ░░░▄▄▄█████████████████████████████▄▄▄▄░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+║─ Base genome vs current mean ──────────────────────────────────       ▄▄████████████████████████████████████████▄▄▄░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+║ trait        base   current            delta   spread                 ███████████████████████████████████████████████▄▄▄░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+║ Speed       0.75   0.75 [████████│░░░]   +0.00  [░░░░░░░▒█░░]         █████████████████████████████████████████████████████▄▄▄▄▄░░░░░░░░░░░░░░░░░░░░░░░░░
+║ Size        0.70   0.70 [████████│░░░]   -0.00  [░░░░░░▒█▒░░]      2  ████████████████████████████████████████████████████████████████████▄▄▄▄▄▄▄▄▄▄▄▄▄░░
+║ Sense       0.70   0.70 [████████│░░░]   -0.00  [░░░░░░▒█▒░░]         D-240                           drought                                           ║
+║ Metabolism  0.50   0.49 [██████│░░░░░]   -0.01  [░░░░▒█▒░░░░]                                                                                           ║
+║ Aggression  0.85   0.85 [█████████│░░]   -0.00  [░░░░░░░░█▒▒]    30-day trend ▒▒▒▒▒░░░░░░░▒▒▒▒▒▒▓▓▓██████▓▓▓  ↓ declining                               ║
+║ Camouflage  0.25   0.29 [███│░░░░░░░░]   +0.04  [░░▒█▒░░░░░░]                                                                                           ║
+║ Fertility   0.40   0.38 [████│░░░░░░░]   -0.02  [░░░▒█▒░░░░░]    240 days ago  21                                                                       ║
+║ Longevity   0.60   0.61 [███████│░░░░]   +0.01  [░░░░░▒█▒░░░]    today         27                                                                       ║
+║ │ base marker   spread = min/mean/max across living Wolves       change        -18 (-88%)                                                               ║
+║                                                                  low / high    1 / 35                                                                   ║
+║─ Interactions ─────────────────────────────────────────────────  births today  2                                                                        ║
+║ eats D Deer [███████░░░░░░░]  48% of kills   109 alive ↑         deaths today  1                                                                        ║
+║ eats H Hare [█████░░░░░░░░░]  39% of kills   211 alive ↑                                                                                                ║
+║ eats V Vole [██░░░░░░░░░░░░]  13% of kills   267 alive ↑         ¶ Wolves recovered after the Day 150 drought as deer herds returned to the Long Meadow.║
+║ competes with L Lynx for hares;  hunted by nothing                                                                                                      ║
+║                                                                 ─ Habitat (living individuals by region) ───────────────────────────────────────────────║
+║─ Notable individuals ──────────────────────────────────────────  The Long Meadow  [████████████]  3          Southern Thicket [████████████]  3         ║
+║ W Ashfang  w#042   61 kills  gen 23  1103 days  The Long Meadow  Ashen Ridge      [████░░░░░░░░]  1          Sunfall Coast    [████░░░░░░░░]  1         ║
+║ w Umber    w#108   27 kills  gen 29    87 days  The Long Meadow  Fenlands         [████░░░░░░░░]  1          Northmarch       [░░░░░░░░░░░░]  0         ║
+║ W Flint    w#112   18 kills  gen 16   257 days  Sunfall Coast    Reedwater Vale   [░░░░░░░░░░░░]  0          Lakeshore        [░░░░░░░░░░░░]  0         ║
+║ W Greymaw  w#115   14 kills  gen 12   483 days  Southern Thicke                                                                                         ║
+║ w Vex      w#113   12 kills  gen 24    64 days  Fenlands                                                                                                ║
+║                                                                                                                                                         ║
+╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+ [↑↓] select  [Enter] detail  [s] sort  [Esc] back                                                      sorted by count ↓  Year 12, Day 4 of Autumn  14:00 

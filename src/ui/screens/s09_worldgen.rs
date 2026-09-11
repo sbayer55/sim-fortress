@@ -10,7 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
 use crate::sim::params::{CreaturesParams, Difficulty, EcologyParams, GeneticsParams, PredationParams, Rainfall, TimeParams, WorldParams};
-use crate::sim::{Params, Sim, SpeciesId, World};
+use crate::sim::{Params, Sim, SpeciesId, World, PRESETS};
 use crate::ui::app::AppState;
 use crate::ui::screens::s01_map::WorldMap;
 use crate::ui::screens::{Action, Screen};
@@ -58,7 +58,7 @@ impl WorldGenForm {
             genetics: params.genetics.clone(),
             predation: params.predation.clone(),
             regrowth_rate: params.ecology.regrowth_rate,
-            // Start on Size (Width), matching the prototype's default highlight and
+            // Start on Size (Width), matching the documented default highlight and
             // so a fresh S09 quits on `q` (FR8: `q` quits when no text field is focused).
             focus: 2,
             preview,
@@ -129,6 +129,8 @@ fn generate(form: &WorldGenForm, app: &mut AppState) -> Action {
     let name = form.name.clone();
     app.params = params.clone();
     app.sim = Some(Sim::new(seed, params));
+    app.world_name = Some(name.clone());
+    app.last_saved_tick = None;
     app.viewport_origin = (0, 0);
     Action::Replace(Box::new(WorldMap::new(name)))
 }
@@ -150,7 +152,7 @@ impl Screen for WorldGen {
         }
 
         if code == KeyCode::Esc {
-            return if app.sim.is_some() { Action::Pop } else { Action::Quit };
+            return Action::Pop; // back to the title screen (C6 title flow)
         }
 
         let focus = form.focus;
@@ -209,25 +211,22 @@ impl Screen for WorldGen {
                     form.dirty = true;
                     Action::None
                 }
-                (25, KeyCode::Enter) => {
-                    if app.sim.is_some() {
-                        Action::Pop
-                    } else {
-                        Action::Quit
-                    }
-                }
+                (25, KeyCode::Enter) => Action::Pop,
                 _ => Action::None,
             };
         }
 
-        // Presets (18..23) are inert until C6.
+        // Presets (18..23): Enter applies the preset into the form (C6 FR7).
         if (18..23).contains(&focus) {
+            if code == KeyCode::Enter {
+                apply_preset(&mut form, focus - 18);
+            }
             return Action::None;
         }
 
-        // 'q' with no text focus quits.
+        // 'q' with no text focus returns to the title.
         if code == KeyCode::Char('q') {
-            return Action::Quit;
+            return Action::Pop;
         }
 
         // Adjustable fields respond to Left/Right; on Size, Up/Down adjusts height.
@@ -271,6 +270,33 @@ impl Screen for WorldGen {
             &seed_hint,
         );
     }
+}
+
+/// Apply a preset (C6 FR7): write its values into the form fields. Balanced
+/// (index 0) resets those fields to the defaults; the name, seed and species
+/// counts are never touched by presets.
+fn apply_preset(form: &mut WorldGenForm, idx: usize) {
+    let preset = &PRESETS[idx];
+    if idx == 0 {
+        let d = Params::default();
+        form.world = d.world;
+        form.season_days = d.time.season_days;
+        form.genetics = d.genetics;
+        form.predation = d.predation;
+        form.regrowth_rate = d.ecology.regrowth_rate;
+    } else {
+        let mut p = form.build_params();
+        if let Err(e) = p.apply_overlay(preset.overlay) {
+            eprintln!("preset error: {e}");
+            return;
+        }
+        form.world = p.world;
+        form.season_days = p.time.season_days;
+        form.genetics = p.genetics;
+        form.predation = p.predation;
+        form.regrowth_rate = p.ecology.regrowth_rate;
+    }
+    form.dirty = true;
 }
 
 fn adjust(form: &mut WorldGenForm, focus: usize, dir: i32) {

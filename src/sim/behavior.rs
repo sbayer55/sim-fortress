@@ -2,8 +2,6 @@
 //! movement, grazing/drinking/resting, mating (C4), den creation, death and the
 //! day boundary.
 
-use std::collections::BTreeMap;
-
 use crate::sim::creatures::{Cause, Creature, CreatureId, CreatureStore, Death, DeathTallies, Goal, HuntPhase, RestReason};
 use crate::sim::events::{Event, EventKind, EventRing};
 use crate::sim::genetics::{self, TickView, OFF8};
@@ -1137,56 +1135,78 @@ fn mark_threats(store: &mut CreatureStore, spatial: &SpatialIndex, world: &World
         .collect();
     preds.sort_unstable_by_key(|p| p.id);
 
-    struct Acc {
+    // A flat prey snapshot (sorted by id) replaces the per-visit `BTreeMap`
+    // accumulation: the hot path is a binary search over contiguous memory and
+    // `for_each_within` does not allocate or sort (C6 FR9).
+    struct PreySnap {
+        id: CreatureId,
+        rest: bool,
+        sense: f32,
+        sense_cells: u16,
+        count: u32,
+        dist: f32,
         pos: (usize, usize),
         species: SpeciesId,
-        dist: f32,
-        count: u32,
     }
-    let mut acc: BTreeMap<CreatureId, Acc> = BTreeMap::new();
+    let mut prey: Vec<PreySnap> = store
+        .living()
+        .filter(|c| c.species.kind() == Kind::Prey)
+        .map(|c| PreySnap {
+            id: c.id,
+            rest: c.goal == Goal::Rest,
+            sense: c.genome.sense(),
+            sense_cells: c.genome.sense_cells(),
+            count: 0,
+            dist: f32::INFINITY,
+            pos: (0, 0),
+            species: SpeciesId::Vole,
+        })
+        .collect();
+    prey.sort_unstable_by_key(|p| p.id);
+
     for pred in &preds {
-        for prey_id in spatial.within(pred.x, pred.y, MAX_SENSE_CELLS) {
-            let Some(prey) = store.get(prey_id) else { continue };
-            if prey.species.kind() != Kind::Prey {
-                continue;
-            }
-            let d = geom::dist(pred.x, pred.y, prey.x, prey.y);
-            let in_range = d <= prey.genome.sense_cells() as f32;
-            let detects = predation::prey_detects_pred_at(prey, pred.x, pred.y, pred.camouflage, pp);
-            let e = acc.entry(prey_id).or_insert(Acc { pos: (pred.x, pred.y), species: pred.species, dist: f32::INFINITY, count: 0 });
+        spatial.for_each_within(pred.x, pred.y, MAX_SENSE_CELLS, |prey_id, qx, qy| {
+            let Ok(i) = prey.binary_search_by_key(&prey_id, |p| p.id) else { return };
+            let p = &mut prey[i];
+            let d = geom::dist(pred.x, pred.y, qx, qy);
+            let range = if p.rest { p.sense_cells as f32 * pp.rest_detect_factor } else { p.sense_cells as f32 };
+            let in_range = d <= p.sense_cells as f32;
+            let detects = d <= range && pred.camouflage < p.sense;
             if in_range {
-                e.count += 1;
+                p.count += 1;
             }
-            let danger = pred.hunting == Some(prey_id) || (pred.hungry && geom::cheb(pred.x, pred.y, prey.x, prey.y) <= pp.chase_trigger_cheb);
-            if detects && danger && d < pp.flee_distance && d < e.dist {
-                e.dist = d;
-                e.pos = (pred.x, pred.y);
-                e.species = pred.species;
+            let danger = pred.hunting == Some(prey_id)
+                || (pred.hungry && geom::cheb(pred.x, pred.y, qx, qy) <= pp.chase_trigger_cheb);
+            if detects && danger && d < pp.flee_distance && d < p.dist {
+                p.dist = d;
+                p.pos = (pred.x, pred.y);
+                p.species = pred.species;
             }
-        }
+        });
     }
 
-    for prey in store.living_mut() {
-        if prey.species.kind() != Kind::Prey {
+    for c in store.living_mut() {
+        if c.species.kind() != Kind::Prey {
             continue;
         }
         // A forced flee (FR4) keeps its last known threat until the timer ends.
-        let keep_forced = prey.goal == Goal::Flee && tick < prey.flee_until && prey.threatened_by.is_some();
-        match acc.get(&prey.id) {
-            Some(a) => {
-                if a.dist < f32::INFINITY {
-                    prey.threatened_by = Some((a.pos.0, a.pos.1, a.species));
+        let keep_forced = c.goal == Goal::Flee && tick < c.flee_until && c.threatened_by.is_some();
+        match prey.binary_search_by_key(&c.id, |p| p.id) {
+            Ok(i) => {
+                let p = &prey[i];
+                if p.dist < f32::INFINITY {
+                    c.threatened_by = Some((p.pos.0, p.pos.1, p.species));
                 } else if !keep_forced {
-                    prey.threatened_by = None;
+                    c.threatened_by = None;
                 }
-                let pressure = world.cell(prey.x, prey.y).pred_pressure;
-                prey.predation_risk = (0.5 * pressure + 0.5 * (a.count as f32) / 3.0).min(1.0);
+                let pressure = world.cell(c.x, c.y).pred_pressure;
+                c.predation_risk = (0.5 * pressure + 0.5 * (p.count as f32) / 3.0).min(1.0);
             }
-            None => {
+            Err(_) => {
                 if !keep_forced {
-                    prey.threatened_by = None;
+                    c.threatened_by = None;
                 }
-                prey.predation_risk = (0.5 * world.cell(prey.x, prey.y).pred_pressure).min(1.0);
+                c.predation_risk = (0.5 * world.cell(c.x, c.y).pred_pressure).min(1.0);
             }
         }
     }

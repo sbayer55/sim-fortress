@@ -1,0 +1,45 @@
+ S11a  Legend & Help — overlay over world map                                                                     25/27  [ ] prev/next   0-9 jump   q quit 
+╔ The Valley of Sunfall ═════════════════════════════════════════════════════════ x 20-129 of 150   ← → scroll ╗╔ Status ═════════════════════════════════╗
+║♣♣♣♣♣""·~~♣♣""""""""",*"""""····♣♠♠♠♠♠··~~~"""""""""""""""""""f"""",,,,,,,,,,,,,,,,,,,,,,,,"W""""♣♣♣♠♠♠H♠♠♠♠♣♣║║─ Clock ─────────────────────────────────║
+║"♣♣""""""♣♣""""""V""",,""""h·""♣♣♣♠♠·♠··~~~"""""""""""""""""""""""",,"""""""",,,,,,,,,,,,,"",H""""♣♣♠♠♠♠♠♠♠♠♣♣║║ Year 12  Day 4     ♫ Autumn             ║
+║""""""··~~~·♣♣h"╔ Legend & Help ══════════════════════════════════════════════════════════════════════════════════════ ? or Esc closes ╗  running        ║
+║""··~~~~~~···♣"H║─ Terrain ────────────────────────────│─ Creatures ──────────────────────────│─ Navigation ───────────────────────────║                 ║
+║♣·~~~~~~~~~~·♣""║ ≈ deep water    impassable, drinkable│ ad jv  species role      diet        │ ← → ↑ ↓   scroll the map               ║                 ║
+║""·~~~~~~~~~·♣♣"║ ~ shallow water drinkable, slow      │ V  v  Vole   prey      seeds, roots  │ PgUp PgDn scroll a page                ║─────────────────║
+║♣♣·~~~≈~~~~·vv♣·║ · sand          no forage            │ H  h  Hare   prey      grass, bark   │ Home      center on the valley         ║█▓▓▓▓▒▒▒░░░░░▒   ║
+║·~~~~~~~~~~~·♣♣♣║ . bare dirt     regrows here first   │ D  d  Deer   prey      grass, leaves │ Tab       next notable creature        ║▓▒▒▒░░░░░░░▒▒▓   ║
+║~~~~~~~~····♣♣♣♣║ , sparse grass  thin forage          │ F  f  Fox    predator  voles, hares  │ c         center on selection          ║░░░░░░▒▒▒▓▓██▓   ║
+║≈≈~~~~~·♣♠♣♣♣♣♣♣║ " grassland     hare & deer grazing  │ W  w  Wolf   predator  deer, hares   │─ Look mode ────────────────────────────║░░▒▒▒▓▓▓▓████▓   ║
+║~≈≈≈≈~~~~~~·♣♣♣"║ ♣ meadow        rich grazing, cover  │ L  l  Lynx   predator  hares, voles  │ k         enter look mode              ║▒▒▒▓▓▓█████▓▓▓   ║
+║·≈≈≈≈≈≈≈≈~··♣♣♣♣║ ♠ forest        cover for small prey │ UPPER adult   lower juvenile         │ ← → ↑ ↓   move the cursor              ║▓▓█████▓▒▒▒░░▒   ║
+║·~≈≈≈~≈≈~·~~··♣♣║ ▲ rock          impassable heights   │ bright W selected   H followed       │ Enter     inspect cell / creature      ║o 7.4:1          ║
+║~~~≈≈~~~≈≈~~~♣""║ Ω den / burrow  shelter, litters     │                                      │ f         follow creature              ║                 ║
+║≈~~~≈≈~~~≈≈≈~·♣♣║ % carcass       scavenger food       │─ Tags ───────────────────────────────│ z         local zoom view              ║─────────────────║
+║"≈≈≈≈≈≈~~~~~~≈♣♣║ * regrowth      regrowing this season│ h#217 = species letter + id          │ Esc       leave look mode              ║░░░░░░░]    44%  ║
+║"""≈≈≈≈·♣♣♣♣♣♣~≈║                                      │ ♂ ♀ sex      gen 23 generation       │─ Overlays ─────────────────────────────║░░░░░░░]    57%  ║
+║""D♣♣≈≈≈♠♠h♠♠♠♠♣║─ Events ─────────────────────────────│                                      │ o         cycle overlays               ║regrowth 14      ║
+║♣♣♣♠♠♠♠♠♠♠♠♠♣♣♣♣║ ♥ birth / litter                     │─ Seasons & time ─────────────────────│ 1         vegetation density           ║                 ║
+║♣♠♠♠♠♠♠♠♠♠♠♠♣♣""║ x death by predation                 │ ♪ Spring  births peak, regrowth fast │ 2         population pressure          ║─────────────────║
+║♠♠♠♠♠♠♠%♠♠♠♣♣"""║ x death by starvation / thirst       │ ☼ Summer  water cells shrink         │ 3         water & moisture             ║ing Bramble      ║
+║♠♠♠♠♠♠♠♠♠♠♠D♣♣""║ x death of old age                   │ ♫ Autumn  forage peaks then falls    │ 4         sense range                  ║ng water         ║
+║♠♠♠♠Fv♠♠♠♠♠♣♣"""║ § mutation in a newborn              │ * Winter  regrowth halved, ice       │ Esc       clear overlay                ║                 ║
+║♠♠♠♠♠♠♠♠♠♠♣♣♣♣""║ → migration between regions          │ ☼ day      ○ night (blue-shifted)    │─ Speed ────────────────────────────────║                 ║
+║♠♠♠♠♠♠♠♠♠♠♣♣♣♣♣"║ ‼ species extinct                    │ ► running  ││ paused  ►► x2 speed    │ Space     pause / resume               ║─────────────────║
+║♣♣♠♠♠♠♠♠♠♠♠♠♣♣♣"║ ¡ drought / scarcity warning         │                                      │ + / -     faster / slower              ║allow water      ║
+║♣♠♠♠♠♠♠♠♠♠♠♠♣♣♣♣║                                      │─ Vitals & trends ────────────────────│ .         step one tick                ║re dirt          ║
+║♣♠♠♠♠♠♠D♠♠♠♠♣♣♣♣║─ Map marks ──────────────────────────│ ███ healthy / rising                 │ p         controls panel               ║assland          ║
+║♣♠♠♠♠♠♠♠♠♠♠♠♣♣♣"║ X look cursor (inverted cell)        │ ███ strained                         │─ Screens ──────────────────────────────║rest             ║
+║♣♠♠♠♠♠♠♠♠♠♠♠♣♣♣"║ ╬ cursor corner marks                │ ███ critical / falling               │ s         species & traits             ║n / burrow       ║
+║♠♠♠♠♠♠···♠♠♠♣♣♣"║ ∙ trail of the followed creature     │ ↑ ↔ ↓ 30-day population trend        │ g         graphs & charts              ║growth           ║
+║♠♠♠♠♠♠~·♠v♠♠♣♣""║ ♦ its current target                 │ § trait differs from species mean    │ y         ecology & regions            ║   Dd Deer       ║
+║♠♠♠W♠~~~~·♠♠♣♣""║ ° sense-range ring edge              │                                      │ e         event log                    ║   Ll Lynx       ║
+║♠H♠♠♠·~~~·♠♣♣♣"V║ ! danger: predator nearby            │                                      │ l         lineage tree                 ║enile            ║
+║♠♠♠♠♠······♠♣♣♣♣║                                      │                                      │ w         world generation             ║                 ║
+║♠♠♠v♠♠♠♠♠·vv♠♠♠♣║ Heatmap shades: ░ <25%  ▒ <50%       │                                      │ ?         this help                    ║                 ║
+║♣♠♠♠♠♣♣♣♠♠♠♠♠♠♠♣║                 ▓ <75%  █ full       │                                      │ q         quit                         ║                 ║
+║♣♣♣♠♣♣♣♣H♣H♣♣♠♠♣║                                      │                                      │                                        ║                 ║
+║"♣♣♣♣♣"""""♣♣♣♣♣║                                      │                                      │                                        ║                 ║
+║"♣♣♣♣V♣♣"""""""♣╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝                 ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝╚═════════════════════════════════════════╝
+ ¶ Ashfang w#042 is stalking Bramble h#217   (e: full log)                                                                                                 
+ [?] close help  [Esc] close  [PgUp/PgDn] scroll  [k] look  [o] overlay  [s] species                                                          help overlay 

@@ -2,6 +2,8 @@
 
 Back to the [screen overview](README.md).
 
+Live since: C1
+
 ## Purpose
 The World Map is the home screen of a running simulation. The player watches creatures move
 over terrain, reads the clock, season and population at a glance, and launches every other

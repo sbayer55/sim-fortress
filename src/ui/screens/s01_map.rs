@@ -143,7 +143,7 @@ impl Screen for WorldMap {
             o => o,
         };
         let overlay_active = overlay != Overlay::None;
-        let night = !overlay_active && time.is_night();
+        let night = !overlay_active && time.is_night() && app.params.ui.day_night_tint;
         let winter = !overlay_active && time.season() == Season::Winter;
 
         let tw = area.width;

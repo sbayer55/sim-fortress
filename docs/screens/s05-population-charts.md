@@ -2,6 +2,8 @@
 
 Back to the [screen overview](README.md).
 
+Live since: C2
+
 ## Purpose
 The charts screen is where the player reads the valley as a *system* rather than as
 individual creatures. It shows the last 240 days of population history so the player can

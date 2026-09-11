@@ -93,13 +93,23 @@ impl SpatialIndex {
     /// Living creature ids within ellipse radius `r` of `(cx, cy)`, ascending.
     /// Only the rows inside the ellipse are visited, each as one slice.
     pub fn within(&self, cx: usize, cy: usize, r: u16) -> Vec<CreatureId> {
+        let mut out = Vec::new();
+        self.for_each_within(cx, cy, r, |id, _, _| out.push(id));
+        out.sort_unstable();
+        out
+    }
+
+    /// Visit every entry inside the ellipse of radius `r` around `(cx, cy)`
+    /// without allocating or sorting (row-major cell order, ids ascending within
+    /// a cell). Used by the hot perception/threat queries where order is not
+    /// significant (C6 FR9).
+    pub fn for_each_within(&self, cx: usize, cy: usize, r: u16, mut f: impl FnMut(CreatureId, usize, usize)) {
         let r = r as i64;
         let cx = cx as i64;
         let cy = cy as i64;
         let y0 = (cy - r).max(0);
         let y1 = (cy + r + 1).min(self.height as i64).max(0);
         let r2 = (r * r) as f32;
-        let mut out = Vec::new();
         for y in y0..y1 {
             let dy = (y - cy) as f32;
             // (dx/2)² + dy² ≤ r²  →  |dx| ≤ 2·sqrt(r² − dy²)
@@ -111,12 +121,10 @@ impl SpatialIndex {
             }
             for &(id, px, py) in self.row_span(y as usize, x0, x1) {
                 if geom::dist(cx as usize, cy as usize, px, py) <= r as f32 {
-                    out.push(id);
+                    f(id, px, py);
                 }
             }
         }
-        out.sort_unstable();
-        out
     }
 }
 

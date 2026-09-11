@@ -1,0 +1,45 @@
+ S05a  Population Charts — prey vs predator over time                                                             16/27  [ ] prev/next   0-9 jump   q quit 
+╔ Population — prey vs predators ══════════════════════════════════════════════ last 240 days, 1 point per day ╗╔ Statistics ═════════════════════════════╗
+║  Prey (voles + hares + deer)                                                                                 ║║─ Current ───────────────────────────────║
+║   400 │                                                                ¡ drought                             ║║ prey         180   ↑ +50% vs 30d ago    ║
+║       │▄▄▄▄▄                                                                                                 ║║ predators      7   ↔ +2% vs 30d ago     ║
+║       │    ▀▀█▄▄                                                                                             ║║ ratio 25.4 prey per predator            ║
+║       │        ▀▀▄                                                                                           ║║                                         ║
+║   300 │           ▀▄                                                                                         ║║─ Prey ──────────────────────────────────║
+║       │             █▄                                                                                       ║║ min     53   Y11 D244                   ║
+║       │              ▀▄                                                                                      ║║ max    361   Y11 D129                   ║
+║       │               ▀█                                                                                     ║║ mean   128   swing 240%                 ║
+║   200 │                 █▄                                                                                   ║║                                         ║
+║       │                  ▀█                                                                              ▄▄█▀║║─ Predators ─────────────────────────────║
+║       │                    ▀▄                                                                       ▄▄▄▀▀▀   ║║ min      4   Y11 D340                   ║
+║       │                     ▀▄▄                                                               ▄▄█▀▀▀         ║║ max    104   Y11 D162                   ║
+║   100 │                        █▄▄                                                       ▄▄▀▀▀▀              ║║ mean    47   swing 214%                 ║
+║       │                           ▀▀▀▄▄▄    ▄▄  ▄                       ▄▄▄▄▄▄▄▄▄▄▄▄▄▀▀▀▀                    ║║                                         ║
+║       │                                 ▀▀▀▀▀ ▀▀▀▀▀▀▀▀▀▀▀▀█▀▀▀▀▀▀▀▀▀▀▀▀▀▀    ▀                               ║║─ Coupling ──────────────────────────────║
+║       │                                                                                                      ║║ predator peak lags prey peak            ║
+║     0 │                                                                                                      ║║ by ~33 days   (Y11 D129 vs Y11 D162)    ║
+║       └───────────────────────────────────────────────────────────────────────────────────────────────────now║║ r = +0.41 same day, +0.95 at lag 60     ║
+║Y11 D124                 Y11 D164      Y11 D204      Y11 D244      Y11 D284      Y11 D324             Y12 D004║║ prey booms feed predators; predators    ║
+║─ Predators (foxes + wolves + lynx) ──────────────────────────────────────────────────────────────────────────║║ overshoot, prey crash, predators starve ║
+║   120 │                                                                ¡ drought                             ║║                                         ║
+║       │                                                                                                      ║║─ Drought ───────────────────────────────║
+║       │             ▄▄▄▄▄▄                                                                                   ║║ ¡ Y11 D274 to Y11 D314                  ║
+║       │           ▄▀▀     ▀█▄                                                                                ║║ vegetation 43% ↓ 21%, water x0.60       ║
+║       │        ▄▄▀          ▀▀▀▄▄                                                                            ║║ prey held at floor; predators ↓ 20 -> 10║
+║    90 │       ▄▀                 ▀▀█▄▄▄                                                                      ║║                                         ║
+║       │     ▄▀                         ▀▀▄▄▄                                                                 ║║─ Map census (sampled) ──────────────────║
+║       │   ▄▀                                ▀█▄                                                              ║║ V Vole  267   H Hare  211   D Deer  109 ║
+║       │  █▀                                    ▀█▄                                                           ║║ F Fox    35   W Wolf   27   L Lynx   17 ║
+║    60 │▄▀                                         ▀█▄                                                        ║║                                         ║
+║       │                                             ▀█▄▄                                                     ║║─ Legend ────────────────────────────────║
+║       │                                                ▀▀▄▄                                                  ║║ ▀▄ prey total   voles+hares+deer        ║
+║       │                                                   ▀█▄▄                                               ║║ ▀▄ predators    foxes+wolves+lynx       ║
+║    30 │                                                       ▀▀▄▄                                           ║║     drought window                      ║
+║       │                                                          ▀▀▀▄▄▄▄▄▄▄                                  ║║ separate y scales: prey per 100,        ║
+║       │                                                                ▀▀▀▀▀▀▀▀▄▄▄▄▄                         ║║ predators per 20                        ║
+║       │                                                                             ▀▀▀▀▀▄▄▄▄█▄▄▄   ▄▄▄  ▄▄▄▄║║                                         ║
+║     0 │                                                                                          ▀▀▀▀▀▀▀▀    ║║─ Keys ──────────────────────────────────║
+║       └───────────────────────────────────────────────────────────────────────────────────────────────────now║║ [+/-] zoom 60/240/720d  [l] log scale   ║
+║Y11 D124                 Y11 D164      Y11 D204      Y11 D244      Y11 D284      Y11 D324             Y12 D004║║                                         ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝╚═════════════════════════════════════════╝
+ [g] next chart  [1-3] pick  [+/-] zoom  [Esc] back                                                                                 chart 1/3  populations 

@@ -8,6 +8,9 @@ use super::app::AppState;
 use crate::widgets::util;
 
 pub mod common;
+pub mod confirm;
+pub mod load_world;
+pub mod s00_title;
 pub mod s01_map;
 pub mod s03_inspector;
 pub mod s04_species;
@@ -28,6 +31,10 @@ pub enum Action {
     Pop,
     Replace(Box<dyn Screen>),
     Quit,
+    /// Replace the whole stack with the S00 title screen (C6 FR3).
+    GoTitle,
+    /// Replace the whole stack with `[Title, WorldMap]` for the named world.
+    EnterWorld { name: String },
 }
 
 pub trait Screen {
@@ -299,12 +306,12 @@ mod tests {
     }
 
     #[test]
-    fn s09_q_quits_when_no_text_focus() {
+    fn s09_q_returns_to_title_when_no_text_focus() {
         let mut app = state();
         let mut s = WorldGen::new();
-        // Default focus is Size (not a text field), so 'q' quits.
+        // Default focus is Size (not a text field), so 'q' returns to the title.
         let a = s.handle_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE), &mut app);
-        assert!(matches!(a, Action::Quit));
+        assert!(matches!(a, Action::Pop));
     }
 
     #[test]

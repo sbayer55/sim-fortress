@@ -11,6 +11,7 @@ pub mod lineage;
 pub mod params;
 pub mod predation;
 pub mod rng;
+pub mod save;
 pub mod spatial;
 pub mod species;
 pub mod stats;
@@ -21,6 +22,7 @@ pub use creatures::{Cause, Creature, CreatureId, Death, DeathTallies, Goal, Muta
 pub use events::{Event, EventKind};
 pub use geom::{cheb, dist};
 pub use params::{Params, PredationParams, Rainfall};
+pub use params::{Difficulty, Preset, PRESETS};
 pub use rng::Rng;
 pub use spatial::SpatialIndex;
 pub use species::{Genome, Kind, SpeciesId, TRAIT_NAMES};
@@ -33,6 +35,7 @@ pub use world::{Cell, RegionRect, Terrain, World};
 
 use creatures::CreatureStore;
 use events::EventRing;
+use serde::{Deserialize, Serialize};
 
 /// A notification the UI should surface (e.g. an extinction modal). C5 FR8.
 #[derive(Clone, Debug, PartialEq)]
@@ -51,7 +54,23 @@ pub struct StepReport {
     pub alerts: Vec<Alert>,
 }
 
+/// Per-system wall-clock timing (C6 FR8/FR9), accumulated over a run.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Profile {
+    pub behavior_ns: u64,
+    pub day_boundary_ns: u64,
+    pub ecology_ns: u64,
+    pub migration_ns: u64,
+    pub spatial_ns: u64,
+    /// Whole step (everything, including the systems above).
+    pub step_ns: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Sim {
+    /// The world seed this sim was generated from (C6 FR1 header; informational
+    /// after generation since the rng state is serialised).
+    pub seed: u64,
     pub params: Params,
     /// Ecology RNG (rain, regrowth, droughts) — unchanged from C2.
     pub rng: Rng,
@@ -63,6 +82,8 @@ pub struct Sim {
     pub events: EventRing,
     pub series: Series,
     pub creatures: CreatureStore,
+    /// Rebuilt on load; never serialised (C6 FR1).
+    #[serde(skip)]
     pub spatial: SpatialIndex,
     pub deaths: DeathTallies,
     pub drought: [bool; 8],
@@ -82,13 +103,23 @@ pub struct Sim {
     /// Retained death record of the last individual, per species.
     pub last_extinct: [Option<ExtinctionRecord>; 6],
     /// Tick until which a (species × 8 + region) pair cannot migrate again.
+    #[serde(with = "serde_big_array::BigArray")]
     pub migration_cooldown_until: [u64; 48],
     /// Consecutive days the migration trigger has held, per (species, region).
+    #[serde(with = "serde_big_array::BigArray")]
     pub migration_days_below: [u32; 48],
     /// Last day a (species, region) count was ≥ `local_extinction_min`.
+    #[serde(with = "serde_big_array::BigArray")]
     pub local_min_day: [Option<u32>; 48],
     /// A local-extinction Note has been emitted for this pair (until repopulated).
+    #[serde(with = "serde_big_array::BigArray")]
     pub local_noted: [bool; 48],
+    /// Per-system timings (C6 FR8); never serialised.
+    #[serde(skip)]
+    pub profile: Profile,
+    /// Whether `--profile` timing is being accumulated.
+    #[serde(skip)]
+    pub profile_enabled: bool,
 }
 
 impl Sim {
@@ -120,6 +151,7 @@ impl Sim {
         let species = SpeciesStats::all(&census(&creatures), 0, params.genetics.drift_every_generations);
 
         Sim {
+            seed,
             params,
             rng,
             creature_rng,
@@ -143,7 +175,15 @@ impl Sim {
             migration_days_below: [0; 48],
             local_min_day: [None; 48],
             local_noted: [false; 48],
+            profile: Profile::default(),
+            profile_enabled: false,
         }
+    }
+
+    /// Rebuild the spatial index from current creature positions (C6 FR1: the
+    /// index is never serialised and must be rebuilt after a load).
+    pub fn rebuild_spatial(&mut self) {
+        self.spatial.rebuild(&self.creatures, &self.world);
     }
 
     /// Births so far today for species index `i` (the live counter).
@@ -165,6 +205,8 @@ impl Sim {
     /// at midnight. Order is fixed for determinism (FR9). Returns the alerts
     /// raised this tick (extinction, C5 FR8).
     pub fn step(&mut self) -> StepReport {
+        let profiling = self.profile_enabled;
+        let step_start = std::time::Instant::now();
         let mut alerts: Vec<Alert> = Vec::new();
         // The initial Spring is announced at tick 0 (Year 1, Day 1, 06:00).
         if self.time.tick == 0 {
@@ -176,6 +218,7 @@ impl Sim {
 
         // Creature behaviour and movement (perception uses the previous tick's
         // spatial snapshot; it is rebuilt below for the next tick and the UI).
+        let t0 = std::time::Instant::now();
         behavior::tick_creatures(
             &mut self.creatures,
             &self.spatial,
@@ -191,6 +234,9 @@ impl Sim {
             &mut self.lineage,
             &mut self.soft_cap_noted,
         );
+        if profiling {
+            self.profile.behavior_ns += t0.elapsed().as_nanos() as u64;
+        }
         if self.soft_cap_noted {
             if !self.soft_cap_counted {
                 self.soft_cap_crossings += 1;
@@ -204,6 +250,7 @@ impl Sim {
 
         // Daily ecology + census at midnight (hour 0).
         if self.time.hour() == 0 {
+            let t0 = std::time::Instant::now();
             behavior::day_boundary(
                 &mut self.creatures,
                 &mut self.world,
@@ -216,6 +263,10 @@ impl Sim {
             let c = census(&self.creatures);
             let day = self.time.day_index() as u32;
             stats::update_species_daily(&mut self.species, &c, &self.deaths, day, self.params.genetics.drift_every_generations);
+            if profiling {
+                self.profile.day_boundary_ns += t0.elapsed().as_nanos() as u64;
+            }
+            let t0 = std::time::Instant::now();
             ecology::daily_update(
                 &mut self.world,
                 &mut self.rng,
@@ -229,12 +280,16 @@ impl Sim {
                 &c,
                 &self.deaths,
             );
+            if profiling {
+                self.profile.ecology_ns += t0.elapsed().as_nanos() as u64;
+            }
             self.deaths = self.deaths.next_day();
             if day.is_multiple_of(7) {
                 self.lineage.prune(&c.max_generation, self.params.genetics.lineage_keep_generations, &self.creatures);
             }
 
             // C5 FR7: migration evaluation, then FR8 extinction detection.
+            let t0 = std::time::Instant::now();
             behavior::migration_daily(
                 &mut self.creatures,
                 &self.world,
@@ -246,9 +301,20 @@ impl Sim {
                 &mut self.migration_days_below,
             );
             self.detect_extinctions(&mut alerts);
+            if profiling {
+                self.profile.migration_ns += t0.elapsed().as_nanos() as u64;
+            }
         }
 
+        let t0 = std::time::Instant::now();
         self.spatial.rebuild(&self.creatures, &self.world);
+        if profiling {
+            self.profile.spatial_ns += t0.elapsed().as_nanos() as u64;
+        }
+
+        if profiling {
+            self.profile.step_ns += step_start.elapsed().as_nanos() as u64;
+        }
 
         StepReport { alerts }
     }

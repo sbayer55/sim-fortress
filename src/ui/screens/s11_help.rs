@@ -222,9 +222,11 @@ fn keys_column(f: &mut Frame, col: Rect) {
             ("y", "ecology & regions"),
             ("e", "event log"),
             ("l", "lineage tree"),
-            ("w", "world generation"),
+            ("F5", "save world"),
+            ("F9", "quick-load"),
             ("?", "this help"),
-            ("q", "world generation"),
+            ("q", "quit to title"),
+            ("w", "quit to title"),
         ]),
     ];
     for (title, keys) in groups {

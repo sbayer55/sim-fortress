@@ -7,6 +7,23 @@ Make Sim Fortress a complete, shippable loop: start from a title screen, save an
 worlds, tune parameters without recompiling, run headless experiments at scale, and meet
 the performance budget. Remove the prototype scaffolding.
 
+> **Status note (implementation).** Everything in this chunk is implemented except the
+> two open bands inherited from C5: the **balance pass** (FR9) and the **performance
+> budget** (FR9). Save/load round-trips byte-for-byte, the title flow, Load World list,
+> confirm and Options modals, `--params` overlays, `--dump-params`, presets, `--seeds` /
+> `--summary` / `--profile` headless tooling, `scripts/sweep.sh`, and the C6 cleanup are
+> all in place and tested. `tests/predators.rs::{six_species_five_years, oscillation_lag,
+> hunt_success_band}` remain `#[ignore]`d. A first optimisation pass (the predator-first
+> threat query) cut headless time from ≈ 2.67 s to ≈ 1.69 s per 1 000 ticks at ~1 000
+> creatures (≈ 590 ticks/s), bit-for-bit deterministic; see
+> [docs/PERFORMANCE.md](../PERFORMANCE.md). **Balance diagnosis:** per-year death-cause
+> analysis (`examples/balance_diag.rs`) shows foxes over-hunt voles (≈ 550 predated in
+> year 1) → fox population explodes → hares/deer collapse → predators starve; ~25
+> parameter sweeps (kill base, detect threshold, litter sizes, cooldowns, initial counts,
+> regrowth) do not stabilise it. The model has no density-dependent predator regulation,
+> so this is a modelling change (e.g. predator territoriality or a prey-refuge functional
+> response), not a parameter tweak.
+
 ## Checkpoint (what the user sees)
 Title screen → New World or Load World → play → save with a key → quit → reload and
 continue from the same tick with identical subsequent behaviour. A `params.toml` in the

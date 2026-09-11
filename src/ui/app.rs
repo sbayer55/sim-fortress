@@ -2,6 +2,7 @@
 
 use std::cell::Cell;
 use std::io;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
@@ -10,19 +11,36 @@ use ratatui::widgets::Paragraph;
 use ratatui::{DefaultTerminal, Frame};
 
 use crate::sim::creatures::CreatureId;
-use crate::sim::{Alert, Params, Sim};
+use crate::sim::save;
+use crate::sim::{Alert, EventKind, Params, Sim};
 use crate::theme;
+use crate::ui::config;
 
+use super::screens::confirm::ConfirmModal;
+use super::screens::s00_title::Title;
+use super::screens::s01_map::WorldMap;
 use super::screens::s04_species::SpeciesBrowser;
 use super::screens::s05_charts::Charts;
 use super::screens::s06_ecology::Ecology;
 use super::screens::s07_log::EventLog;
 use super::screens::s08_lineage::LineageScreen;
-use super::screens::s09_worldgen::WorldGen;
 use super::screens::s10_controls::Controls;
 use super::screens::s11_help::Help;
 use super::screens::s12_alert::AlertModal;
 use super::screens::{self, Action, Stack, TickAccumulator};
+
+/// A pending confirm-modal request (C6 FR4).
+pub struct ConfirmRequest {
+    pub question: String,
+    pub yes: ConfirmYes,
+}
+
+pub enum ConfirmYes {
+    QuickLoad,
+    DeleteSave(PathBuf),
+    QuitApp,
+    ToTitle,
+}
 
 pub struct AppState {
     pub sim: Option<Sim>,
@@ -46,6 +64,18 @@ pub struct AppState {
     pub alert_queue: Vec<Alert>,
     /// The alert currently displayed as the top S12 modal.
     pub alert_shown: Option<Alert>,
+    /// The current world's name (C6 FR1; used for save filenames and F9).
+    pub world_name: Option<String>,
+    /// Directory saves are written to / read from (C6 FR1).
+    pub saves_dir: PathBuf,
+    /// Tick of the last manual or automatic save (C6 FR1 dirty tracking).
+    pub last_saved_tick: Option<u64>,
+    /// Day index at which the last autosave fired (one autosave per day).
+    pub last_autosave_day: Option<u64>,
+    /// A pending confirm modal request (C6 FR4).
+    pub confirm: Option<ConfirmRequest>,
+    /// `--params` was passed on the command line (C6 FR6: ignored on load).
+    pub cli_params_used: bool,
 }
 
 impl AppState {
@@ -63,7 +93,94 @@ impl AppState {
             follow_death_tick: None,
             alert_queue: Vec::new(),
             alert_shown: None,
+            world_name: None,
+            saves_dir: PathBuf::from("saves"),
+            last_saved_tick: None,
+            last_autosave_day: None,
+            confirm: None,
+            cli_params_used: false,
         }
+    }
+
+    /// Whether the current world has unsaved changes (C6 FR1).
+    pub fn dirty(&self) -> bool {
+        match &self.sim {
+            Some(sim) => self.last_saved_tick != Some(sim.time.tick),
+            None => false,
+        }
+    }
+
+    /// Manual `F5` save. Returns the path on success.
+    pub fn save_now(&mut self) -> std::io::Result<Option<PathBuf>> {
+        let Some(sim) = &self.sim else { return Ok(None) };
+        let Some(name) = self.world_name.clone() else { return Ok(None) };
+        let path = save::save(sim, &name, &self.saves_dir).map_err(io::Error::other)?;
+        self.last_saved_tick = Some(sim.time.tick);
+        Ok(Some(path))
+    }
+
+    /// Autosave (overwrites `<slug>-autosave.simf`).
+    pub fn autosave_now(&mut self) -> std::io::Result<Option<PathBuf>> {
+        let Some(sim) = &self.sim else { return Ok(None) };
+        let Some(name) = self.world_name.clone() else { return Ok(None) };
+        let path = save::autosave(sim, &name, &self.saves_dir).map_err(io::Error::other)?;
+        self.last_saved_tick = Some(sim.time.tick);
+        Ok(Some(path))
+    }
+
+    /// `F9` quick-load: the newest save for the current world name (C6 FR1).
+    pub fn quick_load(&mut self) {
+        let Some(name) = self.world_name.clone() else { return };
+        let saves = save::list_saves(&self.saves_dir);
+        let Some(entry) = saves.into_iter().find(|e| e.header.world_name == name) else {
+            eprintln!("no save for \"{name}\"");
+            return;
+        };
+        match save::load(&entry.path) {
+            Ok(loaded) => {
+                self.sim = Some(loaded.sim);
+                self.params = self.sim.as_ref().unwrap().params.clone();
+                if let Some(ui) = config::load_ui() {
+                    self.params.ui = ui;
+                }
+                self.last_saved_tick = Some(self.sim.as_ref().unwrap().time.tick);
+                self.viewport_origin = (0, 0);
+                self.alert_queue.clear();
+                self.alert_shown = None;
+                self.note_params_ignored();
+            }
+            Err(e) => eprintln!("quick-load error: {e}"),
+        }
+    }
+
+    /// Fire an autosave at a day boundary when `ui.autosave_days` is set.
+    pub fn autosave_if_due(&mut self) {
+        let Some(sim) = &self.sim else { return };
+        let day = sim.time.day_index();
+        if save::autosave_due(day, self.params.ui.autosave_days) && self.last_autosave_day != Some(day) {
+            self.last_autosave_day = Some(day);
+            let _ = self.autosave_now();
+        }
+    }
+
+    /// C6 FR6: when a save is loaded and `--params` was passed on the CLI, the
+    /// saved parameters win — log a `Note` event saying so.
+    pub fn note_params_ignored(&mut self) {
+        if !self.cli_params_used {
+            return;
+        }
+        let Some(sim) = self.sim.as_mut() else { return };
+        sim.events.push(crate::sim::Event {
+            year: sim.time.year(),
+            day: sim.time.day_of_year(),
+            hour: sim.time.hour(),
+            kind: EventKind::Note,
+            species: None,
+            subject: None,
+            text: "--params ignored: the saved parameters win".to_string(),
+            pos: None,
+            detail: String::new(),
+        });
     }
 
     /// Largest valid viewport origin for the current world and last-drawn viewport.
@@ -238,9 +355,46 @@ impl App {
                     None => Action::None,
                 }
             }
-            // `q`/`w` return to world generation (title flow arrives in C6).
-            KeyCode::Char('q') | KeyCode::Char('w') => Action::Push(Box::new(WorldGen::new())),
+            // `q`/`w` return to the title screen (confirm when dirty), C6 FR3.
+            KeyCode::Char('q') | KeyCode::Char('w') => self.quit_to_title(),
+            KeyCode::F(5) => {
+                match self.state.save_now() {
+                    Ok(Some(path)) => eprintln!("saved {}", path.display()),
+                    Ok(None) => {}
+                    Err(e) => eprintln!("save error: {e}"),
+                }
+                Action::None
+            }
+            KeyCode::F(9) => self.quick_load_confirm(),
             _ => Action::None,
+        }
+    }
+
+    fn quick_load_confirm(&mut self) -> Action {
+        if self.state.sim.is_some() && self.state.world_name.is_some() {
+            self.state.confirm = Some(ConfirmRequest {
+                question: "Quick-load the newest save for this world?".into(),
+                yes: ConfirmYes::QuickLoad,
+            });
+            Action::Push(Box::new(ConfirmModal::new()))
+        } else {
+            Action::None
+        }
+    }
+
+    fn quit_to_title(&mut self) -> Action {
+        if self.state.sim.is_some() {
+            if self.state.dirty() {
+                self.state.confirm = Some(ConfirmRequest {
+                    question: "World has unsaved changes. Return to title?".into(),
+                    yes: ConfirmYes::ToTitle,
+                });
+                Action::Push(Box::new(ConfirmModal::new()))
+            } else {
+                Action::GoTitle
+            }
+        } else {
+            Action::Quit
         }
     }
 
@@ -270,6 +424,17 @@ impl App {
                 false
             }
             Action::Quit => true,
+            Action::GoTitle => {
+                self.stack.screens.clear();
+                self.stack.push(Box::new(Title::new()));
+                false
+            }
+            Action::EnterWorld { name } => {
+                self.stack.screens.clear();
+                self.stack.push(Box::new(Title::new()));
+                self.stack.push(Box::new(WorldMap::new(name)));
+                false
+            }
         }
     }
 
@@ -280,9 +445,17 @@ impl App {
     }
 }
 
-pub fn run(terminal: &mut DefaultTerminal, params: Params) -> io::Result<()> {
-    let mut app = App::new(params.clone());
-    app.stack.push(Box::new(WorldGen::from_params(params)));
+pub fn run(terminal: &mut DefaultTerminal, params: Params, saves_dir: Option<&Path>, cli_params_used: bool) -> io::Result<()> {
+    let mut params = params;
+    if let Some(ui) = config::load_ui() {
+        params.ui = ui;
+    }
+    let mut app = App::new(params);
+    app.state.cli_params_used = cli_params_used;
+    if let Some(dir) = saves_dir {
+        app.state.saves_dir = dir.to_path_buf();
+    }
+    app.stack.push(Box::new(Title::new()));
 
     let mut acc = TickAccumulator::new();
     let mut last_frame = Instant::now();
@@ -314,13 +487,14 @@ pub fn run(terminal: &mut DefaultTerminal, params: Params) -> io::Result<()> {
         last_frame = now;
 
         let mut ticks_ran = 0u64;
-        if !app.state.paused {
+        if !app.state.paused && app.state.sim.is_some() {
             let tps = app.state.ticks_per_sec();
             ticks_ran = acc.add(elapsed, tps).min(200);
             let alerts = app.state.step_ticks(ticks_ran);
             app.state.enqueue_alerts(alerts);
         }
         app.state.handle_follow();
+        app.state.autosave_if_due();
 
         // Raise the next queued extinction alert, if one is pending and none is shown.
         if let Some(alert) = app.state.take_next_alert() {

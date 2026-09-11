@@ -1,0 +1,45 @@
+ S09a  World Generation — new world form                                                                          23/27  [ ] prev/next   0-9 jump   q quit 
+╔ New World ══════════════════════════════════════ field 3 of 17 ╗╔ Preview ════════════════════════════════════════════════ seed 0xC0FFEE, 150x40 at 1:2 ╗
+║─ World ────────────────────────────────────────────────────────║║     ┌───────────────────────────────────────────────────────────────────────────┐     ║
+║ World name          [ The Valley of Sunfall  ] text            ║║     │▲▲▲▲▲▲"▲"♣♣♣♣"~♣""""",""··♣♠♠·~~"""""""""""",,,,,,,,,,,,"""♣♠♠♠♠♣♣""","""""│     ║
+║ Seed                [ 0xC0FFEE               ] hex/decimal     ║║     │▲▲▲▲▲▲"""""""·~~♣""""""""·~·♣♣~~""""""""""""""""",,,,,"",,""♠♠♠♠♣♣""","""""│     ║
+║ Size                ◄ 150 x 40               ► w x h cells     ║║     │▲▲▲▲▲▲,,""♣~~~~~·"""""""♣♠~≈≈~♣"""""""""··""""",,,,"""~≈~·"·♣♠♠♠♠♣"""",""""│     ║
+║ Water %             ◄ 20                     ► lakes + rivers  ║║     │▲▲▲▲▲..Northmarch♣~""""""♣·≈≈~·♠Ashen Ridge♣"""""""""~~~~~~~~~~·♣♣"""""",""│     ║
+║ Forest %            ◄ 15                     ► predator cover  ║║     │▲▲▲,,.,,""~~~~··♣♣♣♣""""""♠·~~~♠♠♠♠♠~~~♠♠♠♠"""""""♣♣"♣♠~Sunfall Coast""",,,│     ║
+║ Rock %              ◄ 5                      ► impassable      ║║     │,▲..,,≈"""~≈≈~~~♣♣""""""""♣♠·~~♠♠♠♠♠♠♠··♠♠♠♣♣♣♣"""""♣♠~≈≈≈≈≈≈≈≈≈≈≈≈~~·",,,.│     ║
+║ Rainfall            ◄ normal                 ► dry/normal/wet  ║║     │▲▲,..,,"≈"·≈≈≈~~·♣≈≈""""""♣♣♠♠♠♠♠♠♠·♠♠♠♠♠♠♠♠♣♣""""♣·~~≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈·,..│     ║
+║ Season length       ◄ 90 days                ► 30 - 180 days   ║║     │▲▲▲,·~,,""≈~≈~~≈~♣"≈"≈""""~·♣♠♠♠♠♠♠♠♠♠♠♠♠♠♠♣♣♣"♣♣♣~~~≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈~·│     ║
+║                                                                ║║     │▲▲▲,,"""""""≈≈♣♣♣~♣"≈""≈"""~"~♣♠♠♠≈♠♠♠♠♠♠♠♠♠♣"♣""~~≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈~│     ║
+║─ Initial species ──────────────────────────────────────────────║║     │▲▲,"""""""♣♣♠♠♠♠♣♣♣~≈~,""≈"""""♣♣♠♠♠~♠♠♠♠♠~♣""""~≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈≈~~"│     ║
+║   species    kind       count   share of starting population   ║║     │▲▲"""Reedwater Vale"",,,,,,~~,The Long Meadow"♣♣·≈≈≈≈≈≈≈≈≈≈~~~≈≈≈≈~~·"""♣""│     ║
+║ V Voles     prey     ◄  240 ►   [████████░░░░░░░░░░░░]  42%    ║║     │▲▲""♣♣♣♣♣♠♠♠♠♠♠♠♣"""",,,,,,,,,,,,,"≈≈""""""≈"♣≈♣♣·≈~≈····≈≈~~··""""""""""""│     ║
+║ H Hares     prey     ◄  180 ►   [██████░░░░░░░░░░░░░░]  31%    ║║     │▲♣♣♣♣♣♣♣♣♠♠♠♠♠♠♣♣♣""",,.,,,,,▲▲,,,,,,,,,,,,≈≈♣♠♠≈·~≈""≈,,~≈≈≈≈≈≈≈≈"""""""""│     ║
+║ D Deer      prey     ◄   90 ►   [███░░░░░░░░░░░░░░░░░]  16%    ║║     │♣♣♣♣♣▲▲▲♣♣♣♠♠♠♠♠♣♣"",,...,,,,,,,▲▲,,,.,,,,,,""♣~~·≈≈""",≈·≈≈≈≈≈≈≈≈~≈""""··"│     ║
+║ F Foxes     predator ◄   30 ►   [█░░░░░░░░░░░░░░░░░░░]   5%    ║║     │♣♣♣♣♣♣▲▲♣♣♣♠♠♠♠♠♣♣"",,...,,,,,,,,,,,,,,,,,,,"""♣♠♠♠♣♣"""·~Lakeshore""""""·♣│     ║
+║ W Wolves    predator ◄   24 ►   [█░░░░░░░░░░░░░░░░░░░]   4%    ║║     │♣♣♣""♣♣▲♣♣♠♠♠··♠♣♣"",,,,,,,,"▲▲"""♣♣♣♣""""""""♣♠♠♠♠♠♠♣♣"~≈≈≈≈≈≈≈≈~≈·"""·""♣│     ║
+║ L Lynxes    predator ◄   12 ►   [░░░░░░░░░░░░░░░░░░░░]   2%    ║║     │"""",""▲▲♣♠♠♠~~♠♣"""""",,,""▲▲▲▲▲♣♣♠♠♣♣""♣""""♣♣♠♠♠♠♠♠♣♣""~≈≈≈~·"",,,""♣♣~~│     ║
+║   total 576   prey 510   predators 66   ratio 7.7:1            ║║     │....Southern Thicket""""""""♣♣▲▲▲Fenlands♠♠·········♠♠♠♣""""""""""""""""♣""│     ║
+║                                                                ║║     │......,▲▲▲♣♠♠♣♠♠♠♠♣♣♣♣♣"""♣♣♣♣♠♠♣♣♣♠♣♠♠♠♠♠♠♠♠♠♠♠♠♠♠♠♠♠♠♣♣""""""""""""""♣♣♣"│     ║
+║─ Evolution ────────────────────────────────────────────────────║║     │.....,,,▲""♣♣"""♣♣♣♣♠♠♠♠♠♠♠♠♠♠♠♠♠♣♣♣♣♣♠♠♠♠♣♣♣♣♣♣♣♠♠♠♠♠♠▲▲▲▲""""",""♣♣""♣♠♠♣│     ║
+║ Mutation rate       ◄ 0.04                   ► per trait/birth ║║     └───────────────────────────────────────────────────────────────────────────┘     ║
+║ Mutation strength   ◄ 0.06                   ► mutation sd     ║║                                                                                       ║
+║ Predation difficulty◄ normal                 ► easy/norm/hard  ║║─ Terrain summary ─────────────────────────────────────────────────────────────────────║
+║ Regrowth rate       ◄ 1.0                    ► veg multiplier  ║║ ≈ water       [██░░░░░░░░░░]  20% 1200     · sand / dirt [█░░░░░░░░░░░]   6%  362     ║
+║                                                                ║║ " grassland   [█████░░░░░░░]  40% 2389     ♣ meadow      [██░░░░░░░░░░]  14%  849     ║
+║ ¶ Higher mutation strength speeds adaptation but               ║║ ♠ forest      [██░░░░░░░░░░]  15%  900     ▲ rock        [█░░░░░░░░░░░]   5%  300     ║
+║   raises the chance of unviable offspring.                     ║║ land 80%  walkable 4500 cells  mean vegetation 0.42  regions 8  dens 9  seeds 14      ║
+║                                                                ║║                                                                                       ║
+║─ Presets ──────────────────────────────────────────────────────║║─ Carrying capacity estimate ──────────────────────────────────────────────────────────║
+║ ♦ Balanced        default values, gentle seasons               ║║ forage cells 4138  → supports about 1448 prey and 181 predators at normal rainfall    ║
+║ · Harsh winter    180-day seasons, regrowth 0.6                ║║ starting 510 prey / 66 predators: within capacity  (35% / 36% of capacity)            ║
+║ · Lush            forest 30%, regrowth 1.4, predation hard     ║║                                                                                       ║
+║ · Archipelago     water 55%, islands isolate lineages          ║║ ! Sunfall Coast has little forage; lynx placed there tend to starve early.            ║
+║ · Fast evolution  mutation rate 0.10, strength 0.12            ║║                                                                                       ║
+║                                                                ║║                                                                                       ║
+║ ► Generate builds the world from the seed above; the           ║║                                                                                       ║
+║   preview updates as seed or terrain sliders change.           ║║                                                                                       ║
+║                                                                ║║                                                                                       ║
+║                                                                ║║                                                                                       ║
+║    [ Generate ]   [ Randomize seed ]   [ Back ]                ║║                                                                                       ║
+╚════════════════════════════════════════════════════════════════╝╚═══════════════════════════════════════════════════════════════════════════════════════╝
+ [Tab] next field  [←→] adjust  [Enter] generate  [Esc] back                                                                seed 0xC0FFEE  preview is live 

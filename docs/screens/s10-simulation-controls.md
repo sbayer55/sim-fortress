@@ -2,6 +2,8 @@
 
 Back to the [screen overview](README.md).
 
+Live since: C1
+
 ## Purpose
 A small modal where the player sees and changes how time runs: whether the simulation is
 paused, how fast it advances, how large a manual step is, and a few automatic-pause and

@@ -25,6 +25,22 @@ impl Terrain {
         matches!(self, Terrain::DeepWater | Terrain::ShallowWater)
     }
 
+    /// Map a serialised terrain code (`terrain as u8`, 0..=8) back to `Terrain`
+    /// (C6 FR1 title-screen strips). Codes outside the range fall back to Rock.
+    pub fn from_code(code: u8) -> Terrain {
+        match code {
+            0 => Terrain::DeepWater,
+            1 => Terrain::ShallowWater,
+            2 => Terrain::Sand,
+            3 => Terrain::Dirt,
+            4 => Terrain::GrassSparse,
+            5 => Terrain::Grass,
+            6 => Terrain::GrassDense,
+            7 => Terrain::Forest,
+            _ => Terrain::Rock,
+        }
+    }
+
     pub fn walkable(self) -> bool {
         !matches!(self, Terrain::DeepWater | Terrain::Rock)
     }

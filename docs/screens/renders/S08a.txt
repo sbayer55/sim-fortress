@@ -1,0 +1,45 @@
+ S08a  Lineage / Family Tree — Ashfang w#042                                                                      22/27  [ ] prev/next   0-9 jump   q quit 
+╔ Lineage of Fenrir w#003 ══════════════════════════════════════════════════════════════ 19 wolves, 9 generations ╗╔ Focused wolf ════════════════════════╗
+║ ancestry (older on the left)                  gen      years     mutations                                      ║║ W Ashfang  w#042  alive              ║
+║                                                                                                                 ║║                                      ║
+║  Fenrir w#003                                  g17     Y1-Y5    x                                               ║║ generation   23                      ║
+║ ├── Rime w#006                                 g18     Y2-Y6    x § Size +0.11                                  ║║ born         Year 8  (age 4 years)   ║
+║ │  ├── Greymaw w#017                           g20     Y4-Y9    x § Aggression +0.09  ♦ notable                 ║║ died         still living            ║
+║ │  │  ├── Ashfang w#042 ◄ you are here         g23     Y8-      ♥ § Camouflage -0.07  ♦ notable                 ║║ father       Greymaw w#017           ║
+║ │  │  │  ├── Cinder w#051                      g24     Y9-      ♥ § Speed +0.04                                 ║║ mother       Sable w#021             ║
+║ │  │  │  │  ├── Vex w#071                      g25     Y11-     ♥                                               ║║ grandfather  Rime w#006              ║
+║ │  │  │  │  └── Snarl w#072                    g25     Y11-     ♥ § Aggression +0.05                            ║║ children     4  (3 living)           ║
+║ │  │  │  ├── Ember w#053                       g24     Y9-      ♥                                               ║║ descendants  10  (9 living)          ║
+║ │  │  │  │  └── Brindle w#080                  g25     Y12-     ♥                                               ║║ kills        61                      ║
+║ │  │  │  ├── Rook w#058                        g24     Y10-     ♥ § Metabolism -0.06  ♦ notable                 ║║                                      ║
+║ │  │  │  │  ├── Dusk w#075                     g25     Y12-     ♥                                               ║║─ Mutations ──────────────────────────║
+║ │  │  │  │  ├── Talon w#076                    g25     Y12-     ♥ § Sense +0.08  ♦ notable                      ║║ § Camouflage -0.07 at birth (gen 23) ║
+║ │  │  │  │  └── Gloam w#079                    g25     Y12-     ♥                                               ║║ inherited: Aggression +0.09 (Greymaw)║
+║ │  │  │  └── Shade w#060                       g24     Y10-Y11  x                                               ║║            Size +0.11 (Rime)         ║
+║ │  │  └── Flint w#044                          g23     Y8-Y11   x                                               ║║                                      ║
+║ │  └── Scorch w#019                            g20     Y4-Y8    x                                               ║║─ Trait inheritance ──────────────────║
+║ │     └── Umber w#024                          g21     Y5-      ♥                                               ║║            grand parent  self  kids  ║
+║ └── Howl w#009                                 g18     Y2-Y7    x                                               ║║ Speed      0.74  0.78  0.81  0.83    ║
+║    └── Sable w#021                             g21     Y5-Y10   x § Sense +0.05                                 ║║ +0.09      [░░░░░░░░░░░░░░░░░▒▒█░░░░]║
+║                                                                                                                 ║║ Aggression 0.77  0.86  0.91  0.94    ║
+║─ By generation ─────────────────────────────────────────────────────────────────────────────────────────────────║║ +0.17      [░░░░░░░░░░░░░░░░░░▒▒▒█▒░]║
+║  gen   wolves  alive  mutations  members                                                                        ║║ Sense      0.69  0.73  0.77  0.82    ║
+║  g17   ■          0              Fenrir                                                                         ║║ +0.13      [░░░░░░░░░░░░░░░░▒▒█▒░░░░]║
+║  g18   ■■         0    §         Rime, Howl                                                                     ║║ kids = mean of living children       ║
+║  g19              0                                                                                             ║║                                      ║
+║  g20   ■■         0    §         Greymaw, Scorch                                                                ║║─ Children ───────────────────────────║
+║  g21   ■■         1    §         Sable, Umber                                                                   ║║ ♥ Cinder  w#051  g24 Y9-  +kids      ║
+║  g22              0                                                                                             ║║ ♥ Ember   w#053  g24 Y9-  +kids      ║
+║  g23   ■■         1    §         Ashfang, Flint                                                                 ║║ ♥ Rook    w#058  g24 Y10-  +kids     ║
+║  g24   ■■■■       3    §§        Cinder, Ember, Rook, Shade                                                     ║║ x Shade   w#060  g24 Y10-Y11         ║
+║  g25   ■■■■■■     6    §§        Vex, Snarl, Dusk, Talon, Gloam, Brindle                                        ║║                                      ║
+║                                                                                                                 ║║─ Direct line ────────────────────────║
+║                                                                                                                 ║║   Fenrir w#003  g17                  ║
+║─ Legend ────────────────────────────────────────────────────────────────────────────────────────────────────────║║  → Rime w#006  g18                   ║
+║  focus    notable   living   dead   § mutation at birth   ♥ alive  x dead                                       ║║   → Greymaw w#017  g20               ║
+║                                                                                                                 ║║    → Ashfang w#042  g23              ║
+║ 19 in tree: 11 alive, 8 dead   4 notable   8 mutations recorded   longest branch: Fenrir → Talon (8 generations)║║                                      ║
+║ mates are not shown; Sable w#021 (Howl's daughter) is Ashfang's mother.                                         ║║─ Siblings ───────────────────────────║
+║                                                                                                                 ║║ x Flint   w#044  g23 Y8-Y11          ║
+╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝╚══════════════════════════════════════╝
+ [↑↓←→] navigate  [Enter] inspect  [Esc] back                                                                                Ashfang w#042  8 of 19 wolves 

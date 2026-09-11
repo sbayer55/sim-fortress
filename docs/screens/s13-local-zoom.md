@@ -2,6 +2,8 @@
 
 Back to the [screen overview](README.md).
 
+Live since: C3
+
 ## Purpose
 At normal scale a world cell is one character and a hare standing on a den next to a carcass
 is unreadable. The local zoom redraws the neighbourhood of the look cursor with every world

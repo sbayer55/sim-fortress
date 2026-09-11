@@ -1,0 +1,45 @@
+ S07b  Event Log — deaths & extinctions with detail                                                               21/27  [ ] prev/next   0-9 jump   q quit 
+╔ Event Log — deaths & extinctions ════════════════════════════════════════════ 21 events, 1 today ╗╔ Event detail ═══════════════════════════════════════╗
+║ filter:  * all   ♥ births   deaths   § mutations   → migrations   extinctions   ¡ droughts       ║║ x predation   Year 12, Day 4, 13:00                 ║
+║ when           kind          sp  event                                                           ║║ Thistle d#133 was killed by Ashfang w#042 in the    ║
+║►Y12 D004 13:00  x predation  D   Thistle d#133 was killed by Ashfang w#042 in the Fenlands      █║║ Fenlands                                            ║
+║ Y12 D002 12:00  x starved    H   Sorrel h#074 starved in Northmarch                             █║║                                                     ║
+║ Y11 D360 15:00  x starved    H   Sorrel h#058 starved in The Long Meadow                        █║║─ Detail ────────────────────────────────────────────║
+║ Y11 D360 11:00  x starved    D   Yarrow d#080 starved in Reedwater Vale                         █║║ Chase lasted 41 ticks over 17 cells. Ashfang's 61st ║
+║ Y11 D360 04:00  x predation  H   Rowan h#045 was killed by a lynx near Reedwater Vale           █║║ kill.                                               ║
+║ Y11 D358 03:00  x starved    V   Vetch v#005 starved in Southern Thicket                        █║║                                                     ║
+║ Y11 D358 00:00  x starved    V   Yarrow v#022 starved in Southern Thicket                       █║║─ Who ───────────────────────────────────────────────║
+║ Y11 D357 20:00  x starved    F   Sable f#099 starved in The Long Meadow                         █║║ D Deer  prey, eats grass, leaves                    ║
+║ Y11 D352 16:00  x predation  V   Yarrow v#022 was killed by a wolf near Southern Thicket        █║║   109 alive today, 8 born / 3 died                  ║
+║ Y11 D352 09:00  x starved    F   Greymaw f#101 starved in Reedwater Vale                        █║║   Thistle d#133  gen 31  age 866d  dead: killed by A║
+║ Y11 D352 05:00  x predation  V   Nettle v#037 was killed by a lynx near Northmarch              █║║                                                     ║
+║ Y11 D350 20:00  x predation  V   Sedge v#018 was killed by a fox near Northmarch                █║║─ Where ─────────────────────────────────────────────║
+║ Y11 D348 15:00  x old age    H   Moss h#077 died of old age at 570 days                         █║║ (80, 33)  Fenlands  meadow  veg 0.70                ║
+║ Y11 D347 23:00  x predation  D   Cress d#085 was killed by a wolf near Reedwater Vale           █║║ ┌─────────────────────────┐                         ║
+║ Y11 D347 20:00  x predation  V   Birch v#041 was killed by a fox near Southern Thicket          █║║ │"""""""""""d""""""""""V""│ nearby (8):             ║
+║ Y11 D347 08:00  x old age    V   Sorrel v#040 died of old age at 420 days                       █║║ │♣♣♣♣♣♣♣""""""""""""""""♣♣│ V Willow v#011          ║
+║ Y11 D345 05:00  x starved    V   Cress v#030 starved in Sunfall Coast                           █║║ │♣♣♠♠♠♠♣♣""""""""""""""""♣│ v Moss v#015            ║
+║ Y11 D343 20:00  x predation  F   Rime f#102 was killed by a wolf near Fenlands                  █║║ │♣♣♠♠♠♠♣♣♣""╬"╬♣♣"""""L"♣♣│ V Willow v#026          ║
+║ Y11 D342 17:00  x starved    L   Scorch l#116 starved in Lakeshore                              █║║ │♣♣♣♠♠♠♣♣♣♣♣♣%♣♣♣~~~~·····│ H Vetch h#049           ║
+║ Y11 D341 00:00  x old age    V   Willow v#026 died of old age at 403 days                       █║║ │♣♣♣♣♣♣♣♣♣♠♠╬♠╬♠♠♠♠·······│ h Fern h#062            ║
+║ Y11 D338 12:00  ‼ EXTINCTION L   The Lynx line of Sunfall Coast is extinct (last: Gloam l#088)  █║║ │♣♣♣♣♣♣♠♠♠♠♠♠♠♠♠♠♠♠♠♠♠♠··♠│ d Burdock d#087         ║
+║                                                                                                 █║║ │♣♣♠♣♣♣♠♠♠♠♠♠♠h♠♠♠H♠F♠♠♠♠♠│ F Rime f#098            ║
+║                                                                                                 █║║ │♣♠♣♣♣♣♣♣♠♠♠♠V♠♠♠♠♠♠♠♠♠♠♠Ω│ L Talon l#117           ║
+║                                                                                                 █║║ └─────────────────────────┘ X = event cell          ║
+║                                                                                                 █║║                                                     ║
+║                                                                                                 █║║ [Enter] jump to map   [i] inspect creature          ║
+║                                                                                                 █║║ [l] lineage       [s] species screen                ║
+║                                                                                                 █║║                                                     ║
+║                                                                                                 █║║─ Same species, recent ──────────────────────────────║
+║                                                                                                 █║║ D360 x Yarrow d#080 starved in Reedwater Vale       ║
+║                                                                                                 █║║ D359 ¡ Drought deepens in Ashen Ridge; 3 water cel~ ║
+║                                                                                                 █║║ D357 ♥ Burdock d#086 gave birth to 4 young in The ~ ║
+║                                                                                                 █║║ D356 ♥ Yarrow d#080 gave birth to 3 young in Reedw~ ║
+║                                                                                                 █║║ D354 ♥ Nettle d#082 gave birth to 1 young in Reedw~ ║
+║                                                                                                 █║║ D351 ¶ Dill d#084 discovered a new den site in Sun~ ║
+║                                                                                                 █║║ D347 x Cress d#085 was killed by a wolf near Reedw~ ║
+║                                                                                                 █║║ D343 ♥ Burdock d#087 gave birth to 4 young in Fenl~ ║
+║                                                                                                 █║║ D342 ♥ Dill d#084 gave birth to 3 young in Sunfall~ ║
+║                                                                                                 █║║ D342 ♥ Rush d#081 gave birth to 3 young in Reedwat~ ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════╝╚═════════════════════════════════════════════════════╝
+ [↑↓] select  [f] filter  [Enter] jump  [Esc] back                                                                         Year 12, Day 4 of Autumn  14:00 

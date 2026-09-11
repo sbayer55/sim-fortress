@@ -1,0 +1,45 @@
+ S06a  Resources / Ecology — default                                                                              19/27  [ ] prev/next   0-9 jump   q quit 
+╔ Totals ════════════════════════════════════════════════════ sparklines = last 240 days ╗╔ Season ═══════════════════════════════════════════════════════╗
+║─ Now ──────────────────────────────────────────────────────────────────────────────────║║ ♫ Autumn   day 4 of 90   year 12                              ║
+║ resource     level                      value   trend                                  ║║ progress [█░░░░░░░░░░░░░░░░░░░░░░░░░░░]    4%                 ║
+║ vegetation  [████████░░░░░░░░░░]     44%  ▓▓█████▓▓▒▒▒▒▒▒▒▓▓█████▓▓▓▒▒░░░░░▒▒█████▓▓▓▒ ║║ next: * Winter in 86 days   ☼ sunrise 06:00  sunset 18:00     ║
+║ water       [██████████░░░░░░░░]     57%  ▓██████▓▓▓▒▒▒▒▓▓▓▓██████▓▓▓▒░░░░░▒▒█████▓▓▓▓ ║║                                                               ║
+║ carcasses   [███░░░░░░░░░░░░░░░]       8  ▒▓▓▓▓████████▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒░░░░░░░░░░░░░░░ ║║─ Modifiers ───────────────────────────────────────────────────║
+║ dens        [████████░░░░░░░░░░]       9  ▓▓▓▓████████▓▓▓▓▓▓▓▓▒▒▒▒▒▒▒░░░░░░░░░░░░░░░░░ ║║  season    regrowth   evaporation   metabolism   forage       ║
+║ regrowth    [████████░░░░░░░░░░]      14  ▒▒░░░░░▒▒▓▓▓▓▓▓▓▒▒░░░░░▒▒▒▓▓█████▓▓░░░░░▒▒▒▓ ║║  ♪ Spring     1.3x         0.8x         1.0x   lush           ║
+║ 30d: veg ↓ -46%  water ↓ -31%  carcasses ↑ +82%    (dens, regrowth trends derived)     ║║  ☼ Summer     1.0x         1.4x         1.0x   drying         ║
+║                                                                                        ║║► ♫ Autumn     0.8x         0.9x         1.1x   fading         ║
+║─ Terrain ──────────────────────────────────────────────────────────────────────────────║║  * Winter     0.5x         0.6x         1.3x   scarce         ║
+║ " grassland     [██████████████████████]   1770 cells   29%   biomass [██████░░░░] 0.57║║                                                               ║
+║ ♠ forest        [███████████░░░░░░░░░░░]    900 cells   15%   biomass [███████░░░] 0.67║║─ Forecast ────────────────────────────────────────────────────║
+║ ♣ meadow        [███████████░░░░░░░░░░░]    849 cells   14%   biomass [████████░░] 0.79║║ drought risk   moderate   water 57%, ↓ -31% in 30 days        ║
+║ ≈ deep water    [██████████░░░░░░░░░░░░]    800 cells   13%   no forage                ║║ frost          in 86 days   regrowth halves, shallows freeze  ║
+║ , sparse grass  [████████░░░░░░░░░░░░░░]    619 cells   10%   biomass [███░░░░░░░] 0.34║║ forage line    0.25   regions below it start migrations       ║
+║ ~ shallow water [█████░░░░░░░░░░░░░░░░░]    400 cells    7%   no forage                ║║ ! 3 regions strained or scarce (see table below)              ║
+║ ▲ rock          [████░░░░░░░░░░░░░░░░░░]    300 cells    5%   no forage                ║║ ¡ Ashen Ridge: 3 water cells dried up this season             ║
+║ · sand          [███░░░░░░░░░░░░░░░░░░░]    240 cells    4%   biomass [░░░░░░░░░░] 0.02║║                                                               ║
+║ . bare dirt     [██░░░░░░░░░░░░░░░░░░░░]    122 cells    2%   biomass [█░░░░░░░░░] 0.11║║─ Day ─────────────────────────────────────────────────────────║
+║                                                                                        ║║ 00 ░░░░░░▒▒▒▒▒▒▒▒█▒▒▒░░░░░░ 24   now 14:00 ☼ day              ║
+║ standing biomass 2517 units over 4900 walkable cells; 1200 water cells (20%)           ║║ 12h daylight; night halves sense range and doubles rest       ║
+║ prey pressure [█████████░░░░░░░] 0.13    pred pressure [████░░░░░░░░░░░░] 0.07 (mean)  ║║                                                               ║
+╚════════════════════════════════════════════════════════════════════════════════════════╝╚═══════════════════════════════════════════════════════════════╝
+╔ Regions ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════ sorted by name   [r] cycle sort ╗
+║ region            cells   water     vegetation                moisture                 prey pred  pressure   status                                     ║
+║ Northmarch          700     18%   [██████░░░░░░░░░░░░] 0.32 [█████████░░░░░░░░░] 0.48    14    1  0.13  [█░░░░░]   Scarce   ! forage line, crowded      ║
+║►Ashen Ridge         600     12%   [█████████░░░░░░░░░] 0.49 [███████████░░░░░░░] 0.61     4    2  0.02  [░░░░░░]   Stable                               ║
+║ Sunfall Coast       800     44%   [█████░░░░░░░░░░░░░] 0.28 [█████████░░░░░░░░░] 0.50    12    1  0.01  [░░░░░░]   Scarce   ! forage line, crowded      ║
+║ Reedwater Vale      700      9%   [█████████░░░░░░░░░] 0.51 [██████████░░░░░░░░] 0.55    15    1  0.00  [░░░░░░]   Plenty                               ║
+║ The Long Meadow     800     11%   [█████████░░░░░░░░░] 0.49 [██████████░░░░░░░░] 0.58    13    7  0.24  [██░░░░]   Plenty                               ║
+║ Lakeshore          1200     40%   [██████░░░░░░░░░░░░] 0.33 [██████████░░░░░░░░] 0.54    16    2  0.04  [░░░░░░]   Scarce   ! forage line, crowded      ║
+║ Southern Thicket    600      1%   [█████████░░░░░░░░░] 0.50 [██████████░░░░░░░░] 0.53    14    3  0.00  [░░░░░░]   Plenty                               ║
+║ Fenlands            600      1%   [██████████░░░░░░░░] 0.56 [███████████░░░░░░░] 0.60     9    8  0.10  [█░░░░░]   Plenty                               ║
+║                                                                                                                                                         ║
+║─ Whole valley ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────║
+║ all regions        6000     20%   vegetation 0.42   moisture 0.54   97 prey   25 predators   mean pressure 0.07   ratio 3.9:1   (map sample)            ║
+║ → migration pressure: Northmarch, Sunfall Coast, Lakeshore  →  richest forage: Fenlands                                                                 ║
+║                                                                                                                                                         ║
+║ status: Plenty veg >= .45 & prey >= 8   Stable veg >= .40   Strained veg < .40 or prey > 30 x veg   Scarce veg < .37                                    ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+ [r] sort regions  [Tab] focus panel  [Esc] back                                                                    Year 12, Day 4 of Autumn  14:00  ☼ day 

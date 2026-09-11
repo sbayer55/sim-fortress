@@ -2,6 +2,8 @@
 
 Back to the [screen overview](README.md).
 
+Live since: C6
+
 ## Purpose
 The first screen the player sees. It names the game, offers the four top-level actions
 (new world, load world, options, quit) and reminds the player of the world they last

@@ -1,4 +1,4 @@
-//! Small drawing helpers shared by prototypes.
+//! Small drawing helpers shared by screens.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;

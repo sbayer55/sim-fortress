@@ -2,6 +2,8 @@
 
 Back to the [screen overview](README.md).
 
+Live since: C5
+
 ## Purpose
 The simulation interrupts the player for events that change the shape of the world — in the
 prototype, a species going extinct. The modal names the event, gives the facts a player would
