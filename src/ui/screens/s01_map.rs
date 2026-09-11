@@ -299,15 +299,15 @@ impl Screen for WorldMap {
         } else if app.look_cursor.is_some() {
             &[("↑↓←→", "move"), ("Enter", "inspect"), ("f", "follow"), ("z", "zoom"), ("Esc", "exit look")]
         } else if self.overlay == Overlay::Region {
-            &[("5", "regions"), ("o", "cycle"), ("↑↓", "region"), ("Enter", "jump"), ("←→", "scroll"), ("Esc", "clear"), ("Space", "pause"), ("y", "ecology")]
+            &[("1-6", "overlay"), ("o", "cycle"), ("↑↓", "region"), ("Enter", "jump"), ("←→", "scroll"), ("Esc", "clear"), ("Space", "pause"), ("y", "ecology")]
         } else if let Overlay::Sense(_) = overlay {
-            &[("Tab", "next predator"), ("i", "inspect"), ("f", "follow"), ("4", "sense"), ("Esc", "clear"), ("Space", "pause")]
+            &[("Tab", "next predator"), ("i", "inspect"), ("f", "follow"), ("1-6", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause")]
         } else if let Overlay::Species(_) = overlay {
-            &[("Tab", "next species"), ("S-Tab", "previous"), ("←→↑↓", "scroll"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("s", "species")]
+            &[("Tab", "next species"), ("Shift+Tab", "previous"), ("←→↑↓", "scroll"), ("1-6", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause")]
         } else if overlay_active {
             &[("1-6", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("+/-", "speed"), ("e", "log"), ("y", "ecology"), ("g", "charts")]
         } else {
-            &[("k", "look"), ("Tab", "wide"), ("←→↑↓", "scroll"), ("1-3 5-6", "overlay"), ("Space", "pause"), ("+/-", "speed"), ("p", "controls"), ("?", "help"), ("q", "world")]
+            &[("k", "look"), ("Tab", "wide"), ("←→↑↓", "scroll"), ("1-6", "overlay"), ("Space", "pause"), ("+/-", "speed"), ("p", "controls"), ("?", "help"), ("q", "world")]
         };
         let sky = if night { glyphs::MOON } else { glyphs::SUN };
         let skyname = if night { "night" } else { "day" };

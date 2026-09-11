@@ -190,8 +190,7 @@ fn keys_column(f: &mut Frame, col: Rect) {
         ("Navigation", &[
             ("← → ↑ ↓", "scroll the map"),
             ("Tab", "toggle the sidebar"),
-            ("Home", "center on the valley"),
-            ("c", "center on selection"),
+            ("c", "centre (while following)"),
         ]),
         ("Look mode", &[
             ("k", "enter look mode"),
@@ -203,13 +202,10 @@ fn keys_column(f: &mut Frame, col: Rect) {
         ]),
         ("Overlays", &[
             ("o", "cycle overlays"),
-            ("1", "vegetation density"),
-            ("2", "population pressure"),
-            ("3", "water & moisture"),
-            ("4", "sense range"),
-            ("5", "region names & bounds"),
-            ("6", "species density"),
-            ("Tab", "next species (6) / predator (4)"),
+            ("1 2 3", "veg · pressure · moisture"),
+            ("4 5 6", "sense · regions · species"),
+            ("Tab", "next predator / species"),
+            ("Shift+Tab", "previous species"),
             ("Esc", "clear overlay"),
         ]),
         ("Speed", &[
@@ -228,7 +224,7 @@ fn keys_column(f: &mut Frame, col: Rect) {
             ("F9", "quick-load"),
             ("?", "this help"),
             ("q", "quit to title"),
-            ("w", "quit to title"),
+            ("w", "world generation"),
         ]),
     ];
     for (title, keys) in groups {

@@ -478,6 +478,20 @@ mod tests {
     }
 
     #[test]
+    fn s11_help_keys_column_fits() {
+        use crate::ui::screens::s11_help::Help;
+        let (app, _) = map_with_sim();
+        let h = Help::new();
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| h.render(&app, f, Rect::new(0, 0, 155, 45))).unwrap();
+        let buf = terminal.backend().buffer();
+        let all: String = (0..45).map(|y| (0..155).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect();
+        assert!(all.contains("world generation"), "last key row is inside the modal");
+        assert!(all.contains("Shift+Tab"));
+    }
+
+    #[test]
     fn s01_species_overlay_renders_155x45() {
         let (mut app, mut s) = map_with_sim();
         s.handle_key(key(KeyCode::Char('6')), &mut app);

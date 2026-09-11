@@ -234,8 +234,8 @@ Status-bar hints differ between the heatmaps and the sense ring.
 ### S02a–c
 | Key     | Action                                                  | Goes to |
 |---------|---------------------------------------------------------|---------|
-| `o`     | next overlay (vegetation → pressure → moisture → sense) | this screen, next variant |
-| `1`–`4` | pick an overlay directly                                | [S02a–d](s02-map-overlay.md) |
+| `o`     | next overlay (vegetation → pressure → moisture → sense → regions → species) | this screen, next variant |
+| `1`–`6` | pick an overlay directly                                | [S02a–f](s02-map-overlay.md) |
 | `k`     | enter look mode with the overlay still active           | [S01c Look mode](s01-world-map.md) |
 | `Space` | pause / resume                                          | stays here |
 | `+` `-` | faster / slower                                         | stays here |
@@ -246,7 +246,7 @@ Status-bar hints differ between the heatmaps and the sense ring.
 | Key     | Action                                          | Goes to |
 |---------|-------------------------------------------------|---------|
 | `o`     | next overlay (regions → plain map)              | [S01 World Map](s01-world-map.md) |
-| `1`–`5` | pick an overlay directly                        | [S02a–e](s02-map-overlay.md) |
+| `1`–`6` | pick an overlay directly                        | [S02a–f](s02-map-overlay.md) |
 | `↑` `↓` | select the previous / next region (wraps)       | stays here |
 | `Enter` | centre the viewport on the selected region      | stays here |
 | `←` `→` | scroll the map                                  | stays here |
@@ -269,7 +269,7 @@ population. The species shown is remembered across `Esc` and reopening.
 | Key     | Action                                          | Goes to |
 |---------|-------------------------------------------------|---------|
 | `o`     | next overlay                                    | this screen, next variant |
-| `1`–`4` | pick an overlay directly                        | [S02a–d](s02-map-overlay.md) |
+| `1`–`6` | pick an overlay directly                        | [S02a–f](s02-map-overlay.md) |
 | `Tab`   | select the next living predator, re-centre ring | stays here |
 | `i`     | inspect the selected creature                   | [S03 Creature Inspector](s03-creature-inspector.md) |
 | `f`     | follow the selected creature                    | [S01e Follow](s01-world-map.md) |
