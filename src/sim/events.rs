@@ -67,11 +67,14 @@ pub struct Event {
 pub struct EventRing {
     cap: usize,
     buf: Vec<Event>,
+    /// Absolute count of events ever pushed (1-based index of the last event;
+    /// used as the extinction alert's `event_index`).
+    total: u64,
 }
 
 impl EventRing {
     pub fn new(cap: usize) -> Self {
-        EventRing { cap, buf: Vec::new() }
+        EventRing { cap, buf: Vec::new(), total: 0 }
     }
 
     pub fn push(&mut self, e: Event) {
@@ -79,10 +82,16 @@ impl EventRing {
             return;
         }
         self.buf.push(e);
+        self.total += 1;
         let excess = self.buf.len().saturating_sub(self.cap);
         if excess > 0 {
             self.buf.drain(0..excess);
         }
+    }
+
+    /// Absolute (1-based) index of the most recently pushed event.
+    pub fn total(&self) -> u64 {
+        self.total
     }
 
     pub fn len(&self) -> usize {

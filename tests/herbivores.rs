@@ -4,10 +4,14 @@ use std::time::Instant;
 
 use sim_fortress::sim::{EventKind, Params, Sim};
 
-/// C3's world: reproduction switched off (no breeding season).
+/// C3's world: reproduction switched off (no breeding season) and predators
+/// zeroed out — C3 predates predation (which arrives in C5).
 fn no_breeding() -> Params {
     let mut p = Params::default();
     p.genetics.breeding_seasons.clear();
+    p.creatures.initial_counts.insert(sim_fortress::sim::SpeciesId::Fox, 0);
+    p.creatures.initial_counts.insert(sim_fortress::sim::SpeciesId::Wolf, 0);
+    p.creatures.initial_counts.insert(sim_fortress::sim::SpeciesId::Lynx, 0);
     p
 }
 
@@ -65,7 +69,7 @@ fn death_causes_all_present() {
 fn food_is_findable() {
     // Food is reachable: creatures survive the opening days and graze vegetation
     // down rather than all starving immediately.
-    let mut sim = Sim::new(42, Params::default());
+    let mut sim = Sim::new(42, no_breeding());
     let start = sim.creatures.len_living();
     run_days(&mut sim, 30);
     let alive = sim.creatures.len_living();

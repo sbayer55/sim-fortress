@@ -27,6 +27,20 @@ pub struct Peer {
     pub adult: bool,
     /// Passes the FR2 eligibility rule this tick.
     pub mate_ready: bool,
+    /// Predation fields (C5): camouflage for the hiding rule and current goal
+    /// for den protection / prey detection.
+    pub camouflage: f32,
+    pub goal: Goal,
+}
+
+/// A dead-but-not-freed prey carcass, for scavenging (C5).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Carcass {
+    pub id: CreatureId,
+    pub species: SpeciesId,
+    pub x: usize,
+    pub y: usize,
+    pub decay: f32,
 }
 
 /// Per-tick snapshot of every living creature, sorted by id.
@@ -36,11 +50,13 @@ pub struct TickView {
     pub total: usize,
     /// `total < max_population_soft_cap`: new pregnancies allowed.
     pub cap_ok: bool,
+    /// Prey carcasses in range for scavenging (C5), slot order.
+    pub carcasses: Vec<Carcass>,
 }
 
 impl TickView {
     pub fn empty() -> Self {
-        TickView { peers: Vec::new(), total: 0, cap_ok: true }
+        TickView { peers: Vec::new(), total: 0, cap_ok: true, carcasses: Vec::new() }
     }
 
     pub fn build(store: &CreatureStore, time: &Time, world: &World, gp: &GeneticsParams) -> Self {
@@ -54,11 +70,17 @@ impl TickView {
                 y: c.y,
                 adult: c.adult,
                 mate_ready: eligible(c, time, world, gp),
+                camouflage: c.genome.camouflage(),
+                goal: c.goal,
             })
             .collect();
         peers.sort_unstable_by_key(|p| p.id);
         let total = peers.len();
-        TickView { peers, total, cap_ok: (total as u32) < gp.max_population_soft_cap }
+        let carcasses: Vec<Carcass> = store
+            .carcasses()
+            .map(|c| Carcass { id: c.id, species: c.species, x: c.x, y: c.y, decay: c.decay })
+            .collect();
+        TickView { peers, total, cap_ok: (total as u32) < gp.max_population_soft_cap, carcasses }
     }
 
     pub fn get(&self, id: CreatureId) -> Option<&Peer> {
@@ -295,6 +317,18 @@ pub fn deliver(
                 kills_by_species: [0; 6],
                 last_kill: None,
                 chase_stats: (0, 0),
+                chase_longest_year: 0,
+                hunt_phase: crate::sim::creatures::HuntPhase::Stalk,
+                hunt_target: None,
+                chase_start_tick: None,
+                hunt_cooldown_until: 0,
+                eat_until: None,
+                scavenge_target: None,
+                flee_until: 0,
+                threatened_by: None,
+                predation_risk: 0.0,
+                migrate_until: 0,
+                migrate_target: None,
             };
             let id = store.insert(child);
             let child = store.get(id).expect("just inserted");
@@ -469,6 +503,18 @@ mod tests {
             kills_by_species: [0; 6],
             last_kill: None,
             chase_stats: (0, 0),
+            chase_longest_year: 0,
+            hunt_phase: crate::sim::creatures::HuntPhase::Stalk,
+            hunt_target: None,
+            chase_start_tick: None,
+            hunt_cooldown_until: 0,
+            eat_until: None,
+            scavenge_target: None,
+            flee_until: 0,
+            threatened_by: None,
+            predation_risk: 0.0,
+            migrate_until: 0,
+            migrate_target: None,
         }
     }
 

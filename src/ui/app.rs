@@ -10,7 +10,7 @@ use ratatui::widgets::Paragraph;
 use ratatui::{DefaultTerminal, Frame};
 
 use crate::sim::creatures::CreatureId;
-use crate::sim::{Params, Sim};
+use crate::sim::{Alert, Params, Sim};
 use crate::theme;
 
 use super::screens::s04_species::SpeciesBrowser;
@@ -21,6 +21,7 @@ use super::screens::s08_lineage::LineageScreen;
 use super::screens::s09_worldgen::WorldGen;
 use super::screens::s10_controls::Controls;
 use super::screens::s11_help::Help;
+use super::screens::s12_alert::AlertModal;
 use super::screens::{self, Action, Stack, TickAccumulator};
 
 pub struct AppState {
@@ -41,6 +42,10 @@ pub struct AppState {
     pub follow: Option<CreatureId>,
     /// Tick at which the followed creature died (for the 3-hour grace period).
     pub follow_death_tick: Option<u64>,
+    /// Extinction alerts waiting to be shown (C5 FR8).
+    pub alert_queue: Vec<Alert>,
+    /// The alert currently displayed as the top S12 modal.
+    pub alert_shown: Option<Alert>,
 }
 
 impl AppState {
@@ -56,6 +61,8 @@ impl AppState {
             look_cursor: None,
             follow: None,
             follow_death_tick: None,
+            alert_queue: Vec::new(),
+            alert_shown: None,
         }
     }
 
@@ -112,10 +119,51 @@ impl AppState {
         self.speed_idx = idx.min(self.params.ui.speeds.len().saturating_sub(1));
     }
 
-    pub fn step_ticks(&mut self, n: u64) {
+    /// Step `n` ticks and return any alerts raised (C5 FR8).
+    pub fn step_ticks(&mut self, n: u64) -> Vec<Alert> {
+        let mut out = Vec::new();
         if let Some(sim) = self.sim.as_mut() {
             for _ in 0..n {
-                let _report = sim.step();
+                let report = sim.step();
+                out.extend(report.alerts);
+            }
+        }
+        out
+    }
+
+    /// Queue extinction alerts: record the pre-alert speed and pause (when the
+    /// option is on); when off, the events are already logged/tickered only.
+    pub fn enqueue_alerts(&mut self, alerts: Vec<Alert>) {
+        if alerts.is_empty() {
+            return;
+        }
+        if self.params.ui.auto_pause_on_extinction {
+            if self.speed_before_alert.is_none() {
+                self.speed_before_alert = Some(self.speed_idx);
+            }
+            self.paused = true;
+            self.alert_queue.extend(alerts);
+        }
+    }
+
+    /// Pop the next pending alert into `alert_shown`, if one is free.
+    pub fn take_next_alert(&mut self) -> Option<Alert> {
+        if self.alert_shown.is_some() || self.alert_queue.is_empty() {
+            return None;
+        }
+        let a = self.alert_queue.remove(0);
+        self.alert_shown = Some(a.clone());
+        Some(a)
+    }
+
+    /// The current S12 modal was dismissed. Restore speed only when the whole
+    /// queue is drained (Continue on the last alert).
+    pub fn dismiss_alert(&mut self, restore_speed: bool) {
+        self.alert_shown = None;
+        if restore_speed && self.alert_queue.is_empty() {
+            if let Some(s) = self.speed_before_alert.take() {
+                self.speed_idx = s;
+                self.paused = false;
             }
         }
     }
@@ -169,7 +217,8 @@ impl App {
                 Action::None
             }
             KeyCode::Char('.') => {
-                self.state.step_ticks(1);
+                let alerts = self.state.step_ticks(1);
+                self.state.enqueue_alerts(alerts);
                 Action::None
             }
             KeyCode::Char('p') => Action::Push(Box::new(Controls::new())),
@@ -265,9 +314,16 @@ pub fn run(terminal: &mut DefaultTerminal, params: Params) -> io::Result<()> {
         if !app.state.paused {
             let tps = app.state.ticks_per_sec();
             ticks_ran = acc.add(elapsed, tps).min(200);
-            app.state.step_ticks(ticks_ran);
+            let alerts = app.state.step_ticks(ticks_ran);
+            app.state.enqueue_alerts(alerts);
         }
         app.state.handle_follow();
+
+        // Raise the next queued extinction alert, if one is pending and none is shown.
+        if let Some(alert) = app.state.take_next_alert() {
+            app.stack.push(Box::new(AlertModal::new(&alert)));
+            force_draw = true;
+        }
 
         // Redraw on key, or on a tick (throttled to ~30 fps).
         if force_draw || (ticks_ran > 0 && last_draw.elapsed() >= min_frame) {

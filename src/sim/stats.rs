@@ -378,6 +378,102 @@ impl Series {
     }
 }
 
+/// C5 FR11: the lag (in days) at which the predator series best tracks the prey
+/// series. Skips the first 360 days, smooths both with a 30-day centred moving
+/// average, mean-subtracts and returns the `argmax` Pearson correlation lag
+/// `L ∈ 0..=120` (lowest index on ties), or `None` when either series has fewer
+/// than two local maxima.
+pub fn peak_lag(prey: &[f32], pred: &[f32]) -> Option<u32> {
+    if prey.len() <= 360 || pred.len() <= 360 {
+        return None;
+    }
+    let prey = &prey[360..];
+    let pred = &pred[360..];
+    let n = prey.len().min(pred.len());
+    if n < 31 {
+        return None;
+    }
+    let ps = centred_ma(&prey[..n], 30);
+    let qs = centred_ma(&pred[..n], 30);
+    if local_maxima(&ps).len() < 2 || local_maxima(&qs).len() < 2 {
+        return None;
+    }
+    let ps = mean_subtract(&ps);
+    let qs = mean_subtract(&qs);
+    let mut best: Option<(u32, f32)> = None;
+    for l in 0..=120u32 {
+        if l as usize >= n {
+            break;
+        }
+        let corr = pearson(&ps, &qs, l as usize);
+        if best.map_or(true, |b| corr > b.1) {
+            best = Some((l, corr));
+        }
+    }
+    best.map(|(l, _)| l)
+}
+
+/// A sample that is ≥ every sample within ±45 days (lowest index on ties) and
+/// ≥ 1.15 × the series mean.
+pub fn local_maxima(v: &[f32]) -> Vec<usize> {
+    let n = v.len();
+    let mean = v.iter().sum::<f32>() / n.max(1) as f32;
+    let mut out = Vec::new();
+    for i in 0..n {
+        let lo = i.saturating_sub(45);
+        let hi = (i + 45).min(n - 1);
+        let ok = (lo..i).all(|j| v[i] > v[j]) && ((i + 1)..=hi).all(|j| v[i] >= v[j]);
+        if ok && v[i] >= 1.15 * mean {
+            out.push(i);
+        }
+    }
+    out
+}
+
+fn centred_ma(v: &[f32], window: usize) -> Vec<f32> {
+    let n = v.len();
+    let half = (window / 2) as isize;
+    let mut out = vec![0.0f32; n];
+    for i in 0..n {
+        let lo = (i as isize - half).max(0) as usize;
+        let hi = (i as isize + half + 1).min(n as isize) as usize;
+        out[i] = v[lo..hi].iter().sum::<f32>() / (hi - lo) as f32;
+    }
+    out
+}
+
+fn mean_subtract(v: &[f32]) -> Vec<f32> {
+    let mean = v.iter().sum::<f32>() / v.len().max(1) as f32;
+    v.iter().map(|x| x - mean).collect()
+}
+
+/// Pearson correlation of `y[t + lag]` against `x[t]`, `t ∈ 0..(n − lag)`.
+fn pearson(x: &[f32], y: &[f32], lag: usize) -> f32 {
+    let n = x.len().min(y.len());
+    let m = n.saturating_sub(lag);
+    if m < 2 {
+        return 0.0;
+    }
+    let (mut sx, mut sy, mut sxx, mut syy, mut sxy) = (0.0f32, 0.0, 0.0, 0.0, 0.0);
+    for t in 0..m {
+        let a = x[t];
+        let b = y[t + lag];
+        sx += a;
+        sy += b;
+        sxx += a * a;
+        syy += b * b;
+        sxy += a * b;
+    }
+    let m = m as f32;
+    let cov = sxy - sx * sy / m;
+    let varx = sxx - sx * sx / m;
+    let vary = syy - sy * sy / m;
+    if varx <= 0.0 || vary <= 0.0 {
+        return 0.0;
+    }
+    cov / (varx * vary).sqrt()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -644,5 +740,42 @@ mod tests {
         assert_eq!(last.drought_regions, 2);
         assert!(last.drought_flags[0]);
         assert!(!last.drought_flags[1]);
+    }
+
+    #[test]
+    fn local_maxima_rule() {
+        // A flat series has no local maxima (nothing rises 15 % above the mean).
+        let flat = vec![1.0f32; 200];
+        assert!(local_maxima(&flat).is_empty(), "a flat series has no local maxima");
+
+        // Two broad peaks well separated (> 90 days apart): both are detected.
+        let mut v = vec![0.5f32; 600];
+        for i in 100..=140 {
+            v[i] = 2.0;
+        }
+        for i in 400..=440 {
+            v[i] = 2.5;
+        }
+        let maxima = local_maxima(&v);
+        assert_eq!(maxima, vec![100, 400], "lowest index on each plateau: {maxima:?}");
+    }
+
+    #[test]
+    fn peak_lag_on_synthetic_series() {
+        // A predator series that is the prey series delayed by 20 days must yield lag 20.
+        let n = 800usize;
+        let mut prey = vec![0.0f32; n];
+        for i in 0..n {
+            prey[i] = ((i as f32 / 60.0).sin() + 1.0) * 100.0;
+        }
+        let mut pred = vec![0.0f32; n];
+        for i in 20..n {
+            pred[i] = prey[i - 20];
+        }
+        assert_eq!(peak_lag(&prey, &pred), Some(20));
+
+        // Fewer than two local maxima → None.
+        let flat = vec![50.0f32; n];
+        assert_eq!(peak_lag(&flat, &flat), None);
     }
 }

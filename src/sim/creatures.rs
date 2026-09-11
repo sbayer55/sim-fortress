@@ -43,6 +43,15 @@ pub enum Goal {
     Patrol,
 }
 
+/// The phase of a predator's current hunt (C5 FR4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum HuntPhase {
+    Stalk,
+    Chase,
+    Eat,
+}
+
 /// Why a creature is resting (FR5 distinguishes three wake conditions).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RestReason {
@@ -187,8 +196,30 @@ pub struct Creature {
     pub escaped: u32,
     pub threats_by_species: [u32; 6],
     pub kills_by_species: [u32; 6],
-    pub last_kill: Option<(CreatureId, u32)>,
+    /// Last kill: `(victim id, day index, region index)` (C5 FR4).
+    pub last_kill: Option<(CreatureId, u32, u8)>,
+    /// `(sum of chase ticks, longest chase ticks)`; longest year kept beside it.
     pub chase_stats: (u32, u32),
+    pub chase_longest_year: u32,
+    // ---- C5 hunt / flee / scavenge / migration state ----
+    pub hunt_phase: HuntPhase,
+    /// The prey being hunted (cleared when the hunt ends).
+    pub hunt_target: Option<CreatureId>,
+    /// Tick at which the chase clock started (Stalk → Chase transition).
+    pub chase_start_tick: Option<u64>,
+    pub hunt_cooldown_until: u64,
+    /// Tick at which the Eat phase ends; the carcass is `target`.
+    pub eat_until: Option<u64>,
+    /// The prey carcass being scavenged.
+    pub scavenge_target: Option<CreatureId>,
+    /// Tick at which Flee ends.
+    pub flee_until: u64,
+    /// Nearest threatening predator `(x, y, species)` driving the away-vector (per tick).
+    pub threatened_by: Option<(usize, usize, SpeciesId)>,
+    /// `min(1, 0.5 × pred_pressure + 0.5 × predators_in_range / 3)` (S03 Condition).
+    pub predation_risk: f32,
+    pub migrate_until: u64,
+    pub migrate_target: Option<(usize, usize)>,
 }
 
 impl Creature {
@@ -382,6 +413,18 @@ pub fn place_founders(world: &World, params: &CreaturesParams, rng: &mut Rng) ->
                 kills_by_species: [0; 6],
                 last_kill: None,
                 chase_stats: (0, 0),
+                chase_longest_year: 0,
+                hunt_phase: HuntPhase::Stalk,
+                hunt_target: None,
+                chase_start_tick: None,
+                hunt_cooldown_until: 0,
+                eat_until: None,
+                scavenge_target: None,
+                flee_until: 0,
+                threatened_by: None,
+                predation_risk: 0.0,
+                migrate_until: 0,
+                migrate_target: None,
             });
             placed += 1;
         }

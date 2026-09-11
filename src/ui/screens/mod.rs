@@ -18,6 +18,7 @@ pub mod s08_lineage;
 pub mod s09_worldgen;
 pub mod s10_controls;
 pub mod s11_help;
+pub mod s12_alert;
 pub mod s13_zoom;
 
 pub enum Action {
@@ -368,6 +369,9 @@ mod tests {
         s.handle_key(key(KeyCode::Char('5')), &mut app);
         assert_eq!(s.overlay, Overlay::Region);
         s.handle_key(key(KeyCode::Char('3')), &mut app);
+        // New cycle includes sense: Moisture → Sense → Region → None.
+        s.handle_key(key(KeyCode::Char('o')), &mut app);
+        assert!(matches!(s.overlay, Overlay::Sense(_)), "Moisture → Sense, got {:?}", s.overlay);
         s.handle_key(key(KeyCode::Char('o')), &mut app);
         assert_eq!(s.overlay, Overlay::Region);
         s.handle_key(key(KeyCode::Char('o')), &mut app);

@@ -28,11 +28,13 @@ pub struct WorldMap {
     pub overlay: Overlay,
     /// Region highlighted under the regions overlay (S02e).
     pub region_sel: usize,
+    /// Selected creature for the sense overlay (S02d).
+    pub sense_id: Option<CreatureId>,
 }
 
 impl WorldMap {
     pub fn new(world_name: String) -> Self {
-        WorldMap { world_name, wide: false, overlay: Overlay::None, region_sel: 0 }
+        WorldMap { world_name, wide: false, overlay: Overlay::None, region_sel: 0, sense_id: None }
     }
 
     fn overlay_name(overlay: Overlay) -> &'static str {
@@ -40,6 +42,7 @@ impl WorldMap {
             Overlay::Vegetation => "vegetation",
             Overlay::Pressure => "pressure",
             Overlay::Moisture => "moisture",
+            Overlay::Sense(_) => "sense range",
             Overlay::Region => "regions",
             _ => "",
         }
@@ -55,6 +58,46 @@ impl WorldMap {
             .filter(|c| c.alive && crate::sim::cheb(c.x, c.y, x, y) <= 1)
             .min_by_key(|c| (crate::sim::cheb(c.x, c.y, x, y), c.id.0))
             .map(|c| c.id)
+    }
+
+    /// FR9: the default sense-overlay subject — the followed/look-cursor creature
+    /// when a living predator, else the living predator with the most kills (ties by id).
+    fn default_sense(app: &AppState) -> Option<CreatureId> {
+        let sim = app.sim.as_ref()?;
+        if let Some(id) = app.follow {
+            if sim.creatures.get(id).is_some_and(|c| c.alive && c.species.kind() == crate::sim::Kind::Predator) {
+                return Some(id);
+            }
+        }
+        if let Some((x, y)) = app.look_cursor {
+            if let Some(id) = Self::creature_at_cursor(sim, x, y) {
+                if sim.creatures.get(id).is_some_and(|c| c.alive && c.species.kind() == crate::sim::Kind::Predator) {
+                    return Some(id);
+                }
+            }
+        }
+        sim.creatures
+            .living()
+            .filter(|c| c.species.kind() == crate::sim::Kind::Predator)
+            .max_by_key(|c| (c.kills, std::cmp::Reverse(c.id.0)))
+            .map(|c| c.id)
+    }
+
+    /// The next living predator by id ascending, wrapping (FR9).
+    fn next_predator(app: &AppState, current: CreatureId) -> Option<CreatureId> {
+        let sim = app.sim.as_ref()?;
+        let mut ids: Vec<CreatureId> = sim
+            .creatures
+            .living()
+            .filter(|c| c.species.kind() == crate::sim::Kind::Predator)
+            .map(|c| c.id)
+            .collect();
+        ids.sort_unstable();
+        if ids.is_empty() {
+            return None;
+        }
+        let pos = ids.iter().position(|&x| x == current).unwrap_or(0);
+        Some(ids[(pos + 1) % ids.len()])
     }
 }
 
@@ -81,7 +124,12 @@ impl Screen for WorldMap {
         };
         let world = &sim.world;
         let time = &sim.time;
-        let overlay_active = self.overlay != Overlay::None;
+        // If the sense-overlay selection died, revert to the plain map (FR9).
+        let overlay = match self.overlay {
+            Overlay::Sense(id) if sim.creatures.get(id).is_none_or(|c| !c.alive) => Overlay::None,
+            o => o,
+        };
+        let overlay_active = overlay != Overlay::None;
         let night = !overlay_active && time.is_night();
         let winter = !overlay_active && time.season() == Season::Winter;
 
@@ -116,7 +164,7 @@ impl Screen for WorldMap {
         } else if app.look_cursor.is_some() {
             format!("{} · look", self.world_name)
         } else if overlay_active {
-            format!("{} · overlay: {}", self.world_name, Self::overlay_name(self.overlay))
+            format!("{} · overlay: {}", self.world_name, Self::overlay_name(overlay))
         } else {
             self.world_name.clone()
         };
@@ -125,15 +173,15 @@ impl Screen for WorldMap {
         let map_inner = panel::draw_with_hint(f, map_area, &title, &map_hint(world, origin, map_inner_w), panel::Kind::Outer);
 
         let opts = MapOptions {
-            overlay: self.overlay,
+            overlay,
             night,
             winter,
             cursor: app.look_cursor,
             follow: app.follow,
             origin,
             creatures: true,
-            fade_creatures: overlay_active && self.overlay != Overlay::Region,
-            selected_region: if self.overlay == Overlay::Region { Some(self.region_sel) } else { None },
+            fade_creatures: overlay_active && overlay != Overlay::Region && !matches!(overlay, Overlay::Sense(_)),
+            selected_region: if overlay == Overlay::Region { Some(self.region_sel) } else { None },
         };
         map::render(f.buffer_mut(), map_inner, sim, &opts);
 
@@ -152,7 +200,9 @@ impl Screen for WorldMap {
                 self.follow_sidebar(f, side, app, sim, id);
             } else if app.look_cursor.is_some() {
                 self.look_sidebar(f, side, app, sim, world);
-            } else if self.overlay == Overlay::Region {
+            } else if let Overlay::Sense(id) = overlay {
+                self.sense_sidebar(f, side, app, sim, id);
+            } else if overlay == Overlay::Region {
                 self.region_sidebar(f, side, app, sim);
             } else if overlay_active {
                 self.overlay_sidebar(f, side, app, world);
@@ -189,8 +239,10 @@ impl Screen for WorldMap {
             &[("↑↓←→", "move"), ("Enter", "inspect"), ("f", "follow"), ("z", "zoom"), ("Esc", "exit look")]
         } else if self.overlay == Overlay::Region {
             &[("5", "regions"), ("o", "cycle"), ("↑↓", "region"), ("Enter", "jump"), ("←→", "scroll"), ("Esc", "clear"), ("Space", "pause"), ("y", "ecology")]
+        } else if let Overlay::Sense(_) = overlay {
+            &[("Tab", "next predator"), ("i", "inspect"), ("f", "follow"), ("4", "sense"), ("Esc", "clear"), ("Space", "pause")]
         } else if overlay_active {
-            &[("1-3 5", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("+/-", "speed"), ("e", "log"), ("y", "ecology"), ("g", "charts")]
+            &[("1-4 5", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("+/-", "speed"), ("e", "log"), ("y", "ecology"), ("g", "charts")]
         } else {
             &[("k", "look"), ("Tab", "wide"), ("←→↑↓", "scroll"), ("1-3 5", "overlay"), ("Space", "pause"), ("+/-", "speed"), ("p", "controls"), ("?", "help"), ("q", "world")]
         };
@@ -215,7 +267,14 @@ impl WorldMap {
                 Action::None
             }
             KeyCode::Tab => {
-                self.wide = !self.wide;
+                if let Overlay::Sense(id) = self.overlay {
+                    if let Some(next) = Self::next_predator(app, id) {
+                        self.overlay = Overlay::Sense(next);
+                        self.sense_id = Some(next);
+                    }
+                } else {
+                    self.wide = !self.wide;
+                }
                 Action::None
             }
             KeyCode::Left => {
@@ -258,10 +317,16 @@ impl WorldMap {
                     Overlay::None => Overlay::Vegetation,
                     Overlay::Vegetation => Overlay::Pressure,
                     Overlay::Pressure => Overlay::Moisture,
-                    Overlay::Moisture => Overlay::Region,
+                    Overlay::Moisture => match Self::default_sense(app) {
+                        Some(id) => Overlay::Sense(id),
+                        None => Overlay::Region,
+                    },
+                    Overlay::Sense(_) => Overlay::Region,
                     Overlay::Region => Overlay::None,
-                    _ => Overlay::None,
                 };
+                if let Overlay::Sense(id) = self.overlay {
+                    self.sense_id = Some(id);
+                }
                 Action::None
             }
             KeyCode::Char('1') => {
@@ -274,6 +339,13 @@ impl WorldMap {
             }
             KeyCode::Char('3') => {
                 self.overlay = Overlay::Moisture;
+                Action::None
+            }
+            KeyCode::Char('4') => {
+                if let Some(id) = Self::default_sense(app) {
+                    self.overlay = Overlay::Sense(id);
+                    self.sense_id = Some(id);
+                }
                 Action::None
             }
             KeyCode::Char('5') => {
@@ -384,7 +456,7 @@ impl WorldMap {
             ("1", "vegetation", self.overlay == Overlay::Vegetation),
             ("2", "pressure", self.overlay == Overlay::Pressure),
             ("3", "moisture", self.overlay == Overlay::Moisture),
-            ("4", "sense", false),
+            ("4", "sense", matches!(self.overlay, Overlay::Sense(_))),
             ("5", "regions", self.overlay == Overlay::Region),
         ] {
             util::line(f, inner, row, Line::from(vec![
@@ -476,6 +548,175 @@ impl WorldMap {
         panel::section(f, inner, row, "Reading the map");
         row += 1;
         for note in [" tint = region, bright = selected", " labels are clipped at the edge", " Esc restores the plain map"] {
+            util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
+            row += 1;
+        }
+    }
+
+    /// S02d sidebar: the selected predator, the ring contents and the detected-prey table.
+    fn sense_sidebar(&self, f: &mut Frame, area: Rect, app: &AppState, sim: &Sim, id: CreatureId) {
+        let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
+        let mut row = 0u16;
+        let pp = &app.params.predation;
+        let Some(c) = sim.creatures.get(id) else {
+            util::line(f, inner, 0, Line::from(Span::styled(" no selection", theme::dim_text())));
+            return;
+        };
+
+        panel::section(f, inner, row, "Sense range");
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(" how far this creature can see, hear", theme::dim_text())));
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(" or smell other creatures.", theme::dim_text())));
+        row += 2;
+
+        panel::section(f, inner, row, "Selected");
+        row += 1;
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(format!(" {} ", if c.adult { c.species.glyph().to_ascii_uppercase() } else { c.species.glyph() }), Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{} {}", c.name_str(), c.tag()), theme::title()),
+        ]));
+        row += 1;
+        let (sex_g, _) = match c.sex {
+            crate::sim::Sex::Male => (glyphs::MALE, "male"),
+            crate::sim::Sex::Female => (glyphs::FEMALE, "female"),
+        };
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(c.species.name(), Style::default().fg(c.species.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("  {} {}", sex_g, if c.adult { "adult" } else { "juvenile" }), theme::text()),
+            Span::styled(format!("  ({}, {})  {}", c.x, c.y, sim.world.region_name(c.x, c.y)), theme::dim_text()),
+        ]));
+        row += 1;
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(" goal: ", theme::dim_text()),
+            Span::styled(c.goal.plain(), theme::text()),
+        ]));
+        row += 1;
+        bars::labeled(f.buffer_mut(), inner, row, " sense", c.genome.sense(), theme::ACCENT, 20, 20);
+        row += 1;
+        let r = c.genome.sense_cells() as u16;
+        util::line(f, inner, row, Line::from(Span::styled(
+            format!(" radius {} cells   ring {}×{} on screen", r, 4 * r as u16 + 1, 2 * r as u16 + 1),
+            theme::dim_text(),
+        )));
+        row += 2;
+
+        // Inside the ring.
+        panel::section(f, inner, row, "Inside the ring");
+        row += 1;
+        let r_f = r as f32;
+        let mut prey = 0u32;
+        let mut pred = 0u32;
+        let mut tally = [0u32; 6];
+        let mut dens = 0usize;
+        let mut carcasses = 0usize;
+        let mut water = 0usize;
+        for o in sim.creatures.living() {
+            if o.id == id || crate::sim::dist(c.x, c.y, o.x, o.y) > r_f {
+                continue;
+            }
+            if o.species.kind() == crate::sim::Kind::Prey {
+                prey += 1;
+            } else {
+                pred += 1;
+            }
+            tally[o.species.index()] += 1;
+        }
+        for &(dx, dy) in &sim.world.dens {
+            if crate::sim::dist(c.x, c.y, dx, dy) <= r_f {
+                dens += 1;
+            }
+        }
+        for &(dx, dy) in &sim.world.carcasses {
+            if crate::sim::dist(c.x, c.y, dx, dy) <= r_f {
+                carcasses += 1;
+            }
+        }
+        let r_i = r as i32;
+        for dy in -r_i..=r_i {
+            for dx in -2 * r_i..=2 * r_i {
+                let nx = c.x as i32 + dx;
+                let ny = c.y as i32 + dy;
+                if sim.world.in_bounds(nx, ny) && sim.world.cell(nx as usize, ny as usize).terrain.is_water() {
+                    water += 1;
+                }
+            }
+        }
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(format!(" {} creatures: ", prey + pred), theme::text()),
+            Span::styled(format!("{prey} prey"), Style::default().fg(theme::GOOD).bg(theme::PANEL_BG)),
+            Span::styled(format!(" {pred} predators"), Style::default().fg(theme::BAD).bg(theme::PANEL_BG)),
+        ]));
+        row += 1;
+        let mut listed = Vec::new();
+        for (i, id2) in crate::sim::SpeciesId::ALL.iter().enumerate() {
+            if tally[i] > 0 {
+                listed.push(format!("{}{} {}", id2.glyph().to_ascii_uppercase(), id2.glyph(), tally[i]));
+            }
+        }
+        if listed.is_empty() {
+            util::line(f, inner, row, Line::from(Span::styled(" nothing living in range", theme::dim_text())));
+        } else {
+            util::line(f, inner, row, Line::from(Span::styled(listed.join("  "), theme::text())));
+        }
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(
+            format!(" {} {} dens  {} {} carcasses  ~ {} water", glyphs::DEN, dens, glyphs::CARCASS, carcasses, water),
+            theme::dim_text(),
+        )));
+        row += 2;
+
+        // Detected prey table.
+        panel::section(f, inner, row, "Detected prey");
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(" tag name        dist camo status", theme::dim_text())));
+        row += 1;
+        let mut rows: Vec<(f32, &crate::sim::Creature, &'static str)> = Vec::new();
+        for o in sim.creatures.living() {
+            if o.species.kind() != crate::sim::Kind::Prey || crate::sim::dist(c.x, c.y, o.x, o.y) > r_f {
+                continue;
+            }
+            let status = if o.id == c.hunt_target.unwrap_or(crate::sim::CreatureId(u32::MAX)) {
+                "target"
+            } else if crate::sim::predation::can_detect(c, o, &sim.world, pp) {
+                "seen"
+            } else {
+                "hidden"
+            };
+            rows.push((crate::sim::dist(c.x, c.y, o.x, o.y), o, status));
+        }
+        rows.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.id.cmp(&b.1.id)));
+        if rows.is_empty() {
+            util::line(f, inner, row, Line::from(Span::styled(" no prey within range", theme::dim_text())));
+            row += 1;
+        }
+        for (d, o, status) in rows.iter().take(8) {
+            let st = match *status {
+                "hidden" => theme::dim_text(),
+                "target" => Style::default().fg(theme::ACCENT).bg(theme::PANEL_BG),
+                _ => Style::default().fg(theme::GOOD).bg(theme::PANEL_BG),
+            };
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(format!(" {} ", o.species.glyph()), Style::default().fg(o.species.color()).bg(theme::PANEL_BG)),
+                Span::styled(format!("{:<5}{:<12}", o.tag(), o.name_str()), theme::text()),
+                Span::styled(format!("{:>4.1} ", d), theme::text()),
+                Span::styled(format!("{:.2} ", o.genome.camouflage()), theme::dim_text()),
+                Span::styled(*status, st),
+            ]));
+            row += 1;
+        }
+        if rows.len() > 8 {
+            util::line(f, inner, row, Line::from(Span::styled(format!(" … and {} more", rows.len() - 8), theme::dim_text())));
+            row += 1;
+        }
+        row += 1;
+
+        row = self.overlays_selector(f, inner, row);
+        row += 1;
+
+        panel::section(f, inner, row, "Reading the map");
+        row += 1;
+        for note in [" ° ring edge  W selected creature", " tinted cells are within sense range", " [Tab] cycles through living predators"] {
             util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
             row += 1;
         }
@@ -656,6 +897,25 @@ impl WorldMap {
             for (label, v, inv) in [("health", c.hp, false), ("hunger", c.hunger, true), ("thirst", c.thirst, true), ("energy", c.energy, false)] {
                 bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", label), v, bars::vital_color(v, inv), 9, 20);
                 row += 1;
+            }
+            // FR12: danger line — the nearest predator hunting this prey.
+            if c.species.kind() == crate::sim::Kind::Prey {
+                let mut nearest: Option<(usize, &crate::sim::Creature)> = None;
+                for p in sim.creatures.living().filter(|p| p.species.kind() == crate::sim::Kind::Predator && p.hunt_target == Some(id)) {
+                    let d = crate::sim::cheb(c.x, c.y, p.x, p.y);
+                    if nearest.map_or(true, |n| d < n.0) {
+                        nearest = Some((d, p));
+                    }
+                }
+                if let Some((d, p)) = nearest {
+                    let detected = crate::sim::predation::prey_detects_pred(c, p, &app.params.predation);
+                    util::line(f, inner, row, Line::from(vec![
+                        Span::styled(" danger: ", theme::dim_text()),
+                        Span::styled(format!("{} {}", p.name_str(), p.tag()), Style::default().fg(theme::BAD).bg(theme::PANEL_BG)),
+                        Span::styled(format!("  {} cells", d), theme::text()),
+                        Span::styled(if detected { "  detected" } else { "  undetected" }, Style::default().fg(if detected { theme::WARN } else { theme::DIM }).bg(theme::PANEL_BG)),
+                    ]));
+                }
             }
         } else {
             let cause = c.death.map(|d| d.cause.label()).unwrap_or("unknown");

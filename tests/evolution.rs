@@ -9,8 +9,17 @@ use sim_fortress::sim::{EventKind, Params, Rainfall, Sim, SpeciesId};
 
 const FIVE_YEARS: u64 = 5 * 360 * 24;
 
+/// C4 tests exercise prey evolution in isolation: predators are zeroed out
+/// (C5 introduces them; the C5 acceptance lives in tests/predators.rs).
+fn prey_only(mut p: Params) -> Params {
+    p.creatures.initial_counts.insert(SpeciesId::Fox, 0);
+    p.creatures.initial_counts.insert(SpeciesId::Wolf, 0);
+    p.creatures.initial_counts.insert(SpeciesId::Lynx, 0);
+    p
+}
+
 fn five_year_run(seed: u64, params: Params) -> Sim {
-    let mut p = params;
+    let mut p = prey_only(params);
     p.stats.series_days = 2000;
     let mut sim = Sim::new(seed, p);
     for _ in 0..FIVE_YEARS {

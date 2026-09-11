@@ -307,7 +307,16 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     panel::section(f, left, row, "Interactions");
     row += 1;
     if id.kind() == Kind::Prey {
-        util::line(f, left, row, Line::from(vec![sp(" eaten by: ", theme::dim_text()), sp("none yet", theme::text())]));
+        let hunters: Vec<String> = SpeciesId::ALL
+            .iter()
+            .filter(|p| p.kind() == Kind::Predator && sim.params.predation.preference(**p, id) > 0.0)
+            .map(|p| format!("{} {}", p.glyph().to_ascii_uppercase(), p.name()))
+            .collect();
+        if hunters.is_empty() {
+            util::line(f, left, row, Line::from(vec![sp(" eaten by: ", theme::dim_text()), sp("none", theme::text())]));
+        } else {
+            util::line(f, left, row, Line::from(vec![sp(" eaten by: ", theme::dim_text()), sp(hunters.join(" and "), theme::text())]));
+        }
         row += 1;
         let others: Vec<String> = SpeciesId::ALL
             .iter()
@@ -321,7 +330,25 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         ]));
         row += 1;
     } else {
-        util::line(f, left, row, Line::from(sp(" predators arrive in a later chunk", theme::dim_text())));
+        let prey: Vec<String> = SpeciesId::ALL
+            .iter()
+            .filter(|p| p.kind() == Kind::Prey && sim.params.predation.preference(id, **p) > 0.0)
+            .map(|p| format!("{} {}", p.glyph().to_ascii_uppercase(), p.name()))
+            .collect();
+        util::line(f, left, row, Line::from(vec![
+            sp(" hunts ", theme::dim_text()),
+            sp(if prey.is_empty() { "nothing".to_string() } else { prey.join(", ") }, theme::text()),
+        ]));
+        row += 1;
+        let rivals: Vec<String> = SpeciesId::ALL
+            .iter()
+            .filter(|o| o.kind() == Kind::Predator && **o != id)
+            .map(|o| format!("{} {}", o.glyph().to_ascii_uppercase(), o.name()))
+            .collect();
+        util::line(f, left, row, Line::from(vec![
+            sp(" competes with ", theme::dim_text()),
+            sp(rivals.join(" and "), theme::text()),
+        ]));
         row += 1;
     }
     row += 1;

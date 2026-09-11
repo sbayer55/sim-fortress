@@ -9,7 +9,7 @@ use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
 use crate::sim::creatures::{Creature, CreatureId, Goal};
-use crate::sim::{SpeciesId, TRAIT_NAMES};
+use crate::sim::{Kind, SpeciesId, TRAIT_NAMES};
 use crate::ui::app::AppState;
 use crate::ui::screens::common::day_stamp;
 use crate::ui::screens::s08_lineage::LineageScreen;
@@ -101,6 +101,8 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
     // Name line.
     let state = if !c.alive {
         sp("  DEAD", Style::default().fg(theme::BAD).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD))
+    } else if c.species.kind() == Kind::Predator {
+        sp("  predator", Style::default().fg(c.species.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD))
     } else {
         sp("  prey", Style::default().fg(theme::GOOD).bg(theme::PANEL_BG))
     };
@@ -203,7 +205,7 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
         row += 1;
         panel::section(f, inner, row, "Condition");
         row += 1;
-        bars::labeled(f.buffer_mut(), inner, row, " predation risk", 0.0, theme::DIM, 17, 16);
+        bars::labeled(f.buffer_mut(), inner, row, " predation risk", c.predation_risk, bars::vital_color(c.predation_risk, true), 17, 16);
         row += 1;
         // Local forage: mean vegetation within 3 cells.
         let forage = local_forage(sim, c.x, c.y);
@@ -436,6 +438,127 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
     }
     row += mm_h + 1;
 
+    if c.alive {
+        if c.species.kind() == Kind::Predator {
+            // S03b Hunt stats.
+            panel::section(f, inner, row, "Hunt stats");
+            row += 1;
+            let success = if c.attempts > 0 { c.kills as f32 / c.attempts as f32 * 100.0 } else { 0.0 };
+            util::line(f, inner, row, Line::from(sp(format!(" kills {}  attempts {}  success {:.0}%", c.kills, c.attempts, success), theme::text())));
+            row += 1;
+            bars::labeled(f.buffer_mut(), inner, row, " success rate", success / 100.0, c.species.color(), 16, 16);
+            row += 1;
+            panel::section(f, inner, row, "Preferred prey");
+            row += 1;
+            for prey_id in SpeciesId::ALL.iter().filter(|s| s.kind() == Kind::Prey) {
+                let share = if c.kills >= 5 {
+                    c.kills_by_species[prey_id.index()] as f32 / c.kills.max(1) as f32
+                } else {
+                    sim.params.predation.preference(c.species, *prey_id)
+                };
+                bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", prey_id.plural()), share, prey_id.color(), 16, 16);
+                row += 1;
+            }
+            let last_kill = match c.last_kill {
+                Some((victim, day, _)) => {
+                    let vname = sim
+                        .creatures
+                        .get(victim)
+                        .map(|v| format!("{} {}", v.name_str(), v.tag()))
+                        .or_else(|| sim.lineage.get(victim).map(|n| format!("{} {}", n.name_str(), n.tag)))
+                        .unwrap_or_else(|| format!("#{}", victim.0));
+                    format!("{}  {}", vname, day_stamp(day as i64, sim.time.season_days))
+                }
+                None => "none".to_string(),
+            };
+            util::line(f, inner, row, Line::from(vec![sp(" last kill ", theme::dim_text()), sp(last_kill, theme::text())]));
+            row += 1;
+            if let Some(t) = c.hunt_target {
+                if let Some(o) = sim.creatures.get(t) {
+                    let d = crate::sim::dist(c.x, c.y, o.x, o.y);
+                    util::line(f, inner, row, Line::from(vec![sp(" current target ", theme::dim_text()), sp(format!("{} {}, {:.0} cells", o.name_str(), o.tag(), d), theme::label())]));
+                    row += 1;
+                }
+            }
+            let avg = if c.attempts > 0 { c.chase_stats.0 / c.attempts.max(1) } else { 0 };
+            util::line(f, inner, row, Line::from(vec![
+                sp(" avg chase ", theme::dim_text()),
+                sp(format!("{avg} ticks; longest {} (Year {})", c.chase_stats.1, c.chase_longest_year), theme::text()),
+            ]));
+            row += 2;
+        } else {
+            // S03a Survival.
+            panel::section(f, inner, row, "Survival");
+            row += 1;
+            let escape_rate = if c.chased > 0 { c.escaped as f32 / c.chased as f32 } else { 0.0 };
+            util::line(f, inner, row, Line::from(sp(format!(" chased {} times, escaped {} ({:.0}%)", c.chased, c.escaped, escape_rate * 100.0), theme::text())));
+            row += 1;
+            bars::labeled(f.buffer_mut(), inner, row, " escape rate", escape_rate, theme::GOOD, 16, 16);
+            row += 1;
+            panel::section(f, inner, row, "Threats seen");
+            row += 1;
+            let mut any = false;
+            for pred_id in SpeciesId::ALL.iter().filter(|s| s.kind() == Kind::Predator) {
+                let n = c.threats_by_species[pred_id.index()];
+                if n == 0 {
+                    continue;
+                }
+                any = true;
+                util::line(f, inner, row, Line::from(vec![
+                    sp(format!(" {} ", pred_id.glyph().to_ascii_uppercase()), Style::default().fg(pred_id.color()).bg(theme::PANEL_BG)),
+                    sp(format!("{:<8}{} ", pred_id.name(), n), theme::text()),
+                ]));
+                row += 1;
+            }
+            if !any {
+                util::line(f, inner, row, Line::from(sp(" none seen yet", theme::dim_text())));
+                row += 1;
+            }
+            row += 1;
+        }
+    } else {
+        // S03c Killer + scavengers nearby.
+        if let Some(killer_id) = c.death.and_then(|d| d.killer) {
+            panel::section(f, inner, row, "Killer");
+            row += 1;
+            let kname = sim
+                .creatures
+                .get(killer_id)
+                .map(|k| format!("{} {}", k.name_str(), k.tag()))
+                .or_else(|| sim.lineage.get(killer_id).map(|n| format!("{} {}", n.name_str(), n.tag)))
+                .unwrap_or_else(|| format!("#{}", killer_id.0));
+            let kills = sim.creatures.get(killer_id).map(|k| k.kills).unwrap_or(0);
+            let chase = c.death.map(|d| d.chase_ticks).unwrap_or(0);
+            util::line(f, inner, row, Line::from(vec![
+                sp(" ", theme::text()),
+                sp(kname, theme::title()),
+                sp(format!("  {} kills  chase {} ticks", kills, chase), theme::text()),
+            ]));
+            row += 2;
+        }
+        panel::section(f, inner, row, "Scavengers nearby");
+        row += 1;
+        let mut scav: Vec<(f32, &Creature)> = sim
+            .creatures
+            .living()
+            .filter(|o| o.species.kind() == Kind::Predator && o.goal == Goal::Scavenge)
+            .map(|o| (crate::sim::dist(c.x, c.y, o.x, o.y), o))
+            .collect();
+        scav.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.id.cmp(&b.1.id)));
+        if scav.is_empty() {
+            util::line(f, inner, row, Line::from(sp(" none", theme::dim_text())));
+            row += 1;
+        }
+        for (d, o) in scav.iter().take(2) {
+            util::line(f, inner, row, Line::from(vec![
+                sp(format!(" {} ", o.species.glyph().to_ascii_uppercase()), Style::default().fg(o.species.color()).bg(theme::PANEL_BG)),
+                sp(format!("{:<9}{:<7} {:>3.0} cells", o.name_str(), o.tag(), d), theme::text()),
+            ]));
+            row += 1;
+        }
+        row += 1;
+    }
+
     // Legacy (C4 FR10).
     panel::section(f, inner, row, "Legacy");
     row += 1;
@@ -463,10 +586,6 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
                 util::line(f, inner, row, Line::from(sp(" no notable mutations among descendants", theme::dim_text())));
             }
         }
-        row += 1;
-    }
-    if !c.alive {
-        util::line(f, inner, row, Line::from(sp(" carcass feeds: scavengers arrive with predators", theme::dim_text())));
         row += 1;
     }
     row += 1;

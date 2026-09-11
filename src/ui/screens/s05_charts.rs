@@ -21,6 +21,7 @@ const CHART_W: u16 = 112;
 #[derive(Clone, Copy, PartialEq)]
 pub enum Variant {
     Time,
+    Phase,
     Stacked,
 }
 
@@ -50,7 +51,8 @@ impl Screen for Charts {
         match key.code {
             KeyCode::Char('g') => {
                 self.variant = match self.variant {
-                    Variant::Time => Variant::Stacked,
+                    Variant::Time => Variant::Phase,
+                    Variant::Phase => Variant::Stacked,
                     Variant::Stacked => Variant::Time,
                 };
                 Action::None
@@ -59,7 +61,10 @@ impl Screen for Charts {
                 self.variant = Variant::Time;
                 Action::None
             }
-            KeyCode::Char('2') => Action::None, // phase plot arrives with predators
+            KeyCode::Char('2') => {
+                self.variant = Variant::Phase;
+                Action::None
+            }
             KeyCode::Char('3') => {
                 self.variant = Variant::Stacked;
                 Action::None
@@ -99,6 +104,10 @@ impl Screen for Charts {
                 time_chart(f, chart_area, sim, &window);
                 time_sidebar(f, side_area, sim, &window);
             }
+            Variant::Phase => {
+                phase_chart(f, chart_area, sim, &window);
+                phase_sidebar(f, side_area, sim, &window);
+            }
             Variant::Stacked => {
                 stacked_chart(f, chart_area, sim, &window);
                 stacked_sidebar(f, side_area, sim, &window);
@@ -107,6 +116,7 @@ impl Screen for Charts {
 
         let view = match self.variant {
             Variant::Time => "chart 1/3  populations",
+            Variant::Phase => "chart 2/3  phase plot",
             Variant::Stacked => "chart 3/3  stacked species",
         };
         status::render(f, Rect::new(area.x, status_row, area.width, 1), &[("g", "next chart"), ("1/3", "pick"), ("+/-", "zoom"), ("Esc", "back")], view);
@@ -118,6 +128,7 @@ struct Window<'a> {
     samples: &'a [Sample],
     season_days: u32,
     prey: Vec<f32>,
+    pred: Vec<f32>,
     veg: Vec<f32>,
     drought: Vec<bool>,
 }
@@ -131,6 +142,7 @@ impl<'a> Window<'a> {
             samples,
             season_days: sim.time.season_days,
             prey: samples.iter().map(|s| (s.population[0] + s.population[1] + s.population[2]) as f32).collect(),
+            pred: samples.iter().map(|s| (s.population[3] + s.population[4] + s.population[5]) as f32).collect(),
             veg: samples.iter().map(|s| s.veg_mean).collect(),
             drought: samples.iter().map(|s| s.drought_flags.iter().any(|&d| d)).collect(),
         }
@@ -186,9 +198,9 @@ fn time_chart(f: &mut Frame, area: Rect, sim: &Sim, w: &Window) {
     util::line(f, upper, 0, Line::from(sp(" Prey (voles + hares + deer)", Style::default().fg(theme::HARE).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD))));
     line_chart(f, Rect::new(upper.x, upper.y + 1, upper.width, upper.height - 1), w, &w.prey, theme::HARE, 100.0);
     panel::section(f, inner, half, "Predators (foxes + wolves + lynx)");
-    util::line(f, lower, 0, Line::from(sp(" no predators yet", theme::dim_text())));
-    let zeros = vec![0.0f32; w.len()];
-    line_chart(f, Rect::new(lower.x, lower.y + 1, lower.width, lower.height - 1), w, &zeros, theme::WOLF, 20.0);
+    let label = if w.pred.iter().all(|&v| v <= 0.0) { " no predators yet" } else { " " };
+    util::line(f, lower, 0, Line::from(sp(label, theme::dim_text())));
+    line_chart(f, Rect::new(lower.x, lower.y + 1, lower.width, lower.height - 1), w, &w.pred, theme::WOLF, 20.0);
     let _ = sim;
 }
 
@@ -321,13 +333,18 @@ fn time_sidebar(f: &mut Frame, area: Rect, sim: &Sim, w: &Window) {
         sp(format!("  {} {} / 30d", arrow, pct), Style::default().fg(arrow_color(arrow)).bg(theme::PANEL_BG)),
     ]));
     row += 1;
+    let pred_now = sim.species.iter().filter(|s| s.species.kind() == Kind::Predator).map(|s| s.count).sum::<u32>();
+    let pred_counts: Vec<u16> = w.pred.iter().map(|v| *v as u16).collect();
+    let parrow = trend_arrow(&pred_counts);
+    let ppct = pct_change(&w.pred, 30).map(|p| format!("{:+.0}%", p)).unwrap_or_else(|| "–".into());
     util::line(f, inner, row, Line::from(vec![
         sp(" predators  ", theme::dim_text()),
-        sp("    0", Style::default().fg(theme::WOLF).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-        sp("  none yet", theme::dim_text()),
+        sp(format!("{:>5}", pred_now), Style::default().fg(theme::WOLF).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+        sp(format!("  {} {} / 30d", parrow, ppct), Style::default().fg(arrow_color(parrow)).bg(theme::PANEL_BG)),
     ]));
     row += 1;
-    util::line(f, inner, row, Line::from(sp(" ratio –  (no predators)", theme::dim_text())));
+    let ratio = if pred_now > 0 { format!("{:.1} prey per predator", prey_now as f32 / pred_now as f32) } else { "–  (no predators)".to_string() };
+    util::line(f, inner, row, Line::from(sp(format!(" ratio {ratio}"), theme::dim_text())));
     row += 2;
 
     panel::section(f, inner, row, "Prey");
@@ -353,13 +370,42 @@ fn time_sidebar(f: &mut Frame, area: Rect, sim: &Sim, w: &Window) {
     row += 1;
     panel::section(f, inner, row, "Predators");
     row += 1;
-    util::line(f, inner, row, Line::from(sp(" none yet — arrive in a later chunk", theme::dim_text())));
-    row += 2;
+    match stats_of(&w.pred) {
+        Some((min, imin, max, imax, mean)) => {
+            let swing = if mean > 0.0 { (max - min) / mean * 100.0 } else { 0.0 };
+            for (k, v) in [
+                ("min", format!("{:.0}  on {}", min, w.day_label(imin))),
+                ("max", format!("{:.0}  on {}", max, w.day_label(imax))),
+                ("mean", format!("{:.0}", mean)),
+                ("swing", format!("{:.0}%", swing)),
+            ] {
+                util::line(f, inner, row, Line::from(vec![sp(format!(" {:<7}", k), theme::dim_text()), sp(v, theme::text())]));
+                row += 1;
+            }
+        }
+        None => {
+            util::line(f, inner, row, Line::from(sp(" no predators yet", theme::dim_text())));
+            row += 1;
+        }
+    }
+    row += 1;
     panel::section(f, inner, row, "Coupling");
     row += 1;
-    util::line(f, inner, row, Line::from(vec![sp(" lag      ", theme::dim_text()), sp("–", theme::text())]));
-    row += 1;
-    util::line(f, inner, row, Line::from(vec![sp(" corr     ", theme::dim_text()), sp("–", theme::text())]));
+    let full = sim.series.samples();
+    let full_prey: Vec<f32> = full.iter().map(|s| (s.population[0] + s.population[1] + s.population[2]) as f32).collect();
+    let full_pred: Vec<f32> = full.iter().map(|s| (s.population[3] + s.population[4] + s.population[5]) as f32).collect();
+    match crate::sim::stats::peak_lag(&full_prey, &full_pred) {
+        Some(lag) => {
+            util::line(f, inner, row, Line::from(vec![sp(" lag      ", theme::dim_text()), sp(format!("{lag} days"), theme::text())]));
+            row += 1;
+            util::line(f, inner, row, Line::from(vec![sp(" corr     ", theme::dim_text()), sp("predators trail prey", theme::text())]));
+        }
+        None => {
+            util::line(f, inner, row, Line::from(vec![sp(" lag      ", theme::dim_text()), sp("–", theme::text())]));
+            row += 1;
+            util::line(f, inner, row, Line::from(vec![sp(" corr     ", theme::dim_text()), sp("–", theme::text())]));
+        }
+    }
     row += 2;
 
     let dry_days = w.drought.iter().filter(|&&d| d).count();
@@ -416,6 +462,192 @@ fn time_sidebar(f: &mut Frame, area: Rect, sim: &Sim, w: &Window) {
     panel::section(f, inner, row, "Keys");
     row += 1;
     util::line(f, inner, row, Line::from(sp(" [+/-] zoom 60/240/720d", theme::dim_text())));
+}
+
+// ------------------------------------------------------------------ S05b
+
+fn phase_chart(f: &mut Frame, area: Rect, sim: &Sim, w: &Window) {
+    let inner = panel::draw_with_hint(f, area, "Phase plot — predators against prey", &format!("one point per day, {} days", w.len()), panel::Kind::Outer);
+    if w.len() == 0 || inner.height < 12 {
+        return;
+    }
+    let _ = sim;
+    let note_h = 3u16;
+    let plot = Rect::new(inner.x, inner.y + 1, inner.width, inner.height - 1 - note_h);
+    let label_w = 6u16;
+    let px = plot.x + label_w;
+    let pw = plot.width - label_w - 1;
+    let py = plot.y;
+    let ph = plot.height - 1; // last row carries the x labels
+    if pw < 4 || ph < 4 {
+        return;
+    }
+    let max_prey = round_up(w.prey.iter().cloned().fold(0.0f32, f32::max), 50.0);
+    let max_pred = round_up(w.pred.iter().cloned().fold(0.0f32, f32::max), 20.0).max(1.0);
+    let mean_prey = w.prey.iter().sum::<f32>() / w.len() as f32;
+    let mean_pred = w.pred.iter().sum::<f32>() / w.len() as f32;
+    let buf = f.buffer_mut();
+    let n = w.len();
+    let recent = n.saturating_sub(40);
+
+    let x_of = |v: f32| px + ((v / max_prey) * (pw - 1) as f32).round() as u16;
+    let y_of = |v: f32| py + ph - 1 - ((v / max_pred) * (ph - 1) as f32).round() as u16;
+
+    // Scatter: older days as dim dots, the last 40 days as an accent half-block.
+    for i in 0..n {
+        let x = x_of(w.prey[i]);
+        let y = y_of(w.pred[i]);
+        if i < recent {
+            if let Some(c) = buf.cell_mut((x, y)) {
+                c.set_char(glyphs::BULLET);
+                c.set_style(Style::default().fg(theme::DIM).bg(theme::PANEL_BG));
+            }
+        } else if let Some(c) = buf.cell_mut((x, y)) {
+            c.set_char(glyphs::HALF_LOWER);
+            c.set_style(Style::default().fg(theme::ACCENT).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD));
+        }
+    }
+    // Today marker.
+    if let Some(&lp) = w.prey.last() {
+        if let Some(&lq) = w.pred.last() {
+            let x = x_of(lp);
+            let y = y_of(lq);
+            if let Some(c) = buf.cell_mut((x, y)) {
+                c.set_char(glyphs::FULL_BLOCK);
+                c.set_style(Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD));
+            }
+        }
+    }
+    // Equilibrium crosshair (very dim dotted lines through the means).
+    let eqx = x_of(mean_prey);
+    let eqy = y_of(mean_pred);
+    for r in 0..ph {
+        let y = py + r;
+        if let Some(c) = buf.cell_mut((eqx, y)) {
+            if c.symbol() == " " {
+                c.set_char(glyphs::BULLET);
+                c.set_style(Style::default().fg(theme::dim(theme::TEXT, 0.5)).bg(theme::PANEL_BG));
+            }
+        }
+    }
+    for x in px..px + pw {
+        if let Some(c) = buf.cell_mut((x, eqy)) {
+            if c.symbol() == " " {
+                c.set_char(glyphs::BULLET);
+                c.set_style(Style::default().fg(theme::dim(theme::TEXT, 0.5)).bg(theme::PANEL_BG));
+            }
+        }
+    }
+    buf.set_stringn(eqx + 1, eqy, format!("{} equilibrium ({:.0}, {:.0})", glyphs::DIAMOND, mean_prey, mean_pred), 26, Style::default().fg(theme::INFO).bg(theme::PANEL_BG));
+
+    // Axes.
+    for x in px..px + pw {
+        if let Some(c) = buf.cell_mut((x, py + ph)) {
+            c.set_char(glyphs::H_LINE);
+            c.set_style(Style::default().fg(theme::DIM).bg(theme::PANEL_BG));
+        }
+    }
+    for r in 0..ph {
+        if let Some(c) = buf.cell_mut((px - 1, py + r)) {
+            c.set_char(glyphs::V_LINE);
+            c.set_style(Style::default().fg(theme::DIM).bg(theme::PANEL_BG));
+        }
+    }
+    for k in 0..=4u16 {
+        let y = py + ph - 1 - ((ph - 1) as f32 * k as f32 / 4.0).round() as u16;
+        let v = (max_pred * k as f32 / 4.0).round() as u32;
+        buf.set_stringn(inner.x, y, format!("{:>5}", v), 5, theme::dim_text());
+    }
+    for k in 0..=4u16 {
+        let x = px + ((pw - 1) as f32 * k as f32 / 4.0).round() as u16;
+        let v = (max_prey * k as f32 / 4.0).round() as u32;
+        buf.set_stringn(x, py + ph + 1, format!("{:>4}", v), 4, theme::dim_text());
+    }
+    buf.set_stringn(inner.x, py, "pred", 4, Style::default().fg(theme::WOLF).bg(theme::PANEL_BG));
+    buf.set_stringn(px, py + ph + 1, "prey total", 10, Style::default().fg(theme::HARE).bg(theme::PANEL_BG));
+
+    // Quadrant captions.
+    buf.set_stringn(px + 1, py + 1, "II few prey, many predators", 27, theme::dim_text());
+    buf.set_stringn(px + pw.saturating_sub(26), py + 1, "I many prey, many predators", 26, theme::dim_text());
+    buf.set_stringn(px + 1, py + ph.saturating_sub(2), "III few of both", 15, theme::dim_text());
+    buf.set_stringn(px + pw.saturating_sub(24), py + ph.saturating_sub(2), "IV many prey, few predators", 26, theme::dim_text());
+
+    // Note rows.
+    let note_y = inner.y + inner.height - 3;
+    panel::section(f, inner, note_y - inner.y, "Reading the orbit");
+    util::line(f, inner, note_y - inner.y + 1, Line::from(sp(" the orbit runs counter-clockwise: prey boom, predators follow, prey crash, predators starve", theme::dim_text())));
+    util::line(f, inner, note_y - inner.y + 2, Line::from(vec![
+        sp(format!("{}{} ", glyphs::HALF_UPPER, glyphs::HALF_LOWER), Style::default().fg(theme::ACCENT).bg(theme::PANEL_BG)),
+        sp("last 40 days   ", theme::text()),
+        sp(format!("{} ", glyphs::FULL_BLOCK), Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG)),
+        sp("today   ", theme::text()),
+        sp(format!("{} ", glyphs::BULLET), Style::default().fg(theme::DIM).bg(theme::PANEL_BG)),
+        sp("older days", theme::text()),
+    ]));
+}
+
+fn phase_sidebar(f: &mut Frame, area: Rect, sim: &Sim, w: &Window) {
+    let inner = panel::draw(f, area, "Phase", panel::Kind::Outer);
+    let mut row = 0u16;
+    let prey_now = sim.species.iter().filter(|s| s.species.kind() == Kind::Prey).map(|s| s.count).sum::<u32>();
+    let pred_now = sim.species.iter().filter(|s| s.species.kind() == Kind::Predator).map(|s| s.count).sum::<u32>();
+    panel::section(f, inner, row, "Now");
+    row += 1;
+    util::line(f, inner, row, Line::from(vec![
+        sp(" prey      ", theme::dim_text()),
+        sp(format!("{prey_now:>5}"), Style::default().fg(theme::HARE).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+        sp("  predators  ", theme::dim_text()),
+        sp(format!("{pred_now:>4}"), Style::default().fg(theme::WOLF).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+    ]));
+    row += 2;
+
+    panel::section(f, inner, row, "Equilibrium estimate");
+    row += 1;
+    let mean_prey = w.prey.iter().sum::<f32>() / w.len().max(1) as f32;
+    let mean_pred = w.pred.iter().sum::<f32>() / w.len().max(1) as f32;
+    util::line(f, inner, row, Line::from(vec![
+        sp(" prey*  ", theme::dim_text()), sp(format!("{mean_prey:.0}"), theme::text()),
+        sp("   pred*  ", theme::dim_text()), sp(format!("{mean_pred:.0}"), theme::text()),
+    ]));
+    row += 1;
+    util::line(f, inner, row, Line::from(sp(" the time means mark the orbit centre", theme::dim_text())));
+    row += 2;
+
+    panel::section(f, inner, row, "Quadrants");
+    row += 1;
+    for (name, desc, color) in [
+        ("I", "many prey, many predators", theme::WOLF),
+        ("II", "few prey, many predators", theme::WARN),
+        ("III", "few of both", theme::HARE),
+        ("IV", "many prey, few predators", theme::GOOD),
+    ] {
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!(" {name} "), Style::default().fg(color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(desc, theme::text()),
+        ]));
+        row += 1;
+    }
+    row += 2;
+
+    panel::section(f, inner, row, "Recent path");
+    row += 1;
+    let n = w.len();
+    if n > 0 {
+        for back in [40usize, 30, 20, 10, 0] {
+            if back >= n {
+                continue;
+            }
+            let i = n - 1 - back;
+            let day = w.day_label(i);
+            util::line(f, inner, row, Line::from(vec![
+                sp(format!(" {:<9}", day), theme::dim_text()),
+                sp(format!("prey {:>4}", w.prey[i] as u32), theme::text()),
+                sp(format!("  pred {:>4}", w.pred[i] as u32), theme::text()),
+            ]));
+            row += 1;
+        }
+    }
+    let _ = sim;
 }
 
 // ------------------------------------------------------------------ S05c

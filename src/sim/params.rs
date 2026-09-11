@@ -172,7 +172,7 @@ pub struct CreaturesParams {
 impl Default for CreaturesParams {
     fn default() -> Self {
         CreaturesParams {
-            initial_counts: counts([240, 180, 90, 0, 0, 0]),
+            initial_counts: counts([240, 180, 90, 30, 24, 12]),
             adult_age_days: counts([30, 60, 180, 90, 120, 120]),
             hunger_base: 0.004,
             hunger_per_size: 0.008,
@@ -226,6 +226,148 @@ impl CreaturesParams {
     }
 }
 
+/// Predation, hunting, fleeing, scavenging, migration and extinction tunables
+/// (C5 FR1, the `[predation]` table).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct PredationParams {
+    /// Prey is hidden when `camouflage × cover ≥ sense × detect_threshold`.
+    pub detect_threshold: f32,
+    /// Cover bonus per terrain for the hiding rule (water/rock are absent → 0).
+    pub cover_by_terrain: BTreeMap<Terrain, f32>,
+    /// A resting prey on a den cell cannot be targeted.
+    pub den_protects: bool,
+    /// Chase clock starts at `cheb ≤ this` (not at detection).
+    pub chase_trigger_cheb: usize,
+    pub chase_max_ticks: u32,
+    /// Extra move budget per tick while chasing.
+    pub chase_speed_bonus: f32,
+    pub catch_distance_cheb: usize,
+    pub kill_base: f32,
+    pub kill_speed_w: f32,
+    pub kill_aggression_w: f32,
+    pub kill_size_w: f32,
+    pub kill_min: f32,
+    pub kill_max: f32,
+    pub eat_hours_base: f32,
+    pub eat_hours_per_size: f32,
+    pub hunger_per_kill_base: f32,
+    pub hunger_per_kill_per_size: f32,
+    /// Eating advances the carcass decay by this much.
+    pub kill_consumes_decay: f32,
+    pub hunt_cooldown_hours: u32,
+    pub hunt_hunger_min: f32,
+    pub scavenge_hunger_min: f32,
+    /// `hunger −= nutrition × (1 − decay)` once per scavenge visit; prey only.
+    pub carcass_nutrition: f32,
+    pub scavenge_hours: u32,
+    pub scavenge_consumes_decay: f32,
+    /// easy | normal | hard — stored here, given meaning in C6 (never mutates kill_base).
+    pub difficulty: Difficulty,
+    /// Per-predator prey preference shares (preference 0 = never targeted).
+    pub prey_preference: BTreeMap<SpeciesId, BTreeMap<SpeciesId, f32>>,
+    pub nocturnal: Vec<SpeciesId>,
+    pub flee_distance: f32,
+    pub flee_ticks: u32,
+    pub flee_energy_factor: f32,
+    /// A resting prey detects predators at half its sense range.
+    pub rest_detect_factor: f32,
+    pub migrate_veg: f32,
+    pub migrate_days: u32,
+    pub migrate_pressure: f32,
+    pub migrate_prey_min: u32,
+    pub migrate_cooldown_days: u32,
+    pub local_extinction_min: u32,
+}
+
+impl Default for PredationParams {
+    fn default() -> Self {
+        use Terrain::*;
+        let prey = |vals: [(SpeciesId, f32); 3]| -> BTreeMap<SpeciesId, f32> { vals.into_iter().collect() };
+        PredationParams {
+            detect_threshold: 0.8,
+            cover_by_terrain: BTreeMap::from([
+                (Forest, 1.0),
+                (GrassDense, 1.0),
+                (Grass, 0.8),
+                (GrassSparse, 0.6),
+                (Dirt, 0.6),
+                (Sand, 0.4),
+                (ShallowWater, 0.4),
+            ]),
+            den_protects: true,
+            chase_trigger_cheb: 4,
+            chase_max_ticks: 30,
+            chase_speed_bonus: 0.5,
+            catch_distance_cheb: 1,
+            kill_base: 0.35,
+            kill_speed_w: 1.0,
+            kill_aggression_w: 0.3,
+            kill_size_w: 0.2,
+            kill_min: 0.05,
+            kill_max: 0.95,
+            eat_hours_base: 2.0,
+            eat_hours_per_size: 4.0,
+            hunger_per_kill_base: 0.6,
+            hunger_per_kill_per_size: 0.4,
+            kill_consumes_decay: 0.6,
+            hunt_cooldown_hours: 6,
+            hunt_hunger_min: 0.45,
+            scavenge_hunger_min: 0.7,
+            carcass_nutrition: 0.5,
+            scavenge_hours: 1,
+            scavenge_consumes_decay: 0.2,
+            difficulty: Difficulty::Normal,
+            prey_preference: BTreeMap::from([
+                (SpeciesId::Fox, prey([(SpeciesId::Vole, 0.6), (SpeciesId::Hare, 0.4), (SpeciesId::Deer, 0.0)])),
+                (SpeciesId::Wolf, prey([(SpeciesId::Deer, 0.5), (SpeciesId::Hare, 0.4), (SpeciesId::Vole, 0.1)])),
+                (SpeciesId::Lynx, prey([(SpeciesId::Hare, 0.6), (SpeciesId::Vole, 0.4), (SpeciesId::Deer, 0.0)])),
+            ]),
+            nocturnal: vec![SpeciesId::Fox, SpeciesId::Lynx],
+            flee_distance: 8.0,
+            flee_ticks: 10,
+            flee_energy_factor: 2.0,
+            rest_detect_factor: 0.5,
+            migrate_veg: 0.25,
+            migrate_days: 6,
+            migrate_pressure: 0.35,
+            migrate_prey_min: 10,
+            migrate_cooldown_days: 30,
+            local_extinction_min: 5,
+        }
+    }
+}
+
+impl PredationParams {
+    /// `clamp(kill_base + kill_speed_w × (pred.speed − prey.speed) + kill_aggression_w
+    /// × pred.aggression − kill_size_w × prey.size, kill_min, kill_max)` (FR1).
+    pub fn kill_chance(&self, pred_speed: f32, prey_speed: f32, pred_aggression: f32, prey_size: f32) -> f32 {
+        (self.kill_base + self.kill_speed_w * (pred_speed - prey_speed) + self.kill_aggression_w * pred_aggression
+            - self.kill_size_w * prey_size)
+            .clamp(self.kill_min, self.kill_max)
+    }
+
+    /// `ceil(eat_hours_base + eat_hours_per_size × prey.size)` hours (ticks).
+    pub fn eat_hours(&self, prey_size: f32) -> u32 {
+        (self.eat_hours_base + self.eat_hours_per_size * prey_size).ceil() as u32
+    }
+
+    /// `hunger_per_kill_base + hunger_per_kill_per_size × prey.size`.
+    pub fn hunger_per_kill(&self, prey_size: f32) -> f32 {
+        self.hunger_per_kill_base + self.hunger_per_kill_per_size * prey_size
+    }
+
+    /// Preference share of `prey` for `pred` (0 = never targeted; absent = 0).
+    pub fn preference(&self, pred: SpeciesId, prey: SpeciesId) -> f32 {
+        self.prey_preference.get(&pred).and_then(|m| m.get(&prey)).copied().unwrap_or(0.0)
+    }
+
+    /// Whether a species is nocturnal (fox and lynx).
+    pub fn is_nocturnal(&self, id: SpeciesId) -> bool {
+        self.nocturnal.contains(&id)
+    }
+}
+
 /// Reproduction, inheritance and lineage tunables (C4 FR1, the `[genetics]` table).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -256,8 +398,6 @@ pub struct GeneticsParams {
     pub lineage_keep_generations: u32,
     pub lineage_up: u32,
     pub lineage_rows_max: usize,
-    /// Stored here; used by C5.
-    pub predation_difficulty: Difficulty,
 }
 
 impl Default for GeneticsParams {
@@ -283,7 +423,6 @@ impl Default for GeneticsParams {
             lineage_keep_generations: 8,
             lineage_up: 3,
             lineage_rows_max: 400,
-            predation_difficulty: Difficulty::Normal,
         }
     }
 }
@@ -397,6 +536,7 @@ pub struct Params {
     pub creatures: CreaturesParams,
     pub genetics: GeneticsParams,
     pub ecology: EcologyParams,
+    pub predation: PredationParams,
 }
 
 impl Params {

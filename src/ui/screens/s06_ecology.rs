@@ -295,9 +295,33 @@ fn regions(f: &mut Frame, area: Rect, app: &AppState, world: &World, time: &crat
             buf.set_stringn(x + 21, y, format!("{:.2}", v), 4, Style::default().fg(text).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
             x += 26;
         }
-        buf.set_stringn(inner.x + 86, y, format!("{:>5}", 0), 5, Style::default().fg(theme::HARE).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
-        buf.set_stringn(inner.x + 91, y, format!("{:>5}", 0), 5, Style::default().fg(theme::WOLF).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
-        buf.set_stringn(inner.x + 98, y, format!("{:>4.2} ", 0.0), 5, Style::default().fg(text).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
+        let (prey_n, pred_n) = match &app.sim {
+            Some(sim) => {
+                let (mut prey_n, mut pred_n) = (0u32, 0u32);
+                for c in sim.creatures.living() {
+                    if world.region_index(c.x, c.y) == ri {
+                        if c.species.kind() == crate::sim::Kind::Prey { prey_n += 1 } else { pred_n += 1 }
+                    }
+                }
+                (prey_n, pred_n)
+            }
+            None => (0, 0),
+        };
+        let mut psum = 0.0f32;
+        let mut pn = 0usize;
+        for yy in r.2..r.4 {
+            for xx in r.1..r.3 {
+                let cell = world.cell(xx, yy);
+                if !cell.terrain.is_water() {
+                    psum += cell.pred_pressure;
+                    pn += 1;
+                }
+            }
+        }
+        let pressure = if pn > 0 { psum / pn as f32 } else { 0.0 };
+        buf.set_stringn(inner.x + 86, y, format!("{:>5}", prey_n), 5, Style::default().fg(theme::HARE).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
+        buf.set_stringn(inner.x + 91, y, format!("{:>5}", pred_n), 5, Style::default().fg(theme::WOLF).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
+        buf.set_stringn(inner.x + 98, y, format!("{:>4.2} ", pressure), 5, Style::default().fg(text).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
         buf.set_stringn(inner.x + 104, y, format!("{:<9}", label), 9, Style::default().fg(color).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }).add_modifier(Modifier::BOLD));
         row += 1;
     }
