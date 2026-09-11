@@ -21,7 +21,13 @@ pub enum Overlay {
     Region,
     /// Population density of one species (S02f).
     Species(SpeciesId),
+    /// Health: every living creature coloured by its weakest vital (S02g).
+    Health,
 }
+
+/// How far the terrain fades under `Overlay::Health` so the creature colours
+/// carry the picture.
+pub const HEALTH_TERRAIN_DIM: f32 = 0.6;
 
 /// Kernel radius (ellipse metric, cells) of one creature's contribution to the
 /// species-density field: 7 rows × 13 columns on screen.
@@ -80,6 +86,9 @@ pub struct MapCreature<'a> {
     pub glyph: char,
     pub color: Color,
     pub sense_cells: u16,
+    /// Weakest vital in 0..=1 (health, fullness, hydration or energy, whichever
+    /// is lowest); drives the colour under `Overlay::Health`.
+    pub condition: f32,
     pub trail: &'a [(usize, usize)],
     pub target: Option<(usize, usize)>,
 }
@@ -208,6 +217,12 @@ pub fn density_cell(cell: &Cell, t: f32, species: SpeciesId, color: Color) -> (c
     (g, c, theme::dim(c, 0.75))
 }
 
+/// Colour of a creature under the health overlay: the same good / warning /
+/// bad bands the vital bars use (above 60 %, 30–60 %, below 30 %).
+pub fn condition_color(condition: f32) -> Color {
+    crate::widgets::bars::vital_color(condition, false)
+}
+
 pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOptions) {
     let world = source.world();
     let (ox, oy) = opts.origin;
@@ -233,6 +248,10 @@ pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
             let cell = world.cell(wx, wy);
             let (g, fg, bg) = match &density {
                 Some((sp, color, field)) => density_cell(cell, field[wy * world.width() + wx], *sp, *color),
+                None if opts.overlay == Overlay::Health => {
+                    let (g, fg, bg) = terrain_cell(cell, opts.winter);
+                    (g, theme::dim(fg, HEALTH_TERRAIN_DIM), theme::dim(bg, HEALTH_TERRAIN_DIM))
+                }
                 None => overlay_cell(cell, opts.overlay).unwrap_or_else(|| terrain_cell(cell, opts.winter)),
             };
             c.set_char(g);
@@ -341,6 +360,11 @@ pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
             // over its own density; every other species fades.
             let own = matches!(opts.overlay, Overlay::Species(sp) if sp == c.species);
             let mut color = tint(theme::dim(c.color, if own { 0.0 } else { fade }));
+            // Under the health overlay the species colour gives way to the
+            // creature's condition: green, amber or red at full strength.
+            if opts.overlay == Overlay::Health {
+                color = tint(condition_color(c.condition));
+            }
             if let Overlay::Sense(sid) = opts.overlay {
                 if sid == c.id {
                     color = theme::TEXT_BRIGHT;
@@ -514,7 +538,7 @@ mod tests {
     }
 
     fn creature(id: u32, x: usize, y: usize, species: SpeciesId) -> MapCreature<'static> {
-        MapCreature { id: CreatureId(id), x, y, alive: true, adult: true, species, glyph: 'v', color: theme::VOLE, sense_cells: 3, trail: &[], target: None }
+        MapCreature { id: CreatureId(id), x, y, alive: true, adult: true, species, glyph: 'v', color: theme::VOLE, sense_cells: 3, condition: 1.0, trail: &[], target: None }
     }
 
     #[test]
@@ -556,6 +580,32 @@ mod tests {
         // The shown species is drawn at full colour; the other one is faded.
         assert_eq!(buf[(10, 4)].fg, theme::VOLE);
         assert_eq!(buf[(3, 4)].fg, theme::dim(theme::VOLE, 0.55));
+    }
+
+    #[test]
+    fn health_overlay_colours_creatures_by_condition_and_dims_terrain() {
+        let world = two_region_world(20, 8);
+        let mut fit = creature(1, 10, 4, SpeciesId::Vole);
+        fit.condition = 0.9;
+        let mut strained = creature(2, 3, 4, SpeciesId::Hare);
+        strained.condition = 0.45;
+        let mut critical = creature(3, 6, 2, SpeciesId::Deer);
+        critical.condition = 0.1;
+        let creatures = vec![fit, strained, critical];
+        let opts = MapOptions { overlay: Overlay::Health, fade_creatures: true, ..MapOptions::default() };
+        let backend = TestBackend::new(20, 8);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let source = TestSource { world: &world, creatures };
+        terminal.draw(|f| render(f.buffer_mut(), Rect::new(0, 0, 20, 8), &source, &opts)).unwrap();
+        let buf = terminal.backend().buffer().clone();
+        assert_eq!(buf[(10, 4)].fg, theme::GOOD, "healthy reads green");
+        assert_eq!(buf[(3, 4)].fg, theme::WARN, "strained reads amber");
+        assert_eq!(buf[(6, 2)].fg, theme::BAD, "critical reads red");
+        // Terrain keeps its glyph but is dimmed under the creatures.
+        let (g, fg, bg) = terrain_cell(world.cell(0, 0), false);
+        assert_eq!(buf[(0, 0)].symbol(), g.to_string());
+        assert_eq!(buf[(0, 0)].fg, theme::dim(fg, HEALTH_TERRAIN_DIM));
+        assert_eq!(buf[(0, 0)].bg, theme::dim(bg, HEALTH_TERRAIN_DIM));
     }
 
     #[test]

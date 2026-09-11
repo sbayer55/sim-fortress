@@ -1,5 +1,5 @@
 //! S01: the live world map (variants a/b/d — default, wide, winter/night), the
-//! S02a/b/c/e/f overlays, S01c look mode and S01e follow mode.
+//! S02a/b/c/e/f/g overlays, S01c look mode and S01e follow mode.
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
@@ -47,6 +47,7 @@ impl WorldMap {
             Overlay::Sense(_) => "sense range".into(),
             Overlay::Region => "regions".into(),
             Overlay::Species(sp) => sp.plural().to_lowercase(),
+            Overlay::Health => "health".into(),
             Overlay::None => String::new(),
         }
     }
@@ -265,6 +266,8 @@ impl Screen for WorldMap {
                 self.region_sidebar(f, side, app, sim);
             } else if let Overlay::Species(sp) = overlay {
                 self.species_sidebar(f, side, sim, sp);
+            } else if overlay == Overlay::Health {
+                self.health_sidebar(f, side, sim);
             } else if overlay_active {
                 self.overlay_sidebar(f, side, app, world);
             } else {
@@ -299,15 +302,17 @@ impl Screen for WorldMap {
         } else if app.look_cursor.is_some() {
             &[("↑↓←→", "move"), ("Enter", "inspect"), ("f", "follow"), ("z", "zoom"), ("Esc", "exit look")]
         } else if self.overlay == Overlay::Region {
-            &[("1-6", "overlay"), ("o", "cycle"), ("↑↓", "region"), ("Enter", "jump"), ("←→", "scroll"), ("Esc", "clear"), ("Space", "pause"), ("y", "ecology")]
+            &[("1-7", "overlay"), ("o", "cycle"), ("↑↓", "region"), ("Enter", "jump"), ("←→", "scroll"), ("Esc", "clear"), ("Space", "pause"), ("y", "ecology")]
         } else if let Overlay::Sense(_) = overlay {
-            &[("Tab", "next predator"), ("i", "inspect"), ("f", "follow"), ("1-6", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause")]
+            &[("Tab", "next predator"), ("i", "inspect"), ("f", "follow"), ("1-7", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause")]
         } else if let Overlay::Species(_) = overlay {
-            &[("Tab", "next species"), ("Shift+Tab", "previous"), ("←→↑↓", "scroll"), ("1-6", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause")]
+            &[("Tab", "next species"), ("Shift+Tab", "previous"), ("←→↑↓", "scroll"), ("1-7", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause")]
+        } else if overlay == Overlay::Health {
+            &[("←→↑↓", "scroll"), ("k", "look"), ("1-7", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("e", "log"), ("s", "species")]
         } else if overlay_active {
-            &[("1-6", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("+/-", "speed"), ("e", "log"), ("y", "ecology"), ("g", "charts")]
+            &[("1-7", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("+/-", "speed"), ("e", "log"), ("y", "ecology"), ("g", "charts")]
         } else {
-            &[("k", "look"), ("Tab", "wide"), ("←→↑↓", "scroll"), ("1-6", "overlay"), ("Space", "pause"), ("+/-", "speed"), ("p", "controls"), ("?", "help"), ("q", "world")]
+            &[("k", "look"), ("Tab", "wide"), ("←→↑↓", "scroll"), ("1-7", "overlay"), ("Space", "pause"), ("+/-", "speed"), ("p", "controls"), ("?", "help"), ("q", "world")]
         };
         let sky = if night { glyphs::MOON } else { glyphs::SUN };
         let skyname = if night { "night" } else { "day" };
@@ -397,7 +402,8 @@ impl WorldMap {
                     },
                     Overlay::Sense(_) => Overlay::Region,
                     Overlay::Region => Overlay::Species(self.default_species(app)),
-                    Overlay::Species(_) => Overlay::None,
+                    Overlay::Species(_) => Overlay::Health,
+                    Overlay::Health => Overlay::None,
                 };
                 match self.overlay {
                     Overlay::Sense(id) => self.sense_id = Some(id),
@@ -431,6 +437,10 @@ impl WorldMap {
             }
             KeyCode::Char('6') => {
                 self.open_species(app);
+                Action::None
+            }
+            KeyCode::Char('7') => {
+                self.overlay = Overlay::Health;
                 Action::None
             }
             KeyCode::Esc => {
@@ -508,6 +518,10 @@ impl WorldMap {
                 self.open_species(app);
                 Action::None
             }
+            KeyCode::Char('7') => {
+                self.overlay = Overlay::Health;
+                Action::None
+            }
             KeyCode::Esc => {
                 app.look_cursor = None;
                 Action::None
@@ -563,6 +577,10 @@ impl WorldMap {
                 self.open_species(app);
                 Action::None
             }
+            KeyCode::Char('7') => {
+                self.overlay = Overlay::Health;
+                Action::None
+            }
             _ => Action::Unhandled,
         }
     }
@@ -578,6 +596,7 @@ impl WorldMap {
             ("4", "sense", matches!(self.overlay, Overlay::Sense(_))),
             ("5", "regions", self.overlay == Overlay::Region),
             ("6", "species", matches!(self.overlay, Overlay::Species(_))),
+            ("7", "health", self.overlay == Overlay::Health),
         ] {
             util::line(f, inner, row, Line::from(vec![
                 Span::styled(format!(" {key} "), if active { theme::selected() } else { theme::key() }),
@@ -1386,6 +1405,112 @@ impl WorldMap {
         panel::section(f, inner, row, "Reading the map");
         row += 1;
         for note in [" shown species bright, others faded", " Esc restores the plain map", " ░ <25%  ▒ <50%  ▓ <75%  █ ≥75%"] {
+            util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
+            row += 1;
+        }
+    }
+
+    /// S02g sidebar: what the colours mean, every species' condition tally,
+    /// which vital is failing the strained animals, and reading notes.
+    fn health_sidebar(&self, f: &mut Frame, area: Rect, sim: &Sim) {
+        use crate::ui::style::{condition, VITALS};
+        let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
+        let mut row = 0u16;
+        let tone = |c: Color| Style::default().fg(c).bg(theme::PANEL_BG);
+
+        panel::section(f, inner, row, "Health");
+        row += 1;
+        for note in [" colour = each animal's weakest vital:", " health, hunger, thirst or energy."] {
+            util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
+            row += 1;
+        }
+
+        panel::section(f, inner, row, "Legend");
+        row += 1;
+        for (color, label, band) in [(theme::GOOD, "healthy ", "above 60%"), (theme::WARN, "strained", "30–60%"), (theme::BAD, "critical", "below 30%")] {
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(" ███ ", tone(color)),
+                Span::styled(format!("{label}  "), theme::text()),
+                Span::styled(band, theme::dim_text()),
+            ]));
+            row += 1;
+        }
+        util::line(f, inner, row, Line::from(Span::styled(" terrain dimmed  % carcass unchanged", theme::dim_text())));
+        row += 2;
+
+        // Per-species tally of the three bands and the mean condition.
+        panel::section(f, inner, row, "By species");
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled("   species    n  good strn crit  mean", theme::dim_text())));
+        row += 1;
+        let mut all = [0usize; 3];
+        let (mut all_n, mut all_sum) = (0usize, 0.0f32);
+        let mut weakest = [0usize; 4];
+        for id in SpeciesId::ALL {
+            let mut bands = [0usize; 3];
+            let (mut n, mut sum) = (0usize, 0.0f32);
+            for c in sim.creatures.living().filter(|c| c.species == id) {
+                let (t, which) = condition(c);
+                let band = if t > 0.6 { 0 } else if t > 0.3 { 1 } else { 2 };
+                bands[band] += 1;
+                if band > 0 {
+                    weakest[which] += 1;
+                }
+                n += 1;
+                sum += t;
+            }
+            for (a, b) in all.iter_mut().zip(bands) {
+                *a += b;
+            }
+            all_n += n;
+            all_sum += sum;
+            let text = if n == 0 { theme::dim_text() } else { theme::text() };
+            let count = |k: usize, color: Color| Span::styled(format!("{:>5}", bands[k]), if n == 0 { theme::dim_text() } else { tone(color) });
+            let mean = if n > 0 { format!("{:>4}%", (sum / n as f32 * 100.0).round() as u32) } else { "    —".to_string() };
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(format!(" {} ", id.glyph().to_ascii_uppercase()), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{:<8}{n:>4}", id.name()), text),
+                count(0, theme::GOOD),
+                count(1, theme::WARN),
+                count(2, theme::BAD),
+                Span::styled(mean, text),
+            ]));
+            row += 1;
+        }
+        let mean = if all_n > 0 { format!("{:>4}%", (all_sum / all_n as f32 * 100.0).round() as u32) } else { "    —".to_string() };
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(format!("   {:<8}{all_n:>4}", "all"), theme::text()),
+            Span::styled(format!("{:>5}", all[0]), tone(theme::GOOD)),
+            Span::styled(format!("{:>5}", all[1]), tone(theme::WARN)),
+            Span::styled(format!("{:>5}", all[2]), tone(theme::BAD)),
+            Span::styled(mean, theme::text()),
+        ]));
+        row += 2;
+
+        // Which vital is dragging the strained and critical animals down.
+        let unwell = all[1] + all[2];
+        panel::section(f, inner, row, "Weakest vital");
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(format!(" of the {unwell} strained or critical:"), theme::dim_text())));
+        row += 1;
+        for (i, label) in VITALS.iter().enumerate() {
+            let share = if unwell > 0 { weakest[i] as f32 / unwell as f32 } else { 0.0 };
+            util::line(f, inner, row, Line::from(Span::styled(format!(" {:<8}", label), theme::text())));
+            bars::bar(f.buffer_mut(), inner.x + 10, inner.y + row, 12, share, theme::WARN);
+            util::line(f, Rect::new(inner.x + 23, inner.y, inner.width.saturating_sub(23), inner.height), row, Line::from(vec![
+                Span::styled(format!("{:>4}", weakest[i]), theme::text()),
+                Span::styled(format!("{:>4}%", (share * 100.0).round() as u32), theme::dim_text()),
+            ]));
+            row += 1;
+        }
+        row += 1;
+
+        row = self.overlays_selector(f, inner, row);
+        row += 1;
+
+        panel::section(f, inner, row, "Reading the map");
+        row += 1;
+        for note in [" colour is the animal, not the ground", " k look / Enter inspects one animal", " Esc restores the plain map"] {
             util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
             row += 1;
         }

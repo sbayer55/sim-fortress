@@ -204,6 +204,7 @@ fn keys_column(f: &mut Frame, col: Rect) {
             ("o", "cycle overlays"),
             ("1 2 3", "veg · pressure · moisture"),
             ("4 5 6", "sense · regions · species"),
+            ("7", "health (weakest vital)"),
             ("Tab", "next predator / species"),
             ("Shift+Tab", "previous species"),
             ("Esc", "clear overlay"),

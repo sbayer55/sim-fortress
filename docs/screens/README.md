@@ -15,7 +15,7 @@ letter is the variant. The prototype binary shows the id on row 0.
 |-----|---------------------------|------------------------------------------------|-----------------------------------------------------------------|
 | S00 | Title / Main Menu         | [s00-title.md](s00-title.md)                   | a: default                                                      |
 | S01 | World Map                 | [s01-world-map.md](s01-world-map.md)           | a: default · b: wide · c: look mode · d: winter/night · e: follow |
-| S02 | Map Overlay               | [s02-map-overlay.md](s02-map-overlay.md)       | a: vegetation · b: pressure · c: moisture · d: sense range · e: regions · f: species density |
+| S02 | Map Overlay               | [s02-map-overlay.md](s02-map-overlay.md)       | a: vegetation · b: pressure · c: moisture · d: sense range · e: regions · f: species density · g: health |
 | S03 | Creature Inspector        | [s03-creature-inspector.md](s03-creature-inspector.md) | a: prey · b: predator · c: corpse                        |
 | S04 | Species Browser           | [s04-species-browser.md](s04-species-browser.md) | a: table · b: species detail                                  |
 | S05 | Population Charts         | [s05-population-charts.md](s05-population-charts.md) | a: over time · b: phase plot · c: stacked area            |
@@ -47,7 +47,7 @@ flowchart TD
     S01["S01 World Map<br/>a default · b wide · d winter/night"]
     S01c["S01c Look mode"]
     S01e["S01e Follow creature"]
-    S02["S02 Map Overlay<br/>a veg · b pressure · c moisture · d sense · e regions · f species"]
+    S02["S02 Map Overlay<br/>a veg · b pressure · c moisture · d sense · e regions · f species · g health"]
     S13["S13 Local Zoom"]
     S10["S10 Simulation Controls"]
     S11["S11 Legend & Help"]
@@ -74,7 +74,7 @@ flowchart TD
     S01 -- "f / Tab" --> S01e
     S01e -- "Esc" --> S01
     S01e -- "i" --> S03
-    S01 -- "o / 1-6" --> S02
+    S01 -- "o / 1-7" --> S02
     S02 -- "Esc" --> S01
     S02 -- "k" --> S01c
 

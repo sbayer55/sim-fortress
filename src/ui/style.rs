@@ -101,6 +101,25 @@ impl SpeciesStyle for SpeciesId {
     }
 }
 
+/// The four vitals as the health overlay (S02g) reads them: each in 0..=1
+/// where 1 is best, in the order the vital bars use.
+pub const VITALS: [&str; 4] = ["health", "hunger", "thirst", "energy"];
+
+/// A creature's condition: its weakest vital in 0..=1 and the index into
+/// `VITALS` of that vital (ties go to the earlier one). Hunger and thirst are
+/// inverted so that, like health and energy, higher is better.
+pub fn condition(c: &Creature) -> (f32, usize) {
+    let vitals = [c.hp, 1.0 - c.hunger, 1.0 - c.thirst, c.energy];
+    let mut worst = (vitals[0].clamp(0.0, 1.0), 0);
+    for (i, v) in vitals.iter().enumerate().skip(1) {
+        let v = v.clamp(0.0, 1.0);
+        if v < worst.0 {
+            worst = (v, i);
+        }
+    }
+    worst
+}
+
 /// Build the map renderer's lightweight creature view from a sim creature.
 pub fn map_creature(c: &Creature) -> MapCreature<'_> {
     MapCreature {
@@ -113,6 +132,7 @@ pub fn map_creature(c: &Creature) -> MapCreature<'_> {
         glyph: if c.adult { c.species.glyph().to_ascii_uppercase() } else { c.species.glyph() },
         color: c.species.color(),
         sense_cells: c.genome.sense_cells(),
+        condition: condition(c).0,
         trail: &c.trail,
         target: c.target,
     }

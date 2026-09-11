@@ -7,7 +7,8 @@ Live since: C2
 ## Purpose
 An overlay recolours the world map so one hidden quantity can be read at a glance across the
 whole valley: how much forage is standing, where animals have been crowding, where water and
-soil moisture lie, how far a chosen predator can perceive, or where one species is massed.
+soil moisture lie, how far a chosen predator can perceive, where one species is massed, or
+which animals are in trouble.
 Overlays are a *state* of the
 [S01 World Map](s01-world-map.md), not a separate place: the map keeps scrolling, the clock
 keeps running, and the sidebar swaps from the status summary to an explanation of what the
@@ -22,13 +23,15 @@ starving here?", "can that wolf see the hare yet?") that the plain map cannot sh
 | S02c | water & moisture                   | `3`, or the third stop of the `o` cycle                                  |
 | S02d | sense range of selected predator   | `4`, or the fourth stop of the `o` cycle; needs a selected living creature |
 | S02e | regions                            | `5`, or the fifth stop of the `o` cycle                                  |
-| S02f | species density                    | `6`, or the sixth (last) stop of the `o` cycle before the plain map; `Tab` cycles the species |
+| S02f | species density                    | `6`, or the sixth stop of the `o` cycle; `Tab` cycles the species        |
+| S02g | health                             | `7`, or the seventh (last) stop of the `o` cycle before the plain map    |
 
 S02a–c are **heatmaps**: every land cell is shaded by a 0–1 value. S02d is a **ring**: the map
 keeps its normal terrain colours and one creature's perception radius is drawn on top. S02e is
 a **tint**: terrain glyphs and colours stay, every region's background is blended toward that
 region's own hue and its name is written across it. S02f is a **heatmap** too, but of a field
-computed from the living creatures rather than a stored cell value.
+computed from the living creatures rather than a stored cell value. S02g is a **creature
+tint**: the terrain is dimmed and every living creature is recoloured by its condition.
 
 ## Layout
 Same frame split as the world map. Only the sidebar contents and the map title change.
@@ -56,8 +59,8 @@ flowchart TB
 ```
 
 The map panel title must append ` · overlay: vegetation` / `pressure` / `moisture` /
-`sense range` / `regions` / the shown species' lowercase plural (`voles`, `wolves`) so the
-active overlay is named even when the sidebar is collapsed.
+`sense range` / `regions` / the shown species' lowercase plural (`voles`, `wolves`) /
+`health` so the active overlay is named even when the sidebar is collapsed.
 
 ## Content requirements
 
@@ -122,6 +125,18 @@ active overlay is named even when the sidebar is collapsed.
 16. **Creatures**: the shown species draws at full colour over its own density; every other
     species fades 55 % and resources 50 % as on the other heatmaps.
 
+### Map panel — health (S02g)
+17. **Condition**: for every living creature, the weakest of its four vitals, each read in
+    0..1 with 1 best: health, fullness (`1 − hunger`), hydration (`1 − thirst`) and energy.
+    Nothing is stored; it is read off the creatures every frame.
+18. **Creature colour**: the species colour gives way to the vital-bar bands — good above
+    60 %, warning 30–60 %, bad below 30 % — at full strength, adults still bold, so a red
+    glyph anywhere on the map is an animal about to die. Carcasses keep `%` in the carcass
+    colour; the followed creature keeps its accent highlight.
+19. **Terrain**: glyphs and palette are unchanged (winter and night still apply) but both
+    foreground and background are dimmed 60 % so the creature colours carry the picture.
+    Resources fade 50 % as on the heatmaps.
+
 ### Sidebar — heatmaps (S02a–c)
 Sections from the top, in order; all fit in the 40 inner rows without scrolling.
 
@@ -182,6 +197,25 @@ Sections from the top, in order; exactly 40 rows.
 - **Reading the map** (4 rows): shown species bright, others faded; `Esc` restores the plain
   map; the shade-glyph thresholds.
 
+### Sidebar — health (S02g)
+Sections from the top, in order; 39 of the 40 rows.
+
+- **Health** (3 rows): section rule, then two dim lines: `colour = each animal's weakest vital:`
+  and `health, hunger, thirst or energy.`
+- **Legend** (5 rows): three `███` swatches in the good / warning / bad colours labelled
+  `healthy above 60%`, `strained 30–60%`, `critical below 30%`, then the note `terrain dimmed
+  % carcass unchanged`.
+- **By species** (9 rows): a dim header, one row per species — coloured upper-case glyph,
+  name, living count, then the healthy / strained / critical counts in their band colours and
+  the mean condition as a percentage (dim zeros and `—` for an extinct species) — and an
+  `all` total row.
+- **Weakest vital** (6 rows): `of the N strained or critical:` then one row each for
+  `health`, `hunger`, `thirst`, `energy` with a 12-column warning-coloured bar of the share
+  of unwell animals whose lowest vital it is, the count and the percentage.
+- The same **Overlays selector** as item 16, now seven rows, `7 health` active.
+- **Reading the map** (4 rows): colour is the animal, not the ground; `k` look / `Enter`
+  inspects one animal; `Esc` restores the plain map.
+
 ### Sidebar — sense ring (S02d)
 18. **Sense range** (3 rows): a two-line explanation that the ring is how far the selected
     creature can see, hear or smell other creatures.
@@ -217,6 +251,8 @@ Sections from the top, in order; exactly 40 rows.
 | `≈` dimmed, `▲` dimmed         | deep water and rock excluded from vegetation/pressure shading      |
 | vegetation ramp               | brown → olive → green → bright green                               |
 | species ramp                  | near-black → species colour → bright tint of it (S02f)             |
+| good / warning / bad glyphs   | creature condition bands above 60 % / 30–60 % / below 30 % (S02g)  |
+| dimmed terrain                | terrain under the health overlay (60 % toward the background)      |
 | heat ramp                     | navy → blue → green → yellow → orange → red                         |
 | water ramp                    | tan → grey-green → blue → deep blue                                 |
 | `°` accent                     | sense-ring edge                                                    |
@@ -234,8 +270,8 @@ Status-bar hints differ between the heatmaps and the sense ring.
 ### S02a–c
 | Key     | Action                                                  | Goes to |
 |---------|---------------------------------------------------------|---------|
-| `o`     | next overlay (vegetation → pressure → moisture → sense → regions → species) | this screen, next variant |
-| `1`–`6` | pick an overlay directly                                | [S02a–f](s02-map-overlay.md) |
+| `o`     | next overlay (vegetation → pressure → moisture → sense → regions → species → health) | this screen, next variant |
+| `1`–`7` | pick an overlay directly                                | [S02a–g](s02-map-overlay.md) |
 | `k`     | enter look mode with the overlay still active           | [S01c Look mode](s01-world-map.md) |
 | `Space` | pause / resume                                          | stays here |
 | `+` `-` | faster / slower                                         | stays here |
@@ -255,8 +291,8 @@ Status-bar hints differ between the heatmaps and the sense ring.
 ### S02f
 | Key     | Action                                          | Goes to |
 |---------|-------------------------------------------------|---------|
-| `o`     | next overlay (species → plain map)              | [S01 World Map](s01-world-map.md) |
-| `1`–`6` | pick an overlay directly                        | [S02a–f](s02-map-overlay.md) |
+| `o`     | next overlay (species → health)                 | [S02g](s02-map-overlay.md) |
+| `1`–`7` | pick an overlay directly                        | [S02a–g](s02-map-overlay.md) |
 | `Tab` / `Shift+Tab` | next / previous species, wrapping, extinct species included | stays here |
 | `←→↑↓`  | scroll the map                                  | stays here |
 | `Esc`   | close the overlay                               | [S01 World Map](s01-world-map.md) |
@@ -264,6 +300,19 @@ Status-bar hints differ between the heatmaps and the sense ring.
 Opening with `6` shows the look-cursor creature's species, else the followed creature's,
 else the species last shown if it still lives, else the first species with a living
 population. The species shown is remembered across `Esc` and reopening.
+
+### S02g
+| Key     | Action                                          | Goes to |
+|---------|-------------------------------------------------|---------|
+| `o`     | next overlay (health → plain map)               | [S01 World Map](s01-world-map.md) |
+| `1`–`7` | pick an overlay directly                        | [S02a–g](s02-map-overlay.md) |
+| `←→↑↓`  | scroll the map                                  | stays here |
+| `k`     | look mode with the overlay still active         | [S01c Look mode](s01-world-map.md) |
+| `Tab`   | collapse / restore the sidebar                  | stays here |
+| `Esc`   | close the overlay                               | [S01 World Map](s01-world-map.md) |
+
+`7` works from the plain map, look mode and follow mode alike; the overlay survives all
+three.
 
 ### S02d
 | Key     | Action                                          | Goes to |
@@ -292,6 +341,8 @@ Global keys not listed in the bar (`s g y e w q`, `.`) keep their README meaning
   max 100 %.
 - **Extinct species** (S02f): still selectable with `Tab`; the map shows no shading, the
   species row reads `extinct`, the total is `0 alive` and the densest region is `—`.
+- **Extinct species** (S02g): the row shows dim zeros and `—` for the mean.
+- **No unwell animals** (S02g): the weakest-vital bars are empty and read `0  0%`.
 - **Paused simulation**: the overlay stays; only the clock in the status bar stops.
 - **Night / winter**: not shown by the prototype; a heatmap replaces terrain colours, so the
   night blue-shift and snow palette have no obvious effect on it.
@@ -311,7 +362,10 @@ Global keys not listed in the bar (`s g y e w q`, `.`) keep their README meaning
   or the nearest predator to the viewport centre. And does `4` refuse to open when the
   selection is prey?
 - `o` cycles vegetation → pressure → moisture → (sense, when available) → regions → species →
-  plain map.
+  health → plain map.
+- S02g reads energy as a vital, so an animal simply asleep in its den reads strained or
+  critical for a while each night; whether resting should be excluded, or energy dropped
+  from the condition, is undecided.
 - The S02f kernel radius (3), falloff and cap (6) are presentation choices with no tie to the
   simulation's own notion of crowding (`prey_pressure` / `pred_pressure`); revisit if a
   per-species pressure field is ever stored.

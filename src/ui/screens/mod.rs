@@ -448,7 +448,67 @@ mod tests {
         s.handle_key(key(KeyCode::Char('o')), &mut app);
         assert!(matches!(s.overlay, Overlay::Species(_)), "Region → Species, got {:?}", s.overlay);
         s.handle_key(key(KeyCode::Char('o')), &mut app);
+        assert_eq!(s.overlay, Overlay::Health, "Species → Health");
+        s.handle_key(key(KeyCode::Char('o')), &mut app);
         assert_eq!(s.overlay, Overlay::None);
+    }
+
+    #[test]
+    fn s01_key_7_opens_health_overlay_in_every_mode() {
+        let (mut app, mut s) = map_with_sim();
+        s.handle_key(key(KeyCode::Char('7')), &mut app);
+        assert_eq!(s.overlay, Overlay::Health);
+        // Arrows scroll, Tab still toggles the sidebar (no species to cycle).
+        app.viewport_size.set((110, 40));
+        s.handle_key(key(KeyCode::Right), &mut app);
+        assert_eq!(app.viewport_origin.0, 5);
+        s.handle_key(key(KeyCode::Tab), &mut app);
+        assert!(s.wide);
+        s.handle_key(key(KeyCode::Tab), &mut app);
+        s.handle_key(key(KeyCode::Esc), &mut app);
+        assert_eq!(s.overlay, Overlay::None);
+        // Look mode and follow mode reach it too.
+        s.handle_key(key(KeyCode::Char('k')), &mut app);
+        s.handle_key(key(KeyCode::Char('7')), &mut app);
+        assert_eq!(s.overlay, Overlay::Health);
+        assert!(app.look_cursor.is_some(), "look mode stays on under the overlay");
+        s.handle_key(key(KeyCode::Esc), &mut app);
+        s.overlay = Overlay::None;
+        app.follow = app.sim.as_ref().unwrap().creatures.living_ids().first().copied();
+        s.handle_key(key(KeyCode::Char('7')), &mut app);
+        assert_eq!(s.overlay, Overlay::Health);
+    }
+
+    #[test]
+    fn s01_health_overlay_renders_155x45() {
+        let (mut app, mut s) = map_with_sim();
+        s.handle_key(key(KeyCode::Char('7')), &mut app);
+        s.world_name = "The Valley of Sunfall".into();
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| s.render(&app, f, Rect::new(0, 0, 155, 45))).unwrap();
+        let buf = terminal.backend().buffer();
+        let row = |y: u16| -> String { (0..155).map(|x| buf[(x, y)].symbol().to_string()).collect() };
+        assert!(row(0).contains("overlay: health"), "{}", row(0));
+        let all: String = (0..45).map(row).collect::<Vec<_>>().join("\n");
+        assert!(all.contains("Weakest vital"));
+        assert!(all.contains("Lynx"));
+        assert!(all.contains("7 health"), "selector lists the seventh overlay");
+        // Every living creature is drawn in a condition colour, never its species colour.
+        let sim = app.sim.as_ref().unwrap();
+        let mut seen = 0;
+        for c in sim.creatures.living().filter(|c| c.alive && c.x < 110 && c.y < 40) {
+            let cell = &buf[(1 + c.x as u16, 1 + c.y as u16)];
+            if cell.symbol() != c.species.glyph().to_string() && cell.symbol() != c.species.glyph().to_ascii_uppercase().to_string() {
+                continue; // another creature or resource drew over it
+            }
+            assert!([theme::GOOD, theme::WARN, theme::BAD].contains(&cell.fg), "{:?} at {},{}", cell.fg, c.x, c.y);
+            seen += 1;
+        }
+        assert!(seen > 10, "saw {seen} creatures");
+        // The sidebar tallies add up to the living population.
+        let n = sim.creatures.living().filter(|c| c.alive).count();
+        assert!(all.contains(&format!("all     {n:>4}")), "{all}");
     }
 
     #[test]
