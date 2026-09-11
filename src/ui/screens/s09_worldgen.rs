@@ -39,6 +39,9 @@ struct WorldGenForm {
     preview: World,
     dirty: bool,
     text_edited: bool,
+    /// Typed replacement for the focused numeric field (Space opens it,
+    /// Enter applies it, Esc cancels it).
+    edit: Option<String>,
 }
 
 impl WorldGenForm {
@@ -64,6 +67,7 @@ impl WorldGenForm {
             preview,
             dirty: false,
             text_edited: false,
+            edit: None,
         }
     }
 
@@ -143,6 +147,37 @@ impl Screen for WorldGen {
     fn handle_key(&mut self, key: KeyEvent, app: &mut AppState) -> Action {
         let mut form = self.form.borrow_mut();
         let code = key.code;
+
+        // Typed numeric entry (opened with Space) captures every key until it
+        // is applied (Enter/Tab) or cancelled (Esc).
+        if form.edit.is_some() {
+            match code {
+                KeyCode::Char(c) if c.is_ascii_digit() || c == '.' || c == 'x' || c == 'X' => {
+                    let buf = form.edit.as_mut().unwrap();
+                    if buf.len() < 9 {
+                        buf.push(c.to_ascii_lowercase());
+                    }
+                }
+                KeyCode::Backspace => {
+                    form.edit.as_mut().unwrap().pop();
+                }
+                KeyCode::Enter => {
+                    let focus = form.focus;
+                    let text = form.edit.take().unwrap();
+                    commit_edit(&mut form, focus, &text);
+                }
+                KeyCode::Tab | KeyCode::BackTab => {
+                    let focus = form.focus;
+                    let text = form.edit.take().unwrap();
+                    commit_edit(&mut form, focus, &text);
+                    let n = if code == KeyCode::BackTab { FIELD_COUNT - 1 } else { 1 };
+                    form.focus = (form.focus + n) % FIELD_COUNT;
+                }
+                KeyCode::Esc => form.edit = None,
+                _ => {}
+            }
+            return Action::None;
+        }
 
         if code == KeyCode::Tab || code == KeyCode::BackTab {
             let n = if code == KeyCode::BackTab { FIELD_COUNT - 1 } else { 1 };
@@ -229,6 +264,12 @@ impl Screen for WorldGen {
             return Action::Pop;
         }
 
+        // Space opens typed entry on numeric fields.
+        if code == KeyCode::Char(' ') && is_numeric_field(focus) {
+            form.edit = Some(String::new());
+            return Action::None;
+        }
+
         // Adjustable fields respond to Left/Right; on Size, Up/Down adjusts height.
         // Enter generates.
         match code {
@@ -263,12 +304,22 @@ impl Screen for WorldGen {
         preview_panel(f, preview_area, &form);
 
         let seed_hint = if form.seed().is_some() { format!("seed {}  preview is live", form.seed_text) } else { "invalid seed".to_string() };
-        status::render(
-            f,
-            Rect::new(area.x, status_row, area.width, 1),
-            &[("Tab", "next field"), ("←→", "adjust"), ("↑↓", "height"), ("Enter", "generate"), ("Esc", "back")],
-            &seed_hint,
-        );
+        if form.edit.is_some() {
+            let hint = if form.focus == 2 { "type WIDTHxHEIGHT or WIDTH" } else { "type a number" };
+            status::render(
+                f,
+                Rect::new(area.x, status_row, area.width, 1),
+                &[("0-9", "type value"), ("Enter", "apply"), ("Esc", "cancel")],
+                hint,
+            );
+        } else {
+            status::render(
+                f,
+                Rect::new(area.x, status_row, area.width, 1),
+                &[("Tab", "next field"), ("←→", "adjust"), ("↑↓", "height"), ("Space", "type value"), ("Enter", "generate"), ("Esc", "back")],
+                &seed_hint,
+            );
+        }
     }
 }
 
@@ -319,6 +370,62 @@ fn adjust(form: &mut WorldGenForm, focus: usize, dir: i32) {
         16 => cycle_difficulty(&mut form.predation.difficulty, dir),
         17 => form.regrowth_rate = clamp_f32(form.regrowth_rate + dir as f32 * 0.1, 0.2, 2.0),
         _ => {}
+    }
+}
+
+/// Fields whose value can be typed in directly (Space opens the entry).
+fn is_numeric_field(focus: usize) -> bool {
+    matches!(focus, 2..=5 | 7..=15 | 17)
+}
+
+/// Apply a typed value to a numeric field, clamped to the same range the
+/// arrow keys use. Empty or unparseable input leaves the field unchanged.
+fn commit_edit(form: &mut WorldGenForm, focus: usize, text: &str) {
+    let text = text.trim();
+    if text.is_empty() {
+        return;
+    }
+    let int = |t: &str| t.parse::<i64>().ok();
+    let flt = |t: &str| t.parse::<f32>().ok().filter(|v| v.is_finite());
+    let w = &mut form.world;
+    let changed = match focus {
+        2 => {
+            let (wt, ht) = match text.split_once('x') {
+                Some((a, b)) => (a, Some(b)),
+                None => (text, None),
+            };
+            let mut ok = false;
+            if let Some(v) = int(wt) {
+                w.width = clamp_i64(v, 100, 1000) as usize;
+                ok = true;
+            }
+            if let Some(v) = ht.and_then(int) {
+                w.height = clamp_i64(v, 30, 1000) as usize;
+                ok = true;
+            }
+            ok
+        }
+        3 => int(text).map(|v| w.water_pct = clamp_i64(v, 0, 60) as u8).is_some(),
+        4 => int(text).map(|v| w.forest_pct = clamp_i64(v, 0, 50) as u8).is_some(),
+        5 => int(text).map(|v| w.rock_pct = clamp_i64(v, 0, 30) as u8).is_some(),
+        7 => int(text).map(|v| form.season_days = clamp_i64(v, 30, 180) as u32).is_some(),
+        8..=13 => int(text).map(|v| form.counts[focus - 8] = clamp_i64(v, 0, 999) as u32).is_some(),
+        14 => flt(text).map(|v| form.genetics.mutation_rate = clamp_f32(v, 0.0, 0.2)).is_some(),
+        15 => flt(text).map(|v| form.genetics.mutation_strength = clamp_f32(v, 0.0, 0.2)).is_some(),
+        17 => flt(text).map(|v| form.regrowth_rate = clamp_f32(v, 0.2, 2.0)).is_some(),
+        _ => false,
+    };
+    if changed {
+        form.dirty = true;
+    }
+}
+
+/// The text shown in a numeric field: the typed buffer with a caret while
+/// editing, otherwise the formatted value.
+fn shown(form: &WorldGenForm, focus: usize, value: String) -> String {
+    match &form.edit {
+        Some(buf) if form.focus == focus => format!("{buf}_"),
+        _ => value,
     }
 }
 
@@ -396,12 +503,12 @@ fn form_panel(f: &mut Frame, area: Rect, form: &WorldGenForm) {
     let wf = [
         field("World name", form.name.clone(), false, "text"),
         field("Seed", form.seed_text.clone(), false, "hex/decimal"),
-        field("Size", format!("{} x {}", form.world.width, form.world.height), true, "←→ width  ↑↓ height"),
-        field("Water %", form.world.water_pct.to_string(), true, "lakes + rivers"),
-        field("Forest %", form.world.forest_pct.to_string(), true, "predator cover"),
-        field("Rock %", form.world.rock_pct.to_string(), true, "impassable"),
+        field("Size", shown(form, 2, format!("{} x {}", form.world.width, form.world.height)), true, "←→ width  ↑↓ height"),
+        field("Water %", shown(form, 3, form.world.water_pct.to_string()), true, "lakes + rivers"),
+        field("Forest %", shown(form, 4, form.world.forest_pct.to_string()), true, "predator cover"),
+        field("Rock %", shown(form, 5, form.world.rock_pct.to_string()), true, "impassable"),
         field("Rainfall", rainfall_name(form.world.rainfall).to_string(), true, "dry/normal/wet"),
-        field("Season length", format!("{} days", form.season_days), true, "30 - 180 days"),
+        field("Season length", shown(form, 7, format!("{} days", form.season_days)), true, "30 - 180 days"),
     ];
     for (i, (label, value, adjustable, hint)) in wf.iter().enumerate() {
         draw_field(f, inner, row, label.as_str(), value.as_str(), *adjustable, hint, i == form.focus);
@@ -436,7 +543,7 @@ fn form_panel(f: &mut Frame, area: Rect, form: &WorldGenForm) {
         buf.set_stringn(inner.x + 13, y, format!("{:<9}", kind), 9, Style::default().fg(theme::DIM).bg(bg));
         let arrows = if focused { Style::default().fg(theme::KEY).bg(bg).add_modifier(Modifier::BOLD) } else { Style::default().fg(theme::DIM).bg(bg) };
         buf.set_stringn(inner.x + 22, y, glyphs::REWIND.to_string(), 1, arrows);
-        buf.set_stringn(inner.x + 23, y, format!("{:>5} ", form.counts[i]), 6, base);
+        buf.set_stringn(inner.x + 23, y, format!("{:>5} ", shown(form, 8 + i, form.counts[i].to_string())), 6, base);
         buf.set_stringn(inner.x + 29, y, glyphs::PLAY.to_string(), 1, arrows);
         let share = form.counts[i] as f32 / total.max(1) as f32;
         bars::bar(buf, inner.x + 33, y, 22, share, id.color());
@@ -451,10 +558,10 @@ fn form_panel(f: &mut Frame, area: Rect, form: &WorldGenForm) {
     panel::section(f, inner, row, "Evolution");
     row += 1;
     let evo = [
-        field("Mutation rate", format!("{:.2}", form.genetics.mutation_rate), true, "per trait/birth"),
-        field("Mutation strength", format!("{:.2}", form.genetics.mutation_strength), true, "mutation sd"),
+        field("Mutation rate", shown(form, 14, format!("{:.2}", form.genetics.mutation_rate)), true, "per trait/birth"),
+        field("Mutation strength", shown(form, 15, format!("{:.2}", form.genetics.mutation_strength)), true, "mutation sd"),
         field("Predation difficulty", difficulty_name(form.predation.difficulty).to_string(), true, "easy/norm/hard"),
-        field("Regrowth rate", format!("{:.1}", form.regrowth_rate), true, "veg multiplier"),
+        field("Regrowth rate", shown(form, 17, format!("{:.1}", form.regrowth_rate)), true, "veg multiplier"),
     ];
     for (i, (label, value, adjustable, hint)) in evo.iter().enumerate() {
         draw_field(f, inner, row, label.as_str(), value.as_str(), *adjustable, hint, form.focus == 14 + i);

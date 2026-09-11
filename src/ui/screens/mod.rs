@@ -306,6 +306,70 @@ mod tests {
     }
 
     #[test]
+    fn s09_space_opens_typed_entry_on_numeric_fields() {
+        let mut app = state();
+        let mut s = WorldGen::new();
+        let k = |c| KeyEvent::new(c, KeyModifiers::NONE);
+        // Size field: Space, type "250x120", Enter.
+        s.handle_key(k(KeyCode::Char(' ')), &mut app);
+        for c in "250x120".chars() {
+            s.handle_key(k(KeyCode::Char(c)), &mut app);
+        }
+        // Esc cancels an open entry rather than leaving the screen.
+        let a = s.handle_key(k(KeyCode::Esc), &mut app);
+        assert!(matches!(a, Action::None));
+        let p = s.form_params();
+        assert_eq!((p.world.width, p.world.height), (Params::default().world.width, Params::default().world.height));
+        // Try again and apply with Enter.
+        s.handle_key(k(KeyCode::Char(' ')), &mut app);
+        for c in "250x120".chars() {
+            s.handle_key(k(KeyCode::Char(c)), &mut app);
+        }
+        let a = s.handle_key(k(KeyCode::Enter), &mut app);
+        assert!(matches!(a, Action::None), "Enter applies the typed value instead of generating");
+        let p = s.form_params();
+        assert_eq!((p.world.width, p.world.height), (250, 120));
+
+        // Water %: typed values are clamped to the field range.
+        s.handle_key(k(KeyCode::Tab), &mut app);
+        s.handle_key(k(KeyCode::Char(' ')), &mut app);
+        for c in "99".chars() {
+            s.handle_key(k(KeyCode::Char(c)), &mut app);
+        }
+        s.handle_key(k(KeyCode::Enter), &mut app);
+        assert_eq!(s.form_params().world.water_pct, 60);
+
+        // Tab applies and moves on; Backspace edits the buffer.
+        s.handle_key(k(KeyCode::Char(' ')), &mut app);
+        s.handle_key(k(KeyCode::Char('1')), &mut app);
+        s.handle_key(k(KeyCode::Char('9')), &mut app);
+        s.handle_key(k(KeyCode::Backspace), &mut app);
+        s.handle_key(k(KeyCode::Char('2')), &mut app);
+        s.handle_key(k(KeyCode::Tab), &mut app);
+        let p = s.form_params();
+        assert_eq!(p.world.water_pct, 12);
+        // Now on Forest %: a float field further down accepts decimals.
+        for _ in 0..10 {
+            s.handle_key(k(KeyCode::Tab), &mut app); // -> field 14, Mutation rate
+        }
+        s.handle_key(k(KeyCode::Char(' ')), &mut app);
+        for c in "0.15".chars() {
+            s.handle_key(k(KeyCode::Char(c)), &mut app);
+        }
+        s.handle_key(k(KeyCode::Enter), &mut app);
+        assert!((s.form_params().genetics.mutation_rate - 0.15).abs() < 1e-6);
+
+        // The open entry renders with a caret.
+        s.handle_key(k(KeyCode::Char(' ')), &mut app);
+        s.handle_key(k(KeyCode::Char('7')), &mut app);
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| s.render(&app, f, Rect::new(0, 0, 155, 45))).unwrap();
+        let all: String = (0..45).map(|y| (0..66).map(|x| terminal.backend().buffer()[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect();
+        assert!(all.contains("7_"), "caret shown while typing:\n{all}");
+    }
+
+    #[test]
     fn s09_q_returns_to_title_when_no_text_focus() {
         let mut app = state();
         let mut s = WorldGen::new();
