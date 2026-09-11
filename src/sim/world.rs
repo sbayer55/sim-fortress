@@ -104,22 +104,30 @@ impl World {
     pub fn generate(seed: u64, params: &WorldParams) -> World {
         let (w, h) = (params.width, params.height);
         let mut rng = Rng::new(seed);
-        let e1 = Noise::new(&mut rng, 22.0, w, h);
-        let e2 = Noise::new(&mut rng, 9.0, w, h);
-        let e3 = Noise::new(&mut rng, 4.0, w, h);
-        let m1 = Noise::new(&mut rng, 18.0, w, h);
-        let m2 = Noise::new(&mut rng, 6.0, w, h);
-        let v1 = Noise::new(&mut rng, 5.0, w, h);
+        // Noise is sampled in "natural" coordinates where a cell is twice as tall
+        // as it is wide (terminal cells), so the sample space is w x 2h. Feature
+        // size scales with the world so large maps get continents, not speckle.
+        let (sw, sh) = (w as f32, h as f32 * 2.0);
+        let base = (sw.max(sh) / 5.0).max(22.0);
+        let elev = Fbm::new(&mut rng, base, 5, sw, sh);
+        let moist = Fbm::new(&mut rng, base * 0.8, 4, sw, sh);
+        // Low-frequency domain warp: bends coastlines and ridges into organic shapes.
+        let warp_x = Noise::new(&mut rng, base * 1.2, sw, sh);
+        let warp_y = Noise::new(&mut rng, base * 1.2, sw, sh);
+        let warp_amp = base * 0.6;
+        let v1 = Noise::new(&mut rng, 5.0, sw, sh);
 
         let total = w * h;
         let mut cells = Vec::with_capacity(total);
         for y in 0..h {
             for x in 0..w {
-                // Noise is sampled in natural coordinates; river/lake features are
-                // expressed in reference (150×40) coordinates scaled to the world.
+                // River/lake features are expressed in reference (150×40)
+                // coordinates scaled to the world.
                 let (nx, ny) = (x as f32, y as f32 * 2.0);
                 let (rx, ry) = (x as f32 * 150.0 / w as f32, y as f32 * 2.0 * 40.0 / h as f32);
-                let mut elevation = 0.6 * e1.at(nx, ny) + 0.3 * e2.at(nx, ny) + 0.1 * e3.at(nx, ny);
+                let wx = nx + (warp_x.at(nx, ny) - 0.5) * warp_amp;
+                let wy = ny + (warp_y.at(nx, ny) - 0.5) * warp_amp;
+                let mut elevation = elev.at(wx, wy);
                 let river = ((rx * 0.5 - ry * 0.35 - 12.0).sin() * 6.0 + (rx - 75.0) * 0.26 - (ry - 40.0)).abs();
                 if river < 3.0 {
                     elevation -= (3.0 - river) * 0.09;
@@ -129,7 +137,8 @@ impl World {
                     elevation -= (1.2 - lake) * 0.5;
                 }
                 let elevation = elevation.clamp(0.0, 1.0);
-                let moisture = (0.65 * m1.at(nx, ny) + 0.35 * m2.at(nx, ny) + (0.5 - elevation) * 0.5).clamp(0.0, 1.0);
+                // Lowlands are wetter than highlands.
+                let moisture = (moist.at(wx, wy) + (0.5 - elevation) * 0.5).clamp(0.0, 1.0);
                 cells.push(Cell {
                     terrain: Terrain::Dirt,
                     elevation,
@@ -256,7 +265,9 @@ fn build_regions(w: usize, h: usize) -> Vec<RegionRect> {
         .collect()
 }
 
-/// Smooth value noise on a coarse lattice.
+/// Smooth value noise on a coarse lattice covering a `w` x `h` sample space
+/// (callers pass the sample space, not the cell grid, so any aspect correction
+/// must be applied before calling `new`).
 struct Noise {
     lattice: Vec<f32>,
     lw: usize,
@@ -265,16 +276,17 @@ struct Noise {
 }
 
 impl Noise {
-    fn new(rng: &mut Rng, scale: f32, w: usize, h: usize) -> Self {
-        let lw = (w as f32 / scale).ceil() as usize + 2;
-        let lh = (h as f32 / scale).ceil() as usize + 2;
+    fn new(rng: &mut Rng, scale: f32, w: f32, h: f32) -> Self {
+        let lw = (w / scale).ceil() as usize + 2;
+        let lh = (h / scale).ceil() as usize + 2;
         let lattice = (0..lw * lh).map(|_| rng.f32()).collect();
         Noise { lattice, lw, lh, scale }
     }
 
+    /// Sample at (x, y); coordinates outside the sample space clamp to the edge.
     fn at(&self, x: f32, y: f32) -> f32 {
-        let fx = x / self.scale;
-        let fy = y / self.scale;
+        let fx = (x / self.scale).max(0.0);
+        let fy = (y / self.scale).max(0.0);
         let x0 = fx.floor() as usize;
         let y0 = fy.floor() as usize;
         let tx = smooth(fx - x0 as f32);
@@ -283,6 +295,39 @@ impl Noise {
         let a = g(x0, y0) + (g(x0 + 1, y0) - g(x0, y0)) * tx;
         let b = g(x0, y0 + 1) + (g(x0 + 1, y0 + 1) - g(x0, y0 + 1)) * tx;
         a + (b - a) * ty
+    }
+}
+
+/// Fractal Brownian motion: `octaves` layers of value noise, each at half the
+/// scale and half the amplitude of the last, normalised to [0, 1].
+struct Fbm {
+    octaves: Vec<Noise>,
+    norm: f32,
+}
+
+impl Fbm {
+    fn new(rng: &mut Rng, base_scale: f32, octaves: usize, w: f32, h: f32) -> Self {
+        let mut layers = Vec::with_capacity(octaves);
+        let mut scale = base_scale;
+        let mut amp = 1.0f32;
+        let mut norm = 0.0f32;
+        for _ in 0..octaves {
+            layers.push(Noise::new(rng, scale.max(1.5), w, h));
+            norm += amp;
+            scale *= 0.5;
+            amp *= 0.5;
+        }
+        Fbm { octaves: layers, norm }
+    }
+
+    fn at(&self, x: f32, y: f32) -> f32 {
+        let mut sum = 0.0f32;
+        let mut amp = 1.0f32;
+        for n in &self.octaves {
+            sum += n.at(x, y) * amp;
+            amp *= 0.5;
+        }
+        sum / self.norm
     }
 }
 
@@ -326,6 +371,33 @@ mod tests {
             assert!((water - 20.0).abs() < 3.0, "seed {seed} water {water:.2}");
             assert!((forest - 15.0).abs() < 3.0, "seed {seed} forest {forest:.2}");
             assert!((rock - 5.0).abs() < 3.0, "seed {seed} rock {rock:.2}");
+        }
+    }
+
+    #[test]
+    fn rows_vary_vertically() {
+        // Regression: the noise lattice used to be sized for `h` rows while sampling
+        // at 2h, so the lower half of the world was a single repeated row.
+        for (w, h) in [(150usize, 40usize), (1000, 1000)] {
+            let world = World::generate(3, &WorldParams { width: w, height: h, ..WorldParams::default() });
+            let mut identical_pairs = 0;
+            for y in 1..h {
+                let same = (0..w).all(|x| world.cell(x, y).elevation == world.cell(x, y - 1).elevation);
+                if same {
+                    identical_pairs += 1;
+                }
+            }
+            assert_eq!(identical_pairs, 0, "{w}x{h}: {identical_pairs} repeated rows");
+            // Terrain in the top and bottom halves should differ in mix.
+            let mut top = [0usize; 9];
+            let mut bottom = [0usize; 9];
+            for y in 0..h {
+                for x in 0..w {
+                    let t = world.cell(x, y).terrain as usize;
+                    if y < h / 2 { top[t] += 1 } else { bottom[t] += 1 }
+                }
+            }
+            assert_ne!(top, bottom, "{w}x{h}");
         }
     }
 

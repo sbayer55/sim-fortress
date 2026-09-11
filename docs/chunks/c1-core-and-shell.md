@@ -73,8 +73,11 @@ deep-merged over the defaults (so `[world] rainfall = "dry"` alone is valid).
 ### FR2 World generation
 `World::generate(seed, &WorldParams)` is pure. Terrain thresholds are **quantiles** so the
 percentage targets are met on any seed:
-1. Compute elevation and moisture noise as the fixture does (river and lake features
-   scaled to width/height).
+1. Compute elevation and moisture as multi-octave value noise (5 and 4 octaves) sampled
+   in a w × 2h space (cells are twice as tall as wide) through a low-frequency domain
+   warp; the base feature size is `max(w, 2h) / 5` (at least 22) so large worlds get
+   continents rather than speckle. The reference river and lake features are scaled to
+   width/height as before.
 2. Sort elevations. Cells at or below the `water_pct` quantile are water: the lower ⅔ of
    them `DeepWater`, the upper ⅓ `ShallowWater`. Cells above the `100 − rock_pct` quantile
    are `Rock`. The next 4 % of cells above the water line are `Sand`.

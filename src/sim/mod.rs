@@ -146,7 +146,7 @@ mod tests {
         }
         assert_eq!(a.checksum(), b.checksum());
         // Lock the exact value so accidental algorithm changes fail loudly.
-        assert_eq!(a.checksum(), 0xc156_e903_9756_a324);
+        assert_eq!(a.checksum(), 0x1c12_45d6_13d2_2fc8);
     }
 
     #[test]
