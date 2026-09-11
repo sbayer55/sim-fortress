@@ -40,16 +40,20 @@ struct WorldGenForm {
 }
 
 impl WorldGenForm {
-    fn new() -> Self {
-        let world = WorldParams::default();
+    fn new(params: Params) -> Self {
+        let world = params.world.clone();
         let preview = World::generate(parse_seed("0xC0FFEE").unwrap_or(0), &world);
+        let mut counts = [0u32; 6];
+        for (i, id) in SpeciesId::ALL.iter().enumerate() {
+            counts[i] = params.creatures.initial_counts.get(id).copied().unwrap_or(0);
+        }
         WorldGenForm {
             name: "The Valley of Sunfall".to_string(),
             seed_text: "0xC0FFEE".to_string(),
             world,
-            season_days: 90,
-            counts: [240, 180, 90, 30, 24, 12],
-            evolution: EvolutionParams::default(),
+            season_days: params.time.season_days,
+            counts,
+            evolution: params.evolution.clone(),
             // Start on Size (Width), matching the prototype's default highlight and
             // so a fresh S09 quits on `q` (FR8: `q` quits when no text field is focused).
             focus: 2,
@@ -96,7 +100,11 @@ impl Default for WorldGen {
 
 impl WorldGen {
     pub fn new() -> Self {
-        WorldGen { form: RefCell::new(WorldGenForm::new()) }
+        Self::from_params(Params::default())
+    }
+
+    pub fn from_params(params: Params) -> Self {
+        WorldGen { form: RefCell::new(WorldGenForm::new(params)) }
     }
 }
 

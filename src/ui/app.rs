@@ -138,9 +138,9 @@ impl App {
     }
 }
 
-pub fn run(terminal: &mut DefaultTerminal) -> io::Result<()> {
-    let mut app = App::new(Params::default());
-    app.stack.push(Box::new(WorldGen::new()));
+pub fn run(terminal: &mut DefaultTerminal, params: Params) -> io::Result<()> {
+    let mut app = App::new(params.clone());
+    app.stack.push(Box::new(WorldGen::from_params(params)));
 
     let mut acc = TickAccumulator::new();
     let mut last_frame = Instant::now();

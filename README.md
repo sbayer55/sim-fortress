@@ -15,11 +15,15 @@ prototypes, which are drawn at a fixed 155×45).
 
 ```bash
 cargo run                                        # live app (opens the world-generation form)
+cargo run -- --width 200 --height 50             # live app, pre-fill the world size
 cargo run -- --headless --seed 42 --ticks 4320   # headless: prints a checksum + last events
+cargo run -- --headless --seed 42 --ticks 4320 --width 200 --height 50 --params world.toml
 cargo run -- --prototypes S01a                   # static prototype viewer (fixed 155x45)
 ```
 
-The prototype viewer shows the prototype id and name on row 0.
+The world size is configurable in the S09 form (Width 100–200, Height 30–60), via the
+`--width`/`--height` flags, or via a `[world] width = … / height = …` table in a
+`--params` TOML file. The prototype viewer shows the prototype id and name on row 0.
 
 | Key                      | Action                              |
 |--------------------------|-------------------------------------|
