@@ -15,3 +15,47 @@ serde-big-array = "0.5"
 
 [profile.dev]
 opt-level = 1
+
+[workspace.lints.rust]
+unsafe_code = "forbid"          # drop to "deny" or remove if you need unsafe
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+# --- groups (negative priority so individual overrides below win) ---
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+
+# --- correctness / footguns worth denying outright ---
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+indexing_slicing = "warn"
+integer_division = "warn"
+float_cmp = "deny"
+mem_forget = "deny"
+lossy_float_literal = "deny"
+as_conversions = "warn"          # forces you to think about casts
+cast_possible_truncation = "warn"
+cast_sign_loss = "warn"
+
+# --- the maintainability metrics from earlier ---
+cognitive_complexity = "warn"
+too_many_lines = "warn"
+
+# --- pedantic/nursery lints that are mostly noise ---
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+similar_names = "allow"
+struct_excessive_bools = "allow"
+multiple_crate_versions = "allow"   # rarely actionable in practice
+option_if_let_else = "allow"        # nursery, fights readability
+
