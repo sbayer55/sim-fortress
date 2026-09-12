@@ -1,5 +1,5 @@
-//! S05: the live charts screen — S05a prey/predator lines and S05c stacked
-//! species over vegetation (C4 FR9). S05b (phase plot) arrives with predators.
+//! S05: the live charts screen — S05a prey/predator lines, S05b phase plot,
+//! S05c stacked species over vegetation (C4 FR9) and S05d infections (C7 FR13).
 
 use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
@@ -8,6 +8,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Line;
 use ratatui::Frame;
 
+use crate::sim::{Outbreak, PathogenId};
 use crate::sim::{Kind, Sample, Sim, SpeciesId};
 use crate::ui::app::AppState;
 use crate::ui::screens::common::{arrow_color, day_stamp, sp, trend_arrow};
@@ -23,6 +24,7 @@ pub enum Variant {
     Time,
     Phase,
     Stacked,
+    Infections,
 }
 
 pub struct Charts {
@@ -53,7 +55,8 @@ impl Screen for Charts {
                 self.variant = match self.variant {
                     Variant::Time => Variant::Phase,
                     Variant::Phase => Variant::Stacked,
-                    Variant::Stacked => Variant::Time,
+                    Variant::Stacked => Variant::Infections,
+                    Variant::Infections => Variant::Time,
                 };
                 Action::None
             }
@@ -67,6 +70,10 @@ impl Screen for Charts {
             }
             KeyCode::Char('3') => {
                 self.variant = Variant::Stacked;
+                Action::None
+            }
+            KeyCode::Char('4') => {
+                self.variant = Variant::Infections;
                 Action::None
             }
             KeyCode::Char('+') => {
@@ -112,14 +119,19 @@ impl Screen for Charts {
                 stacked_chart(f, chart_area, sim, &window);
                 stacked_sidebar(f, side_area, sim, &window);
             }
+            Variant::Infections => {
+                infection_chart(f, chart_area, sim, &window);
+                infection_sidebar(f, side_area, sim, &window);
+            }
         }
 
         let view = match self.variant {
-            Variant::Time => "chart 1/3  populations",
-            Variant::Phase => "chart 2/3  phase plot",
-            Variant::Stacked => "chart 3/3  stacked species",
+            Variant::Time => "chart 1/4  populations",
+            Variant::Phase => "chart 2/4  phase plot",
+            Variant::Stacked => "chart 3/4  stacked species",
+            Variant::Infections => "chart 4/4  infections",
         };
-        status::render(f, Rect::new(area.x, status_row, area.width, 1), &[("g", "next chart"), ("1/3", "pick"), ("+/-", "zoom"), ("Esc", "back")], view);
+        status::render(f, Rect::new(area.x, status_row, area.width, 1), &[("g", "next chart"), ("1-4", "pick"), ("+/-", "zoom"), ("Esc", "back")], view);
     }
 }
 
@@ -131,6 +143,9 @@ struct Window<'a> {
     pred: Vec<f32>,
     veg: Vec<f32>,
     drought: Vec<bool>,
+    /// Days inside an epidemic window (C7): any outbreak flagged `epidemic`
+    /// whose `started_day..=ended_day` (or today) covers the sample day.
+    epidemic: Vec<bool>,
 }
 
 impl<'a> Window<'a> {
@@ -138,6 +153,8 @@ impl<'a> Window<'a> {
         let all = sim.series.samples();
         let start = all.len().saturating_sub(zoom);
         let samples = &all[start..];
+        let today = sim.time.day_index() as u32;
+        let epidemics: Vec<(u32, u32)> = sim.disease.outbreaks.iter().filter(|o| o.epidemic).map(|o| (o.started_day, o.ended_day.unwrap_or(today))).collect();
         Window {
             samples,
             season_days: sim.time.season_days,
@@ -145,6 +162,7 @@ impl<'a> Window<'a> {
             pred: samples.iter().map(|s| (s.population[3] + s.population[4] + s.population[5]) as f32).collect(),
             veg: samples.iter().map(|s| s.veg_mean).collect(),
             drought: samples.iter().map(|s| s.drought_flags.iter().any(|&d| d)).collect(),
+            epidemic: samples.iter().map(|s| epidemics.iter().any(|&(a, b)| s.day >= a && s.day <= b)).collect(),
         }
     }
 
@@ -181,6 +199,14 @@ impl<'a> Window<'a> {
         }
         let (a, b) = self.bin(c, cols);
         self.drought[a..b].iter().any(|&d| d)
+    }
+
+    fn epidemic_in(&self, c: usize, cols: usize) -> bool {
+        if self.len() == 0 {
+            return false;
+        }
+        let (a, b) = self.bin(c, cols);
+        self.epidemic[a..b].iter().any(|&d| d)
     }
 }
 
@@ -924,5 +950,327 @@ fn stacked_sidebar(f: &mut Frame, area: Rect, sim: &Sim, w: &Window) {
     ] {
         util::line(f, inner, row, Line::from(sp(line, theme::dim_text())));
         row += 1;
+    }
+}
+
+// ------------------------------------------------------------------ S05d
+
+/// Line colours for the eight pathogen slots (roster first, strains appended).
+/// Lower-case delta (CP437 0xEB); the capital Δ is not in CP437.
+const DELTA: char = 'δ';
+
+const PATHOGEN_COLORS: [Color; 8] = [theme::SICK, theme::WARN, theme::MAGENTA, theme::INFO, theme::ACCENT, theme::LYNX, theme::DEER, theme::HARE];
+
+fn slot_color(slot: usize) -> Color {
+    PATHOGEN_COLORS[slot % PATHOGEN_COLORS.len()]
+}
+
+/// Pathogen slots with any active case inside the window, with their series.
+fn case_series(w: &Window) -> Vec<(usize, Vec<f32>)> {
+    (0..8)
+        .filter_map(|slot| {
+            let v: Vec<f32> = w.samples.iter().map(|s| s.active_by_pathogen[slot] as f32).collect();
+            if v.iter().any(|&x| x > 0.0) { Some((slot, v)) } else { None }
+        })
+        .collect()
+}
+
+/// Species with a nonzero population inside the window, with their mean
+/// Resistance series.
+fn resistance_series(w: &Window) -> Vec<(SpeciesId, Vec<f32>)> {
+    SpeciesId::ALL
+        .iter()
+        .filter(|id| w.samples.iter().any(|s| s.population[id.index()] > 0))
+        .map(|id| (*id, w.samples.iter().map(|s| s.genome_mean[id.index()].resistance()).collect()))
+        .collect()
+}
+
+/// The species an outbreak hit hardest (most cases), or `None` before any case.
+fn outbreak_host(o: &Outbreak) -> Option<SpeciesId> {
+    let (i, n) = o.species_cases.iter().enumerate().max_by_key(|(i, n)| (**n, std::cmp::Reverse(*i)))?;
+    if *n == 0 { None } else { Some(SpeciesId::ALL[i]) }
+}
+
+/// Several half-block series over one y scale, with epidemic windows shaded;
+/// `reference` rows are drawn as dim dotted lines behind the series.
+#[allow(clippy::too_many_arguments)]
+fn multi_line_chart(f: &mut Frame, area: Rect, w: &Window, series: &[(Vec<f32>, Color)], reference: &[(f32, Color)], y_max: f32, y_label: impl Fn(f32) -> String) {
+    if area.height < 4 || area.width < 12 {
+        return;
+    }
+    let label_w = 6u16;
+    let plot = Rect::new(area.x + label_w, area.y, area.width - label_w - 1, area.height - 2);
+    let axis_y = plot.bottom();
+    let cols = plot.width as usize;
+    let rows = plot.height as usize;
+    let buf = f.buffer_mut();
+    let band = theme::lerp(theme::PANEL_BG, theme::SICK, 0.22);
+    let mut band_started: Option<u16> = None;
+    let y_of = |v: f32| -> usize { rows - 1 - (((v / y_max).clamp(0.0, 1.0) * (rows as f32 - 1.0)).round() as usize).min(rows - 1) };
+    for c in 0..cols {
+        let x = plot.x + c as u16;
+        let sick = w.len() > 0 && w.epidemic_in(c, cols);
+        if sick {
+            for r in 0..rows {
+                if let Some(cell) = buf.cell_mut((x, plot.y + r as u16)) {
+                    cell.set_char(' ');
+                    cell.set_style(Style::default().bg(band));
+                }
+            }
+            if band_started.is_none() {
+                band_started = Some(x);
+            }
+        }
+        for &(v, color) in reference {
+            let r = y_of(v);
+            if let Some(cell) = buf.cell_mut((x, plot.y + r as u16)) {
+                if c % 2 == 0 {
+                    cell.set_char(glyphs::DOT);
+                    cell.set_style(Style::default().fg(theme::dim(color, 0.55)).bg(cell.bg));
+                }
+            }
+        }
+        if w.len() == 0 {
+            continue;
+        }
+        for (values, color) in series {
+            let v = w.mean_over(values, c, cols);
+            let halves = ((v / y_max).clamp(0.0, 1.0) * (rows as f32 * 2.0)).round() as usize;
+            if halves == 0 {
+                if let Some(cell) = buf.cell_mut((x, plot.y + rows as u16 - 1)) {
+                    cell.set_char(glyphs::HALF_LOWER);
+                    cell.set_style(Style::default().fg(*color).bg(cell.bg));
+                }
+                continue;
+            }
+            let r = rows - 1 - ((halves - 1) / 2).min(rows - 1);
+            let ch = if halves % 2 == 1 { glyphs::HALF_LOWER } else { glyphs::HALF_UPPER };
+            if let Some(cell) = buf.cell_mut((x, plot.y + r as u16)) {
+                cell.set_char(ch);
+                cell.set_style(Style::default().fg(*color).bg(cell.bg).add_modifier(Modifier::BOLD));
+            }
+        }
+    }
+    if let Some(bx) = band_started {
+        buf.set_stringn(bx + 1, plot.y, format!("{} epidemic", glyphs::DISEASE), 11, Style::default().fg(theme::SICK).bg(band));
+    }
+    for k in 0..=4 {
+        let y = axis_y - 1 - ((rows - 1) as f32 * k as f32 / 4.0).round() as u16;
+        buf.set_stringn(area.x, y, format!("{:>5}", y_label(y_max * k as f32 / 4.0)), 5, theme::dim_text());
+        buf.set_stringn(plot.x - 1, y, glyphs::CROSS.to_string(), 1, theme::border());
+    }
+    for r in 0..rows {
+        let y = plot.y + r as u16;
+        if buf.cell((plot.x - 1, y)).map(|c| c.symbol() != "┼").unwrap_or(false) {
+            buf.set_stringn(plot.x - 1, y, glyphs::V_LINE.to_string(), 1, theme::border());
+        }
+    }
+    let axis: String = std::iter::repeat_n(glyphs::H_LINE, cols + 1).collect();
+    buf.set_stringn(plot.x - 1, axis_y, &axis, cols + 1, theme::border());
+    let n = w.len().max(1);
+    for k in 0..=6 {
+        let i = (k * (n - 1) / 6).min(n - 1);
+        let x = if k == 6 { plot.x + cols as u16 - 1 } else { plot.x + (i * cols / n) as u16 };
+        buf.set_stringn(x, axis_y, glyphs::CROSS.to_string(), 1, theme::border());
+        let label = w.day_label(i);
+        if !label.is_empty() {
+            let lx = (x as i32 - label.len() as i32 / 2).max(area.x as i32) as u16;
+            let lx = lx.min(area.right().saturating_sub(label.len() as u16 + 1));
+            buf.set_stringn(lx, axis_y + 1, &label, label.len(), theme::dim_text());
+        }
+    }
+    buf.set_stringn(plot.right() - 3, axis_y, "now", 3, Style::default().fg(theme::ACCENT).bg(theme::PANEL_BG));
+}
+
+fn infection_chart(f: &mut Frame, area: Rect, sim: &Sim, w: &Window) {
+    let inner = panel::draw_with_hint(f, area, "Infections — cases and resistance", &format!("last {} days", w.len()), panel::Kind::Outer);
+    let half = (inner.height.saturating_sub(1)) / 2;
+    let upper = Rect::new(inner.x, inner.y, inner.width, half);
+    let lower = Rect::new(inner.x, inner.y + half + 1, inner.width, inner.height - half - 1);
+
+    // Top: active cases per pathogen slot.
+    let cases = case_series(w);
+    let mut spans = vec![sp(" Active cases", Style::default().fg(theme::SICK).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD))];
+    if cases.is_empty() {
+        spans.push(sp("   no infections in the window", theme::dim_text()));
+    }
+    for (slot, _) in &cases {
+        spans.push(sp(format!("   {}{} ", glyphs::HALF_UPPER, glyphs::HALF_LOWER), Style::default().fg(slot_color(*slot)).bg(theme::PANEL_BG)));
+        spans.push(sp(sim.disease.name(PathogenId(*slot as u8)).to_string(), theme::text()));
+    }
+    util::line(f, upper, 0, Line::from(spans));
+    let max_cases = cases.iter().flat_map(|(_, v)| v.iter().cloned()).fold(0.0f32, f32::max);
+    let case_lines: Vec<(Vec<f32>, Color)> = cases.iter().map(|(slot, v)| (v.clone(), slot_color(*slot))).collect();
+    multi_line_chart(f, Rect::new(upper.x, upper.y + 1, upper.width, upper.height - 1), w, &case_lines, &[], round_up(max_cases, 10.0), |v| format!("{:.0}", v));
+
+    // Bottom: mean Resistance per species with the base value as a reference.
+    panel::section(f, inner, half, "Mean Resistance (host species)");
+    let resist = resistance_series(w);
+    let mut spans = vec![sp(" 0..1", theme::dim_text())];
+    for (id, _) in &resist {
+        spans.push(sp(format!("   {}{} ", glyphs::HALF_UPPER, glyphs::HALF_LOWER), Style::default().fg(id.color()).bg(theme::PANEL_BG)));
+        spans.push(sp(id.plural().to_string(), theme::text()));
+    }
+    spans.push(sp(format!("   {} base", glyphs::DOT), theme::dim_text()));
+    util::line(f, lower, 0, Line::from(spans));
+    let resist_lines: Vec<(Vec<f32>, Color)> = resist.iter().map(|(id, v)| (v.clone(), id.color())).collect();
+    let reference: Vec<(f32, Color)> = resist.iter().map(|(id, _)| (id.base_genome().resistance(), id.color())).collect();
+    multi_line_chart(f, Rect::new(lower.x, lower.y + 1, lower.width, lower.height - 1), w, &resist_lines, &reference, 1.0, |v| format!("{:.2}", v));
+}
+
+fn infection_sidebar(f: &mut Frame, area: Rect, sim: &Sim, w: &Window) {
+    let inner = panel::draw(f, area, "Outbreaks", panel::Kind::Outer);
+    let mut row = 0u16;
+    let today = sim.time.day_index() as u32;
+    let recent: Vec<&Outbreak> = sim.disease.outbreaks.iter().rev().take(8).collect();
+    if recent.is_empty() {
+        util::line(f, inner, row, Line::from(sp(" no outbreaks yet", theme::dim_text())));
+        row += 1;
+    }
+    for o in recent {
+        let strain = sim.disease.pathogen(o.pathogen).is_some_and(|p| p.is_strain());
+        let color = if strain { theme::MAGENTA } else { theme::SICK };
+        let name = sim.disease.name(o.pathogen).to_string();
+        let stamp = day_stamp(o.started_day as i64, w.season_days);
+        let tag = if o.epidemic { " EPIDEMIC" } else { "" };
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!(" {} ", glyphs::DISEASE), Style::default().fg(color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!("{:<14}", name), Style::default().fg(color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!("{:<9}", stamp), theme::dim_text()),
+            sp(tag, Style::default().fg(theme::SICK).bg(theme::PANEL_BG)),
+        ]));
+        row += 1;
+        let (host_glyph, delta) = match outbreak_host(o) {
+            Some(id) => {
+                let i = id.index();
+                let delta = if o.ended_day.is_none() { "open".to_string() } else { format!("{:+.2}", o.resist_at_end[i] - o.resist_at_start[i]).replace("0.", ".") };
+                (format!("{} ", id.glyph().to_ascii_uppercase()), delta)
+            }
+            None => ("- ".to_string(), "open".to_string()),
+        };
+        let _ = today;
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!("   {}", host_glyph), Style::default().fg(outbreak_host(o).map(|id| id.color()).unwrap_or(theme::DIM)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!("cases {:<5} dead {:<5} {}resist {}", o.cases, o.deaths, DELTA, delta), theme::text()),
+        ]));
+        row += 1;
+    }
+    row += 1;
+
+    panel::section(f, inner, row, "Pathogens");
+    row += 1;
+    let cases = case_series(w);
+    if cases.is_empty() {
+        util::line(f, inner, row, Line::from(sp(" none active in the window", theme::dim_text())));
+        row += 1;
+    }
+    for (slot, v) in &cases {
+        let id = PathogenId(*slot as u8);
+        let strain = sim.disease.pathogen(id).is_some_and(|p| p.is_strain());
+        let peak = v.iter().cloned().fold(0.0f32, f32::max) as u32;
+        let now = v.last().copied().unwrap_or(0.0) as u32;
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!(" {}{} ", glyphs::HALF_UPPER, glyphs::HALF_LOWER), Style::default().fg(slot_color(*slot)).bg(theme::PANEL_BG)),
+            sp(format!("{:<14}", sim.disease.name(id)), theme::text()),
+            sp(format!("now {:<4} peak {:<4}", now, peak), theme::dim_text()),
+            sp(if strain { "strain" } else { "" }, Style::default().fg(theme::MAGENTA).bg(theme::PANEL_BG)),
+        ]));
+        row += 1;
+    }
+    row += 1;
+
+    panel::section(f, inner, row, "Legend");
+    row += 1;
+    for (glyph, desc, color) in [
+        ("▀▄", "active cases per pathogen (top)", theme::SICK),
+        ("▀▄", "mean Resistance per species (bottom)", theme::HARE),
+        ("·", "base Resistance of the species", theme::DIM),
+        ("░", "epidemic window", theme::SICK),
+    ] {
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!(" {:<3}", glyph), Style::default().fg(color).bg(theme::PANEL_BG)),
+            sp(desc, theme::text()),
+        ]));
+        row += 1;
+    }
+    row += 1;
+    panel::section(f, inner, row, "Keys");
+    row += 1;
+    util::line(f, inner, row, Line::from(sp(" [+/-] zoom 60/240/720d", theme::dim_text())));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sim::{CreatureId, Params};
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::KeyModifiers;
+    use ratatui::Terminal;
+
+    fn fake_outbreak(sim: &mut Sim) {
+        sim.disease.first_index = 0;
+        sim.disease.outbreaks.push(Outbreak {
+            pathogen: PathogenId(0),
+            started_day: 0,
+            ended_day: Some(12),
+            origin_region: 1,
+            index_case: CreatureId(0),
+            cases: 14,
+            deaths: 5,
+            recovered: 9,
+            peak_active: 7,
+            peak_day: 6,
+            species_cases: [14, 0, 0, 0, 0, 0],
+            species_deaths: [5, 0, 0, 0, 0, 0],
+            epidemic: true,
+            resist_at_start: [0.30; 6],
+            resist_at_end: [0.33; 6],
+            active: 0,
+            cases_today: 0,
+        });
+    }
+
+    fn screen_text(app: &AppState, screen: &Charts) -> String {
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| screen.render(app, f, Rect::new(0, 0, 155, 45))).unwrap();
+        let buf = terminal.backend().buffer();
+        (0..45).map(|y| (0..155).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect()
+    }
+
+    #[test]
+    fn s05d_render() {
+        let mut app = AppState::new(Params::default());
+        let mut sim = Sim::new(7, Params::default());
+        fake_outbreak(&mut sim);
+        let name = sim.disease.name(PathogenId(0)).to_string();
+        assert!(!name.is_empty() && name != "?", "default roster should have a pathogen in slot 0");
+        app.sim = Some(sim);
+
+        let mut s = Charts::new();
+        // g cycles a → b → c → d → a.
+        for _ in 0..3 {
+            s.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE), &mut app);
+        }
+        assert!(s.variant == Variant::Infections);
+        s.handle_key(KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE), &mut app);
+        assert!(s.variant == Variant::Time);
+        // 4 picks it directly; 1–3 keep their meaning.
+        s.handle_key(KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE), &mut app);
+        assert!(s.variant == Variant::Infections);
+
+        let text = screen_text(&app, &s);
+        assert!(text.contains("Infections — cases and resistance"), "{text}");
+        assert!(text.contains("Mean Resistance (host species)"), "{text}");
+        assert!(text.contains("Outbreaks"), "{text}");
+        assert!(text.contains(&format!("{} {}", glyphs::DISEASE, name)), "{text}");
+        assert!(text.contains("cases 14"), "{text}");
+        assert!(text.contains("dead 5"), "{text}");
+        assert!(text.contains("resist +.03"), "{text}");
+        assert!(text.contains("chart 4/4  infections"), "{text}");
+
+        s.handle_key(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE), &mut app);
+        assert!(s.variant == Variant::Phase);
+        assert!(screen_text(&app, &s).contains("chart 2/4"));
     }
 }

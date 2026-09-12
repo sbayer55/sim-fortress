@@ -26,6 +26,7 @@ pub fn daily_update(
     rainfall: Rainfall,
     c: &Census,
     deaths: &DeathTallies,
+    disease: &crate::sim::disease::DiseaseState,
 ) {
     let season = time.season();
     let (w, h) = (world.width, world.height);
@@ -262,6 +263,11 @@ pub fn daily_update(
         deaths: deaths.deaths,
         generation_mean: std::array::from_fn(|i| c.generation_mean(i)),
         generation_max: c.max_generation,
+        infected: c.infected,
+        immune: c.immune,
+        deaths_disease: deaths.disease,
+        parasite_mean: std::array::from_fn(|i| if c.population[i] > 0 { c.parasite_sum[i] / c.population[i] as f32 } else { 0.0 }),
+        active_by_pathogen: std::array::from_fn(|i| disease.stats[i].active),
     });
 }
 
@@ -503,9 +509,9 @@ mod tests {
     #[test]
     fn region_means_exclude_water() {
         let cells = vec![
-            Cell { terrain: Terrain::ShallowWater, elevation: 0.5, moisture: 0.5, vegetation: 0.9, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None },
-            Cell { terrain: Terrain::Grass, elevation: 0.5, moisture: 0.5, vegetation: 0.1, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None },
-            Cell { terrain: Terrain::Grass, elevation: 0.5, moisture: 0.5, vegetation: 0.3, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None },
+            Cell { terrain: Terrain::ShallowWater, elevation: 0.5, moisture: 0.5, vegetation: 0.9, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 },
+            Cell { terrain: Terrain::Grass, elevation: 0.5, moisture: 0.5, vegetation: 0.1, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 },
+            Cell { terrain: Terrain::Grass, elevation: 0.5, moisture: 0.5, vegetation: 0.3, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 },
         ];
         let world = World {
             cells,

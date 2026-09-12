@@ -103,7 +103,7 @@ fn terrain_column(f: &mut Frame, col: Rect) {
 
     panel::section(f, col, row, "Events");
     row += 1;
-    let events: [(EventKind, &str); 8] = [
+    let events: [(EventKind, &str); 10] = [
         (EventKind::Birth, "birth / litter"),
         (EventKind::DeathPredation, "death by predation"),
         (EventKind::DeathStarved, "death by starvation / thirst"),
@@ -112,6 +112,8 @@ fn terrain_column(f: &mut Frame, col: Rect) {
         (EventKind::Migration, "migration between regions"),
         (EventKind::Extinction, "species extinct"),
         (EventKind::Drought, "drought / scarcity warning"),
+        (EventKind::Outbreak, "outbreak / epidemic / death by disease"),
+        (EventKind::Recovery, "recovery (now immune)"),
     ];
     for (kind, label) in events {
         util::line(f, col, row, Line::from(vec![
@@ -124,13 +126,14 @@ fn terrain_column(f: &mut Frame, col: Rect) {
 
     panel::section(f, col, row, "Map marks");
     row += 1;
-    let marks: [(char, Color, &str); 6] = [
+    let marks: [(char, Color, &str); 7] = [
         (glyphs::CURSOR, theme::CURSOR_BG, "look cursor (inverted cell)"),
         (glyphs::CORNER, theme::CURSOR_BG, "cursor corner marks"),
         (glyphs::TRAIL, theme::TRAIL, "trail of the followed creature"),
         (glyphs::DIAMOND, theme::ACCENT, "its current target"),
         (glyphs::RING, theme::ACCENT, "sense-range ring edge"),
         (glyphs::ALERT, theme::BAD, "danger: predator nearby"),
+        (glyphs::PARASITE, theme::WARN, "parasites (cell tint)"),
     ];
     for (g, color, label) in marks {
         util::line(f, col, row, Line::from(vec![glyph_span(g, color), Span::styled(label, theme::text())]));
@@ -205,6 +208,7 @@ fn keys_column(f: &mut Frame, col: Rect) {
             ("1 2 3", "veg · pressure · moisture"),
             ("4 5 6", "sense · regions · species"),
             ("7", "health (weakest vital)"),
+            ("8 9", "disease · parasites"),
             ("Tab", "next predator / species"),
             ("Shift+Tab", "previous species"),
             ("Esc", "clear overlay"),

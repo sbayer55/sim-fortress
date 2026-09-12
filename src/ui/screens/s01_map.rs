@@ -1,5 +1,7 @@
 //! S01: the live world map (variants a/b/d — default, wide, winter/night), the
-//! S02a/b/c/e/f/g overlays, S01c look mode and S01e follow mode.
+//! S02a/b/c/e/f/g/h/i overlays, S01c look mode and S01e follow mode.
+
+use std::collections::HashMap;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
@@ -8,6 +10,7 @@ use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
 use crate::sim::creatures::CreatureId;
+use crate::sim::disease::{self, PathogenId};
 use crate::sim::{Season, Sim, SpeciesId, World};
 use crate::ui::screens::s06_ecology::region_status;
 use crate::ui::app::AppState;
@@ -48,6 +51,8 @@ impl WorldMap {
             Overlay::Region => "regions".into(),
             Overlay::Species(sp) => sp.plural().to_lowercase(),
             Overlay::Health => "health".into(),
+            Overlay::Disease(_) => "disease".into(),
+            Overlay::Parasites => "parasites".into(),
             Overlay::None => String::new(),
         }
     }
@@ -89,6 +94,37 @@ impl WorldMap {
         self.species_sel = next;
         self.overlay = Overlay::Species(next);
         true
+    }
+
+    /// `Tab` / `BackTab` with the disease overlay active (S02h): show every
+    /// pathogen (`all`), then each live slot in turn, wrapping. Extinct strains
+    /// are skipped. Returns false when the overlay is not active.
+    fn cycle_pathogen(&mut self, app: &AppState, backwards: bool) -> bool {
+        let Overlay::Disease(cur) = self.overlay else { return false };
+        let Some(sim) = app.sim.as_ref() else { return true };
+        let mut stops: Vec<Option<PathogenId>> = vec![None];
+        stops.extend(sim.disease.pathogens.iter().enumerate().filter(|(_, p)| !p.extinct).map(|(i, _)| Some(PathogenId(i as u8))));
+        let n = stops.len();
+        let i = stops.iter().position(|&s| s == cur).unwrap_or(0);
+        self.overlay = Overlay::Disease(stops[if backwards { (i + n - 1) % n } else { (i + 1) % n }]);
+        true
+    }
+
+    /// C7 FR9: the S12b "Show outbreak" button leaves a pathogen slot on the
+    /// app; the next key or frame opens the disease overlay on it.
+    fn take_pending(&mut self, app: &mut AppState) {
+        if let Some(p) = app.pending_overlay.take() {
+            self.overlay = Overlay::Disease(Some(p));
+        }
+    }
+
+    /// The overlay to draw this frame: `render` cannot take the pending slot,
+    /// so it is honoured here until the next key consumes it.
+    fn effective_overlay(&self, app: &AppState) -> Overlay {
+        match app.pending_overlay {
+            Some(p) => Overlay::Disease(Some(p)),
+            None => self.overlay,
+        }
     }
 
     /// The living creature on the cursor cell, else the nearest within `cheb ≤ 1`.
@@ -163,6 +199,7 @@ impl Screen for WorldMap {
     }
 
     fn handle_key(&mut self, key: KeyEvent, app: &mut AppState) -> Action {
+        self.take_pending(app);
         // Follow mode (S01e) takes precedence.
         if app.follow.is_some() {
             return self.handle_follow_key(key, app);
@@ -181,8 +218,10 @@ impl Screen for WorldMap {
         let world = &sim.world;
         let time = &sim.time;
         // If the sense-overlay selection died, revert to the plain map (FR9).
-        let overlay = match self.overlay {
+        let overlay = match self.effective_overlay(app) {
             Overlay::Sense(id) if sim.creatures.get(id).is_none_or(|c| !c.alive) => Overlay::None,
+            // A slot that no longer exists falls back to every pathogen.
+            Overlay::Disease(Some(p)) if sim.disease.pathogen(p).is_none() => Overlay::Disease(None),
             o => o,
         };
         let overlay_active = overlay != Overlay::None;
@@ -242,6 +281,11 @@ impl Screen for WorldMap {
                 Overlay::Species(sp) => sp.color(),
                 _ => theme::TEXT,
             },
+            creature_tint: match overlay {
+                Overlay::Disease(shown) => Some(disease_tints(sim, shown)),
+                Overlay::Parasites => Some(parasite_tints(sim)),
+                _ => None,
+            },
         };
         map::render(f.buffer_mut(), map_inner, sim, &opts);
 
@@ -268,6 +312,10 @@ impl Screen for WorldMap {
                 self.species_sidebar(f, side, sim, sp);
             } else if overlay == Overlay::Health {
                 self.health_sidebar(f, side, sim);
+            } else if let Overlay::Disease(shown) = overlay {
+                self.disease_sidebar(f, side, sim, shown);
+            } else if overlay == Overlay::Parasites {
+                self.parasite_sidebar(f, side, sim);
             } else if overlay_active {
                 self.overlay_sidebar(f, side, app, world);
             } else {
@@ -302,17 +350,21 @@ impl Screen for WorldMap {
         } else if app.look_cursor.is_some() {
             &[("↑↓←→", "move"), ("Enter", "inspect"), ("f", "follow"), ("z", "zoom"), ("Esc", "exit look")]
         } else if self.overlay == Overlay::Region {
-            &[("1-7", "overlay"), ("o", "cycle"), ("↑↓", "region"), ("Enter", "jump"), ("←→", "scroll"), ("Esc", "clear"), ("Space", "pause"), ("y", "ecology")]
+            &[("1-9", "overlay"), ("o", "cycle"), ("↑↓", "region"), ("Enter", "jump"), ("←→", "scroll"), ("Esc", "clear"), ("Space", "pause"), ("y", "ecology")]
         } else if let Overlay::Sense(_) = overlay {
-            &[("Tab", "next predator"), ("i", "inspect"), ("f", "follow"), ("1-7", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause")]
+            &[("Tab", "next predator"), ("i", "inspect"), ("f", "follow"), ("1-9", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause")]
         } else if let Overlay::Species(_) = overlay {
-            &[("Tab", "next species"), ("Shift+Tab", "previous"), ("←→↑↓", "scroll"), ("1-7", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause")]
+            &[("Tab", "next species"), ("Shift+Tab", "previous"), ("←→↑↓", "scroll"), ("1-9", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause")]
         } else if overlay == Overlay::Health {
-            &[("←→↑↓", "scroll"), ("k", "look"), ("1-7", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("e", "log"), ("s", "species")]
+            &[("←→↑↓", "scroll"), ("k", "look"), ("1-9", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("e", "log"), ("s", "species")]
+        } else if let Overlay::Disease(_) = overlay {
+            &[("Tab", "next pathogen"), ("Shift+Tab", "previous"), ("←→↑↓", "scroll"), ("k", "look"), ("1-9", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause")]
+        } else if overlay == Overlay::Parasites {
+            &[("←→↑↓", "scroll"), ("k", "look"), ("1-9", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("e", "log"), ("y", "ecology")]
         } else if overlay_active {
-            &[("1-7", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("+/-", "speed"), ("e", "log"), ("y", "ecology"), ("g", "charts")]
+            &[("1-9", "overlay"), ("o", "cycle"), ("Esc", "clear"), ("Space", "pause"), ("+/-", "speed"), ("e", "log"), ("y", "ecology"), ("g", "charts")]
         } else {
-            &[("k", "look"), ("Tab", "wide"), ("←→↑↓", "scroll"), ("1-7", "overlay"), ("Space", "pause"), ("+/-", "speed"), ("p", "controls"), ("?", "help"), ("q", "world")]
+            &[("k", "look"), ("Tab", "wide"), ("←→↑↓", "scroll"), ("1-9", "overlay"), ("Space", "pause"), ("+/-", "speed"), ("p", "controls"), ("?", "help"), ("q", "world")]
         };
         let sky = if night { glyphs::MOON } else { glyphs::SUN };
         let skyname = if night { "night" } else { "day" };
@@ -335,13 +387,15 @@ impl WorldMap {
                 Action::None
             }
             KeyCode::Tab => {
-                if !self.cycle_sense(app) && !self.cycle_species(false) {
+                if !self.cycle_sense(app) && !self.cycle_species(false) && !self.cycle_pathogen(app, false) {
                     self.wide = !self.wide;
                 }
                 Action::None
             }
             KeyCode::BackTab => {
-                self.cycle_species(true);
+                if !self.cycle_species(true) {
+                    self.cycle_pathogen(app, true);
+                }
                 Action::None
             }
             KeyCode::Left => {
@@ -403,7 +457,9 @@ impl WorldMap {
                     Overlay::Sense(_) => Overlay::Region,
                     Overlay::Region => Overlay::Species(self.default_species(app)),
                     Overlay::Species(_) => Overlay::Health,
-                    Overlay::Health => Overlay::None,
+                    Overlay::Health => Overlay::Disease(None),
+                    Overlay::Disease(_) => Overlay::Parasites,
+                    Overlay::Parasites => Overlay::None,
                 };
                 match self.overlay {
                     Overlay::Sense(id) => self.sense_id = Some(id),
@@ -441,6 +497,14 @@ impl WorldMap {
             }
             KeyCode::Char('7') => {
                 self.overlay = Overlay::Health;
+                Action::None
+            }
+            KeyCode::Char('8') => {
+                self.overlay = Overlay::Disease(None);
+                Action::None
+            }
+            KeyCode::Char('9') => {
+                self.overlay = Overlay::Parasites;
                 Action::None
             }
             KeyCode::Esc => {
@@ -498,13 +562,15 @@ impl WorldMap {
             }
             KeyCode::Char('z') => Action::Push(Box::new(Zoom::new())),
             KeyCode::Tab => {
-                if !self.cycle_sense(app) {
-                    self.cycle_species(false);
+                if !self.cycle_sense(app) && !self.cycle_species(false) {
+                    self.cycle_pathogen(app, false);
                 }
                 Action::None
             }
             KeyCode::BackTab => {
-                self.cycle_species(true);
+                if !self.cycle_species(true) {
+                    self.cycle_pathogen(app, true);
+                }
                 Action::None
             }
             KeyCode::Char('4') => {
@@ -520,6 +586,14 @@ impl WorldMap {
             }
             KeyCode::Char('7') => {
                 self.overlay = Overlay::Health;
+                Action::None
+            }
+            KeyCode::Char('8') => {
+                self.overlay = Overlay::Disease(None);
+                Action::None
+            }
+            KeyCode::Char('9') => {
+                self.overlay = Overlay::Parasites;
                 Action::None
             }
             KeyCode::Esc => {
@@ -557,13 +631,15 @@ impl WorldMap {
                 Action::None
             }
             KeyCode::Tab => {
-                if !self.cycle_sense(app) && !self.cycle_species(false) {
+                if !self.cycle_sense(app) && !self.cycle_species(false) && !self.cycle_pathogen(app, false) {
                     self.wide = !self.wide;
                 }
                 Action::None
             }
             KeyCode::BackTab => {
-                self.cycle_species(true);
+                if !self.cycle_species(true) {
+                    self.cycle_pathogen(app, true);
+                }
                 Action::None
             }
             KeyCode::Char('4') => {
@@ -579,6 +655,14 @@ impl WorldMap {
             }
             KeyCode::Char('7') => {
                 self.overlay = Overlay::Health;
+                Action::None
+            }
+            KeyCode::Char('8') => {
+                self.overlay = Overlay::Disease(None);
+                Action::None
+            }
+            KeyCode::Char('9') => {
+                self.overlay = Overlay::Parasites;
                 Action::None
             }
             _ => Action::Unhandled,
@@ -597,6 +681,8 @@ impl WorldMap {
             ("5", "regions", self.overlay == Overlay::Region),
             ("6", "species", matches!(self.overlay, Overlay::Species(_))),
             ("7", "health", self.overlay == Overlay::Health),
+            ("8", "disease", matches!(self.overlay, Overlay::Disease(_))),
+            ("9", "parasites", self.overlay == Overlay::Parasites),
         ] {
             util::line(f, inner, row, Line::from(vec![
                 Span::styled(format!(" {key} "), if active { theme::selected() } else { theme::key() }),
@@ -1516,6 +1602,329 @@ impl WorldMap {
         }
     }
 
+    /// S02h sidebar: what the colours mean, the pathogen roster with the shown
+    /// slot marked, that pathogen's outbreak, every species' sick / immune
+    /// counts and mean Resistance, a parasite summary, the selector and notes.
+    /// Fixed sections take 31 rows plus one per pathogen slot; the rows left
+    /// over separate the sections and lengthen the reading notes.
+    fn disease_sidebar(&self, f: &mut Frame, area: Rect, sim: &Sim, shown: Option<PathogenId>) {
+        let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
+        let mut row = 0u16;
+        let tone = |c: Color| Style::default().fg(c).bg(theme::PANEL_BG);
+        let day = sim.time.day_index() as u32;
+        let ds = &sim.disease;
+        let world = &sim.world;
+        let slots = ds.pathogens.len();
+        let mut spare = disease::MAX_PATHOGENS.saturating_sub(slots) as u16;
+        let reading_extra = spare.min(2);
+        spare -= reading_extra;
+        let gap = |row: &mut u16, spare: &mut u16| {
+            if *spare > 0 {
+                *spare -= 1;
+                *row += 1;
+            }
+        };
+
+        panel::section(f, inner, row, "Disease");
+        row += 1;
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(format!(" {} sick", glyphs::DISEASE), tone(theme::SICK).add_modifier(Modifier::BOLD)),
+            Span::styled(" bright, ", theme::dim_text()),
+            Span::styled("incubating", tone(theme::dim(theme::SICK, 0.4))),
+            Span::styled(" dim, ", theme::dim_text()),
+            Span::styled(format!("{} immune", glyphs::IMMUNE), tone(theme::IMMUNE)),
+        ]));
+        row += 1;
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(" amber", tone(theme::WARN)),
+            Span::styled(" = worms; fouled ground is tinted.", theme::dim_text()),
+        ]));
+        row += 1;
+        gap(&mut row, &mut spare);
+
+        // Pathogens: one row per slot, strains indented under their parent.
+        let title = match shown {
+            None => "Pathogens · all".to_string(),
+            Some(p) => format!("Pathogens · {}", ds.name(p)),
+        };
+        panel::section(f, inner, row, &title);
+        row += 1;
+        for (i, p) in ds.pathogens.iter().enumerate() {
+            let id = PathogenId(i as u8);
+            let sel = shown == Some(id);
+            let st = &ds.stats[i];
+            let (status, color, bold) = if p.extinct {
+                ("extinct", theme::DIM, false)
+            } else {
+                match ds.open_outbreak(id) {
+                    Some((_, o)) if o.epidemic => ("EPIDEMIC", theme::SICK, true),
+                    Some(_) => ("outbreak", theme::SICK, false),
+                    None => ("dormant", theme::DIM, false),
+                }
+            };
+            let is_new = p.is_strain() && p.born_day.is_some_and(|b| day < b.saturating_add(30));
+            let name: String = if p.is_strain() { format!("└ {}", p.name()) } else { p.name().to_string() }.chars().take(11).collect();
+            let text = if sel { theme::selected() } else if p.extinct { theme::dim_text() } else { theme::text() };
+            let bg = if sel { theme::SELECT_BG } else { theme::PANEL_BG };
+            let mut status_style = Style::default().fg(color).bg(bg);
+            if bold {
+                status_style = status_style.add_modifier(Modifier::BOLD);
+            }
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(if sel { "►" } else { " " }, text),
+                Span::styled(format!("{name:<11}"), text),
+                Span::styled(format!(" act{:>3}", st.active), if st.active > 0 { tone(theme::SICK).bg(bg) } else { Style::default().fg(theme::DIM).bg(bg) }),
+                Span::styled(format!(" dead{:>3} ", st.total_deaths), if p.extinct { Style::default().fg(theme::DIM).bg(bg) } else { text }),
+                Span::styled(format!("{status:<8}"), status_style),
+                Span::styled(if is_new { " new" } else { "" }, Style::default().fg(theme::MAGENTA).bg(bg).add_modifier(Modifier::BOLD)),
+            ]));
+            row += 1;
+        }
+        gap(&mut row, &mut spare);
+
+        // This outbreak: the shown pathogen's open outbreak, else its latest;
+        // for `all`, the latest open outbreak of any pathogen, else the latest.
+        let outbreak = match shown {
+            Some(p) => ds.open_outbreak(p).map(|(_, o)| o).or_else(|| ds.outbreaks.iter().rev().find(|o| o.pathogen == p)),
+            None => ds.outbreaks.iter().rev().find(|o| o.ended_day.is_none()).or_else(|| ds.outbreaks.last()),
+        };
+        panel::section(f, inner, row, "This outbreak");
+        row += 1;
+        match outbreak {
+            Some(o) => {
+                let (y, d) = (o.started_day / 360 + 1, o.started_day % 360 + 1);
+                let dur = o.duration_days(day);
+                let when = if o.ended_day.is_some() { format!(" · over after {dur} d") } else { format!(" · day {}", dur + 1) };
+                util::line(f, inner, row, Line::from(vec![
+                    Span::styled(format!(" {}", ds.name(o.pathogen)), tone(theme::SICK).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!(" began Year {y}, Day {d}"), theme::text()),
+                    Span::styled(when, theme::dim_text()),
+                ]));
+                row += 1;
+                let origin = world.regions.get(o.origin_region as usize).map(|r| r.0.as_str()).unwrap_or("The Wilds");
+                util::line(f, inner, row, Line::from(vec![Span::styled(" origin ", theme::dim_text()), Span::styled(origin, theme::text())]));
+                row += 1;
+                let index = match sim.creatures.get(o.index_case) {
+                    Some(c) => format!("{} {} ({})", c.tag(), c.name_str(), c.species.name().to_lowercase()),
+                    None => format!("#{}", o.index_case.0),
+                };
+                util::line(f, inner, row, Line::from(vec![Span::styled(" index case ", theme::dim_text()), Span::styled(index, theme::text())]));
+                row += 1;
+                util::line(f, inner, row, Line::from(vec![
+                    Span::styled(" cases ", theme::dim_text()),
+                    Span::styled(o.cases.to_string(), tone(theme::SICK)),
+                    Span::styled("  deaths ", theme::dim_text()),
+                    Span::styled(o.deaths.to_string(), tone(theme::BAD)),
+                    Span::styled("  recovered ", theme::dim_text()),
+                    Span::styled(o.recovered.to_string(), tone(theme::GOOD)),
+                ]));
+                row += 1;
+                let arrow = active_arrow(sim.series.samples(), Some(o.pathogen), 7);
+                util::line(f, inner, row, Line::from(vec![
+                    Span::styled(" today ", theme::dim_text()),
+                    Span::styled(format!("+{} new ", o.cases_today), theme::text()),
+                    Span::styled(arrow.to_string(), tone(crate::ui::screens::common::arrow_color(arrow))),
+                    Span::styled(format!("  active {}", o.active), theme::dim_text()),
+                ]));
+                row += 1;
+            }
+            None => {
+                util::line(f, inner, row, Line::from(Span::styled(" no outbreak recorded yet", theme::dim_text())));
+                row += 5;
+            }
+        }
+        gap(&mut row, &mut spare);
+
+        // By species: living, sick with / immune to the shown pathogen(s), and
+        // mean Resistance against the species base.
+        panel::section(f, inner, row, "By species");
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled("   species    n  sick immune resist", theme::dim_text())));
+        row += 1;
+        let resist = disease::mean_resistance(&sim.creatures);
+        for id in SpeciesId::ALL {
+            let (mut n, mut sick, mut immune) = (0u32, 0u32, 0u32);
+            for c in sim.creatures.living().filter(|c| c.species == id) {
+                n += 1;
+                if c.infection.is_some_and(|inf| shown.is_none_or(|p| p == inf.pathogen)) {
+                    sick += 1;
+                }
+                if immune_to_shown(c, shown, slots, day) {
+                    immune += 1;
+                }
+            }
+            let base = id.base_genome().resistance();
+            let mean = resist[id.index()];
+            let text = if n == 0 { theme::dim_text() } else { theme::text() };
+            let arrow = if n == 0 {
+                ' '
+            } else if mean > base + 0.005 {
+                glyphs::UP
+            } else if mean < base - 0.005 {
+                glyphs::DOWN
+            } else {
+                glyphs::FLAT
+            };
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(format!(" {} ", id.glyph().to_ascii_uppercase()), tone(id.color()).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{:<8}{n:>4}", id.name()), text),
+                Span::styled(format!("{sick:>6}"), if sick > 0 { tone(theme::SICK) } else { theme::dim_text() }),
+                Span::styled(format!("{immune:>7}"), if immune > 0 { tone(theme::IMMUNE) } else { theme::dim_text() }),
+                Span::styled(if n == 0 { "    —".to_string() } else { format!("  {}", fmt2(mean)) }, text),
+                Span::styled(arrow.to_string(), tone(crate::ui::screens::common::arrow_color(arrow))),
+            ]));
+            row += 1;
+        }
+        gap(&mut row, &mut spare);
+
+        // Parasites: mean load per species and the most fouled region.
+        panel::section(f, inner, row, "Parasites");
+        row += 1;
+        let (means, _heavy) = parasite_by_species(sim);
+        let mut spans = vec![Span::styled(" mean load", theme::dim_text())];
+        for id in SpeciesId::ALL {
+            spans.push(Span::styled(format!(" {}", id.glyph()), tone(id.color()).add_modifier(Modifier::BOLD)));
+            spans.push(Span::styled(fmt2(means[id.index()]), theme::text()));
+        }
+        util::line(f, inner, row, Line::from(spans));
+        row += 1;
+        let (worst, worst_mean) = worst_region(world);
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(" worst ground: ", theme::dim_text()),
+            Span::styled(worst, tone(theme::WARN)),
+            Span::styled(format!(" {}", fmt2(worst_mean)), theme::text()),
+        ]));
+        row += 1;
+        gap(&mut row, &mut spare);
+
+        row = self.overlays_selector(f, inner, row);
+        gap(&mut row, &mut spare);
+
+        let notes = [" colour = animal · amber ground = fouled", " Tab pathogen · k look · Esc restores map"];
+        if reading_extra == 0 {
+            util::line(f, inner, row, Line::from(Span::styled(notes[1], theme::dim_text())));
+        } else {
+            panel::section(f, inner, row, "Reading the map");
+            row += 1;
+            for note in notes.iter().take(reading_extra as usize) {
+                util::line(f, inner, row, Line::from(Span::styled(*note, theme::dim_text())));
+                row += 1;
+            }
+        }
+    }
+
+    /// S02i sidebar: the parasite ramp and creature bands, mean cell load per
+    /// region, per-species load / heavy count / litter penalty, the three
+    /// heaviest carriers, the selector and a reading note. Exactly 40 rows.
+    fn parasite_sidebar(&self, f: &mut Frame, area: Rect, sim: &Sim) {
+        let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
+        let mut row = 0u16;
+        let tone = |c: Color| Style::default().fg(c).bg(theme::PANEL_BG);
+        let world = &sim.world;
+        let dp = &sim.params.disease;
+
+        panel::section(f, inner, row, "Parasites");
+        row += 1;
+        for note in [" worms build up where animals graze,", " drink and rest; carcasses pass them on."] {
+            util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
+            row += 1;
+        }
+
+        panel::section(f, inner, row, "Legend");
+        row += 1;
+        for i in 0..24 {
+            let t = (i as f32 + 0.5) / 24.0;
+            let g = glyphs::shade(t);
+            if let Some(c) = f.buffer_mut().cell_mut((inner.x + 4 + i, inner.y + row)) {
+                c.set_char(g);
+                c.set_style(Style::default().fg(theme::parasite(t)).bg(theme::dim(theme::parasite(t), 0.75)));
+            }
+        }
+        row += 1;
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(" clean … fouled   ", theme::dim_text()),
+            Span::styled("~", tone(theme::WARN)),
+            Span::styled(" fouled water  ▲ rock", theme::dim_text()),
+        ]));
+        row += 1;
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(" animals: ", theme::dim_text()),
+            Span::styled("dim", theme::dim_text()),
+            Span::styled(format!(" <{}%  ", (map::PARASITE_LIGHT * 100.0) as u32), theme::dim_text()),
+            Span::styled("amber", tone(theme::WARN)),
+            Span::styled(format!(" <{}%  ", (map::PARASITE_HEAVY * 100.0) as u32), theme::dim_text()),
+            Span::styled("red", tone(theme::BAD).add_modifier(Modifier::BOLD)),
+            Span::styled(format!(" ≥{}%", (map::PARASITE_HEAVY * 100.0) as u32), theme::dim_text()),
+        ]));
+        row += 1;
+
+        // By region: mean cell load, then the worst region and the fouled count.
+        panel::section(f, inner, row, "By region");
+        row += 1;
+        for r in &world.regions {
+            bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", r.0), region_load_mean(world, r), theme::WARN, 18, 14);
+            row += 1;
+        }
+        let (worst, _) = worst_region(world);
+        let fouled = world.cells.iter().filter(|c| c.parasite_load >= map::PARASITE_TINT_THRESHOLD).count();
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(" worst: ", theme::dim_text()),
+            Span::styled(format!("{worst:<16}"), tone(theme::WARN)),
+            Span::styled(format!("  {fouled} cells ≥{}%", (map::PARASITE_TINT_THRESHOLD * 100.0) as u32), theme::text()),
+        ]));
+        row += 1;
+
+        // By species: mean load bar, heavy carriers and the litter penalty.
+        panel::section(f, inner, row, "By species");
+        row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(format!("{:<3}{:<5}{:>4} {:<12}{:>4}{:>4}{:>7}", "", "name", "n", "load", "mean", "hvy", "litter"), theme::dim_text())));
+        row += 1;
+        let (means, heavy) = parasite_by_species(sim);
+        for id in SpeciesId::ALL {
+            let i = id.index();
+            let n = sim.creatures.living().filter(|c| c.species == id).count();
+            let text = if n == 0 { theme::dim_text() } else { theme::text() };
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(format!(" {} ", id.glyph().to_ascii_uppercase()), tone(id.color()).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{:<5}{n:>4}", id.name()), text),
+            ]));
+            bars::bar(f.buffer_mut(), inner.x + 13, inner.y + row, 12, means[i], theme::WARN);
+            let litter = (dp.parasite_fertility_w * means[i] * 100.0).round() as u32;
+            util::line(f, Rect::new(inner.x + 25, inner.y, inner.width.saturating_sub(25), inner.height), row, Line::from(vec![
+                Span::styled(if n == 0 { "   —".to_string() } else { format!(" {}", fmt2(means[i])) }, text),
+                Span::styled(format!("{:>4}", heavy[i]), if heavy[i] > 0 { tone(theme::BAD) } else { theme::dim_text() }),
+                Span::styled(format!("{:>7}", format!("−{litter}%")), if litter > 0 { tone(theme::WARN) } else { theme::dim_text() }),
+            ]));
+            row += 1;
+        }
+
+        // Carriers: the three heaviest living carriers.
+        panel::section(f, inner, row, "Carriers");
+        row += 1;
+        let mut carriers: Vec<&crate::sim::creatures::Creature> = sim.creatures.living().filter(|c| c.parasite_load > 0.0).collect();
+        carriers.sort_by(|a, b| b.parasite_load.partial_cmp(&a.parasite_load).unwrap_or(std::cmp::Ordering::Equal).then(a.id.0.cmp(&b.id.0)));
+        for k in 0..3 {
+            match carriers.get(k) {
+                Some(c) => {
+                    let (color, _) = map::parasite_tint(c.species.color(), c.parasite_load);
+                    let name: String = c.name_str().chars().take(8).collect();
+                    util::line(f, inner, row, Line::from(vec![
+                        Span::styled(format!(" {} ", c.species.glyph()), tone(c.species.color()).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("{:<6} {name:<8} ", c.tag()), theme::text()),
+                        Span::styled(fmt2(c.parasite_load), tone(color)),
+                        Span::styled(format!(" {}", world.region_name(c.x, c.y)), theme::dim_text()),
+                    ]));
+                }
+                None if k == 0 => util::line(f, inner, row, Line::from(Span::styled(" no carriers", theme::dim_text()))),
+                None => {}
+            }
+            row += 1;
+        }
+
+        row = self.overlays_selector(f, inner, row);
+        util::line(f, inner, row, Line::from(Span::styled(" k look = exact cell load · Esc restores", theme::dim_text())));
+    }
+
     fn overlay_sidebar(&self, f: &mut Frame, area: Rect, app: &AppState, world: &World) {
         let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
         let mut row = 0u16;
@@ -1587,6 +1996,99 @@ impl WorldMap {
     }
 }
 
+/// S02h: every living creature's colour under the disease overlay.
+fn disease_tints(sim: &Sim, shown: Option<PathogenId>) -> HashMap<CreatureId, (Color, bool)> {
+    let day = sim.time.day_index() as u32;
+    let slots = sim.disease.pathogens.len();
+    sim.creatures
+        .living()
+        .map(|c| {
+            let infection = c.infection.map(|i| (i.pathogen, i.stage));
+            (c.id, map::disease_tint(c.species.color(), shown, infection, immune_to_shown(c, shown, slots, day), c.parasite_load))
+        })
+        .collect()
+}
+
+/// S02i: every living creature's colour under the parasite overlay.
+fn parasite_tints(sim: &Sim) -> HashMap<CreatureId, (Color, bool)> {
+    sim.creatures.living().map(|c| (c.id, map::parasite_tint(c.species.color(), c.parasite_load))).collect()
+}
+
+/// Immune to the shown pathogen, or to any of the `slots` live slots when all
+/// are shown.
+fn immune_to_shown(c: &crate::sim::creatures::Creature, shown: Option<PathogenId>, slots: usize, day: u32) -> bool {
+    match shown {
+        Some(p) => disease::is_immune(c, p, day),
+        None => (0..slots).any(|k| disease::is_immune(c, PathogenId(k as u8), day)),
+    }
+}
+
+/// Mean parasite load and heavy-carrier count (`≥ PARASITE_HEAVY`) per species.
+fn parasite_by_species(sim: &Sim) -> ([f32; 6], [u32; 6]) {
+    let (mut sum, mut n, mut heavy) = ([0.0f32; 6], [0u32; 6], [0u32; 6]);
+    for c in sim.creatures.living() {
+        let i = c.species.index();
+        sum[i] += c.parasite_load;
+        n[i] += 1;
+        if c.parasite_load >= map::PARASITE_HEAVY {
+            heavy[i] += 1;
+        }
+    }
+    (std::array::from_fn(|i| if n[i] > 0 { sum[i] / n[i] as f32 } else { 0.0 }), heavy)
+}
+
+/// Mean `parasite_load` over a region's rectangle.
+fn region_load_mean(world: &World, r: &crate::sim::world::RegionRect) -> f32 {
+    let (mut sum, mut n) = (0.0f32, 0usize);
+    for y in r.2..r.4.min(world.height()) {
+        for x in r.1..r.3.min(world.width()) {
+            sum += world.cells[y * world.width() + x].parasite_load;
+            n += 1;
+        }
+    }
+    if n == 0 {
+        0.0
+    } else {
+        sum / n as f32
+    }
+}
+
+/// The region with the highest mean parasite load (`—` with no regions).
+fn worst_region(world: &World) -> (&str, f32) {
+    world
+        .regions
+        .iter()
+        .map(|r| (r.0.as_str(), region_load_mean(world, r)))
+        .fold(("—", -1.0), |best, cur| if cur.1 > best.1 { cur } else { best })
+}
+
+/// A 0..1 value as `.xx`.
+fn fmt2(v: f32) -> String {
+    format!(".{:02}", (v * 100.0).round().clamp(0.0, 99.0) as u32)
+}
+
+/// Trend arrow of the active case count over the last `window` samples: one
+/// pathogen slot, or every slot summed. Same ±3 % rule as the population arrow.
+fn active_arrow(samples: &[crate::sim::Sample], shown: Option<PathogenId>, window: usize) -> char {
+    if samples.len() < 2 {
+        return glyphs::FLAT;
+    }
+    let active = |s: &crate::sim::Sample| match shown {
+        Some(p) => s.active_by_pathogen.get(p.0 as usize).copied().unwrap_or(0),
+        None => s.active_by_pathogen.iter().sum(),
+    };
+    let a = active(&samples[samples.len().saturating_sub(window).min(samples.len() - 1)]) as f32;
+    let b = active(samples.last().unwrap()) as f32;
+    let pct = if a > 0.0 { (b - a) / a * 100.0 } else if b > 0.0 { f32::INFINITY } else { 0.0 };
+    if pct > 3.0 {
+        glyphs::UP
+    } else if pct < -3.0 {
+        glyphs::DOWN
+    } else {
+        glyphs::FLAT
+    }
+}
+
 fn map_hint(world: &World, origin: (usize, usize), inner_w: usize) -> String {
     if inner_w < world.width() {
         format!("x {}-{} of {}   ← → scroll", origin.0, origin.0 + inner_w - 1, world.width())
@@ -1645,4 +2147,187 @@ pub fn group(n: u64) -> String {
         out.push(ch);
     }
     out
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sim::disease::{Infection, Stage};
+    use crate::sim::world::{Cell, Terrain};
+    use crate::sim::Params;
+    use ratatui::backend::TestBackend;
+    use ratatui::buffer::Buffer;
+    use ratatui::Terminal;
+
+    fn key(c: KeyCode) -> KeyEvent {
+        KeyEvent::new(c, KeyModifiers::NONE)
+    }
+
+    fn draw(screen: &WorldMap, app: &AppState) -> Buffer {
+        let mut terminal = Terminal::new(TestBackend::new(155, 45)).unwrap();
+        terminal.draw(|f| screen.render(app, f, f.area())).unwrap();
+        terminal.backend().buffer().clone()
+    }
+
+    fn row_text(buf: &Buffer, y: u16) -> String {
+        (0..buf.area.width).map(|x| buf[(x, y)].symbol().chars().next().unwrap_or(' ')).collect()
+    }
+
+    /// A sim with every pathogen slot filled (the roster plus strains of slot 0).
+    fn full_roster_sim() -> Sim {
+        let mut sim = Sim::new(7, Params::default());
+        let day = sim.time.day_index() as u32;
+        while sim.disease.pathogens.len() < disease::MAX_PATHOGENS {
+            let mut p = sim.disease.pathogens[0].clone();
+            p.parent = Some(PathogenId(0));
+            p.born_day = Some(day);
+            p.params.name = format!("Strain{}", sim.disease.pathogens.len());
+            sim.disease.pathogens.push(p);
+        }
+        sim
+    }
+
+    #[test]
+    fn s02h_disease_tint_bands() {
+        let mut sim = full_roster_sim();
+        let day = sim.time.day_index() as u32;
+        let ids = sim.creatures.living_ids();
+        assert!(ids.len() >= 4, "the default world starts with founders");
+        let (a, b, c, d) = (ids[0], ids[1], ids[2], ids[3]);
+        let infection = |stage: Stage, p: u8| Infection { pathogen: PathogenId(p), stage, since_day: day, ends_day: day + 5, severity: 0.5, source: None, outbreak: 0 };
+        sim.creatures.get_mut(a).unwrap().infection = Some(infection(Stage::Infectious, 0));
+        sim.creatures.get_mut(b).unwrap().infection = Some(infection(Stage::Incubating, 0));
+        let cc = sim.creatures.get_mut(c).unwrap();
+        cc.infection = None;
+        cc.immune_until[7] = u32::MAX;
+        let dd = sim.creatures.get_mut(d).unwrap();
+        dd.infection = None;
+        dd.parasite_load = 0.8;
+        let species_of = |sim: &Sim, id: CreatureId| sim.creatures.get(id).unwrap().species.color();
+
+        // All pathogens shown: every band present.
+        let tints = disease_tints(&sim, None);
+        assert_eq!(tints[&a], (theme::SICK, true), "infectious is SICK bold");
+        assert_eq!(tints[&b], (theme::dim(theme::SICK, 0.4), false), "incubating is SICK dimmed 40%");
+        assert_eq!(tints[&c].0, theme::IMMUNE, "immune to any slot reads IMMUNE when all are shown");
+        assert_eq!(tints[&d].0, theme::WARN, "heavy parasite load reads WARN");
+        // One slot shown: an infection with another pathogen counts as healthy,
+        // and immunity is only to that slot.
+        let tints7 = disease_tints(&sim, Some(PathogenId(7)));
+        assert_eq!(tints7[&a].0, theme::dim(species_of(&sim, a), map::HEALTHY_FADE));
+        assert_eq!(tints7[&c].0, theme::IMMUNE);
+        let tints0 = disease_tints(&sim, Some(PathogenId(0)));
+        assert_eq!(tints0[&a].0, theme::SICK);
+        assert_eq!(tints0[&c].0, theme::dim(species_of(&sim, c), map::HEALTHY_FADE), "immune to slot 7 is not immune to slot 0");
+
+        // Render at 155×45 with all eight slots, for every Tab stop.
+        let mut app = AppState::new(Params::default());
+        app.sim = Some(sim);
+        let mut screen = WorldMap::new("Test".into());
+        screen.overlay = Overlay::Disease(None);
+        let buf = draw(&screen, &app);
+        assert!(row_text(&buf, 0).contains("overlay: disease"), "map title names the overlay");
+        assert!(row_text(&buf, 0).contains("Overlay"), "sidebar title");
+        let side: Vec<String> = (1..41).map(|y| row_text(&buf, y).chars().skip(112).collect::<String>()).collect();
+        assert!(side.iter().any(|l| l.contains("Pathogens · all")));
+        assert!(side.iter().any(|l| l.contains("└ Strain7")), "strains are indented under their parent");
+        assert!(side.iter().any(|l| l.contains("new")), "a strain born today carries the new tag");
+        assert!(side.iter().any(|l| l.contains("9 ") && l.contains("parasites")), "selector lists 9 rows");
+        assert!(side[39].contains("Tab pathogen"), "with all eight slots the reading note is the 40th sidebar row");
+        // The infectious creature draws in SICK when it is inside the viewport.
+        let ca = app.sim.as_ref().unwrap().creatures.get(a).unwrap();
+        if ca.x < 110 && ca.y < 40 {
+            assert_eq!(buf[(ca.x as u16 + 1, ca.y as u16 + 1)].fg, theme::SICK);
+        }
+        // Tab walks all → slot 0 … slot 7 → all; Shift+Tab walks back.
+        screen.handle_key(key(KeyCode::Tab), &mut app);
+        assert_eq!(screen.overlay, Overlay::Disease(Some(PathogenId(0))));
+        for i in 1..8u8 {
+            screen.handle_key(key(KeyCode::Tab), &mut app);
+            assert_eq!(screen.overlay, Overlay::Disease(Some(PathogenId(i))));
+            let buf = draw(&screen, &app);
+            assert!(row_text(&buf, 0).contains("overlay: disease"));
+        }
+        screen.handle_key(key(KeyCode::Tab), &mut app);
+        assert_eq!(screen.overlay, Overlay::Disease(None));
+        screen.handle_key(key(KeyCode::BackTab), &mut app);
+        assert_eq!(screen.overlay, Overlay::Disease(Some(PathogenId(7))));
+
+        // The S12b hook: a pending slot renders at once and is taken by the next key.
+        screen.overlay = Overlay::None;
+        app.pending_overlay = Some(PathogenId(2));
+        let buf = draw(&screen, &app);
+        assert!(row_text(&buf, 0).contains("overlay: disease"));
+        screen.handle_key(key(KeyCode::Right), &mut app);
+        assert_eq!(screen.overlay, Overlay::Disease(Some(PathogenId(2))));
+        assert!(app.pending_overlay.is_none());
+
+        // `o` walks health → disease → parasites → plain map; `8` and `9` go direct.
+        screen.overlay = Overlay::Health;
+        screen.handle_key(key(KeyCode::Char('o')), &mut app);
+        assert_eq!(screen.overlay, Overlay::Disease(None));
+        screen.handle_key(key(KeyCode::Char('o')), &mut app);
+        assert_eq!(screen.overlay, Overlay::Parasites);
+        screen.handle_key(key(KeyCode::Char('o')), &mut app);
+        assert_eq!(screen.overlay, Overlay::None);
+        screen.handle_key(key(KeyCode::Char('9')), &mut app);
+        assert_eq!(screen.overlay, Overlay::Parasites);
+        screen.handle_key(key(KeyCode::Char('8')), &mut app);
+        assert_eq!(screen.overlay, Overlay::Disease(None));
+    }
+
+    #[test]
+    fn s02i_parasite_heatmap() {
+        // The ramp and the cell shading.
+        assert_eq!(theme::parasite(0.5), theme::WARN);
+        assert_eq!(theme::parasite(1.0), theme::BAD);
+        let cell = |terrain: Terrain, load: f32| Cell { terrain, elevation: 0.5, moisture: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: load };
+        let (g, fg, _) = map::parasite_cell(&cell(Terrain::Dirt, 0.9));
+        assert_eq!((g, fg), (glyphs::shade(0.9), theme::parasite(0.9)));
+        assert_eq!(map::parasite_cell(&cell(Terrain::Dirt, 0.0)).0, glyphs::DIRT, "an empty shade shows the dirt glyph");
+        assert_eq!(map::parasite_cell(&cell(Terrain::DeepWater, 0.0)).0, glyphs::DEEP_WATER);
+        assert_eq!(map::parasite_cell(&cell(Terrain::Rock, 0.9)).0, glyphs::ROCK);
+        let (g, fg, _) = map::parasite_cell(&cell(Terrain::ShallowWater, 0.3));
+        assert_eq!((g, fg), (glyphs::SHALLOW_WATER, theme::WARN), "fouled water draws ~ in WARN");
+        // Creature bands.
+        assert_eq!(map::parasite_tint(theme::VOLE, 0.1), (theme::dim(theme::VOLE, map::HEALTHY_FADE), false));
+        assert_eq!(map::parasite_tint(theme::VOLE, 0.3), (theme::WARN, false));
+        assert_eq!(map::parasite_tint(theme::VOLE, 0.7), (theme::BAD, true));
+
+        // A full-screen render with a fouled land cell in view.
+        let mut sim = full_roster_sim();
+        let w = sim.world.width();
+        let occupied: std::collections::HashSet<(usize, usize)> = sim.creatures.living().map(|c| (c.x, c.y)).collect();
+        let idx = (0..sim.world.cells.len())
+            .find(|&i| {
+                let t = sim.world.cells[i].terrain;
+                let (x, y) = (i % w, i / w);
+                !t.is_water() && t != Terrain::Rock && x < 110 && y < 40 && !occupied.contains(&(x, y))
+            })
+            .expect("a free land cell in the viewport");
+        sim.world.cells[idx].parasite_load = 0.9;
+        let ids = sim.creatures.living_ids();
+        sim.creatures.get_mut(ids[0]).unwrap().parasite_load = 0.7;
+        sim.creatures.get_mut(ids[1]).unwrap().parasite_load = 0.3;
+        let tints = parasite_tints(&sim);
+        assert_eq!(tints[&ids[0]], (theme::BAD, true));
+        assert_eq!(tints[&ids[1]], (theme::WARN, false));
+
+        let mut app = AppState::new(Params::default());
+        app.sim = Some(sim);
+        let mut screen = WorldMap::new("Test".into());
+        screen.overlay = Overlay::Parasites;
+        let buf = draw(&screen, &app);
+        assert!(row_text(&buf, 0).contains("overlay: parasites"));
+        let (x, y) = ((idx % w) as u16 + 1, (idx / w) as u16 + 1);
+        assert_eq!(buf[(x, y)].fg, theme::parasite(0.9), "the fouled cell is shaded on the parasite ramp");
+        let side: Vec<String> = (1..41).map(|y| row_text(&buf, y).chars().skip(112).collect::<String>()).collect();
+        assert!(side.iter().any(|l| l.contains("By region")));
+        assert!(side.iter().any(|l| l.contains("Carriers")));
+        assert!(side.iter().any(|l| l.contains("cells ≥25%")));
+        assert!(side.iter().any(|l| l.contains("litter")));
+        assert!(side[39].contains("k look"), "the reading note is the 40th sidebar row");
+        assert!(row_text(&buf, 44).contains("1-9"), "status bar hints cover the nine overlays");
+    }
 }

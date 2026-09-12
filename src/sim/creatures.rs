@@ -9,6 +9,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::sim::disease::{Infection, PathogenId};
 use crate::sim::params::CreaturesParams;
 use crate::sim::rng::Rng;
 use crate::sim::species::{names, Genome, SpeciesId};
@@ -87,6 +88,9 @@ pub struct DeathTallies {
     pub thirst: u32,
     pub age: u32,
     pub predation: u32,
+    /// Disease deaths today (C7), total and per species.
+    pub disease: u32,
+    pub disease_by_species: [u32; 6],
     /// Births per species today (C4 FR5), `SpeciesId::ALL` order.
     pub births: [u32; 6],
     /// Deaths per species today (C4 FR5), `SpeciesId::ALL` order.
@@ -150,6 +154,8 @@ pub enum Cause {
     Age,
     Injury,
     Predation,
+    /// C7: a pathogen or a parasite load (FR5/FR6).
+    Disease,
 }
 
 impl Cause {
@@ -160,6 +166,7 @@ impl Cause {
             Cause::Age => "old age",
             Cause::Injury => "injury",
             Cause::Predation => "predation",
+            Cause::Disease => "disease",
         }
     }
 }
@@ -257,6 +264,16 @@ pub struct Creature {
     pub predation_risk: f32,
     pub migrate_until: u64,
     pub migrate_target: Option<(usize, usize)>,
+    // ---- C7 disease / parasites ----
+    /// The current contagious infection, at most one at a time (FR3).
+    pub infection: Option<Infection>,
+    /// Immunity per pathogen slot as a day index (`0` none, `u32::MAX` lifelong).
+    pub immune_until: [u32; 8],
+    /// Continuous parasite ("gut worm") load 0..=1.
+    pub parasite_load: f32,
+    pub infections_survived: u8,
+    /// Set at death when the creature was infectious: carcass transmission and S03c.
+    pub died_infected: Option<PathogenId>,
 }
 
 impl Creature {
@@ -369,7 +386,7 @@ impl CreatureStore {
 
 /// Place founders per FR3. Deterministic: iterates `SpeciesId::ALL` order and
 /// draws from `rng` in a fixed sequence.
-pub fn place_founders(world: &World, params: &CreaturesParams, rng: &mut Rng) -> Vec<Creature> {
+pub fn place_founders(world: &World, params: &CreaturesParams, resistance_sd: f32, rng: &mut Rng) -> Vec<Creature> {
     let mut out = Vec::new();
     for species in SpeciesId::ALL {
         let n = params.initial_counts.get(&species).copied().unwrap_or(0);
@@ -395,8 +412,10 @@ pub fn place_founders(world: &World, params: &CreaturesParams, rng: &mut Rng) ->
             }
 
             let mut genome = base;
-            for v in genome.0.iter_mut() {
-                *v = Genome::clamp_trait(*v + rng.gauss(0.0, 0.12));
+            for (t, v) in genome.0.iter_mut().enumerate() {
+                // C7: Resistance starts with a wider spread (`resistance_sd`).
+                let sd = if t == 8 { resistance_sd } else { 0.12 };
+                *v = Genome::clamp_trait(*v + rng.gauss(0.0, sd));
             }
             let max_age = params.max_age_base + (genome.longevity() * params.max_age_per_longevity as f32) as u32;
             let adult = rng.chance(0.7);
@@ -461,6 +480,12 @@ pub fn place_founders(world: &World, params: &CreaturesParams, rng: &mut Rng) ->
                 threatened_by: None,
                 predation_risk: 0.0,
                 migrate_until: 0,
+                // ---- C7 disease / parasites
+                infection: None,
+                immune_until: [0; 8],
+                parasite_load: 0.0,
+                infections_survived: 0,
+                died_infected: None,
                 migrate_target: None,
                 path_for: None,
             });
@@ -485,7 +510,7 @@ mod tests {
         let w = world();
         let p = CreaturesParams::default();
         let mut rng = Rng::new(42);
-        let creatures = place_founders(&w, &p, &mut rng);
+        let creatures = place_founders(&w, &p, 0.20, &mut rng);
         assert!(!creatures.is_empty(), "expected founders to be placed");
         for c in &creatures {
             let cell = w.cell(c.x, c.y);
@@ -505,7 +530,7 @@ mod tests {
         let w = world();
         let p = CreaturesParams::default();
         let mut rng = Rng::new(42);
-        for c in place_founders(&w, &p, &mut rng) {
+        for c in place_founders(&w, &p, 0.20, &mut rng) {
             let age = c.age_days(0);
             assert!(age < c.max_age_days(&p), "age {age} >= max {}", c.max_age_days(&p));
         }
@@ -514,7 +539,7 @@ mod tests {
     #[test]
     fn slot_storage_free_list_and_stable_ids() {
         let mut store = CreatureStore::new();
-        let mut c = place_founders(&world(), &CreaturesParams::default(), &mut Rng::new(1)).remove(0);
+        let mut c = place_founders(&world(), &CreaturesParams::default(), 0.20, &mut Rng::new(1)).remove(0);
         c.id = CreatureId(0);
         let a = store.insert(c.clone());
         let b = store.insert(c.clone());

@@ -44,7 +44,8 @@ pub fn trait_color(t: usize) -> Color {
         4 => theme::BAD,
         5 => theme::VEGETATION,
         6 => theme::MAGENTA,
-        _ => theme::LYNX,
+        7 => theme::LYNX,
+        _ => theme::SICK,
     }
 }
 

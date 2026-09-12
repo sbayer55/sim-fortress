@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::sim::creatures::{Creature, CreatureId, CreatureStore, Mutation, NameId, Sex};
+use crate::sim::creatures::{Cause, Creature, CreatureId, CreatureStore, Mutation, NameId, Sex};
 use crate::sim::species::{Genome, SpeciesId};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -26,8 +26,13 @@ pub struct LineageNode {
     pub parents: Option<(CreatureId, CreatureId)>,
     /// Children in birth (id) order.
     pub children: Vec<CreatureId>,
-    /// Carries a notable mutation or has ≥ 10 offspring.
+    /// Carries a notable mutation, has ≥ 10 offspring, or survived ≥ 2 infections (C7).
     pub notable: bool,
+    // ---- C7
+    pub cause: Option<Cause>,
+    /// The outbreak that killed it (absolute index into `Sim.disease.outbreaks`).
+    pub outbreak: Option<u16>,
+    pub infections_survived: u8,
 }
 
 impl LineageNode {
@@ -124,6 +129,9 @@ impl Lineage {
                 parents: c.parents,
                 children: Vec::new(),
                 notable,
+                cause: None,
+                outbreak: None,
+                infections_survived: 0,
             },
         );
         if let Some((m, f)) = c.parents {
@@ -140,9 +148,15 @@ impl Lineage {
         }
     }
 
-    pub fn record_death(&mut self, id: CreatureId, day: u32) {
+    pub fn record_death(&mut self, id: CreatureId, day: u32, cause: Cause, outbreak: Option<u16>, survived: u8) {
         if let Some(n) = self.nodes.get_mut(&id) {
             n.died_day = Some(day);
+            n.cause = Some(cause);
+            n.outbreak = outbreak;
+            n.infections_survived = survived;
+            if survived >= 2 {
+                n.notable = true;
+            }
         }
     }
 

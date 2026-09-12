@@ -73,6 +73,8 @@ pub struct Cell {
     pub pred_pressure: f32,
     /// Set to `Some(ShallowWater)` when a shallow-water cell dried to sand in a drought.
     pub dried_from: Option<Terrain>,
+    /// C7: parasite contamination 0..=1, shed by carriers, decays daily.
+    pub parasite_load: f32,
 }
 
 /// A named rectangle: (name, x0, y0, x1, y1), half-open on the upper edges.
@@ -211,6 +213,7 @@ impl World {
                     moisture,
                     vegetation: 0.0,
                     prey_pressure: 0.0,
+                    parasite_load: 0.0,
                     pred_pressure: 0.0,
                     dried_from: None,
                 });

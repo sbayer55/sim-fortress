@@ -3,8 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 /// Trait names, indexed by the `Genome` array order.
-pub const TRAIT_NAMES: [&str; 8] = [
-    "Speed", "Size", "Sense", "Metabolism", "Aggression", "Camouflage", "Fertility", "Longevity",
+pub const TRAIT_NAMES: [&str; Genome::LEN] = [
+    "Speed", "Size", "Sense", "Metabolism", "Aggression", "Camouflage", "Fertility", "Longevity", "Resistance",
 ];
 
 /// Prey name pool (shared by Vole, Hare and Deer; a `NameId` indexes into it).
@@ -119,22 +119,24 @@ impl SpeciesId {
 
     /// Baseline genome around which individuals vary.
     pub fn base_genome(self) -> Genome {
-        // speed, size, sense, metabolism, aggression, camouflage, fertility, longevity
+        // speed, size, sense, metabolism, aggression, camouflage, fertility, longevity, resistance
         match self {
-            SpeciesId::Vole => Genome([0.45, 0.10, 0.40, 0.75, 0.05, 0.60, 0.90, 0.20]),
-            SpeciesId::Hare => Genome([0.80, 0.25, 0.65, 0.60, 0.10, 0.55, 0.75, 0.35]),
-            SpeciesId::Deer => Genome([0.65, 0.80, 0.55, 0.40, 0.20, 0.35, 0.35, 0.70]),
-            SpeciesId::Fox => Genome([0.70, 0.35, 0.80, 0.55, 0.60, 0.50, 0.50, 0.45]),
-            SpeciesId::Wolf => Genome([0.75, 0.70, 0.70, 0.50, 0.85, 0.25, 0.40, 0.60]),
-            SpeciesId::Lynx => Genome([0.72, 0.50, 0.90, 0.45, 0.75, 0.70, 0.30, 0.55]),
+            SpeciesId::Vole => Genome([0.45, 0.10, 0.40, 0.75, 0.05, 0.60, 0.90, 0.20, 0.30]),
+            SpeciesId::Hare => Genome([0.80, 0.25, 0.65, 0.60, 0.10, 0.55, 0.75, 0.35, 0.35]),
+            SpeciesId::Deer => Genome([0.65, 0.80, 0.55, 0.40, 0.20, 0.35, 0.35, 0.70, 0.45]),
+            SpeciesId::Fox => Genome([0.70, 0.35, 0.80, 0.55, 0.60, 0.50, 0.50, 0.45, 0.40]),
+            SpeciesId::Wolf => Genome([0.75, 0.70, 0.70, 0.50, 0.85, 0.25, 0.40, 0.60, 0.50]),
+            SpeciesId::Lynx => Genome([0.72, 0.50, 0.90, 0.45, 0.75, 0.70, 0.30, 0.55, 0.45]),
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Genome(pub [f32; 8]);
+pub struct Genome(pub [f32; Genome::LEN]);
 
 impl Genome {
+    /// Number of traits (C7 added Resistance as the ninth).
+    pub const LEN: usize = 9;
     pub fn speed(&self) -> f32 {
         self.0[0]
     }
@@ -158,6 +160,10 @@ impl Genome {
     }
     pub fn longevity(&self) -> f32 {
         self.0[7]
+    }
+    /// Disease resistance (C7): lowers susceptibility, lethality and duration; costs hunger.
+    pub fn resistance(&self) -> f32 {
+        self.0[8]
     }
     /// Sense range in map cells.
     pub fn sense_cells(&self) -> u16 {

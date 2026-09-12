@@ -7,9 +7,9 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
 use ratatui::Frame;
 
-use crate::sim::creatures::CreatureId;
+use crate::sim::creatures::{Cause, CreatureId};
 use crate::sim::lineage::{LineageNode, Tree, TreeItem};
-use crate::sim::{Kind, Sim, TRAIT_NAMES};
+use crate::sim::{Genome, Kind, Sim, TRAIT_NAMES};
 use crate::ui::app::AppState;
 use crate::ui::screens::common::{day_stamp, sp};
 use crate::ui::screens::s03_inspector::Inspector;
@@ -152,7 +152,7 @@ fn draw_tree(f: &mut Frame, area: Rect, sim: &Sim, tree: &Tree) {
         sp(" ", theme::text()),
         sp(format!("{:<46}", "ancestry (older on the left)"), theme::dim_text()),
         sp(format!("{:<9}", "gen"), theme::dim_text()),
-        sp(format!("{:<10}", "years"), theme::dim_text()),
+        sp(format!("{:<14}", "years"), theme::dim_text()),
         sp("mutations", theme::dim_text()),
     ]));
     row += 2;
@@ -203,10 +203,27 @@ fn draw_tree(f: &mut Frame, area: Rect, sim: &Sim, tree: &Tree) {
                 let yrs = years(n, season_days);
                 let yrs_style = if dead { theme::dim_text() } else { Style::default().fg(theme::GOOD).bg(theme::PANEL_BG) };
                 buf.set_stringn(col + 7, y, format!("{:<11}", yrs), 11, yrs_style);
-                let status = if dead { format!("{} ", glyphs::DEATH) } else { format!("{} ", glyphs::BIRTH) };
-                let status_style = if dead { theme::dim_text() } else { Style::default().fg(theme::GOOD).bg(theme::PANEL_BG) };
+                // C7: a disease death shows ☻ (SICK); survived infections add ☺N.
+                let of_disease = dead && n.cause == Some(Cause::Disease);
+                let status = if of_disease {
+                    format!("{} ", glyphs::DISEASE)
+                } else if dead {
+                    format!("{} ", glyphs::DEATH)
+                } else {
+                    format!("{} ", glyphs::BIRTH)
+                };
+                let status_style = if of_disease {
+                    Style::default().fg(theme::SICK).bg(theme::PANEL_BG)
+                } else if dead {
+                    theme::dim_text()
+                } else {
+                    Style::default().fg(theme::GOOD).bg(theme::PANEL_BG)
+                };
                 buf.set_stringn(col + 18, y, &status, 2, status_style);
-                let mut mx = col + 20;
+                if n.infections_survived > 0 {
+                    buf.set_stringn(col + 20, y, format!("{}{}", glyphs::IMMUNE, n.infections_survived.min(9)), 2, Style::default().fg(theme::IMMUNE).bg(theme::PANEL_BG));
+                }
+                let mut mx = col + 23;
                 for m in &n.mutations {
                     let s = format!("{} {} {:+.2}  ", glyphs::MUTATION, TRAIT_NAMES[m.trait_idx], m.delta);
                     let w = s.chars().count() as u16;
@@ -236,7 +253,7 @@ fn draw_tree(f: &mut Frame, area: Rect, sim: &Sim, tree: &Tree) {
     row = inner.height.saturating_sub(gen_rows + LEGEND_ROWS + 1);
     panel::section(f, inner, row, "By generation");
     row += 1;
-    util::line(f, inner, row, Line::from(sp(format!("  gen   {:<8}alive  mutations  members", plural), theme::dim_text())));
+    util::line(f, inner, row, Line::from(sp(format!("  gen   {:<8}alive sick mutations  members", plural), theme::dim_text())));
     row += 1;
     let color = species.map(|s| s.color()).unwrap_or(theme::TEXT);
     let mut shown = 0;
@@ -250,6 +267,7 @@ fn draw_tree(f: &mut Frame, area: Rect, sim: &Sim, tree: &Tree) {
         }
         let alive_g = members.iter().filter(|n| n.alive()).count();
         let muts_g: usize = members.iter().map(|n| n.mutations.len()).sum();
+        let sick_g = members.iter().filter(|n| n.cause == Some(Cause::Disease)).count();
         let names: Vec<String> = members.iter().take(12).map(|n| n.name_str().to_string()).collect();
         let y = inner.y + row;
         let buf = f.buffer_mut();
@@ -257,13 +275,16 @@ fn draw_tree(f: &mut Frame, area: Rect, sim: &Sim, tree: &Tree) {
         let blocks: String = std::iter::repeat_n(glyphs::SQUARE, members.len().min(7)).collect();
         buf.set_stringn(inner.x + 8, y, format!("{:<7}", blocks), 7, Style::default().fg(color).bg(theme::PANEL_BG));
         buf.set_stringn(inner.x + 15, y, format!("{:>5}", alive_g), 5, Style::default().fg(theme::GOOD).bg(theme::PANEL_BG));
+        // C7: disease deaths in this generation.
+        let sick_text = if sick_g > 0 { format!("{}{:<3}", glyphs::DISEASE, sick_g.min(999)) } else { "   -".to_string() };
+        buf.set_stringn(inner.x + 21, y, format!("{:>4}", sick_text), 4, Style::default().fg(if sick_g > 0 { theme::SICK } else { theme::DIM }).bg(theme::PANEL_BG));
         let m: String = std::iter::repeat_n(glyphs::MUTATION, muts_g.min(9)).collect();
-        buf.set_stringn(inner.x + 24, y, format!("{:<9}", m), 9, Style::default().fg(theme::INFO).bg(theme::PANEL_BG));
+        buf.set_stringn(inner.x + 27, y, format!("{:<9}", m), 9, Style::default().fg(theme::INFO).bg(theme::PANEL_BG));
         let mut list = names.join(", ");
         if members.len() > 12 {
             list.push_str(&format!(" {} {} more", glyphs::DOT, members.len() - 12));
         }
-        buf.set_stringn(inner.x + 34, y, list, (inner.width as usize).saturating_sub(35), theme::dim_text());
+        buf.set_stringn(inner.x + 38, y, list, (inner.width as usize).saturating_sub(39), theme::dim_text());
         row += 1;
         shown += 1;
     }
@@ -284,6 +305,8 @@ fn draw_tree(f: &mut Frame, area: Rect, sim: &Sim, tree: &Tree) {
         sp("   dead", theme::dim_text()),
         sp(format!("   {} mutation at birth", glyphs::MUTATION), Style::default().fg(theme::INFO).bg(theme::PANEL_BG)),
         sp(format!("   {} alive  {} dead", glyphs::BIRTH, glyphs::DEATH), theme::dim_text()),
+        sp(format!("   {} died of disease", glyphs::DISEASE), Style::default().fg(theme::SICK).bg(theme::PANEL_BG)),
+        sp(format!("  {}N infections survived", glyphs::IMMUNE), Style::default().fg(theme::IMMUNE).bg(theme::PANEL_BG)),
     ]));
     row += 2;
     util::line(f, inner, row, Line::from(sp(
@@ -335,17 +358,30 @@ fn details(f: &mut Frame, area: Rect, sim: &Sim, focus: CreatureId) {
         Some(c) => c.kills.to_string(),
         None => n.children.len().to_string(),
     };
-    let facts: Vec<(String, String)> = vec![
+    let mut facts: Vec<(String, String)> = vec![
         ("generation".into(), format!("{}", n.generation)),
         ("born".into(), format!("{}  (age {} days)", day_stamp(n.born_day as i64, season_days), age_days)),
         ("died".into(), n.died_day.map(|d| day_stamp(d as i64, season_days)).unwrap_or_else(|| "still living".into())),
+    ];
+    // C7: cause of death and, for disease, the outbreak it belonged to.
+    if !n.alive() {
+        if let Some(cause) = n.cause {
+            facts.push(("died of".into(), cause.label().to_string()));
+        }
+        if let Some(o) = n.outbreak.and_then(|i| sim.disease.outbreak(i)) {
+            let year = o.started_day / (4 * season_days).max(1) + 1;
+            // The 38-column panel leaves 23 cells for the value.
+            facts.push(("outbreak".into(), format!("{} outbreak, Y{}", sim.disease.name(o.pathogen), year)));
+        }
+    }
+    facts.extend([
         ("mother".into(), name_of(mother)),
         ("father".into(), name_of(father)),
         ("grandmother".into(), name_of(grand)),
         ("children".into(), format!("{}  ({} living)", n.children.len(), living_kids)),
         ("descendants".into(), format!("{}  ({} living)", desc_total, living_desc)),
         (count_label.into(), count_value),
-    ];
+    ]);
     for (k, v) in facts {
         util::line(f, inner, row, Line::from(vec![sp(format!(" {:<13}", k), theme::dim_text()), sp(v, theme::text())]));
         row += 1;
@@ -371,14 +407,14 @@ fn details(f: &mut Frame, area: Rect, sim: &Sim, focus: CreatureId) {
     util::line(f, inner, row, Line::from(sp("            grand parent  self  kids", theme::dim_text())));
     row += 1;
     // The three traits that moved most from the mother.
-    let kids_mean: Option<[f32; 8]> = {
+    let kids_mean: Option<[f32; Genome::LEN]> = {
         let living: Vec<&LineageNode> = n.children.iter().filter_map(|c| lin.get(*c)).filter(|k| k.alive()).collect();
         if living.is_empty() {
             None
         } else {
-            let mut m = [0.0f32; 8];
+            let mut m = [0.0f32; Genome::LEN];
             for k in &living {
-                for t in 0..8 {
+                for t in 0..Genome::LEN {
                     m[t] += k.genome.0[t];
                 }
             }
@@ -388,12 +424,18 @@ fn details(f: &mut Frame, area: Rect, sim: &Sim, focus: CreatureId) {
             Some(m)
         }
     };
-    let mut order: Vec<usize> = (0..8).collect();
+    // C7: Resistance leads when the species has been through an outbreak.
+    const RESISTANCE: usize = Genome::LEN - 1;
+    let had_outbreak = sim.disease.outbreaks.iter().any(|o| o.species_cases[n.species.index()] > 0);
+    let mut order: Vec<usize> = (0..Genome::LEN).filter(|&t| !(had_outbreak && t == RESISTANCE)).collect();
     order.sort_by(|&a, &b| {
         let da = mother.map(|m| (n.genome.0[a] - m.genome.0[a]).abs()).unwrap_or(0.0);
         let db = mother.map(|m| (n.genome.0[b] - m.genome.0[b]).abs()).unwrap_or(0.0);
         db.partial_cmp(&da).unwrap_or(std::cmp::Ordering::Equal).then(a.cmp(&b))
     });
+    if had_outbreak {
+        order.insert(0, RESISTANCE);
+    }
     for &t in order.iter().take(3) {
         let a = grand.map(|g| g.genome.0[t]);
         let b = mother.map(|m| m.genome.0[t]);
@@ -487,5 +529,63 @@ fn details(f: &mut Frame, area: Rect, sim: &Sim, focus: CreatureId) {
             sp(format!("g{} {}", k.generation, years(k, season_days)), theme::dim_text()),
         ]));
         row += 1;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sim::disease::{Infection, Outbreak, PathogenId, Stage};
+    use crate::sim::Params;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    fn screen_text(app: &AppState, screen: &dyn Screen) -> String {
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| screen.render(app, f, Rect::new(0, 0, 155, 45))).unwrap();
+        let buf = terminal.backend().buffer();
+        (0..45).map(|y| (0..155).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect()
+    }
+
+    #[test]
+    fn s08_disease_markers() {
+        let mut app = AppState::new(Params::default());
+        let mut sim = Sim::new(7, Params::default());
+        let id = sim.creatures.living_ids()[0];
+        sim.creatures.get_mut(id).unwrap().infection =
+            Some(Infection { pathogen: PathogenId(0), stage: Stage::Infectious, since_day: 0, ends_day: 9, severity: 0.8, source: None, outbreak: 0 });
+        // An outbreak touched the species; the lineage node records the disease
+        // death in it and two survived infections.
+        let species = sim.creatures.get(id).unwrap().species;
+        let mut species_cases = [0u32; 6];
+        species_cases[species.index()] = 4;
+        sim.disease.outbreaks.push(Outbreak {
+            pathogen: PathogenId(0),
+            started_day: 0,
+            ended_day: None,
+            origin_region: 0,
+            index_case: id,
+            cases: 4,
+            deaths: 1,
+            recovered: 1,
+            peak_active: 2,
+            peak_day: 0,
+            species_cases,
+            species_deaths: [0; 6],
+            epidemic: false,
+            resist_at_start: [0.3; 6],
+            resist_at_end: [0.0; 6],
+            active: 2,
+            cases_today: 0,
+        });
+        sim.lineage.record_death(id, 3, Cause::Disease, Some(0), 2);
+        app.sim = Some(sim);
+        let text = screen_text(&app, &LineageScreen::new(id));
+        assert!(text.contains(&format!("{} died of disease", glyphs::DISEASE)), "legend missing: {text}");
+        assert!(text.contains(&format!("{}2", glyphs::IMMUNE)), "survived marker missing: {text}");
+        assert!(text.contains("died of      disease"), "facts missing: {text}");
+        assert!(text.contains("outbreak, Y1"), "outbreak fact missing: {text}");
+        assert!(text.contains(" Resistance "), "Resistance should lead trait inheritance: {text}");
     }
 }

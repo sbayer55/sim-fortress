@@ -29,6 +29,9 @@ pub fn region_status(veg: f32, prey: u32, prey_configured: bool, th: &ScarcityTh
     }
 }
 
+/// Active cases in one region that flip its status word to `Outbreak` (C7 FR13).
+pub const OUTBREAK_CASES: u32 = 5;
+
 pub struct Ecology {
     sort: usize,
     selected: usize,
@@ -164,7 +167,7 @@ fn totals(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, world: &World) {
     let max = counts.iter().copied().max().unwrap_or(1).max(1) as f32;
     for t in kinds {
         let n = counts[t as usize];
-        let (g, fg, _bg) = map::terrain_cell(&crate::sim::Cell { terrain: t, elevation: 0.0, moisture: 0.0, vegetation: 0.0, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None }, false);
+        let (g, fg, _bg) = map::terrain_cell(&crate::sim::Cell { terrain: t, elevation: 0.0, moisture: 0.0, vegetation: 0.0, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 }, false);
         let buf = f.buffer_mut();
         let y = inner.y + row;
         buf.set_stringn(inner.x + 1, y, format!("{} ", g), 2, Style::default().fg(fg).bg(theme::PANEL_BG));
@@ -269,7 +272,7 @@ fn regions(f: &mut Frame, area: Rect, app: &AppState, world: &World, time: &crat
     let prey_configured = app.params.creatures.initial_counts.iter().filter(|(id, _)| id.kind() == crate::sim::Kind::Prey).map(|(_, n)| *n).sum::<u32>() > 0;
 
     util::line(f, inner, row, Line::from(Span::styled(
-        format!("{:<17}{:>6}{:>7}   {:<26}{:<26}{:>5}{:>5}{:>10}   {}", " region", "cells", "water", " vegetation", " moisture", "prey", "pred", "pressure", "status"),
+        format!("{:<17}{:>6}{:>7}   {:<26}{:<26}{:>5}{:>5}{:>5}{:>10}   {}", " region", "cells", "water", " vegetation", " moisture", "prey", "pred", "sick", "pressure", "status"),
         theme::dim_text(),
     )));
     row += 1;
@@ -284,13 +287,6 @@ fn regions(f: &mut Frame, area: Rect, app: &AppState, world: &World, time: &crat
             let (x, y) = (idx % world.width, idx / world.width);
             x >= r.1 && x < r.3 && y >= r.2 && y < r.4 && c.terrain.is_water()
         }).count();
-        let status = region_status(veg, 0, prey_configured, th);
-        let (label, color) = match status {
-            "Scarce" => ("Scarce", theme::BAD),
-            "Strained" => ("Strained", theme::WARN),
-            "Plenty" => ("Plenty", theme::GOOD),
-            _ => ("Stable", theme::TEXT),
-        };
         let selected = i == screen.selected;
         let y = inner.y + row;
         let buf = f.buffer_mut();
@@ -311,17 +307,29 @@ fn regions(f: &mut Frame, area: Rect, app: &AppState, world: &World, time: &crat
             buf.set_stringn(x + 21, y, format!("{:.2}", v), 4, Style::default().fg(text).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
             x += 26;
         }
-        let (prey_n, pred_n) = match &app.sim {
+        let (prey_n, pred_n, sick_n) = match &app.sim {
             Some(sim) => {
-                let (mut prey_n, mut pred_n) = (0u32, 0u32);
+                let (mut prey_n, mut pred_n, mut sick_n) = (0u32, 0u32, 0u32);
                 for c in sim.creatures.living() {
                     if world.region_index(c.x, c.y) == ri {
                         if c.species.kind() == crate::sim::Kind::Prey { prey_n += 1 } else { pred_n += 1 }
+                        if c.infection.is_some() {
+                            sick_n += 1;
+                        }
                     }
                 }
-                (prey_n, pred_n)
+                (prey_n, pred_n, sick_n)
             }
-            None => (0, 0),
+            None => (0, 0, 0),
+        };
+        // C7: an outbreak (≥ 5 active cases) outranks everything but Scarce.
+        let status = region_status(veg, 0, prey_configured, th);
+        let (label, color) = match status {
+            "Scarce" => ("Scarce", theme::BAD),
+            _ if sick_n >= OUTBREAK_CASES => ("Outbreak", theme::SICK),
+            "Strained" => ("Strained", theme::WARN),
+            "Plenty" => ("Plenty", theme::GOOD),
+            _ => ("Stable", theme::TEXT),
         };
         let mut psum = 0.0f32;
         let mut pn = 0usize;
@@ -337,8 +345,10 @@ fn regions(f: &mut Frame, area: Rect, app: &AppState, world: &World, time: &crat
         let pressure = if pn > 0 { psum / pn as f32 } else { 0.0 };
         buf.set_stringn(inner.x + 86, y, format!("{:>5}", prey_n), 5, Style::default().fg(theme::HARE).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
         buf.set_stringn(inner.x + 91, y, format!("{:>5}", pred_n), 5, Style::default().fg(theme::WOLF).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
-        buf.set_stringn(inner.x + 98, y, format!("{:>4.2} ", pressure), 5, Style::default().fg(text).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
-        buf.set_stringn(inner.x + 104, y, format!("{:<9}", label), 9, Style::default().fg(color).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }).add_modifier(Modifier::BOLD));
+        let sick_color = if sick_n > 0 { theme::SICK } else { theme::DIM };
+        buf.set_stringn(inner.x + 96, y, format!("{:>5}", sick_n), 5, Style::default().fg(sick_color).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
+        buf.set_stringn(inner.x + 103, y, format!("{:>4.2} ", pressure), 5, Style::default().fg(text).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
+        buf.set_stringn(inner.x + 109, y, format!("{:<9}", label), 9, Style::default().fg(color).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }).add_modifier(Modifier::BOLD));
         row += 1;
     }
     let _ = time;

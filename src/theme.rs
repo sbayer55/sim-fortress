@@ -59,6 +59,10 @@ pub const FOX: Color = Color::Rgb(246, 128, 42);
 pub const WOLF: Color = Color::Rgb(224, 66, 66);
 pub const LYNX: Color = Color::Rgb(236, 110, 150);
 pub const VEGETATION: Color = Color::Rgb(96, 196, 96);
+/// Disease / infection colour (C7): a sickly yellow-green.
+pub const SICK: Color = Color::Rgb(150, 205, 70);
+/// Immunity marker colour (C7).
+pub const IMMUNE: Color = INFO;
 
 /// Linear blend between two RGB colors. `t` is clamped to 0..=1.
 pub fn lerp(a: Color, b: Color, t: f32) -> Color {
@@ -122,6 +126,11 @@ pub fn water(t: f32) -> Color {
         ],
         t,
     )
+}
+
+/// Parasite-load ramp (S02i): dim olive (clean) through `WARN` to `BAD` (fouled).
+pub fn parasite(t: f32) -> Color {
+    ramp(&[Color::Rgb(70, 74, 34), WARN, BAD], t)
 }
 
 /// Species-density ramp (S02f): near-black through the species' own colour to

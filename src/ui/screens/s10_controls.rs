@@ -1,5 +1,5 @@
 //! S10 / Options modal (C6 FR5): drawn over the dimmed world map (or the title
-//! screen). The Options section is five rows and persists to `ui.toml`.
+//! screen). The Options section is six rows and persists to `ui.toml`.
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
@@ -115,6 +115,11 @@ impl Screen for Controls {
                 persist(app);
                 Action::None
             }
+            KeyCode::Char('d') => {
+                app.params.ui.auto_pause_on_epidemic = !app.params.ui.auto_pause_on_epidemic;
+                persist(app);
+                Action::None
+            }
             KeyCode::Left => {
                 app.params.ui.autosave_days = app.params.ui.autosave_days.saturating_sub(1);
                 persist(app);
@@ -130,7 +135,7 @@ impl Screen for Controls {
     }
 
     fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
-        let modal = util::centered(area, 60.min(area.width.saturating_sub(2)), 20.min(area.height.saturating_sub(2)));
+        let modal = util::centered(area, 60.min(area.width.saturating_sub(2)), 21.min(area.height.saturating_sub(2)));
         let inner = panel::draw_with_hint(f, modal, "Simulation Controls", "Esc closes", panel::Kind::Focus);
         let mut row = 0u16;
 
@@ -205,11 +210,12 @@ impl Screen for Controls {
 
         panel::section(f, inner, row, "Options");
         row += 1;
-        let toggles: [(&str, bool, &str); 4] = [
+        let toggles: [(&str, bool, &str); 5] = [
             ("a", app.params.ui.auto_pause_on_extinction, "auto-pause on extinction"),
             ("b", app.params.ui.log_births, "log births to the event log"),
             ("c", app.params.ui.pause_on_follow_death, "pause when a followed creature dies"),
             ("t", app.params.ui.day_night_tint, "day/night tint"),
+            ("d", app.params.ui.auto_pause_on_epidemic, "auto-pause on epidemic"),
         ];
         for (key, on, label) in toggles {
             let mark = if on { "[x]" } else { "[ ]" };
@@ -253,7 +259,7 @@ impl Screen for Controls {
         // Repaint the status bar undimmed.
         let status_row = area.y + area.height - 1;
         util::fill(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1), Style::default().bg(theme::STATUS_BG));
-        let keys: &[(&str, &str)] = &[("Space", "pause"), ("+/-", "speed"), ("1-5", "set speed"), (".", "step"), ("a/b/c/t", "toggle"), ("Esc", "close")];
+        let keys: &[(&str, &str)] = &[("Space", "pause"), ("+/-", "speed"), ("1-5", "set speed"), (".", "step"), ("a/b/c/t/d", "toggle"), ("Esc", "close")];
         let right = match &app.sim {
             Some(sim) => {
                 let t = &sim.time;
@@ -263,5 +269,51 @@ impl Screen for Controls {
             None => "options".to_string(),
         };
         status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, &right);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sim::Params;
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::KeyModifiers;
+    use ratatui::Terminal;
+
+    fn render(app: &AppState) -> String {
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| Controls::new().render(app, f, Rect::new(0, 0, 155, 45))).unwrap();
+        let buf = terminal.backend().buffer();
+        (0..45)
+            .map(|y| (0..155).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>() + "\n")
+            .collect()
+    }
+
+    #[test]
+    fn s10_epidemic_toggle() {
+        // `d` persists through `save_ui`; point it at a scratch dir so the test
+        // never overwrites the user's real `~/.config/sim-fortress/ui.toml`.
+        let scratch = std::env::temp_dir().join(format!("sim-fortress-s10-test-{}", std::process::id()));
+        std::env::set_var("XDG_CONFIG_HOME", &scratch);
+
+        let mut app = AppState::new(Params::default());
+        app.sim = Some(crate::sim::Sim::new(7, Params::default()));
+        let before = app.params.ui.auto_pause_on_epidemic;
+        assert!(before, "auto-pause on epidemic defaults to on");
+        let text = render(&app);
+        assert!(text.contains("[x] auto-pause on epidemic"), "row missing:\n{text}");
+        assert!(text.contains("[d]"));
+        assert!(text.contains("[Space] pause"), "key hint row must survive the extra option row:\n{text}");
+
+        let mut c = Controls::new();
+        // `d` toggles the option; the change is what the alert gate reads.
+        let a = c.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE), &mut app);
+        assert!(matches!(a, Action::None));
+        assert_eq!(app.params.ui.auto_pause_on_epidemic, !before);
+        assert!(render(&app).contains("[ ] auto-pause on epidemic"));
+        // Toggle back so the persisted ui.toml is left as it was.
+        c.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE), &mut app);
+        assert_eq!(app.params.ui.auto_pause_on_epidemic, before);
     }
 }

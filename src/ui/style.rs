@@ -44,6 +44,8 @@ impl EventKindStyle for EventKind {
         match self {
             EventKind::Birth => glyphs::BIRTH,
             EventKind::DeathStarved | EventKind::DeathThirst | EventKind::DeathPredation | EventKind::DeathAge => glyphs::DEATH,
+            EventKind::DeathDisease | EventKind::Outbreak | EventKind::Spillover | EventKind::Epidemic | EventKind::EpidemicOver => glyphs::DISEASE,
+            EventKind::Recovery => glyphs::IMMUNE,
             EventKind::Mutation => glyphs::MUTATION,
             EventKind::Migration => glyphs::MIGRATION,
             EventKind::Extinction => glyphs::EXTINCTION,
@@ -68,6 +70,10 @@ impl EventKindStyle for EventKind {
             EventKind::DroughtEased => theme::DIM,
             EventKind::Season => theme::TITLE,
             EventKind::Note => theme::TEXT,
+            EventKind::DeathDisease | EventKind::Outbreak | EventKind::Epidemic => theme::SICK,
+            EventKind::Spillover => theme::MAGENTA,
+            EventKind::EpidemicOver => theme::DIM,
+            EventKind::Recovery => theme::GOOD,
         }
     }
 }

@@ -37,7 +37,7 @@ flowchart TB
     subgraph body["155 × 44 body — S01a dimmed 55 %"]
         subgraph modal["Legend & Help  120 × 38 (centred)"]
             direction LR
-            c1["Terrain 38 cols<br/>── Terrain ── 12 rows<br/>── Events ── 8 rows<br/>── Map marks ── 6 rows<br/>heatmap shades"]
+            c1["Terrain 38 cols<br/>── Terrain ── 12 rows<br/>── Events ── 10 rows<br/>── Map marks ── 7 rows<br/>heatmap shades"]
             c2["Creatures 38 cols<br/>── Creatures ── 6 species<br/>── Tags ──<br/>── Seasons & time ──<br/>── Vitals & trends ──"]
             c3["Keys 40 cols<br/>── Navigation ──<br/>── Look mode ──<br/>── Overlays ──<br/>── Speed ──<br/>── Screens ──"]
             c1 --- c2 --- c3
@@ -56,13 +56,14 @@ flowchart TB
    gameplay note: *impassable, drinkable · drinkable, slow · no forage · regrows here first ·
    thin forage · hare & deer grazing · rich grazing, cover · cover for small prey ·
    impassable heights · shelter, litters · scavenger food · regrowing this season.*
-2. **Events** (8 rows): event-kind glyphs in their log colours — birth / litter, death by
+2. **Events** (10 rows): event-kind glyphs in their log colours — birth / litter, death by
    predation, death by starvation / thirst, death of old age, mutation in a newborn,
-   migration between regions, species extinct, drought / scarcity warning. The three death
-   kinds share the `x` glyph and differ only by colour.
-3. **Map marks** (6 rows): look cursor (inverted cell), cursor corner marks `╬`, trail of the
+   migration between regions, species extinct, drought / scarcity warning, `☻` outbreak /
+   epidemic / death by disease (infection colour), `☺` recovery (now immune). The three
+   death kinds share the `x` glyph and differ only by colour.
+3. **Map marks** (7 rows): look cursor (inverted cell), cursor corner marks `╬`, trail of the
    followed creature `∙`, its current target `♦`, sense-range ring edge `°`, danger marker
-   `!` (predator nearby).
+   `!` (predator nearby), `∩` parasites (cell tint, warning colour).
 4. **Heatmap shades** (2 dim rows): `░ <25%  ▒ <50%  ▓ <75%  █ full`, matching the S02
    overlay thresholds.
 
@@ -91,12 +92,12 @@ flowchart TB
      creature · `f` follow creature · `z` local zoom view · `Esc` leave look mode.
    - **Overlays**: `o` cycle overlays · `1` vegetation density · `2` population pressure ·
      `3` water & moisture · `4` sense range · `5` regions · `6` species density · `7` health
-     (weakest vital) · `Esc` clear overlay.
+     (weakest vital) · `8` disease · `9` parasites · `Esc` clear overlay.
    - **Speed**: `Space` pause / resume · `+ / -` faster / slower · `.` step one tick · `p`
      controls panel.
    - **Screens**: `s` species & traits · `g` graphs & charts · `y` ecology & regions · `e`
      event log · `l` lineage tree · `w` world generation · `?` this help · `q` quit.
-10. The column is exactly filled (5 rules + 29 rows = 34 of 36 rows); adding a binding
+10. The column is exactly filled (5 rules + 31 rows = 36 of 36 rows); adding a binding
     requires dropping or merging one.
 
 ### Status bar
@@ -105,7 +106,7 @@ flowchart TB
 ## Glyphs and colors
 This screen is the canonical list; every glyph it shows must be the same constant the
 corresponding screen draws. In particular: terrain `≈ ~ · . , " ♣ ♠ ▲`, resources `Ω % *`,
-events `♥ x § → ‼ ¡`, marks `X ╬ ∙ ♦ ° !`, seasons `♪ ☼ ♫ *`, sky `☼ ○`, controls
+events `♥ x § → ‼ ¡ ☻ ☺`, marks `X ╬ ∙ ♦ ° ! ∩`, seasons `♪ ☼ ♫ *`, sky `☼ ○`, controls
 `► ││ ►►`, trend `↑ ↔ ↓`, sex `♂ ♀`, shades `░ ▒ ▓ █`, bars `███`. Colours: each species'
 palette entry, the terrain foreground colours, event-kind colours, good / warning / bad for
 vitals, accent for marks, and the focus border for the modal. Note that `*` is used for both

@@ -9,7 +9,7 @@ use crate::sim::species::{Genome, SpeciesId, TRAIT_NAMES};
 pub use crate::sim::lineage::{Lineage, LineageNode, Tree, TreeItem};
 
 /// Trait histogram: 8 traits × 12 buckets.
-pub type Hist = [[u16; 12]; 8];
+pub type Hist = [[u16; 12]; Genome::LEN];
 
 /// Histogram bucket for a trait value: `min(floor(v × 12), 11)`.
 pub fn hist_bucket(v: f32) -> usize {
@@ -31,6 +31,12 @@ pub struct Census {
     pub max_generation: [u32; 6],
     /// Sum of generations of living members (for the CSV mean).
     pub generation_sum: [u64; 6],
+    // ---- C7
+    /// Living members with an infection (any stage).
+    pub infected: [u32; 6],
+    /// Living members immune to at least one pathogen.
+    pub immune: [u32; 6],
+    pub parasite_sum: [f32; 6],
 }
 
 impl Census {
@@ -53,16 +59,26 @@ pub fn census(store: &CreatureStore) -> Census {
     let mut population = [0u32; 6];
     let mut adults = [0u32; 6];
     let mut juveniles = [0u32; 6];
-    let mut sum = [[0.0f32; 8]; 6];
-    let mut min = [[1.0f32; 8]; 6];
-    let mut max = [[0.0f32; 8]; 6];
-    let mut hist = [[[0u16; 12]; 8]; 6];
+    let mut sum = [[0.0f32; Genome::LEN]; 6];
+    let mut min = [[1.0f32; Genome::LEN]; 6];
+    let mut max = [[0.0f32; Genome::LEN]; 6];
+    let mut hist = [[[0u16; 12]; Genome::LEN]; 6];
     let mut max_generation = [0u32; 6];
     let mut generation_sum = [0u64; 6];
+    let mut infected = [0u32; 6];
+    let mut immune = [0u32; 6];
+    let mut parasite_sum = [0.0f32; 6];
 
     for c in store.living() {
         let i = c.species.index();
         population[i] += 1;
+        if c.infection.is_some() {
+            infected[i] += 1;
+        }
+        if c.immune_until.iter().any(|&u| u > 0) {
+            immune[i] += 1;
+        }
+        parasite_sum[i] += c.parasite_load;
         if c.adult {
             adults[i] += 1;
         } else {
@@ -70,7 +86,7 @@ pub fn census(store: &CreatureStore) -> Census {
         }
         max_generation[i] = max_generation[i].max(c.generation);
         generation_sum[i] += c.generation as u64;
-        for t in 0..8 {
+        for t in 0..Genome::LEN {
             let v = c.genome.0[t];
             sum[i][t] += v;
             min[i][t] = min[i][t].min(v);
@@ -79,12 +95,12 @@ pub fn census(store: &CreatureStore) -> Census {
         }
     }
 
-    let mut genome_mean = [Genome([0.0; 8]); 6];
-    let mut genome_min = [Genome([0.0; 8]); 6];
-    let mut genome_max = [Genome([0.0; 8]); 6];
+    let mut genome_mean = [Genome([0.0; Genome::LEN]); 6];
+    let mut genome_min = [Genome([0.0; Genome::LEN]); 6];
+    let mut genome_max = [Genome([0.0; Genome::LEN]); 6];
     for i in 0..6 {
         if population[i] > 0 {
-            for t in 0..8 {
+            for t in 0..Genome::LEN {
                 sum[i][t] /= population[i] as f32;
             }
             genome_mean[i] = Genome(sum[i]);
@@ -93,7 +109,7 @@ pub fn census(store: &CreatureStore) -> Census {
         }
     }
 
-    Census { population, adults, juveniles, genome_mean, genome_min, genome_max, hist, max_generation, generation_sum }
+    Census { population, adults, juveniles, genome_mean, genome_min, genome_max, hist, max_generation, generation_sum, infected, immune, parasite_sum }
 }
 
 /// One species' live record (C4 FR5). Counters are incremental during the day;
@@ -122,6 +138,11 @@ pub struct SpeciesStats {
     /// Last 12 samples of the mean genome, `(generation, mean)`, oldest first.
     pub drift: Vec<(u32, Genome)>,
     pub last_drift_generation: u32,
+    // ---- C7
+    pub sick: u32,
+    pub immune: u32,
+    pub deaths_disease_today: u32,
+    pub deaths_disease_yesterday: u32,
 }
 
 impl SpeciesStats {
@@ -142,9 +163,13 @@ impl SpeciesStats {
             mean: species.base_genome(),
             min: species.base_genome(),
             max: species.base_genome(),
-            hist: [[0; 12]; 8],
+            hist: [[0; 12]; Genome::LEN],
             drift: Vec::new(),
             last_drift_generation: 0,
+            sick: 0,
+            immune: 0,
+            deaths_disease_today: 0,
+            deaths_disease_yesterday: 0,
         }
     }
 
@@ -186,6 +211,8 @@ impl SpeciesStats {
             self.max = c.genome_max[i];
         }
         self.hist = c.hist[i];
+        self.sick = c.infected[i];
+        self.immune = c.immune[i];
         self.trend.push(self.count.min(u16::MAX as u32) as u16);
         if self.trend.len() > 30 {
             let excess = self.trend.len() - 30;
@@ -210,6 +237,7 @@ pub fn update_species_daily(stats: &mut [SpeciesStats; 6], c: &Census, tallies: 
     for (i, s) in stats.iter_mut().enumerate() {
         s.births_today = tallies.births[i];
         s.deaths_today = tallies.deaths[i];
+        s.deaths_disease_today = tallies.disease_by_species[i];
         if s.births_today > 0 && s.first_birth_day.is_none() {
             s.first_birth_day = Some(day);
         }
@@ -218,6 +246,8 @@ pub fn update_species_daily(stats: &mut [SpeciesStats; 6], c: &Census, tallies: 
         s.deaths_yesterday = s.deaths_today;
         s.births_today = 0;
         s.deaths_today = 0;
+        s.deaths_disease_yesterday = s.deaths_disease_today;
+        s.deaths_disease_today = 0;
     }
 }
 
@@ -261,6 +291,12 @@ pub struct Sample {
     pub deaths: [u32; 6],
     pub generation_mean: [f32; 6],
     pub generation_max: [u32; 6],
+    // ---- C7 disease
+    pub infected: [u32; 6],
+    pub immune: [u32; 6],
+    pub deaths_disease: u32,
+    pub parasite_mean: [f32; 6],
+    pub active_by_pathogen: [u32; 8],
 }
 
 /// Daily ring buffer; oldest samples are evicted once `cap` is exceeded.
@@ -342,6 +378,17 @@ impl Series {
                 out.push_str(&format!(",{n}_{}_mean", t.to_lowercase()));
             }
         }
+        // C7 FR10: infections, disease deaths, parasite loads, active cases per pathogen slot.
+        for id in SpeciesId::ALL {
+            out.push_str(&format!(",infected_{}", id.name().to_lowercase()));
+        }
+        out.push_str(",d_disease");
+        for id in SpeciesId::ALL {
+            out.push_str(&format!(",parasite_{}", id.name().to_lowercase()));
+        }
+        for i in 0..8 {
+            out.push_str(&format!(",active_p{i}"));
+        }
         out.push('\n');
         for s in &self.buf {
             out.push_str(&format!(
@@ -368,9 +415,19 @@ impl Series {
                 out.push_str(&format!(",{},{}", s.generation_mean[i], s.generation_max[i]));
             }
             for i in 0..3 {
-                for t in 0..8 {
+                for t in 0..Genome::LEN {
                     out.push_str(&format!(",{}", s.genome_mean[i].0[t]));
                 }
+            }
+            for i in 0..6 {
+                out.push_str(&format!(",{}", s.infected[i]));
+            }
+            out.push_str(&format!(",{}", s.deaths_disease));
+            for i in 0..6 {
+                out.push_str(&format!(",{}", s.parasite_mean[i]));
+            }
+            for i in 0..8 {
+                out.push_str(&format!(",{}", s.active_by_pathogen[i]));
             }
             out.push('\n');
         }
@@ -487,7 +544,7 @@ mod tests {
         let w = World::generate(7, &WorldParams::default());
         let params = CreaturesParams::default();
         let mut store = CreatureStore::new();
-        for c in place_founders(&w, &params, &mut Rng::new(5)) {
+        for c in place_founders(&w, &params, 0.20, &mut Rng::new(5)) {
             store.insert(c);
         }
         let c = census(&store);
@@ -496,7 +553,7 @@ mod tests {
             assert_eq!(c.population[i], want, "{:?}", id);
             assert_eq!(c.adults[i] + c.juveniles[i], want, "{:?}", id);
             if want > 0 {
-                for t in 0..8 {
+                for t in 0..Genome::LEN {
                     assert!(c.genome_min[i].0[t] <= c.genome_mean[i].0[t]);
                     assert!(c.genome_mean[i].0[t] <= c.genome_max[i].0[t]);
                 }
@@ -525,13 +582,18 @@ mod tests {
             deaths_starved: 0,
             deaths_thirst: 0,
             deaths_age: 0,
-            genome_mean: [Genome([0.0; 8]); 6],
-            genome_min: [Genome([0.0; 8]); 6],
-            genome_max: [Genome([0.0; 8]); 6],
+            genome_mean: [Genome([0.0; Genome::LEN]); 6],
+            genome_min: [Genome([0.0; Genome::LEN]); 6],
+            genome_max: [Genome([0.0; Genome::LEN]); 6],
             births: [0; 6],
             deaths: [0; 6],
             generation_mean: [0.0; 6],
             generation_max: [0; 6],
+            infected: [0; 6],
+            immune: [0; 6],
+            deaths_disease: 0,
+            parasite_mean: [0.0; 6],
+            active_by_pathogen: [0; 8],
         }
     }
 
@@ -559,12 +621,12 @@ mod tests {
         assert_eq!(hist_bucket(1.0), 11);
         let w = World::generate(7, &WorldParams::default());
         let mut store = CreatureStore::new();
-        for c in place_founders(&w, &CreaturesParams::default(), &mut Rng::new(5)) {
+        for c in place_founders(&w, &CreaturesParams::default(), 0.20, &mut Rng::new(5)) {
             store.insert(c);
         }
         let c = census(&store);
         for i in 0..6 {
-            for t in 0..8 {
+            for t in 0..Genome::LEN {
                 let n: u32 = c.hist[i][t].iter().map(|&v| v as u32).sum();
                 assert_eq!(n, c.population[i], "histogram {i}/{t} must count every living member");
             }
@@ -612,7 +674,7 @@ mod tests {
     fn drift_sample_cadence() {
         let w = World::generate(7, &WorldParams::default());
         let mut store = CreatureStore::new();
-        for c in place_founders(&w, &CreaturesParams::default(), &mut Rng::new(5)) {
+        for c in place_founders(&w, &CreaturesParams::default(), 0.20, &mut Rng::new(5)) {
             store.insert(c);
         }
         let c = census(&store);
@@ -641,7 +703,7 @@ mod tests {
 
     fn lineage_creature(id: u32, gen: u32, parents: Option<(u32, u32)>, alive: bool) -> crate::sim::Creature {
         let w = World::generate(7, &WorldParams::default());
-        let mut c = place_founders(&w, &CreaturesParams::default(), &mut Rng::new(1)).remove(0);
+        let mut c = place_founders(&w, &CreaturesParams::default(), 0.20, &mut Rng::new(1)).remove(0);
         c.id = crate::sim::CreatureId(id);
         c.generation = gen;
         c.parents = parents.map(|(m, f)| (crate::sim::CreatureId(m), crate::sim::CreatureId(f)));
@@ -659,7 +721,7 @@ mod tests {
             let c = lineage_creature(id, gen, parents, alive);
             lin.record(&c, 0.1);
             if !alive {
-                lin.record_death(c.id, 50);
+                lin.record_death(c.id, 50, crate::sim::creatures::Cause::Age, None, 0);
             }
             if alive {
                 let mut cc = c.clone();

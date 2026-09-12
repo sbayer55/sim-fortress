@@ -80,6 +80,7 @@ mod tests {
         let mut c = crate::sim::creatures::place_founders(
             &World::generate(7, &WorldParams::default()),
             &CreaturesParams::default(),
+            0.20,
             &mut crate::sim::rng::Rng::new(1),
         )
         .remove(0);

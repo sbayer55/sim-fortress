@@ -102,7 +102,7 @@ block-beta
     `12h daylight; night halves sense range and doubles rest`.
 
 ### Regions panel (title `Regions`, hint `sorted by name   [r] cycle sort`)
-16. Header row: `region  cells  water  vegetation  moisture  prey  pred  pressure  status`.
+16. Header row: `region  cells  water  vegetation  moisture  prey  pred  sick  pressure  status`.
 17. One row per named region. The fixture regions tile the 150×40 world:
 
     | Region           | x0–x1   | y0–y1 |
@@ -121,9 +121,13 @@ block-beta
     creatures standing in it: `cells`, `water` (% of cells that are water, shallow-water
     colour), `vegetation` (20-col bar coloured by the vegetation ramp + mean to 2 dp),
     `moisture` (20-col bar on the water ramp + mean), `prey` and `pred` counts (hare / wolf
-    colours), `pressure` (mean predator pressure to 2 dp + 8-col bar on the heat ramp at
-    1.5×), and a bold **status** label with an explanatory note.
-19. Status rules (in order): **Scarce** (bad) if vegetation < 0.365; **Strained** (warn) if
+    colours), `sick` (living creatures in the region with an active infection, incubating
+    or infectious; `SICK` when > 0, dim when 0 — C7), `pressure` (mean predator pressure
+    to 2 dp + 8-col bar on the heat ramp at 1.5×), and a bold **status** label with an
+    explanatory note.
+19. Status rules (in order): **Scarce** (bad) if vegetation < 0.365; **Outbreak** (`SICK`)
+    if the region holds ≥ 5 active cases (C7 — ranked above the crowded/Strained rule so
+    a sick herd reads as sick before it reads as crowded); **Strained** (warn) if
     vegetation < 0.40, or the region is crowded (prey > 30 × vegetation) and vegetation
     < 0.45; **Plenty** (good) if vegetation ≥ 0.45 and prey ≥ 8; otherwise **Stable**.
     Notes: Scarce → `! forage line, crowded`; Strained → `! vegetation thinning` when

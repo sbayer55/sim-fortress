@@ -13,7 +13,7 @@ use crate::sim::Sim;
 /// File magic: `b"SIMF"`.
 pub const MAGIC: [u8; 4] = *b"SIMF";
 /// Current on-disk format version. A newer version is rejected (FR1).
-pub const VERSION: u16 = 1;
+pub const VERSION: u16 = 2;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 
@@ -50,8 +50,8 @@ pub struct SaveEntry {
 pub enum SaveError {
     Io(std::io::Error),
     Postcard(postcard::Error),
-    /// `save is from a newer version (N > M)`.
-    NewerVersion { found: u16, supported: u16 },
+    /// `save is from another version (N ≠ M)`: the format is never kept compatible (C7 FR11).
+    VersionMismatch { found: u16, supported: u16 },
     BadMagic,
     Truncated,
 }
@@ -61,8 +61,8 @@ impl fmt::Display for SaveError {
         match self {
             SaveError::Io(e) => write!(f, "{e}"),
             SaveError::Postcard(e) => write!(f, "{e}"),
-            SaveError::NewerVersion { found, supported } => {
-                write!(f, "save is from a newer version ({found} > {supported})")
+            SaveError::VersionMismatch { found, supported } => {
+                write!(f, "save is from another version ({found} ≠ {supported})")
             }
             SaveError::BadMagic => write!(f, "not a Sim Fortress save (bad magic)"),
             SaveError::Truncated => write!(f, "save file is truncated"),
@@ -187,8 +187,8 @@ fn decode(bytes: &[u8]) -> Result<(SaveHeader, Sim), SaveError> {
         return Err(SaveError::BadMagic);
     }
     let version = u16::from_le_bytes([bytes[4], bytes[5]]);
-    if version > VERSION {
-        return Err(SaveError::NewerVersion { found: version, supported: VERSION });
+    if version != VERSION {
+        return Err(SaveError::VersionMismatch { found: version, supported: VERSION });
     }
     let header_len = u32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]) as usize;
     if bytes.len() < 10 + header_len {
@@ -237,8 +237,8 @@ pub fn read_header(path: &Path) -> Result<SaveHeader, SaveError> {
         return Err(SaveError::BadMagic);
     }
     let version = u16::from_le_bytes([bytes[4], bytes[5]]);
-    if version > VERSION {
-        return Err(SaveError::NewerVersion { found: version, supported: VERSION });
+    if version != VERSION {
+        return Err(SaveError::VersionMismatch { found: version, supported: VERSION });
     }
     let header_len = u32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]) as usize;
     if bytes.len() < 10 + header_len {
@@ -309,7 +309,7 @@ mod tests {
     }
 
     #[test]
-    fn newer_version_rejected() {
+    fn version_mismatch_rejected() {
         let dir = tmpdir("version");
         let sim = Sim::new(7, Params::default());
         let header = build_header(&sim, "v");
@@ -319,11 +319,11 @@ mod tests {
         let path = dir.join("future.simf");
         std::fs::write(&path, &bytes).unwrap();
         match load(&path) {
-            Err(SaveError::NewerVersion { found, supported }) => {
+            Err(SaveError::VersionMismatch { found, supported }) => {
                 assert_eq!(found, VERSION + 1);
                 assert_eq!(supported, VERSION);
             }
-            other => panic!("expected NewerVersion, got {other:?}"),
+            other => panic!("expected VersionMismatch, got {other:?}"),
         }
     }
 

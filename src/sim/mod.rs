@@ -3,6 +3,7 @@
 
 pub mod behavior;
 pub mod creatures;
+pub mod disease;
 pub mod ecology;
 pub mod events;
 pub mod genetics;
@@ -19,6 +20,7 @@ pub mod time;
 pub mod world;
 
 pub use creatures::{Cause, Creature, CreatureId, Death, DeathTallies, Goal, Mutation, RestReason, Sex};
+pub use disease::{DiseaseState, Infection, Outbreak, Pathogen, PathogenId, PathogenStats, Stage};
 pub use events::{Event, EventKind};
 pub use geom::{cheb, dist};
 pub use params::{Params, PredationParams, Rainfall};
@@ -46,6 +48,13 @@ pub enum Alert {
         species: SpeciesId,
         last: CreatureId,
     },
+    /// C7 FR9: an outbreak crossed the epidemic threshold.
+    Epidemic {
+        event_index: u64,
+        pathogen: PathogenId,
+        /// Absolute outbreak index (`Sim.disease.outbreak(index)`).
+        outbreak: u16,
+    },
 }
 
 pub use creatures::ExtinctionRecord;
@@ -62,6 +71,8 @@ pub struct Profile {
     pub ecology_ns: u64,
     pub migration_ns: u64,
     pub spatial_ns: u64,
+    /// Contagion pass + daily disease update (C7).
+    pub disease_ns: u64,
     /// Whole step (everything, including the systems above).
     pub step_ns: u64,
 }
@@ -120,6 +131,11 @@ pub struct Sim {
     /// Whether `--profile` timing is being accumulated.
     #[serde(skip)]
     pub profile_enabled: bool,
+    // ---- C7 disease ----
+    /// Disease RNG, a third stream so enabling disease leaves the ecology and
+    /// creature streams untouched.
+    pub disease_rng: Rng,
+    pub disease: DiseaseState,
 }
 
 impl Sim {
@@ -136,10 +152,15 @@ impl Sim {
         let series = Series::new(params.stats.series_days);
         let rng = Rng::new(seed);
         let mut creature_rng = Rng::new(seed ^ 0x9E37_79B9_7F4A_7C15);
+        let disease_rng = Rng::new(seed ^ 0x7F4A_7C15_9E37_79B9);
+        let disease = DiseaseState::new(&params.disease);
 
         // Place founders (FR3), then build the spatial index over them.
         let mut creatures = CreatureStore::new();
-        for c in creatures::place_founders(&world, &params.creatures, &mut creature_rng) {
+        for mut c in creatures::place_founders(&world, &params.creatures, params.disease.resistance_founder_sd, &mut creature_rng) {
+            if params.disease.enabled {
+                c.parasite_load = params.disease.parasite_baseline;
+            }
             creatures.insert(c);
         }
         let mut spatial = SpatialIndex::new(&world);
@@ -177,6 +198,8 @@ impl Sim {
             local_noted: [false; 48],
             profile: Profile::default(),
             profile_enabled: false,
+            disease_rng,
+            disease,
         }
     }
 
@@ -229,10 +252,13 @@ impl Sim {
             &self.params.ecology,
             &self.params.genetics,
             &self.params.predation,
+            &self.params.disease,
             &mut self.creature_rng,
             &mut self.deaths,
             &mut self.lineage,
             &mut self.soft_cap_noted,
+            &mut self.disease,
+            &mut self.disease_rng,
         );
         if profiling {
             self.profile.behavior_ns += t0.elapsed().as_nanos() as u64;
@@ -257,14 +283,32 @@ impl Sim {
                 &mut self.events,
                 &self.time,
                 &self.params.creatures,
+                &self.params.disease,
                 &mut self.deaths,
                 &mut self.lineage,
+                &mut self.disease,
+                &mut self.disease_rng,
             );
             let c = census(&self.creatures);
             let day = self.time.day_index() as u32;
             stats::update_species_daily(&mut self.species, &c, &self.deaths, day, self.params.genetics.drift_every_generations);
             if profiling {
                 self.profile.day_boundary_ns += t0.elapsed().as_nanos() as u64;
+            }
+            // C7 FR8: outbreak tracking, epidemic alerts and emergence, after the census.
+            let t0 = std::time::Instant::now();
+            alerts.extend(disease::daily_update(
+                &mut self.creatures,
+                &self.world,
+                &mut self.events,
+                &self.time,
+                &self.params.disease,
+                &mut self.disease,
+                &c.population,
+                &mut self.disease_rng,
+            ));
+            if profiling {
+                self.profile.disease_ns += t0.elapsed().as_nanos() as u64;
             }
             let t0 = std::time::Instant::now();
             ecology::daily_update(
@@ -279,6 +323,7 @@ impl Sim {
                 self.params.world.rainfall,
                 &c,
                 &self.deaths,
+                &self.disease,
             );
             if profiling {
                 self.profile.ecology_ns += t0.elapsed().as_nanos() as u64;
@@ -464,7 +509,21 @@ impl Sim {
             feed(&mut h, &c.migrate_until.to_le_bytes());
             feed(&mut h, &c.migrate_target.map(|(x, y)| (x as u64, y as u64)).unwrap_or((u64::MAX, u64::MAX)).0.to_le_bytes());
             feed(&mut h, &c.migrate_target.map(|(x, y)| (x as u64, y as u64)).unwrap_or((u64::MAX, u64::MAX)).1.to_le_bytes());
+            // C7: infection state and parasite load.
+            match c.infection {
+                Some(i) => {
+                    feed(&mut h, &[i.pathogen.0, i.stage as u8]);
+                    feed(&mut h, &i.ends_day.to_le_bytes());
+                }
+                None => feed(&mut h, &[0xff, 0xff]),
+            }
+            feed(&mut h, &c.parasite_load.to_bits().to_le_bytes());
         }
+        for &d in &self.disease.last_case_day {
+            feed(&mut h, &d.to_le_bytes());
+        }
+        feed(&mut h, &(self.disease.outbreaks.len() as u64).to_le_bytes());
+        feed(&mut h, &self.disease_rng.state().to_le_bytes());
         feed(&mut h, &self.time.tick.to_le_bytes());
         feed(&mut h, &self.rng.state().to_le_bytes());
         feed(&mut h, &self.creature_rng.state().to_le_bytes());
@@ -524,7 +583,7 @@ mod tests {
         }
         assert_eq!(a.checksum(), b.checksum());
         // Lock the exact value so accidental algorithm changes fail loudly.
-        assert_eq!(a.checksum(), 0x05ee_94ba_f7cb_d4d7);
+        assert_eq!(a.checksum(), 0x47f5d08e70a07dd3);
     }
 
     #[test]
@@ -596,8 +655,9 @@ mod tests {
         let alerts = step_to_midnight(&mut sim);
         let species: Vec<SpeciesId> = alerts
             .iter()
-            .map(|a| match a {
-                Alert::Extinction { species, .. } => *species,
+            .filter_map(|a| match a {
+                Alert::Extinction { species, .. } => Some(*species),
+                Alert::Epidemic { .. } => None,
             })
             .collect();
         assert_eq!(species, vec![SpeciesId::Vole, SpeciesId::Hare], "species-table order on the same day");

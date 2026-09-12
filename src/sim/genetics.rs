@@ -9,6 +9,8 @@ use crate::sim::geom;
 use crate::sim::lineage::Lineage;
 use crate::sim::params::{CreaturesParams, GeneticsParams};
 use crate::sim::rng::Rng;
+use crate::sim::disease::{self, DiseaseState};
+use crate::sim::params::DiseaseParams;
 use crate::sim::species::{names, Genome, Kind, SpeciesId, TRAIT_NAMES};
 use crate::sim::time::Time;
 use crate::sim::world::World;
@@ -59,7 +61,7 @@ impl TickView {
         TickView { peers: Vec::new(), total: 0, cap_ok: true, carcasses: Vec::new() }
     }
 
-    pub fn build(store: &CreatureStore, time: &Time, world: &World, gp: &GeneticsParams) -> Self {
+    pub fn build(store: &CreatureStore, time: &Time, world: &World, gp: &GeneticsParams, dp: &DiseaseParams) -> Self {
         let mut peers: Vec<Peer> = store
             .living()
             .map(|c| Peer {
@@ -69,7 +71,7 @@ impl TickView {
                 x: c.x,
                 y: c.y,
                 adult: c.adult,
-                mate_ready: eligible(c, time, world, gp),
+                mate_ready: eligible(c, time, world, gp, dp),
                 camouflage: c.genome.camouflage(),
                 goal: c.goal,
             })
@@ -90,8 +92,12 @@ impl TickView {
 
 /// FR2 mate eligibility: adult, fed, watered, rested, off cooldown, in a
 /// breeding season and (prey only) standing on vegetation ≥ the minimum.
-pub fn eligible(c: &Creature, time: &Time, world: &World, gp: &GeneticsParams) -> bool {
+pub fn eligible(c: &Creature, time: &Time, world: &World, gp: &GeneticsParams, dp: &DiseaseParams) -> bool {
     if !c.alive || !c.adult || c.pregnant_due.is_some() {
+        return false;
+    }
+    // C7 FR6: the infectious do not mate.
+    if !disease::effects(c, dp).can_mate {
         return false;
     }
     if c.hunger >= gp.mate_hunger_max || c.thirst >= gp.mate_thirst_max || c.energy <= gp.mate_energy_min {
@@ -136,9 +142,9 @@ pub fn pick_mate(c: &Creature, candidates: &[CreatureId], view: &TickView) -> Op
 /// FR3 inheritance: per trait a random parent's value, plus with probability
 /// `mutation_rate` a gaussian `N(0, mutation_strength)` delta, clamped.
 pub fn inherit(mother: &Genome, father: &Genome, generation: u32, gp: &GeneticsParams, rng: &mut Rng) -> (Genome, Vec<Mutation>) {
-    let mut g = [0.0f32; 8];
+    let mut g = [0.0f32; Genome::LEN];
     let mut mutations = Vec::new();
-    for t in 0..8 {
+    for t in 0..Genome::LEN {
         let base = if rng.chance(0.5) { mother.0[t] } else { father.0[t] };
         let mut v = base;
         if rng.chance(gp.mutation_rate) {
@@ -225,9 +231,12 @@ pub fn deliver(
     time: &Time,
     gp: &GeneticsParams,
     cp: &CreaturesParams,
+    dp: &DiseaseParams,
     rng: &mut Rng,
     tallies: &mut DeathTallies,
     lineage: &mut Lineage,
+    dstate: &DiseaseState,
+    drng: &mut Rng,
 ) -> u32 {
     let due: Vec<CreatureId> = store
         .living()
@@ -242,9 +251,11 @@ pub fn deliver(
         let mother_genome = m.genome;
         let mother_gen = m.generation;
         let father_id = m.mate_id.unwrap_or(mother_id);
-        let litter = gp.litter_size(species, m.genome.fertility());
+        // C7 FR6: parasites lower the effective fertility.
+        let litter = gp.litter_size(species, m.genome.fertility() * disease::effects(m, dp).fertility_factor);
         let mother_label = format!("{} {}", m.name_str(), m.tag());
         let mother_water = m.last_water;
+        let mother_snapshot = m.clone();
 
         let (father_genome, father_gen) = match store.get(father_id) {
             Some(f) => (f.genome, f.generation),
@@ -275,7 +286,7 @@ pub fn deliver(
             let (genome, mutations) = inherit(&mother_genome, &father_genome, generation, gp, rng);
             let sex = if rng.chance(0.5) { Sex::Male } else { Sex::Female };
             let name = rng.below(pool) as NameId;
-            let child = Creature {
+            let mut child = Creature {
                 id: CreatureId(0),
                 species,
                 name,
@@ -328,9 +339,16 @@ pub fn deliver(
                 threatened_by: None,
                 predation_risk: 0.0,
                 migrate_until: 0,
+                // ---- C7 disease / parasites
+                infection: None,
+                immune_until: [0; 8],
+                parasite_load: 0.0,
+                infections_survived: 0,
+                died_infected: None,
                 migrate_target: None,
                 path_for: None,
             };
+            disease::at_birth(&mut child, &mother_snapshot, time, dp, dstate, drng);
             let id = store.insert(child);
             let child = store.get(id).expect("just inserted");
             lineage.record(child, gp.mutation_notable);
@@ -515,6 +533,12 @@ mod tests {
             threatened_by: None,
             predation_risk: 0.0,
             migrate_until: 0,
+                // ---- C7 disease / parasites
+                infection: None,
+                immune_until: [0; 8],
+                parasite_load: 0.0,
+                infections_survived: 0,
+                died_infected: None,
             migrate_target: None,
             path_for: None,
         }
@@ -526,21 +550,21 @@ mod tests {
         let gp = gp();
         let t = time_at(12);
         let mut c = adult(5, 5, Sex::Female);
-        assert!(eligible(&c, &t, &w, &gp));
+        assert!(eligible(&c, &t, &w, &gp, &DiseaseParams::default()));
         c.adult = false;
-        assert!(!eligible(&c, &t, &w, &gp), "juveniles never mate");
+        assert!(!eligible(&c, &t, &w, &gp, &DiseaseParams::default()), "juveniles never mate");
         c.adult = true;
         c.hunger = 0.5;
-        assert!(!eligible(&c, &t, &w, &gp), "too hungry");
+        assert!(!eligible(&c, &t, &w, &gp, &DiseaseParams::default()), "too hungry");
         c.hunger = 0.1;
         c.cooldown_until = 100;
-        assert!(!eligible(&c, &t, &w, &gp), "on cooldown");
+        assert!(!eligible(&c, &t, &w, &gp, &DiseaseParams::default()), "on cooldown");
         c.cooldown_until = 0;
         // Winter: day index 270+ → tick 270*24.
-        assert!(!eligible(&c, &time_at(270 * 24), &w, &gp), "not a breeding season");
+        assert!(!eligible(&c, &time_at(270 * 24), &w, &gp, &DiseaseParams::default()), "not a breeding season");
         let mut bare = world();
         bare.cell_mut(5, 5).vegetation = 0.0;
-        assert!(!eligible(&c, &t, &bare, &gp), "prey need vegetation on the cell");
+        assert!(!eligible(&c, &t, &bare, &gp, &DiseaseParams::default()), "prey need vegetation on the cell");
     }
 
     #[test]
@@ -551,7 +575,7 @@ mod tests {
         let mut store = CreatureStore::new();
         let f = store.insert(adult(5, 5, Sex::Female));
         let m = store.insert(adult(6, 5, Sex::Male));
-        let view = TickView::build(&store, &t, &w, &gp);
+        let view = TickView::build(&store, &t, &w, &gp, &DiseaseParams::default());
         assert!(view.get(f).unwrap().mate_ready);
         let picked = pick_mate(store.get(f).unwrap(), &[m], &view).unwrap();
         assert_eq!(picked.0, m);
@@ -604,7 +628,7 @@ mod tests {
         let mut events = EventRing::new(10);
         let mut tallies = DeathTallies::default();
         let mut lineage = Lineage::new();
-        let born = deliver(&mut store, &w, &mut events, &time_at(10), &gp, &cp, &mut Rng::new(3), &mut tallies, &mut lineage);
+        let born = deliver(&mut store, &w, &mut events, &time_at(10), &gp, &cp, &DiseaseParams::default(), &mut Rng::new(3), &mut tallies, &mut lineage, &DiseaseState::new(&DiseaseParams::default()), &mut Rng::new(4));
         assert_eq!(born, 4);
         assert_eq!(store.len_living(), 6);
         for c in store.living().filter(|c| c.parents.is_some()) {
@@ -628,17 +652,17 @@ mod tests {
     fn inheritance_mean() {
         let gp = gp();
         let mut rng = Rng::new(11);
-        let mother = Genome([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]);
-        let father = Genome([0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.4, 0.3]);
-        let mut sum = [0.0f64; 8];
+        let mother = Genome([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.5]);
+        let father = Genome([0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.4, 0.3, 0.3]);
+        let mut sum = [0.0f64; Genome::LEN];
         let n = 10_000;
         for _ in 0..n {
             let (g, _) = inherit(&mother, &father, 2, &gp, &mut rng);
-            for t in 0..8 {
+            for t in 0..Genome::LEN {
                 sum[t] += g.0[t] as f64;
             }
         }
-        for t in 0..8 {
+        for t in 0..Genome::LEN {
             let want = (mother.0[t] + father.0[t]) as f64 / 2.0;
             let got = sum[t] / n as f64;
             assert!((got - want).abs() < 0.005, "trait {t}: mean {got} vs parental mean {want}");
@@ -656,7 +680,7 @@ mod tests {
             let (_, m) = inherit(&g, &g, 2, &gp, &mut rng);
             count += m.len();
         }
-        let freq = count as f32 / (n as f32 * 8.0);
+        let freq = count as f32 / (n as f32 * Genome::LEN as f32);
         assert!((freq - gp.mutation_rate).abs() <= gp.mutation_rate * 0.10, "mutation frequency {freq} vs rate {}", gp.mutation_rate);
     }
 
@@ -691,7 +715,7 @@ mod tests {
         kid.born_day = 0;
         kid.mother = Some(m);
         let k = store.insert(kid);
-        let view = TickView::build(&store, &t, &w, &gp);
+        let view = TickView::build(&store, &t, &w, &gp, &DiseaseParams::default());
         let target = follow_target(store.get(k).unwrap(), &view, &w, &t, &gp, &mut Rng::new(1)).unwrap();
         assert!(geom::cheb(target.0, target.1, 20, 5) <= 3, "target {:?} not within 3 of the mother", target);
         // Past follow_mother_days: no following.
@@ -709,7 +733,7 @@ mod tests {
         let m = store.insert(adult(6, 5, Sex::Male));
         store.get_mut(f).unwrap().goal = Goal::Mate;
         store.get_mut(f).unwrap().mate_id = Some(m);
-        let view = TickView::build(&store, &t, &w, &gp);
+        let view = TickView::build(&store, &t, &w, &gp, &DiseaseParams::default());
         assert!(!view.cap_ok);
         let mut events = EventRing::new(10);
         let mut noted = false;
@@ -732,8 +756,8 @@ mod tests {
         let mut a = adult(5, 5, Sex::Female);
         let mut b = a.clone();
         b.pregnant_due = Some(1000);
-        crate::sim::behavior::needs(&mut a, &w, &t, &cp, &ep, &gp);
-        crate::sim::behavior::needs(&mut b, &w, &t, &cp, &ep, &gp);
+        crate::sim::behavior::needs(&mut a, &w, &t, &cp, &ep, &gp, &DiseaseParams::default(), 1.0);
+        crate::sim::behavior::needs(&mut b, &w, &t, &cp, &ep, &gp, &DiseaseParams::default(), 1.0);
         let da = a.hunger - 0.1;
         let db = b.hunger - 0.1;
         assert!((db - da * gp.pregnancy_hunger_factor).abs() < 1e-6, "pregnant gain {db} vs {da}×{}", gp.pregnancy_hunger_factor);

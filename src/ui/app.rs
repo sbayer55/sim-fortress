@@ -76,6 +76,9 @@ pub struct AppState {
     pub confirm: Option<ConfirmRequest>,
     /// `--params` was passed on the command line (C6 FR6: ignored on load).
     pub cli_params_used: bool,
+    /// C7 FR9: the S12b "Show outbreak" button asks the map to open the disease
+    /// overlay on this pathogen slot; the map screen takes it on its next key/render.
+    pub pending_overlay: Option<crate::sim::PathogenId>,
 }
 
 impl AppState {
@@ -93,6 +96,7 @@ impl AppState {
             follow_death_tick: None,
             alert_queue: Vec::new(),
             alert_shown: None,
+            pending_overlay: None,
             world_name: None,
             saves_dir: PathBuf::from("saves"),
             last_saved_tick: None,
@@ -248,19 +252,27 @@ impl AppState {
         out
     }
 
-    /// Queue extinction alerts: record the pre-alert speed and pause (when the
-    /// option is on); when off, the events are already logged/tickered only.
+    /// Queue alerts whose auto-pause option is on (`auto_pause_on_extinction`
+    /// for `Alert::Extinction`, `auto_pause_on_epidemic` for `Alert::Epidemic`):
+    /// record the pre-alert speed and pause. Alerts whose option is off are
+    /// dropped here — their events are already logged and tickered.
     pub fn enqueue_alerts(&mut self, alerts: Vec<Alert>) {
-        if alerts.is_empty() {
+        let ui = &self.params.ui;
+        let wanted: Vec<Alert> = alerts
+            .into_iter()
+            .filter(|a| match a {
+                Alert::Extinction { .. } => ui.auto_pause_on_extinction,
+                Alert::Epidemic { .. } => ui.auto_pause_on_epidemic,
+            })
+            .collect();
+        if wanted.is_empty() {
             return;
         }
-        if self.params.ui.auto_pause_on_extinction {
-            if self.speed_before_alert.is_none() {
-                self.speed_before_alert = Some(self.speed_idx);
-            }
-            self.paused = true;
-            self.alert_queue.extend(alerts);
+        if self.speed_before_alert.is_none() {
+            self.speed_before_alert = Some(self.speed_idx);
         }
+        self.paused = true;
+        self.alert_queue.extend(wanted);
     }
 
     /// Pop the next pending alert into `alert_shown`, if one is free.

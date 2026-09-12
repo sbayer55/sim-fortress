@@ -16,6 +16,7 @@ checkpoint demo script, tests and the decisions it depends on.
 | C4 | Reproduction, genetics and evolution | Populations sustain themselves, traits drift, species browser and lineage tree fill in | [c4-evolution.md](c4-evolution.md) |
 | C5 | Predators, predation and extinction | Predator–prey oscillations, sense overlay, hunt stats, phase plot, extinction alerts, migration | [c5-predators.md](c5-predators.md) |
 | C6 | Persistence, title flow, balance and tooling | Save/load, title menu, headless experiments, parameter tuning, performance budget | [c6-persistence-and-balance.md](c6-persistence-and-balance.md) |
+| C7 | Disease and parasites | Pathogens spread by proximity, parasites build up from ground and carcasses, a Resistance gene evolves under a hunger cost; epidemic alerts, disease overlay, outbreak history in the lineage tree | [c7-disease-and-parasites.md](c7-disease-and-parasites.md) |
 
 ## Why this order
 
@@ -121,3 +122,4 @@ Rules that hold for every chunk:
 | C4 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | implemented (balance table recorded in the doc) |
 | C5 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | implemented (population bands open — see the status note in the doc) |
 | C6 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | implemented |
+| C7 | drafted (not yet validated) | — | implemented (balance table and recorded results in the doc) |

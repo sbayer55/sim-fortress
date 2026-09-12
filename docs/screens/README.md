@@ -15,17 +15,17 @@ letter is the variant. The prototype binary shows the id on row 0.
 |-----|---------------------------|------------------------------------------------|-----------------------------------------------------------------|
 | S00 | Title / Main Menu         | [s00-title.md](s00-title.md)                   | a: default                                                      |
 | S01 | World Map                 | [s01-world-map.md](s01-world-map.md)           | a: default · b: wide · c: look mode · d: winter/night · e: follow |
-| S02 | Map Overlay               | [s02-map-overlay.md](s02-map-overlay.md)       | a: vegetation · b: pressure · c: moisture · d: sense range · e: regions · f: species density · g: health |
+| S02 | Map Overlay               | [s02-map-overlay.md](s02-map-overlay.md)       | a: vegetation · b: pressure · c: moisture · d: sense range · e: regions · f: species density · g: health · h: disease · i: parasites |
 | S03 | Creature Inspector        | [s03-creature-inspector.md](s03-creature-inspector.md) | a: prey · b: predator · c: corpse                        |
 | S04 | Species Browser           | [s04-species-browser.md](s04-species-browser.md) | a: table · b: species detail                                  |
-| S05 | Population Charts         | [s05-population-charts.md](s05-population-charts.md) | a: over time · b: phase plot · c: stacked area            |
+| S05 | Population Charts         | [s05-population-charts.md](s05-population-charts.md) | a: over time · b: phase plot · c: stacked area · d: infections |
 | S06 | Resources / Ecology       | [s06-ecology.md](s06-ecology.md)               | a: default                                                      |
 | S07 | Event Log                 | [s07-event-log.md](s07-event-log.md)           | a: full log · b: deaths & extinctions with detail               |
 | S08 | Lineage / Family Tree     | [s08-lineage.md](s08-lineage.md)               | a: focused creature                                             |
 | S09 | World Generation          | [s09-world-generation.md](s09-world-generation.md) | a: new world form                                           |
 | S10 | Simulation Controls       | [s10-simulation-controls.md](s10-simulation-controls.md) | a: modal over the map                                 |
 | S11 | Legend & Help             | [s11-legend-help.md](s11-legend-help.md)       | a: overlay over the map                                         |
-| S12 | Alert Modal               | [s12-alert-modal.md](s12-alert-modal.md)       | a: extinction event                                             |
+| S12 | Alert Modal               | [s12-alert-modal.md](s12-alert-modal.md)       | a: extinction event · b: epidemic                                |
 | S13 | Local Zoom View           | [s13-local-zoom.md](s13-local-zoom.md)         | a: 3×3 tiles around the cursor                                  |
 
 ## Screen families

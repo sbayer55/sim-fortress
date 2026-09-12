@@ -8,8 +8,9 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
-use crate::sim::creatures::{Creature, CreatureId, Goal};
-use crate::sim::{Kind, SpeciesId, TRAIT_NAMES};
+use crate::sim::creatures::{Cause, Creature, CreatureId, Goal};
+use crate::sim::disease::{PathogenId, Stage};
+use crate::sim::{Genome, Kind, SpeciesId, TRAIT_NAMES};
 use crate::ui::app::AppState;
 use crate::ui::screens::common::day_stamp;
 use crate::ui::screens::s08_lineage::LineageScreen;
@@ -202,10 +203,48 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
             bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", label), v, bars::vital_color(v, inv), 9, 24);
             row += 1;
         }
+        // C7: sickness, immunity and parasite load.
+        let today = sim.time.day_index() as u32;
+        let sick_style = Style::default().fg(theme::SICK).bg(theme::PANEL_BG);
+        let sickness = match c.infection {
+            Some(i) if i.stage == Stage::Infectious => {
+                let n = today.saturating_sub(i.since_day) + 1;
+                let m = i.ends_day.saturating_sub(i.since_day);
+                sp(format!("{} {} infectious day {}/~{} sev .{:02}", glyphs::DISEASE, sim.disease.name(i.pathogen), n, m, (i.severity * 100.0).round() as u32 % 100), sick_style)
+            }
+            Some(i) => sp(format!("{} {} incubating (shows in {} days)", glyphs::DISEASE, sim.disease.name(i.pathogen), i.ends_day.saturating_sub(today)), sick_style),
+            None => sp("healthy", theme::dim_text()),
+        };
+        util::line(f, inner, row, Line::from(vec![sp(format!("{:<9}", " sickness"), theme::text()), sickness]));
         row += 1;
+        let immune: Vec<String> = c
+            .immune_until
+            .iter()
+            .enumerate()
+            .filter(|(_, &until)| until > today)
+            .map(|(slot, &until)| {
+                let name = sim.disease.name(PathogenId(slot as u8));
+                if until == u32::MAX { format!("{name} (for life)") } else { name.to_string() }
+            })
+            .collect();
+        let immune_span = if immune.is_empty() {
+            sp("none", theme::dim_text())
+        } else {
+            sp(format!("{} {}", glyphs::IMMUNE, immune.join(", ")), Style::default().fg(theme::IMMUNE).bg(theme::PANEL_BG))
+        };
+        util::line(f, inner, row, Line::from(vec![sp(format!("{:<9}", " immune"), theme::text()), immune_span]));
+        row += 1;
+        let load = c.parasite_load;
+        bars::labeled(f.buffer_mut(), inner, row, &format!(" {} parasites", glyphs::PARASITE), load, theme::WARN, 12, 24);
+        let note = if load < 0.2 { "light" } else if load < 0.5 { "heavy" } else { "severe" };
+        f.buffer_mut().set_stringn(inner.x + 44, inner.y + row, note, 6, Style::default().fg(bars::vital_color(load, true)).bg(theme::PANEL_BG));
+        row += 2;
         panel::section(f, inner, row, "Condition");
         row += 1;
         bars::labeled(f.buffer_mut(), inner, row, " predation risk", c.predation_risk, bars::vital_color(c.predation_risk, true), 17, 16);
+        row += 1;
+        let contagion = contagion_risk(sim, c);
+        bars::labeled(f.buffer_mut(), inner, row, " contagion risk", contagion, bars::vital_color(contagion, true), 17, 16);
         row += 1;
         // Local forage: mean vegetation within 3 cells.
         let forage = local_forage(sim, c.x, c.y);
@@ -216,6 +255,13 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
 
         panel::section(f, inner, row, "Behaviour");
         row += 1;
+        if crate::sim::disease::is_infectious(c) {
+            util::line(f, inner, row, Line::from(vec![
+                sp(format!(" {} ", glyphs::ALERT), Style::default().fg(theme::SICK).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+                sp("sick — resting more, no mating", Style::default().fg(theme::SICK).bg(theme::PANEL_BG)),
+            ]));
+            row += 1;
+        }
         let line = match c.goal {
             Goal::Drink => format!(" {} because thirst = {:.2}", c.goal.label(false), c.thirst),
             Goal::Graze => format!(" {} because hunger = {:.2}", c.goal.label(false), c.hunger),
@@ -237,10 +283,14 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
         panel::section(f, inner, row, "Death");
         row += 1;
         let cause = c.death.map(|d| d.cause.label()).unwrap_or("unknown");
+        let cause = match c.died_infected {
+            Some(p) => format!("{} ({})", cause, sim.disease.name(p)),
+            None => cause.to_string(),
+        };
         let age = c.age_days(sim.time.day_index());
         util::line(f, inner, row, Line::from(vec![
             sp(format!(" {} ", glyphs::DEATH), Style::default().fg(theme::BAD).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-            sp(cause.to_string(), theme::text()),
+            sp(cause, theme::text()),
         ]));
         row += 1;
         util::line(f, inner, row, Line::from(vec![
@@ -289,6 +339,14 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
             events.push((glyphs::BIRTH, theme::GOOD, d, format!("litter of {n}")));
         }
     }
+    if let Some(i) = c.infection {
+        events.push((glyphs::DISEASE, theme::SICK, i.since_day as i64, format!("fell ill with {}", sim.disease.name(i.pathogen))));
+    }
+    if c.infections_survived > 0 {
+        let n = c.infections_survived;
+        let when = c.death.map(|d| d.day as i64).unwrap_or(sim.time.day_index() as i64);
+        events.push((glyphs::IMMUNE, theme::IMMUNE, when, format!("recovered {} time{}", n, if n == 1 { "" } else { "s" })));
+    }
     if let Some(d) = c.death {
         events.push((glyphs::DEATH, theme::BAD, d.day as i64, format!("died of {}", d.cause.label())));
     }
@@ -312,7 +370,25 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
 /// S03c (Identity & Death panel): the killer from
 /// `death.killer` and the two nearest living predators with the Scavenge goal.
 pub(crate) fn killer_and_scavengers(f: &mut Frame, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
-    if let Some(killer_id) = c.death.and_then(|d| d.killer) {
+    // C7 (S03c): a disease death names its outbreak instead of a killer.
+    let outbreak_index = if c.death.is_some_and(|d| d.cause == Cause::Disease) {
+        sim.lineage.get(c.id).and_then(|n| n.outbreak).or_else(|| c.infection.map(|i| i.outbreak))
+    } else {
+        None
+    };
+    if let Some(o) = outbreak_index.and_then(|i| sim.disease.outbreak(i)) {
+        panel::section(f, inner, row, "Outbreak");
+        row += 1;
+        let year = o.started_day / (4 * sim.time.season_days).max(1) + 1;
+        let region = sim.world.regions.get(o.origin_region as usize).map(|r| r.0.as_str()).unwrap_or("?");
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!(" {} ", glyphs::DISEASE), Style::default().fg(theme::SICK).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!("{} outbreak of Year {}, began {}", sim.disease.name(o.pathogen), year, region), theme::text()),
+        ]));
+        row += 1;
+        util::line(f, inner, row, Line::from(sp(format!("   {} others died in it", o.deaths.saturating_sub(1)), theme::dim_text())));
+        row += 2;
+    } else if let Some(killer_id) = c.death.and_then(|d| d.killer) {
         panel::section(f, inner, row, "Killer");
         row += 1;
         let kname = sim
@@ -378,7 +454,7 @@ fn genome(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, c: &Creature) {
         sp("  species", theme::dim_text()),
     ]));
     row += 1;
-    for t in 0..8 {
+    for t in 0..Genome::LEN {
         let v = c.genome.0[t];
         let d = v - mean.0[t];
         let color = trait_color(t);
@@ -416,6 +492,7 @@ fn genome(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, c: &Creature) {
         ("max lifespan".into(), format!("{} days", c.max_age_days(&sim.params.creatures))),
         ("litter size".into(), format!("{} (fertility {:.2})", sim.params.genetics.litter_size(c.species, g.fertility()), g.fertility())),
         ("mate cooldown".into(), format!("{} days", sim.params.genetics.cooldown(c.species))),
+        ("resistance cost".into(), format!("+{} % food", (100.0 * sim.params.disease.resist_hunger_cost * g.resistance()).round() as u32)),
     ];
     for (k, v) in derived {
         util::line(f, inner, row, Line::from(vec![
@@ -431,7 +508,7 @@ fn genome(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, c: &Creature) {
     panel::section(f, inner, row, "Offspring forecast (with an average mate)");
     row += 1;
     let sd = sim.params.genetics.mutation_strength;
-    for t in 0..8 {
+    for t in 0..Genome::LEN {
         if row >= inner.height {
             break;
         }
@@ -471,6 +548,7 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
         fade_creatures: false,
         selected_region: None,
         species_color: crate::theme::TEXT,
+        creature_tint: None,
     };
     map::render(f.buffer_mut(), mm_inner, sim, &opts);
 
@@ -533,7 +611,12 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
             if let Some(t) = c.hunt_target {
                 if let Some(o) = sim.creatures.get(t) {
                     let d = crate::sim::dist(c.x, c.y, o.x, o.y);
-                    util::line(f, inner, row, Line::from(vec![sp(" current target ", theme::dim_text()), sp(format!("{} {}, {:.0} cells", o.name_str(), o.tag(), d), theme::label())]));
+                    let mut spans = vec![sp(" current target ", theme::dim_text()), sp(format!("{} {}, {:.0} cells", o.name_str(), o.tag(), d), theme::label())];
+                    if let Some(i) = o.infection.filter(|i| i.stage == Stage::Infectious) {
+                        let bonus = sim.params.disease.kill_sick_bonus * i.severity;
+                        spans.push(sp(format!(" (+.{:02} sick prey)", (bonus * 100.0).round() as u32 % 100), Style::default().fg(theme::SICK).bg(theme::PANEL_BG)));
+                    }
+                    util::line(f, inner, row, Line::from(spans));
                     row += 1;
                 }
             }
@@ -689,6 +772,19 @@ pub(crate) fn compass(x: usize, y: usize, tx: usize, ty: usize) -> &'static str 
     }
 }
 
+/// C7 (S03 Condition): infectious conspecifics within `contact_cheb` Chebyshev
+/// cells, over 8, clamped to 0..1.
+pub(crate) fn contagion_risk(sim: &crate::sim::Sim, c: &Creature) -> f32 {
+    let r = sim.params.disease.contact_cheb as i64;
+    let n = sim
+        .creatures
+        .living()
+        .filter(|o| o.id != c.id && o.species == c.species && crate::sim::disease::is_infectious(o))
+        .filter(|o| (o.x as i64 - c.x as i64).abs() <= r && (o.y as i64 - c.y as i64).abs() <= r)
+        .count();
+    (n as f32 / 8.0).clamp(0.0, 1.0)
+}
+
 pub(crate) fn local_forage(sim: &crate::sim::Sim, x: usize, y: usize) -> f32 {
     let (mut sum, mut n) = (0.0f32, 0usize);
     for dy in -3i32..=3 {
@@ -712,7 +808,8 @@ fn trait_color(t: usize) -> Color {
         4 => theme::BAD,
         5 => theme::VEGETATION,
         6 => theme::MAGENTA,
-        _ => theme::LYNX,
+        7 => theme::LYNX,
+        _ => theme::SICK,
     }
 }
 
@@ -734,5 +831,41 @@ pub(crate) fn clip(text: &str, max: usize) -> String {
         let mut t: String = text.chars().take(max.saturating_sub(1)).collect();
         t.push(glyphs::DOT);
         t
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sim::disease::Infection;
+    use crate::sim::{Params, Sim};
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    fn screen_text(app: &AppState, screen: &dyn Screen) -> String {
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| screen.render(app, f, Rect::new(0, 0, 155, 45))).unwrap();
+        let buf = terminal.backend().buffer();
+        (0..45).map(|y| (0..155).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect()
+    }
+
+    #[test]
+    fn s03_sickness_rows() {
+        let mut app = AppState::new(Params::default());
+        let mut sim = Sim::new(7, Params::default());
+        let id = sim.creatures.living_ids()[0];
+        sim.creatures.get_mut(id).unwrap().infection =
+            Some(Infection { pathogen: PathogenId(0), stage: Stage::Infectious, since_day: 0, ends_day: 9, severity: 0.8, source: None, outbreak: 0 });
+        sim.creatures.get_mut(id).unwrap().immune_until[1] = u32::MAX;
+        app.sim = Some(sim);
+        let text = screen_text(&app, &Inspector::new(id));
+        assert!(text.contains(&format!("{} ", glyphs::DISEASE)), "sickness row missing: {text}");
+        assert!(text.contains("infectious day 1/~9"), "{text}");
+        assert!(text.contains("sick — resting more, no mating"), "{text}");
+        assert!(text.contains("for life"), "{text}");
+        assert!(text.contains("contagion risk"), "{text}");
+        assert!(text.contains("resistance cost"), "{text}");
+        assert!(text.contains("fell ill with"), "{text}");
     }
 }

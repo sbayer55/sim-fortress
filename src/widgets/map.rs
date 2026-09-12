@@ -1,10 +1,13 @@
 //! World map renderer: terrain, resources, creatures, overlays, cursor, trails.
 
+use std::collections::HashMap;
+
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::sim::creatures::CreatureId;
+use crate::sim::disease::{PathogenId, Stage};
 use crate::sim::species::SpeciesId;
 use crate::sim::world::{Cell, Terrain, World};
 use crate::{glyphs, theme};
@@ -23,11 +26,29 @@ pub enum Overlay {
     Species(SpeciesId),
     /// Health: every living creature coloured by its weakest vital (S02g).
     Health,
+    /// Disease (S02h): every living creature coloured by its infection state
+    /// for one pathogen slot, or for every pathogen when `None`.
+    Disease(Option<PathogenId>),
+    /// Parasites (S02i): a heatmap of `cell.parasite_load`, creatures on top
+    /// coloured by their own load.
+    Parasites,
 }
 
 /// How far the terrain fades under `Overlay::Health` so the creature colours
 /// carry the picture.
 pub const HEALTH_TERRAIN_DIM: f32 = 0.6;
+
+/// Cells at or above this parasite load get a `WARN` background tint under
+/// the disease overlay (S02h).
+pub const PARASITE_TINT_THRESHOLD: f32 = 0.25;
+/// Blend factor of that tint.
+pub const PARASITE_TINT: f32 = 0.18;
+/// Creature parasite-load bands (S02i): below `PARASITE_LIGHT` the species
+/// colour dimmed, up to `PARASITE_HEAVY` amber, from there red and bold.
+pub const PARASITE_LIGHT: f32 = 0.2;
+pub const PARASITE_HEAVY: f32 = 0.5;
+/// How far a healthy creature's species colour fades under S02h/S02i.
+pub const HEALTHY_FADE: f32 = 0.55;
 
 /// Kernel radius (ellipse metric, cells) of one creature's contribution to the
 /// species-density field: 7 rows × 13 columns on screen.
@@ -54,6 +75,11 @@ pub struct MapOptions {
     /// Ramp colour for `Overlay::Species` (the species' own colour; a UI concern,
     /// so the caller supplies it).
     pub species_color: Color,
+    /// Per-creature colour override (and forced bold) for the S02h disease and
+    /// S02i parasite overlays. The caller computes it from the sim (see
+    /// `disease_tint` / `parasite_tint`); a living creature with no entry draws
+    /// as usual.
+    pub creature_tint: Option<HashMap<CreatureId, (Color, bool)>>,
 }
 
 impl Default for MapOptions {
@@ -69,6 +95,7 @@ impl Default for MapOptions {
             fade_creatures: false,
             selected_region: None,
             species_color: theme::TEXT,
+            creature_tint: None,
         }
     }
 }
@@ -141,6 +168,7 @@ pub fn terrain_code_cell(code: u8) -> (char, Color, Color) {
         prey_pressure: 0.0,
         pred_pressure: 0.0,
         dried_from: None,
+        parasite_load: 0.0,
     };
     terrain_cell(&cell, false)
 }
@@ -157,6 +185,7 @@ pub fn overlay_cell(cell: &Cell, overlay: Overlay) -> Option<(char, Color, Color
             let t = if cell.terrain.is_water() { 1.0 } else { cell.moisture };
             (t, theme::water(t))
         }
+        Overlay::Parasites => return Some(parasite_cell(cell)),
         _ => return None,
     };
     if cell.terrain == Terrain::DeepWater && overlay != Overlay::Moisture {
@@ -223,6 +252,59 @@ pub fn condition_color(condition: f32) -> Color {
     crate::widgets::bars::vital_color(condition, false)
 }
 
+/// Glyph and colours for a cell under the parasite heatmap (S02i): the
+/// `theme::parasite` ramp at `cell.parasite_load`, deep water and rock keeping
+/// their dimmed glyphs, and any water cell carrying a load drawn as `~` in
+/// `WARN` (shared drinking spots are the hot spots).
+pub fn parasite_cell(cell: &Cell) -> (char, Color, Color) {
+    let t = cell.parasite_load.clamp(0.0, 1.0);
+    if cell.terrain.is_water() {
+        if t > 0.0 {
+            return (glyphs::SHALLOW_WATER, theme::WARN, theme::dim(theme::parasite(t), 0.75));
+        }
+        return match cell.terrain {
+            Terrain::DeepWater => (glyphs::DEEP_WATER, theme::dim(theme::DEEP_WATER_FG, 0.4), theme::dim(theme::DEEP_WATER_BG, 0.4)),
+            _ => (glyphs::SHALLOW_WATER, theme::dim(theme::SHALLOW_FG, 0.4), theme::dim(theme::SHALLOW_BG, 0.4)),
+        };
+    }
+    if cell.terrain == Terrain::Rock {
+        return (glyphs::ROCK, theme::dim(theme::ROCK_FG, 0.5), theme::dim(theme::ROCK_BG, 0.5));
+    }
+    let color = theme::parasite(t);
+    let g = glyphs::shade(t);
+    let g = if g == ' ' { glyphs::DIRT } else { g };
+    (g, color, theme::dim(color, 0.75))
+}
+
+/// Colour (and forced bold) of a living creature under the disease overlay
+/// (S02h). `infection` is the creature's current infection, `immune` whether
+/// it is immune to the shown pathogen (or to any, when all are shown), `load`
+/// its parasite load. An infection with a pathogen other than the shown one
+/// counts as healthy for this picture.
+pub fn disease_tint(species: Color, shown: Option<PathogenId>, infection: Option<(PathogenId, Stage)>, immune: bool, load: f32) -> (Color, bool) {
+    match infection {
+        Some((p, stage)) if shown.is_none_or(|s| s == p) => match stage {
+            Stage::Infectious => (theme::SICK, true),
+            Stage::Incubating => (theme::dim(theme::SICK, 0.4), false),
+        },
+        _ if immune => (theme::IMMUNE, false),
+        _ if load >= PARASITE_HEAVY => (theme::WARN, false),
+        _ => (theme::dim(species, HEALTHY_FADE), false),
+    }
+}
+
+/// Colour (and forced bold) of a living creature under the parasite overlay
+/// (S02i), by its own load band.
+pub fn parasite_tint(species: Color, load: f32) -> (Color, bool) {
+    if load >= PARASITE_HEAVY {
+        (theme::BAD, true)
+    } else if load >= PARASITE_LIGHT {
+        (theme::WARN, false)
+    } else {
+        (theme::dim(species, HEALTHY_FADE), false)
+    }
+}
+
 pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOptions) {
     let world = source.world();
     let (ox, oy) = opts.origin;
@@ -251,6 +333,16 @@ pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
                 None if opts.overlay == Overlay::Health => {
                     let (g, fg, bg) = terrain_cell(cell, opts.winter);
                     (g, theme::dim(fg, HEALTH_TERRAIN_DIM), theme::dim(bg, HEALTH_TERRAIN_DIM))
+                }
+                // S02h: the health path's dimmed terrain, plus a warning tint
+                // on the background of fouled cells.
+                None if matches!(opts.overlay, Overlay::Disease(_)) => {
+                    let (g, fg, bg) = terrain_cell(cell, opts.winter);
+                    let mut bg = theme::dim(bg, HEALTH_TERRAIN_DIM);
+                    if cell.parasite_load >= PARASITE_TINT_THRESHOLD {
+                        bg = theme::lerp(bg, theme::WARN, PARASITE_TINT);
+                    }
+                    (g, theme::dim(fg, HEALTH_TERRAIN_DIM), bg)
                 }
                 None => overlay_cell(cell, opts.overlay).unwrap_or_else(|| terrain_cell(cell, opts.winter)),
             };
@@ -365,12 +457,18 @@ pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
             if opts.overlay == Overlay::Health {
                 color = tint(condition_color(c.condition));
             }
+            // S02h / S02i: the caller's per-creature tint wins outright.
+            let mut bold = c.adult;
+            if let Some((tc, force_bold)) = opts.creature_tint.as_ref().and_then(|m| m.get(&c.id)) {
+                color = tint(*tc);
+                bold |= *force_bold;
+            }
             if let Overlay::Sense(sid) = opts.overlay {
                 if sid == c.id {
                     color = theme::TEXT_BRIGHT;
                 }
             }
-            put(buf, c.x, c.y, c.glyph, color, c.adult);
+            put(buf, c.x, c.y, c.glyph, color, bold);
             if opts.follow == Some(c.id) {
                 followed_pos = Some((c.x, c.y));
             }
@@ -515,7 +613,7 @@ mod tests {
 
     /// A `w`×`h` all-dirt world split into two regions down the middle.
     fn two_region_world(w: usize, h: usize) -> World {
-        let cell = Cell { terrain: Terrain::Dirt, elevation: 0.5, moisture: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None };
+        let cell = Cell { terrain: Terrain::Dirt, elevation: 0.5, moisture: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 };
         World {
             cells: vec![cell; w * h],
             width: w,

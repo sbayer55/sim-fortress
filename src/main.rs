@@ -141,6 +141,14 @@ fn summary_header() -> String {
     for id in SpeciesId::ALL {
         cols.push(format!("speed_{}", id.name().to_lowercase()));
     }
+    // C7 FR10
+    cols.push("outbreaks".to_string());
+    cols.push("epidemics".to_string());
+    cols.push("spillovers".to_string());
+    cols.push("disease_deaths".to_string());
+    for id in SpeciesId::ALL {
+        cols.push(format!("resistance_{}", id.name().to_lowercase()));
+    }
     cols.join(",")
 }
 
@@ -169,6 +177,14 @@ fn summary_row(sim: &Sim, seed: u64, years: f64) -> String {
     for i in 0..6 {
         cols.push(format!("{:.3}", census.genome_mean[i].speed()));
     }
+    let d = &sim.disease;
+    cols.push(d.outbreaks.len().to_string());
+    cols.push(d.outbreaks.iter().filter(|o| o.epidemic).count().to_string());
+    cols.push(d.pathogens.iter().filter(|p| p.is_strain()).count().to_string());
+    cols.push(d.stats.iter().map(|s| s.total_deaths).sum::<u32>().to_string());
+    for i in 0..6 {
+        cols.push(format!("{:.3}", census.genome_mean[i].resistance()));
+    }
     cols.join(",")
 }
 
@@ -182,6 +198,7 @@ fn print_profile(sim: &Sim) {
     println!("  ecology:       {:>8.4}", per1k(p.ecology_ns));
     println!("  migration/ext: {:>8.4}", per1k(p.migration_ns));
     println!("  spatial:       {:>8.4}", per1k(p.spatial_ns));
+    println!("  disease:       {:>8.4}   (contagion is inside behavior; this is the daily update)", per1k(p.disease_ns));
     println!("  total step:    {:>8.4}", per1k(p.step_ns));
 }
 

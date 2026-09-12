@@ -12,6 +12,8 @@ pub enum EventKind {
     DeathThirst,
     DeathPredation,
     DeathAge,
+    /// C7: died of a pathogen or parasite load.
+    DeathDisease,
     Mutation,
     Migration,
     Extinction,
@@ -19,13 +21,19 @@ pub enum EventKind {
     DroughtEased,
     Season,
     Note,
+    // ---- C7 disease
+    Outbreak,
+    Spillover,
+    Epidemic,
+    EpidemicOver,
+    Recovery,
 }
 
 impl EventKind {
     pub fn is_death(self) -> bool {
         matches!(
             self,
-            EventKind::DeathStarved | EventKind::DeathThirst | EventKind::DeathPredation | EventKind::DeathAge
+            EventKind::DeathStarved | EventKind::DeathThirst | EventKind::DeathPredation | EventKind::DeathAge | EventKind::DeathDisease
         )
     }
 
@@ -37,6 +45,7 @@ impl EventKind {
             EventKind::DeathThirst => "thirst",
             EventKind::DeathPredation => "predation",
             EventKind::DeathAge => "old age",
+            EventKind::DeathDisease => "disease",
             EventKind::Mutation => "mutation",
             EventKind::Migration => "migration",
             EventKind::Extinction => "EXTINCTION",
@@ -44,6 +53,11 @@ impl EventKind {
             EventKind::DroughtEased => "eases",
             EventKind::Season => "season",
             EventKind::Note => "note",
+            EventKind::Outbreak => "outbreak",
+            EventKind::Spillover => "spillover",
+            EventKind::Epidemic => "EPIDEMIC",
+            EventKind::EpidemicOver => "burnt out",
+            EventKind::Recovery => "recovery",
         }
     }
 }

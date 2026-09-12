@@ -136,13 +136,15 @@ classDiagram
 ## Content requirements
 
 ### S04a — Species table panel
-1. **Header row** (dim): `Species  Kind  Count  Adults  Juv  Birth/d  Death/d  Peak  Gen
-   30-day trend  Spd Siz Sen Met Agg Cam Fer Lon  Diet`.
+1. **Header row** (dim): `Species  Kind  Count  Adults  Juv  Birth/d  Death/d  Sick  Peak
+   Gen  30-day trend  Spd Siz Sen Met Agg Cam Fer Lon Res  Diet` (`Sick` and `Res` live
+   since C7).
 2. **One row per species**, starting on the second row under the header, sorted by count
    descending (the default sort; see Interaction). Columns: selection marker `►` (only on
    the selected row), species glyph upper-case in the species colour, name (8), kind
    `prey`/`pred` (6), count (6), adults (7), juveniles (6), births today (8, good colour),
-   deaths today (8, bad colour), peak (6), generation (5), a 20-cell sparkline of the 30-day
+   deaths today (8, bad colour), sick (6, sick colour when > 0; *live since: C7*), peak
+   (6), generation (5), a 20-cell sparkline of the 30-day
    trend in the species colour followed by the trend arrow (`↑` good, `↓` bad, `↔` dim),
    the eight trait means as two-digit integers (value × 100) each in its trait colour, and
    the diet text (dim). Source: species stats.
@@ -165,7 +167,9 @@ classDiagram
    16-cell bar of its share of kills, `<pct>% of kills   <prey count> alive <trend arrow>`;
    then `competes with <species> for <prey>;  hunted by <…>`. A prey species needs the
    mirror image (`eaten by …`, `competes with … for grass`); the prototype only shows the
-   predator form.
+   predator form. *Live since: C7* — two more lines: `susceptible to: <pathogen names
+   whose host list includes this species>` (sick colour, or `none`) and `∩ worms: mean
+   load .xx` (mean `parasite_load` over living members; warn colour at ≥ 0.2).
 9. **Notable individuals.** Up to five living members of the species, ranked by kills
    for predators (see open questions for prey), each as glyph, name, tag, `<kills> kills
    gen <g>  <age> days  <region>`.
@@ -188,13 +192,17 @@ classDiagram
 
 ### S04b — Trait distributions panel
 15. **Eight histogram blocks** in a 2 × 4 grid, each 38 columns × 9 rows, in trait order
-    down the first column then the second. Each block: trait name in its trait colour with
+    down the first column then the second (*C7:* nine blocks in a 3 × 3 grid of 26-column
+    blocks with 24-wide histograms, two cells per bucket, the mean marker at
+    `x + round(mean × 23)`). Each block: trait name in its trait colour with
     `min .xx mean .xx max .xx`; a 36-column histogram of the 12 buckets (3 columns per
     bucket) built from `▄`/`█` stacks; an axis of `─` with a bright `┼` at the mean; tick
     labels `0.0`, `0.5`, `1.0`; `n=<sum of buckets>` and `mode <bucket centre>`.
     Source: species `hist`.
 16. **Footer legend.** `┼ mean   █ full  ▄ half bucket   each column is 1/12 of the 0..1
-    range`.
+    range`. *Live since: C7* — the **Selection pressure** (item 20, at most two lines) and
+    **Compared with other species** (item 21) sections are drawn under the legend in this
+    panel, since nine traits leave the drift panel no room for them.
 
 ### S04b — Drift over generations panel
 17. **Drift sparklines.** Header `trait  gen 1  oldest … newest  g<current> change`, then
@@ -208,10 +216,16 @@ classDiagram
 19. **Population.** `count <n> (<adults> adults, <juveniles> juveniles)`, `generation`,
     `peak <n> (<pct>% of peak now)`, `births today` (good), `deaths today` (bad), `trend
     <arrow> over 30 days`.
+19a. **Disease** (*live since: C7*, after Population). `active N · immune M (pct) ·
+    disease deaths yesterday D` (active in the sick colour, immune in the immune colour),
+    then one line per outbreak whose `species_cases` for this species is > 0 and that
+    began within the last three years, newest first, at most four: `☻ Y3 D112 Greyfever
+    312 cases, 118 dead, resist .31 → .37` (`resist_at_start` → `resist_at_end`; the
+    current mean while the outbreak is still open), or `no outbreaks in the last 3 years`.
 20. **Selection pressure.** Two or three `§`/`¶` lines explaining which traits are moving
     and why (for example aggression rising, camouflage falling, longevity flat).
 21. **Compared with other species (mean x100).** Header `Spd Siz Sen Met Agg Cam Fer Lon
-    count gen`, then one row per species (all six, absent ones dimmed): glyph, name (title
+    Res count gen`, then one row per species (all six, absent ones dimmed): glyph, name (title
     style for the selected species), eight means in trait colours, count and generation.
     (C4 renamed the block from "Compared with other predators".)
 
@@ -231,6 +245,7 @@ classDiagram
 | `┼ ─`                 | histogram axis and mean marker                                |
 | `[█░]`                | bars; range bars show min–mean–max                            |
 | `§ ¶`                 | selection-pressure notes and narrative notes                  |
+| `☻ ∩`                 | C7: outbreak rows / sick counts (SICK), worm load line (WARN) |
 | `±`                   | delta prefix                                                  |
 | trait colours         | Speed INFO, Size DEER, Sense ACCENT, Metabolism WARN, Aggression BAD, Camouflage VEGETATION, Fertility MAGENTA, Longevity LYNX (same as [S03](s03-creature-inspector.md)) |
 | GOOD / BAD / DIM      | births, deaths, deltas, rise/fall cells                       |

@@ -25,13 +25,13 @@ readable under the modal.
 | Panel                | Position (cols × rows)         | Notes                                              |
 |----------------------|--------------------------------|----------------------------------------------------|
 | Backdrop             | 155 × 44                       | S01a rendered normally, then dimmed                |
-| Controls modal       | 60 × 18, centred in the body   | double border in the focus colour; inner 58 × 16   |
+| Controls modal       | 60 × 21, centred in the body   | double border in the focus colour; inner 58 × 19   |
 | Status bar           | 155 × 1, row 44                | redrawn undimmed                                   |
 
 ```mermaid
 flowchart TB
     subgraph body["155 × 44 body — S01a dimmed 55 %"]
-        modal["Simulation Controls  60 × 18 (centred)<br/>hint: Esc closes<br/><br/>state · speed · step<br/>── Clock ──<br/>── Options ──<br/>key hints"]
+        modal["Simulation Controls  60 × 21 (centred)<br/>hint: Esc closes<br/><br/>state · speed · step<br/>── Clock ──<br/>── Options ──<br/>key hints"]
     end
     status["Status bar 155 × 1 — undimmed"]
     body --> status
@@ -40,7 +40,7 @@ flowchart TB
 The modal title is `Simulation Controls` with the right-aligned dim hint `Esc closes`.
 
 ## Content requirements
-Rows are counted inside the modal, top to bottom (16 rows available).
+Rows are counted inside the modal, top to bottom (19 rows available).
 
 1. **State row** (row 0), from the clock: `state` label, then either `► RUNNING` in the good
    colour or `││ PAUSED` in the warning colour, bold; then the current speed as `►► x‹n›`;
@@ -53,12 +53,15 @@ Rows are counted inside the modal, top to bottom (16 rows available).
    (thousands separated, e.g. `1,064,772`), `day D of Season` with the season glyph in the
    season colour, `year Y`, and `HH:00 ☼`. Below it a dim conversion line:
    `24 ticks = 1 hour   1 day = 576 ticks   x‹speed› = ‹24 × speed› ticks/s`.
-5. **Options section** (rows 9–12): a `── Options ──` rule and three checkbox rows, each
+5. **Options section** (rows 9–15): a `── Options ──` rule and five checkbox rows, each
    `[x]` (good colour, bold) or `[ ]` (dim), a 36-column label, and the toggle key in key
    style at the right:
    - `[x] auto-pause on extinction` — `[a]`
    - `[ ] log births to the event log` — `[b]`
    - `[x] pause when a followed creature dies` — `[c]`
+   - `[x] day/night tint` — `[t]`
+   - `[x] auto-pause on epidemic` — `[d]` (C7: raises [S12b](s12-alert-modal.md))
+   then the autosave row `◄ autosave every N days ►` stepped with `[←→]` (`off` at 0).
 6. **Key hints** (last row): `[Space] pause  [+/-] speed  [.] step  [Esc] close` in key /
    dim styles.
 7. **Status bar**: hints as in the table below; right side is the clock label followed by
@@ -88,7 +91,8 @@ the persistent option flags. Nothing else on the modal depends on world state.
 | `+` `-`  | next / previous speed stop                 | stays here |
 | `1`–`5`  | set speed to x1 / x2 / x5 / x10 / x25      | stays here |
 | `.`      | advance one step of the selected size      | stays here (only meaningful while paused) |
-| `a` `b` `c` | toggle the corresponding option         | stays here |
+| `a` `b` `c` `t` `d` | toggle the corresponding option | stays here |
+| `←` `→`  | autosave interval down / up (days)         | stays here |
 | `Esc`    | close the modal                            | [S01 World Map](s01-world-map.md) |
 
 Keys with a local meaning override the README global bindings while the modal is open

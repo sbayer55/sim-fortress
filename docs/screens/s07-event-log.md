@@ -79,12 +79,14 @@ In S07a the list panel spans all 155 columns and the detail panel is absent.
 ### List panel
 6. Panel hint (right of the title): `N events, M today`, where *today* means the event's
    year and day equal the clock's.
-7. **Filter chip row**: ` filter: ` followed by seven chips in this order:
+7. **Filter chip row**: ` filter: ` followed by eight chips in this order:
    `* all`, `♥ births`, `x deaths`, `§ mutations`, `→ migrations`, `‼ extinctions`,
-   `¡ droughts`. An active chip is drawn in the selected style (name only, selection
-   background); an inactive chip shows its glyph in the kind colour and its name in text
-   colour. When the panel is wider than 120 columns the row ends with the hint
-   `[f] cycles, [1-7] toggles`.
+   `¡ droughts`, `☻ disease`. An active chip is drawn in the selected style (name only,
+   selection background); an inactive chip shows its glyph in the kind colour and its
+   name in text colour. When the row has room (S07a) it ends with the right-aligned hint
+   `[f] cycles, [1-8] toggles`. The `disease` chip (C7) shows `Outbreak`, `Spillover`,
+   `Epidemic`, `EpidemicOver` and `Recovery`; a death by disease is a death and stays
+   under `deaths`.
 8. **Column header** (dim): `when` (16 cols), `kind` (14), `sp` (4), `event`.
 9. **Event rows**, one per event:
    - selection marker `►` or space, then `Y12 D004 13:00` — bright when selected, normal
@@ -108,6 +110,17 @@ In S07a the list panel spans all 155 columns and the detail panel is absent.
 13. Header: kind glyph and label, bold in the kind colour, then `Year Y, Day D, HH:00` dim.
 14. The headline, bold and bright, word-wrapped to the panel width.
 15. **Detail** section: the event's detail text, wrapped, at most 5 lines.
+15b. **Outbreak record** (C7): for an `Outbreak`, `Epidemic`, `EpidemicOver` or
+    `Spillover` event the panel shows the outbreak instead of the creature vitals. The
+    pathogen is the one named in the headline (longest matching name wins, so a strain
+    named after its parent is preferred) and the record is that pathogen's latest
+    outbreak started on or before the event day. Rows: `☻ <name>  outbreak|epidemic
+    ongoing|over after N days` (name in `SICK`, `MAGENTA` for a strain); `began Y D in
+    <region>`; `cases N / dead D / recovered R / peak P` (cases `SICK`, dead bad,
+    recovered good); `resist H .31 → .37` for the host species (most cases; the current
+    mean while the outbreak is open, tagged `(so far)`); `strain of <parent>` when the
+    pathogen is a spillover strain. `no outbreak record for this event` when nothing
+    matches (e.g. a save that predates the record).
 16. **Who** section: species glyph and name in the species colour, `prey`/`predator`, and
     `eats <diet>`; a dim line `N alive today, B born / D died`; if the creature named in the
     headline exists, `Name tag  gen G  age Nd  alive` or `dead: <cause>`. For valley-wide
@@ -133,10 +146,16 @@ Every event kind, its glyph, colour role, list label and the chip that shows it:
 | DeathStarved    | `x`   | warn        | `starved`    | `deaths`       |
 | DeathPredation  | `x`   | bad         | `predation`  | `deaths`       |
 | DeathAge        | `x`   | dim         | `old age`    | `deaths`       |
+| DeathDisease    | `☻`   | sick        | `disease`    | `deaths`       |
 | Mutation        | `§`   | info        | `mutation`   | `mutations`    |
 | Migration       | `→`   | accent      | `migration`  | `migrations`   |
 | Extinction      | `‼`   | magenta     | `EXTINCTION` | `extinctions`  |
 | Drought         | `¡`   | warn        | `drought`    | `droughts`     |
+| Outbreak        | `☻`   | sick        | `outbreak`   | `disease`      |
+| Spillover       | `☻`   | magenta     | `spillover`  | `disease`      |
+| Epidemic        | `☻`   | sick        | `epidemic`   | `disease`      |
+| EpidemicOver    | `☻`   | dim         | `burnt out`  | `disease`      |
+| Recovery        | `☻`   | good        | `recovery`   | `disease`      |
 | Season          | `☼`   | title       | `season`     | *(none — `all` only)* |
 | Note            | `¶`   | text        | `note`       | *(none — `all` only)* |
 
@@ -152,9 +171,9 @@ stateDiagram-v2
         All --> Preset : f (cycle presets)
         Preset --> Preset : f
         Preset --> All : f (wraps)
-        All --> Custom : 2–7 (toggle chip)
-        Preset --> Custom : 2–7
-        Custom --> Custom : 2–7
+        All --> Custom : 2–8 (toggle chip)
+        Preset --> Custom : 2–8
+        Custom --> Custom : 2–8
         Custom --> All : 1 (all)
     }
     note right of F
@@ -199,8 +218,8 @@ detail panel.
 | Key        | Action                                                          | Goes to |
 |------------|-----------------------------------------------------------------|---------|
 | `↑` `↓`    | move the selection (list scrolls to keep it visible)            | stays on S07 |
-| `f`        | cycle the filter presets (all → … → deaths & extinctions → all) | stays on S07 (S07a ↔ S07b) |
-| `1`–`7`    | toggle a chip (`1` = all resets the filter)                     | stays on S07 |
+| `f`        | cycle the filter presets (all → deaths & extinctions → migrations & droughts → disease → all) | stays on S07 (S07a ↔ S07b) |
+| `1`–`8`    | toggle a chip (`1` = all resets the filter)                     | stays on S07 |
 | `Enter`    | jump: open the map in look mode with the cursor on the event cell | [S01c World Map, look mode](s01-world-map.md) |
 | `i`        | inspect the creature named in the event                         | [S03 Creature Inspector](s03-creature-inspector.md) |
 | `l`        | open the lineage of the named creature                          | [S08 Lineage](s08-lineage.md) |
@@ -209,7 +228,7 @@ detail panel.
 | `?`        | help overlay                                                    | [S11 Legend & Help](s11-legend-help.md) |
 
 Overrides of global keys: `s` opens the species browser *on the selected species* rather
-than the plain table; `e` is a no-op here. `1`–`7` are chip toggles, not overlay keys.
+than the plain table; `e` is a no-op here. `1`–`8` are chip toggles, not overlay keys.
 `g`, `y`, `w` keep their global meaning ([S05](s05-population-charts.md),
 [S06](s06-ecology.md), [S08](s08-lineage.md)).
 

@@ -78,19 +78,22 @@ flowchart TB
    - `◄ you are here` in the key colour after the focused individual's name.
    - `g<generation>` (dim if dead).
    - years `Y<born>-Y<died>` (dim) or `Y<born>-` in the good colour if still living.
-   - `♥` (good) if living or `x` (dim) if dead.
+   - `♥` (good) if living or `x` (dim) if dead; *live since: C7* — `☻` (sick colour)
+     when the cause of death is disease, and `☺N` (immune colour) after the status glyph
+     when `infections_survived` is N > 0.
    - one `§ <mutation>` entry per mutation recorded at birth, in the info colour (bold if
      the individual is notable), followed by `♦ notable` in the label style when notable
      and space allows.
    Source: lineage nodes (name, tag, generation, born_year, died_year, mutations,
    children, notable).
-4. **By generation table.** Header `gen  wolves  alive  mutations  members`, then one row
-   per generation from the root's to the newest: `g<n>`, one `■` per member in the wolf
-   colour, the living count (good), one `§` per mutation in that generation (info colour),
+4. **By generation table.** Header `gen  wolves  alive  sick  mutations  members`, then one
+   row per generation from the root's to the newest: `g<n>`, one `■` per member in the wolf
+   colour, the living count (good), `☻<n>` disease deaths in that generation (sick colour,
+   `-` dim when none; *live since: C7*), one `§` per mutation in that generation (info colour),
    and the member names joined by `, ` (dim, truncated at 70 cells).
 5. **Legend section** (pinned to the bottom six rows). A sample of each row style:
    ` focus ` (selected), `notable` (title), `living`, `dead` (dim), `§ mutation at birth`,
-   `♥ alive  x dead`.
+   `♥ alive  x dead`, and (*live since: C7*) `☻ died of disease  ☺N infections survived`.
 6. **Statistics line** (dim). `<n> in tree: <a> alive, <d> dead   <k> notable   <m>
    mutations recorded   longest branch: <first> → <last> (<g> generations)`.
 7. **Mates line** (dim). `mates are not shown; <mother name tag> (<relation>) is <focus
@@ -103,7 +106,10 @@ flowchart TB
    y> years)`, `died Year <y>` or `still living`, `father`, `mother`, `grandfather`,
    `children <n> (<living> living)`, `descendants <n> (<living> living)`, `kills`.
    Father and grandfather are found by walking up the tree; `unknown` if the focus is the
-   root. Source: lineage nodes, creature record for kills and mother.
+   root. Source: lineage nodes, creature record for kills and mother. *Live since: C7* —
+   a dead focus adds `died of <cause label>` after `died` and, for a disease death whose
+   node `outbreak` resolves, `outbreak  <Pathogen> outbreak, Y<year>` (shortened to fit the
+   23 value cells of this panel).
 10. **Mutations section.** `§ <mutation> at birth (gen <n>)` per recorded mutation, or
     `none`; then dim `inherited:` lines naming mutations carried down from named ancestors
     (for example `Aggression +0.09 (Greymaw)`).
@@ -112,7 +118,9 @@ flowchart TB
     grandparent (dim), parent, self (selected style), children's mean (good if higher than
     self, bad if lower) — and under them a 26-cell range bar from the lowest to the highest
     of the four values with the self value as the marker, prefixed by the `±` change from
-    grandparent to kids. Footer `kids = mean of living children`.
+    grandparent to kids. Footer `kids = mean of living children`. *Live since: C7* — when
+    the focus's species appears in any outbreak's `species_cases`, Resistance is the first
+    of the three rows, followed by the two largest-delta traits.
 12. **Children section.** One row per child: `♥`/`x` status, name, tag, `g<gen>
     Y<born>-Y<died>`, and `+kids` (label style) if the child has children of its own.
 13. **Direct line section.** The chain from the root to the focused individual, one per
@@ -131,6 +139,7 @@ flowchart TB
 | `├── └── │`        | tree branches (border colour)                               |
 | `◄`                | "you are here" marker on the focused row (KEY colour)       |
 | `♥` / `x`          | living (GOOD) / dead (DIM)                                   |
+| `☻` / `☺N`         | C7: died of disease (SICK) / N infections survived (IMMUNE)  |
 | `§`                | a mutation recorded at birth (INFO)                         |
 | `♦`                | notable individual                                          |
 | `■`                | one individual in the per-generation count (WOLF colour)    |

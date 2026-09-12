@@ -12,6 +12,9 @@ fn no_breeding() -> Params {
     p.creatures.initial_counts.insert(sim_fortress::sim::SpeciesId::Fox, 0);
     p.creatures.initial_counts.insert(sim_fortress::sim::SpeciesId::Wolf, 0);
     p.creatures.initial_counts.insert(sim_fortress::sim::SpeciesId::Lynx, 0);
+    // C3 needs-and-movement acceptance: the disease chunk (C7) adds a hunger
+    // cost and epidemics that are asserted in tests/disease.rs instead.
+    p.disease.enabled = false;
     p
 }
 

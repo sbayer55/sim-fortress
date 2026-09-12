@@ -8,7 +8,7 @@ use ratatui::text::Line;
 use ratatui::Frame;
 
 use crate::sim::stats::SpeciesStats;
-use crate::sim::{Kind, Sim, SpeciesId, TRAIT_NAMES};
+use crate::sim::{Genome, Kind, Sim, SpeciesId, TRAIT_NAMES};
 use crate::ui::app::AppState;
 use crate::ui::screens::common::{arrow_color, delta_style, downsample, sp, trait_color, trend_arrow, two};
 use crate::ui::screens::{Action, Screen};
@@ -166,11 +166,12 @@ fn table(f: &mut Frame, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesI
         sp(format!("{:>6}", "Juv"), dim),
         sp(format!("{:>8}", "Birth/d"), dim),
         sp(format!("{:>8}", "Death/d"), dim),
+        sp(format!("{:>6}", "Sick"), dim),
         sp(format!("{:>6}", "Peak"), dim),
         sp(format!("{:>5}", "Gen"), dim),
         sp("  30-day trend         ", dim),
         sp("  ", dim),
-        sp("  Spd Siz Sen Met Agg Cam Fer Lon", dim),
+        sp("  Spd Siz Sen Met Agg Cam Fer Lon Res", dim),
         sp("   Diet", dim),
     ]);
     util::line(f, inner, 0, header);
@@ -201,13 +202,15 @@ fn table(f: &mut Frame, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesI
             sp(format!("{:>6}", s.juveniles), base),
             sp(format!("{:>8}", s.births_yesterday), Style::default().fg(if absent { theme::DIM } else { theme::GOOD }).bg(bg)),
             sp(format!("{:>8}", s.deaths_yesterday), Style::default().fg(if absent { theme::DIM } else { theme::BAD }).bg(bg)),
+            // C7: living infected members, in SICK when any.
+            sp(format!("{:>6}", s.sick), if s.sick > 0 { Style::default().fg(theme::SICK).bg(bg) } else { dimmed }),
             sp(format!("{:>6}", s.peak), base),
             sp(format!("{:>5}", s.generation), base),
             sp(format!("{:<23}", ""), base), // sparkline slot
             sp(format!("{} ", arrow), Style::default().fg(arrow_color(arrow)).bg(bg).add_modifier(Modifier::BOLD)),
             sp("  ", base),
         ];
-        for t in 0..8 {
+        for t in 0..Genome::LEN {
             let st = if absent { Style::default().fg(theme::DIM).bg(bg) } else { Style::default().fg(trait_color(t)).bg(bg) };
             spans.push(sp(format!("{:>3} ", two(s.mean.0[t])), st));
         }
@@ -222,7 +225,7 @@ fn table(f: &mut Frame, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesI
             }
         }
         if !s.trend.is_empty() {
-            bars::sparkline(f.buffer_mut(), inner.x + 65, inner.y + row, 20, &s.trend, if absent { theme::DIM } else { id.color() });
+            bars::sparkline(f.buffer_mut(), inner.x + 71, inner.y + row, 20, &s.trend, if absent { theme::DIM } else { id.color() });
         }
         row += 1;
     }
@@ -283,7 +286,7 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     util::line(f, left, row, Line::from(sp(" trait        base   current            delta   spread", theme::dim_text())));
     row += 1;
     let base = id.base_genome();
-    for t in 0..8 {
+    for t in 0..Genome::LEN {
         let b = base.0[t];
         let m = s.mean.0[t];
         let d = m - b;
@@ -383,7 +386,24 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         ]));
         row += 1;
     }
+    // C7: pathogens that can infect this species, and the mean worm load.
+    let pathogens: Vec<&str> = sim.disease.pathogens.iter().filter(|p| !p.extinct && p.host(id) > 0.0).map(|p| p.name()).collect();
+    util::line(f, left, row, Line::from(vec![
+        sp(" susceptible to: ", theme::dim_text()),
+        if pathogens.is_empty() {
+            sp("none", theme::dim_text())
+        } else {
+            sp(pathogens.join(", "), Style::default().fg(theme::SICK).bg(theme::PANEL_BG))
+        },
+    ]));
     row += 1;
+    let (load_sum, load_n) = sim.creatures.living().filter(|c| c.species == id).fold((0.0f32, 0u32), |(a, n), c| (a + c.parasite_load, n + 1));
+    let load = if load_n > 0 { load_sum / load_n as f32 } else { 0.0 };
+    util::line(f, left, row, Line::from(vec![
+        sp(format!(" {} worms: mean load ", glyphs::PARASITE), theme::dim_text()),
+        sp(format!(".{:02}", ((load * 100.0).round() as u32).min(99)), Style::default().fg(if load >= 0.2 { theme::WARN } else { theme::TEXT }).bg(theme::PANEL_BG)),
+    ]));
+    row += 2;
     panel::section(f, left, row, "Notable individuals");
     row += 1;
     let day = sim.time.day_index();
@@ -570,50 +590,80 @@ impl Screen for SpeciesDetail {
 fn histograms(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     let s = &sim.species[id.index()];
     let inner = panel::draw_with_hint(f, area, &format!("{}: trait distributions", id.name()), "12 buckets, living adults + juveniles", panel::Kind::Outer);
-    let col_w = 38u16;
+    // C7: nine traits in a 3 × 3 grid of 26-column blocks (24-wide histograms).
+    let col_w = 25u16;
     let block_h = 9u16;
-    for t in 0..8 {
-        let col = (t / 4) as u16;
-        let r = (t % 4) as u16;
+    for t in 0..Genome::LEN {
+        let col = (t / 3) as u16;
+        let r = (t % 3) as u16;
         let x = inner.x + 1 + col * (col_w + 1);
         let y = inner.y + 1 + r * block_h;
         let color = trait_color(t);
         let mean = s.mean.0[t];
         let (min, max) = (s.min.0[t], s.max.0[t]);
         let buf = f.buffer_mut();
-        buf.set_stringn(x, y, TRAIT_NAMES[t], 12, Style::default().fg(color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD));
+        buf.set_stringn(x, y, TRAIT_NAMES[t], 11, Style::default().fg(color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD));
         buf.set_stringn(
-            x + 12,
+            x + 11,
             y,
-            format!("min .{:02} mean .{:02} max .{:02}", (min * 100.0).round() as u32 % 100, (mean * 100.0).round() as u32 % 100, (max * 100.0).round() as u32 % 100),
-            26,
+            format!(".{:02} .{:02} .{:02}", (min * 100.0).round() as u32 % 100, (mean * 100.0).round() as u32 % 100, (max * 100.0).round() as u32 % 100),
+            14,
             theme::dim_text(),
         );
-        let hist_area = Rect::new(x, y + 1, 36, 5);
+        let hist_area = Rect::new(x, y + 1, 24, 5);
         if s.count > 0 {
-            bars::histogram(buf, hist_area, &s.hist[t], color, 3);
+            bars::histogram(buf, hist_area, &s.hist[t], color, 2);
         }
-        let axis: String = std::iter::repeat_n(glyphs::H_LINE, 36).collect();
-        buf.set_stringn(x, y + 6, &axis, 36, theme::border());
-        let mx = x + ((mean * 35.0).round() as u16).min(35);
+        let axis: String = std::iter::repeat_n(glyphs::H_LINE, 24).collect();
+        buf.set_stringn(x, y + 6, &axis, 24, theme::border());
+        let mx = x + ((mean * 23.0).round() as u16).min(23);
         buf.set_stringn(mx, y + 6, glyphs::CROSS.to_string(), 1, Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG));
-        buf.set_stringn(x, y + 7, "0.0", 3, theme::dim_text());
-        buf.set_stringn(x + 16, y + 7, "0.5", 3, theme::dim_text());
-        buf.set_stringn(x + 33, y + 7, "1.0", 3, theme::dim_text());
+        buf.set_stringn(x, y + 7, "0", 1, theme::dim_text());
+        buf.set_stringn(x + 23, y + 7, "1", 1, theme::dim_text());
         let n: u32 = s.hist[t].iter().map(|&v| v as u32).sum();
         let peak_bucket = s.hist[t].iter().enumerate().max_by_key(|(_, v)| **v).map(|(i, _)| i).unwrap_or(0);
-        buf.set_stringn(x + 4, y + 7, format!("n={}", n), 8, theme::dim_text());
-        buf.set_stringn(x + 20, y + 7, format!("mode {:.2}", (peak_bucket as f32 + 0.5) / 12.0), 12, theme::dim_text());
+        buf.set_stringn(x + 2, y + 7, format!("n={}", n), 7, theme::dim_text());
+        buf.set_stringn(x + 11, y + 7, format!("mode .{:02}", ((peak_bucket as f32 + 0.5) / 12.0 * 100.0).round() as u32), 11, theme::dim_text());
     }
-    let y = inner.y + 1 + 4 * block_h;
+    let y = inner.y + 1 + 3 * block_h;
     let buf = f.buffer_mut();
     buf.set_stringn(
         inner.x + 1,
         y,
-        format!("{} mean   {} full  {} half bucket   each column is 1/12 of the 0..1 range", glyphs::CROSS, glyphs::FULL_BLOCK, glyphs::HALF_LOWER),
+        format!("{} mean   {} full  {} half bucket   columns = 1/12 of 0..1   header: min mean max", glyphs::CROSS, glyphs::FULL_BLOCK, glyphs::HALF_LOWER),
         inner.width as usize - 2,
         theme::dim_text(),
     );
+    // C7: the two trait-comparison sections moved here from the drift panel to
+    // make room for its Disease section (nine traits already fill the top).
+    let mut row = y - inner.y + 1;
+    panel::section(f, inner, row, "Selection pressure");
+    row += 1;
+    for note in selection_pressure(s).into_iter().take(2) {
+        util::line(f, inner, row, Line::from(sp(format!(" {}", note), theme::dim_text())));
+        row += 1;
+    }
+    row += 1;
+    panel::section(f, inner, row, "Compared with other species (mean x100)");
+    row += 1;
+    util::line(f, inner, row, Line::from(sp("              Spd Siz Sen Met Agg Cam Fer Lon Res   count  gen", theme::dim_text())));
+    row += 1;
+    for other in &sim.species {
+        if row >= inner.height {
+            break;
+        }
+        let absent = other.count == 0;
+        let mut spans = vec![
+            sp(format!(" {} ", other.species.glyph().to_ascii_uppercase()), Style::default().fg(if absent { theme::DIM } else { other.species.color() }).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!("{:<10}", other.species.name()), if other.species == id { theme::title() } else if absent { theme::dim_text() } else { theme::text() }),
+        ];
+        for t in 0..Genome::LEN {
+            spans.push(sp(format!(" {:>3}", two(other.mean.0[t])), Style::default().fg(if absent { theme::DIM } else { trait_color(t) }).bg(theme::PANEL_BG)));
+        }
+        spans.push(sp(format!("   {:>5}  {:>3}", other.count, other.generation), theme::dim_text()));
+        util::line(f, inner, row, Line::from(spans));
+        row += 1;
+    }
 }
 
 /// Selection-pressure lines (FR7): traits whose drift over the last 3 samples
@@ -625,7 +675,7 @@ pub fn selection_pressure(s: &SpeciesStats) -> Vec<String> {
         let a = &s.drift[n.saturating_sub(3)];
         let b = &s.drift[n - 1];
         let gens = b.0.saturating_sub(a.0).max(1);
-        for t in 0..8 {
+        for t in 0..Genome::LEN {
             let d = b.1 .0[t] - a.1 .0[t];
             if d.abs() > 0.02 {
                 out.push(format!("{} {} {} ({:+.2} over {} generations)", glyphs::MUTATION, TRAIT_NAMES[t], if d > 0.0 { "rising" } else { "falling" }, d, gens));
@@ -653,7 +703,7 @@ fn drift(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         buf.set_stringn(inner.x + 58, y, format!(" g{:<3} change", s.generation), 12, theme::dim_text());
     }
     row += 1;
-    for t in 0..8 {
+    for t in 0..Genome::LEN {
         let color = trait_color(t);
         let y = inner.y + row;
         let buf = f.buffer_mut();
@@ -681,7 +731,7 @@ fn drift(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     }
     util::line(f, inner, row, Line::from(sp(hdr, theme::dim_text())));
     row += 1;
-    for t in 0..8 {
+    for t in 0..Genome::LEN {
         let mut spans = vec![sp(format!(" {:<12} ", TRAIT_NAMES[t]), theme::text())];
         for g in 0..n {
             let v = s.drift[g].1 .0[t];
@@ -711,31 +761,112 @@ fn drift(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         row += 1;
     }
     row += 1;
-    panel::section(f, inner, row, "Selection pressure");
+    disease_section(f, inner, row, sim, id);
+}
+
+/// C7 (S04b): the species' current disease picture and the outbreaks that
+/// touched it in the last three years, newest first (at most four).
+fn disease_section(f: &mut Frame, inner: Rect, mut row: u16, sim: &Sim, id: SpeciesId) {
+    let s = &sim.species[id.index()];
+    let si = id.index();
+    panel::section(f, inner, row, "Disease");
     row += 1;
-    for note in selection_pressure(s) {
-        util::line(f, inner, row, Line::from(sp(format!(" {}", note), theme::dim_text())));
-        row += 1;
+    let pct = (s.immune * 100).checked_div(s.count).unwrap_or(0);
+    util::line(f, inner, row, Line::from(vec![
+        sp(" active ", theme::dim_text()),
+        sp(format!("{}", s.sick), Style::default().fg(if s.sick > 0 { theme::SICK } else { theme::TEXT }).bg(theme::PANEL_BG)),
+        sp(format!(" {} immune ", glyphs::DOT), theme::dim_text()),
+        sp(format!("{} ({}%)", s.immune, pct), Style::default().fg(theme::IMMUNE).bg(theme::PANEL_BG)),
+        sp(format!(" {} disease deaths yesterday ", glyphs::DOT), theme::dim_text()),
+        sp(format!("{}", s.deaths_disease_yesterday), Style::default().fg(if s.deaths_disease_yesterday > 0 { theme::BAD } else { theme::TEXT }).bg(theme::PANEL_BG)),
+    ]));
+    row += 1;
+    let today = sim.time.day_index() as u32;
+    let year_len = 4 * sim.time.season_days;
+    let horizon = today.saturating_sub(3 * year_len);
+    let recent: Vec<_> = sim
+        .disease
+        .outbreaks
+        .iter()
+        .rev()
+        .filter(|o| o.species_cases[si] > 0 && o.started_day >= horizon)
+        .take(4)
+        .collect();
+    if recent.is_empty() {
+        util::line(f, inner, row, Line::from(sp(" no outbreaks in the last 3 years", theme::dim_text())));
+        return;
     }
-    row += 1;
-    panel::section(f, inner, row, "Compared with other species (mean x100)");
-    row += 1;
-    util::line(f, inner, row, Line::from(sp("              Spd Siz Sen Met Agg Cam Fer Lon   count  gen", theme::dim_text())));
-    row += 1;
-    for other in &sim.species {
+    for o in recent {
         if row >= inner.height {
             break;
         }
-        let absent = other.count == 0;
-        let mut spans = vec![
-            sp(format!(" {} ", other.species.glyph().to_ascii_uppercase()), Style::default().fg(if absent { theme::DIM } else { other.species.color() }).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-            sp(format!("{:<10}", other.species.name()), if other.species == id { theme::title() } else if absent { theme::dim_text() } else { theme::text() }),
-        ];
-        for t in 0..8 {
-            spans.push(sp(format!(" {:>3}", two(other.mean.0[t])), Style::default().fg(if absent { theme::DIM } else { trait_color(t) }).bg(theme::PANEL_BG)));
-        }
-        spans.push(sp(format!("   {:>5}  {:>3}", other.count, other.generation), theme::dim_text()));
-        util::line(f, inner, row, Line::from(spans));
+        // Resistance at the end of an open outbreak is the current species mean.
+        let end = if o.ended_day.is_some() { o.resist_at_end[si] } else { s.mean.resistance() };
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!(" {} ", glyphs::DISEASE), Style::default().fg(theme::SICK).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!("{:<8} ", crate::ui::screens::common::day_stamp(o.started_day as i64, sim.time.season_days)), theme::dim_text()),
+            sp(format!("{:<10}", sim.disease.name(o.pathogen)), Style::default().fg(theme::SICK).bg(theme::PANEL_BG)),
+            sp(format!(" {} cases, {} dead, ", o.species_cases[si], o.species_deaths[si]), theme::text()),
+            sp(format!("resist .{:02} {} .{:02}", ((o.resist_at_start[si] * 100.0).round() as u32).min(99), glyphs::RIGHT, ((end * 100.0).round() as u32).min(99)), theme::dim_text()),
+        ]));
         row += 1;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sim::disease::{Infection, Outbreak, PathogenId, Stage};
+    use crate::sim::Params;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+
+    fn screen_text(app: &AppState, screen: &dyn Screen) -> String {
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| screen.render(app, f, Rect::new(0, 0, 155, 45))).unwrap();
+        let buf = terminal.backend().buffer();
+        (0..45).map(|y| (0..155).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect()
+    }
+
+    #[test]
+    fn s04b_disease_section() {
+        let mut app = AppState::new(Params::default());
+        let mut sim = Sim::new(7, Params::default());
+        let id = sim.creatures.living_ids()[0];
+        let species = sim.creatures.get(id).unwrap().species;
+        sim.creatures.get_mut(id).unwrap().infection =
+            Some(Infection { pathogen: PathogenId(0), stage: Stage::Infectious, since_day: 0, ends_day: 9, severity: 0.8, source: None, outbreak: 0 });
+        let mut species_cases = [0u32; 6];
+        species_cases[species.index()] = 12;
+        sim.disease.outbreaks.push(Outbreak {
+            pathogen: PathogenId(0),
+            started_day: 0,
+            ended_day: None,
+            origin_region: 0,
+            index_case: id,
+            cases: 12,
+            deaths: 3,
+            recovered: 2,
+            peak_active: 5,
+            peak_day: 0,
+            species_cases,
+            species_deaths: [0; 6],
+            epidemic: false,
+            resist_at_start: [0.3; 6],
+            resist_at_end: [0.0; 6],
+            active: 5,
+            cases_today: 1,
+        });
+        app.sim = Some(sim);
+        let text = screen_text(&app, &SpeciesDetail::new(species));
+        assert!(text.contains("Disease"), "{text}");
+        assert!(text.contains(&format!("{} Y1 D001", glyphs::DISEASE)), "outbreak line missing: {text}");
+        assert!(text.contains("12 cases, 0 dead, resist .30"), "{text}");
+        // S04a: the Sick column header and the summary's disease lines render too.
+        let text = screen_text(&app, &SpeciesBrowser::new());
+        assert!(text.contains("Sick"), "{text}");
+        assert!(text.contains("susceptible to:"), "{text}");
+        assert!(text.contains("worms: mean load"), "{text}");
     }
 }

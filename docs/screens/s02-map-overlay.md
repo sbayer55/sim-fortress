@@ -7,8 +7,9 @@ Live since: C2
 ## Purpose
 An overlay recolours the world map so one hidden quantity can be read at a glance across the
 whole valley: how much forage is standing, where animals have been crowding, where water and
-soil moisture lie, how far a chosen predator can perceive, where one species is massed, or
-which animals are in trouble.
+soil moisture lie, how far a chosen predator can perceive, where one species is massed,
+which animals are in trouble, who is sick or immune, and where the ground is fouled with
+parasites.
 Overlays are a *state* of the
 [S01 World Map](s01-world-map.md), not a separate place: the map keeps scrolling, the clock
 keeps running, and the sidebar swaps from the status summary to an explanation of what the
@@ -24,7 +25,9 @@ starving here?", "can that wolf see the hare yet?") that the plain map cannot sh
 | S02d | sense range of selected predator   | `4`, or the fourth stop of the `o` cycle; needs a selected living creature |
 | S02e | regions                            | `5`, or the fifth stop of the `o` cycle                                  |
 | S02f | species density                    | `6`, or the sixth stop of the `o` cycle; `Tab` cycles the species        |
-| S02g | health                             | `7`, or the seventh (last) stop of the `o` cycle before the plain map    |
+| S02g | health                             | `7`, or the seventh stop of the `o` cycle                                |
+| S02h | disease                            | `8`, or the eighth stop of the `o` cycle; `Tab` cycles the pathogen      |
+| S02i | parasites                          | `9`, or the ninth (last) stop of the `o` cycle before the plain map      |
 
 S02a–c are **heatmaps**: every land cell is shaded by a 0–1 value. S02d is a **ring**: the map
 keeps its normal terrain colours and one creature's perception radius is drawn on top. S02e is
@@ -32,6 +35,9 @@ a **tint**: terrain glyphs and colours stay, every region's background is blende
 region's own hue and its name is written across it. S02f is a **heatmap** too, but of a field
 computed from the living creatures rather than a stored cell value. S02g is a **creature
 tint**: the terrain is dimmed and every living creature is recoloured by its condition.
+S02h is a creature tint too, on the S02g path, recolouring every living creature by its
+infection state for one pathogen (or all). S02i is a **heatmap** of the stored
+`cell.parasite_load`, with the creatures on top recoloured by their own load.
 
 ## Layout
 Same frame split as the world map. Only the sidebar contents and the map title change.
@@ -60,7 +66,8 @@ flowchart TB
 
 The map panel title must append ` · overlay: vegetation` / `pressure` / `moisture` /
 `sense range` / `regions` / the shown species' lowercase plural (`voles`, `wolves`) /
-`health` so the active overlay is named even when the sidebar is collapsed.
+`health` / `disease` / `parasites` so the active overlay is named even when the sidebar is
+collapsed.
 
 ## Content requirements
 
@@ -136,6 +143,28 @@ The map panel title must append ` · overlay: vegetation` / `pressure` / `moistu
 19. **Terrain**: glyphs and palette are unchanged (winter and night still apply) but both
     foreground and background are dimmed 60 % so the creature colours carry the picture.
     Resources fade 50 % as on the heatmaps.
+
+### Map panel — disease (S02h)
+20. **Terrain** as on the health overlay: glyphs and palette unchanged, foreground and
+    background dimmed 60 %, resources faded 50 %. Cells with `parasite_load ≥ 0.25` get their
+    background blended 18 % toward the warning colour, so fouled ground shows through.
+21. **Creature colour**, read off every living creature each frame for the shown pathogen
+    slot (or every slot when `all` is shown): infectious → `SICK` bold; incubating → `SICK`
+    dimmed 40 %; immune to the shown pathogen (to any, when `all`) → `IMMUNE`; parasite load
+    `≥ 0.5` → `WARN`; otherwise the species colour dimmed 55 %. An infection with a pathogen
+    other than the shown one counts as healthy for this picture. Carcasses keep `%`; the
+    followed creature keeps its accent highlight.
+22. Opening with `8` shows `all`; the S12b epidemic alert's *Show outbreak* button opens the
+    overlay on its pathogen and centres the viewport on the outbreak (`AppState::pending_overlay`,
+    honoured by the next frame and taken by the next key).
+
+### Map panel — parasites (S02i)
+23. **Per-cell value** `t = cell.parasite_load` on the `theme::parasite(t)` ramp (dim olive →
+    `WARN` → `BAD`), shade glyphs and the 75 % dimmed background as on the other heatmaps.
+    Deep water keeps its dimmed `≈` and rock its dimmed `▲`, except that any water cell with a
+    load above 0 draws `~` in `WARN` — shared drinking spots are the hot spots.
+24. **Creatures** draw on top recoloured by their own load band: `< 0.2` species colour dimmed
+    55 %, `0.2–0.5` `WARN`, `≥ 0.5` `BAD` bold; resources fade 50 %.
 
 ### Sidebar — heatmaps (S02a–c)
 Sections from the top, in order; all fit in the 40 inner rows without scrolling.
@@ -216,6 +245,54 @@ Sections from the top, in order; 39 of the 40 rows.
 - **Reading the map** (4 rows): colour is the animal, not the ground; `k` look / `Enter`
   inspects one animal; `Esc` restores the plain map.
 
+### Sidebar — disease (S02h)
+Sections from the top, in order. The fixed sections take 31 rows plus one per pathogen slot
+(at most 8); the rows left over separate the sections and lengthen the reading notes, so the
+sidebar never overflows even with every slot filled.
+
+- **Disease** (3 rows): section rule, then two lines naming the colours: `☻ sick` bright,
+  `incubating` dim, `☺ immune` blue; `amber` = heavy worms, fouled ground tinted.
+- **Pathogens** (1 + up to 8 rows): the rule reads `Pathogens · all` or `Pathogens · ‹name›`;
+  one row per slot: `► ‹name›  act N  dead D  ‹status›` where the status is `dormant` (dim),
+  `outbreak` (`SICK`), `EPIDEMIC` (`SICK` bold) or `extinct` (dim); the shown slot is in the
+  selection style with the `►` marker. Strains are indented `└ ` under their parent and carry
+  a `MAGENTA` `new` tag for 30 days after `born_day`. `Tab` / `Shift+Tab` cycle `all` → each
+  live slot (extinct strains skipped), wrapping.
+- **This outbreak** (6 rows): the shown pathogen's open outbreak, else its latest; for `all`
+  the latest open outbreak of any pathogen, else the latest recorded. `‹Pathogen› began
+  Year Y, Day D · day N` (or `· over after N d`), `origin ‹region›`, `index case ‹tag name›`,
+  `cases N  deaths D  recovered R` in the sick / bad / good colours, and `today +N new ‹arrow›
+  active A` with a 7-day arrow of the active count. `no outbreak recorded yet` when none.
+- **By species** (8 rows): a dim header, then one row per species: coloured upper-case glyph,
+  name, living count, sick (`SICK`, counting infections with the shown pathogen or any),
+  immune (`IMMUNE`), `mean resist .xx` with `↑`/`↓`/`↔` against the species base Resistance.
+- **Parasites** (3 rows): `mean load` per species as `‹glyph›.xx`, then `worst ground: ‹region›
+  .xx` by mean cell load.
+- The same **Overlays selector** as item 16, now nine rows, `8 disease` active.
+- **Reading the map** (1–3 rows): `colour = animal · amber ground = fouled` and `Tab pathogen ·
+  k look · Esc restores map`; with all eight slots filled only the second note is shown,
+  without its rule.
+
+### Sidebar — parasites (S02i)
+Sections from the top, in order; exactly 40 rows.
+
+- **Parasites** (3 rows): section rule, then `worms build up where animals graze, drink` /
+  `and rest; carcasses pass them on.`
+- **Legend** (4 rows): the 24-cell parasite ramp built from the map's shade glyphs; `clean …
+  fouled  ~ fouled water  ▲ rock`; and the creature bands `animals: dim <20%  amber <50%
+  red ≥50%` in their colours.
+- **By region** (10 rows): one labelled bar per region (18-column label, 14-column `WARN`
+  bar, percentage) of the mean cell load over the rectangle, then `worst: ‹region›  N cells
+  ≥25%`.
+- **By species** (8 rows): a dim header, then one row per species: coloured glyph, name,
+  living count, a 12-column `WARN` bar of the mean load, `.xx`, the `heavy` count (`≥ 0.5`,
+  in `BAD` when non-zero) and `litter −N%` — the mean fertility penalty in effect,
+  `parasite_fertility_w × mean load`.
+- **Carriers** (4 rows): the three heaviest living carriers as `‹glyph› ‹tag› ‹name› .xx
+  ‹region›`, the load in its band colour; `no carriers` when none.
+- The same **Overlays selector** as item 16, now nine rows, `9 parasites` active.
+- **Reading the map** (1 row, no rule): `k look = exact cell load · Esc restores`.
+
 ### Sidebar — sense ring (S02d)
 18. **Sense range** (3 rows): a two-line explanation that the ring is how far the selected
     creature can see, hear or smell other creatures.
@@ -252,7 +329,15 @@ Sections from the top, in order; 39 of the 40 rows.
 | vegetation ramp               | brown → olive → green → bright green                               |
 | species ramp                  | near-black → species colour → bright tint of it (S02f)             |
 | good / warning / bad glyphs   | creature condition bands above 60 % / 30–60 % / below 30 % (S02g)  |
-| dimmed terrain                | terrain under the health overlay (60 % toward the background)      |
+| dimmed terrain                | terrain under the health and disease overlays (60 % toward the background) |
+| `SICK` bold / dim glyph       | infectious / incubating creature (S02h)                            |
+| `IMMUNE` glyph                | creature immune to the shown pathogen (S02h)                       |
+| `WARN` glyph                  | creature with parasite load ≥ 0.5 (S02h) or 0.2–0.5 (S02i)         |
+| `BAD` bold glyph              | creature with parasite load ≥ 0.5 (S02i)                            |
+| warning-tinted background     | cell with parasite load ≥ 0.25 under the disease overlay (18 % blend) |
+| parasite ramp                 | dim olive → amber → red (S02i)                                     |
+| `~` warning                   | water cell carrying a parasite load (S02i)                         |
+| `└ ` / `new`                  | strain under its parent pathogen / born in the last 30 days (S02h) |
 | heat ramp                     | navy → blue → green → yellow → orange → red                         |
 | water ramp                    | tan → grey-green → blue → deep blue                                 |
 | `°` accent                     | sense-ring edge                                                    |
@@ -270,8 +355,8 @@ Status-bar hints differ between the heatmaps and the sense ring.
 ### S02a–c
 | Key     | Action                                                  | Goes to |
 |---------|---------------------------------------------------------|---------|
-| `o`     | next overlay (vegetation → pressure → moisture → sense → regions → species → health) | this screen, next variant |
-| `1`–`7` | pick an overlay directly                                | [S02a–g](s02-map-overlay.md) |
+| `o`     | next overlay (vegetation → pressure → moisture → sense → regions → species → health → disease → parasites) | this screen, next variant |
+| `1`–`9` | pick an overlay directly                                | [S02a–i](s02-map-overlay.md) |
 | `k`     | enter look mode with the overlay still active           | [S01c Look mode](s01-world-map.md) |
 | `Space` | pause / resume                                          | stays here |
 | `+` `-` | faster / slower                                         | stays here |
@@ -304,8 +389,8 @@ population. The species shown is remembered across `Esc` and reopening.
 ### S02g
 | Key     | Action                                          | Goes to |
 |---------|-------------------------------------------------|---------|
-| `o`     | next overlay (health → plain map)               | [S01 World Map](s01-world-map.md) |
-| `1`–`7` | pick an overlay directly                        | [S02a–g](s02-map-overlay.md) |
+| `o`     | next overlay (health → disease)                 | [S02h](s02-map-overlay.md) |
+| `1`–`9` | pick an overlay directly                        | [S02a–i](s02-map-overlay.md) |
 | `←→↑↓`  | scroll the map                                  | stays here |
 | `k`     | look mode with the overlay still active         | [S01c Look mode](s01-world-map.md) |
 | `Tab`   | collapse / restore the sidebar                  | stays here |
@@ -313,6 +398,27 @@ population. The species shown is remembered across `Esc` and reopening.
 
 `7` works from the plain map, look mode and follow mode alike; the overlay survives all
 three.
+
+### S02h
+| Key     | Action                                          | Goes to |
+|---------|-------------------------------------------------|---------|
+| `o`     | next overlay (disease → parasites)              | [S02i](s02-map-overlay.md) |
+| `1`–`9` | pick an overlay directly                        | [S02a–i](s02-map-overlay.md) |
+| `Tab` / `Shift+Tab` | next / previous pathogen: `all`, then each live slot, wrapping | stays here |
+| `←→↑↓`  | scroll the map                                  | stays here |
+| `k`     | look mode with the overlay still active         | [S01c Look mode](s01-world-map.md) |
+| `Esc`   | close the overlay                               | [S01 World Map](s01-world-map.md) |
+
+`8`, `9` and `Tab` work from the plain map, look mode and follow mode alike, as `7` does.
+
+### S02i
+| Key     | Action                                          | Goes to |
+|---------|-------------------------------------------------|---------|
+| `o`     | next overlay (parasites → plain map)            | [S01 World Map](s01-world-map.md) |
+| `1`–`9` | pick an overlay directly                        | [S02a–i](s02-map-overlay.md) |
+| `←→↑↓`  | scroll the map                                  | stays here |
+| `k`     | look mode with the overlay still active; the cursor tooltip shows the cell | [S01c Look mode](s01-world-map.md) |
+| `Esc`   | close the overlay                               | [S01 World Map](s01-world-map.md) |
 
 ### S02d
 | Key     | Action                                          | Goes to |
@@ -343,6 +449,12 @@ Global keys not listed in the bar (`s g y e w q`, `.`) keep their README meaning
   species row reads `extinct`, the total is `0 alive` and the densest region is `—`.
 - **Extinct species** (S02g): the row shows dim zeros and `—` for the mean.
 - **No unwell animals** (S02g): the weakest-vital bars are empty and read `0  0%`.
+- **All eight pathogen slots filled** (S02h): the sidebar drops its section gaps and shrinks
+  the reading notes to one line so nothing overflows.
+- **Shown pathogen slot vanishes** (S02h): the overlay falls back to `all`.
+- **No outbreak yet** (S02h): the outbreak block reads `no outbreak recorded yet`.
+- **Nothing fouled** (S02i): every bar is empty, `worst:` names the first region, `0 cells
+  ≥25%`, and Carriers reads `no carriers`.
 - **Paused simulation**: the overlay stays; only the clock in the status bar stops.
 - **Night / winter**: not shown by the prototype; a heatmap replaces terrain colours, so the
   night blue-shift and snow palette have no obvious effect on it.
@@ -362,7 +474,7 @@ Global keys not listed in the bar (`s g y e w q`, `.`) keep their README meaning
   or the nearest predator to the viewport centre. And does `4` refuse to open when the
   selection is prey?
 - `o` cycles vegetation → pressure → moisture → (sense, when available) → regions → species →
-  health → plain map.
+  health → disease → parasites → plain map.
 - S02g reads energy as a vital, so an animal simply asleep in its den reads strained or
   critical for a while each night; whether resting should be excluded, or energy dropped
   from the condition, is undecided.

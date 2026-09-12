@@ -5,8 +5,8 @@ Back to the [screen overview](README.md).
 Live since: C5
 
 ## Purpose
-The simulation interrupts the player for events that change the shape of the world — in the
-prototype, a species going extinct. The modal names the event, gives the facts a player would
+The simulation interrupts the player for events that change the shape of the world — a
+species going extinct, or a pathogen turning epidemic. The modal names the event, gives the facts a player would
 want to remember (when, where, who was last, how the line fared) and offers a small set of
 next actions. It is raised by the simulation rather than by a key press, and while it is open
 the simulation is paused (when the corresponding auto-pause option in
@@ -16,6 +16,7 @@ the simulation is paused (when the corresponding auto-pause option in
 | Id   | Variant          | When it is shown                                                       |
 |------|------------------|------------------------------------------------------------------------|
 | S12a | extinction event | the last individual of a species dies and auto-pause on extinction is on |
+| S12b | epidemic alert   | an outbreak crosses the epidemic share and auto-pause on epidemic is on |
 
 ## Layout
 [S01a World Map](s01-world-map.md) drawn and dimmed 55 %; a compact focus-bordered modal is
@@ -25,7 +26,7 @@ centred on the body; the status bar is repainted undimmed.
 |---------------|----------------------------|--------------------------------------------------------------|
 | Backdrop      | 155 × 44                   | S01a dimmed                                                  |
 | Alert modal   | 64 × 12, centred           | double focus border; title ` ‼ EXTINCTION ‼ ` centred on the top border in magenta bold; inner 62 × 10 |
-| Status bar    | 155 × 1, row 44            | right side reads `││ paused on extinction`                   |
+| Status bar    | 155 × 1, row 44            | right side reads `││ paused on extinction` (S12b: `││ paused on epidemic`) |
 
 ```mermaid
 flowchart TB
@@ -62,10 +63,36 @@ Data sources: the extinction event (species, clock stamp, position, last individ
 last individual's creature record (name, tag, cause of death, age), and the species
 statistics (peak, generation count).
 
+### S12b epidemic
+Same 64 × 12 frame and row plan as S12a, with these substitutions.
+
+1. **Title** on the border: `☻ EPIDEMIC ☻`, centred, infection colour (`SICK`), bold.
+2. **Headline** (row 1, `SICK` bold): `‹Pathogen› is epidemic among the ‹Plural›`; the host
+   species is the one with the most cases in the outbreak. When the pathogen is a strain the
+   headline reads `A new strain: ‹name›`.
+3. **When and who** (row 3): the clock as in S12a, then dim `index case:` and the index case's
+   `Name tag` in its species colour, bold (from the creature record while it is still stored,
+   else its lineage node, else a bare `#id`).
+4. **Spread** (row 4): `N sick` (`SICK`) `· D dead` (bad) `· k/8 regions · since D‹d›,
+   ‹region›` — `k` counts regions holding a living creature infected in this outbreak; the
+   region is the outbreak's origin (the short form keeps long region names inside the
+   62-cell modal).
+5. **Resistance** (row 6): `mean Resistance x.xx (base x.xx)   pct% immune` for the host
+   species — the species' mean and base-genome Resistance, and the pathogen's immune count
+   over the living hosts.
+6. **Buttons** (row 8): `[ Continue ]`, `[ Show outbreak ]`, `[ Pause ]`; hint row as S12a.
+7. **Status bar**: `o show outbreak` replaces `l lineage` in the hints; right side
+   `││ paused on epidemic`.
+
+Data sources: the outbreak record (started day, origin region, index case, active, deaths,
+per-species cases), the pathogen (name, strain flag), the disease statistics (immune count)
+and the host species statistics (mean genome, count).
+
 ## Glyphs and colors
 | Glyph / colour           | Meaning                                                   |
 |--------------------------|-----------------------------------------------------------|
 | `‼` magenta              | extinction (event-kind glyph and colour)                  |
+| `☻` infection colour     | epidemic (S12b title, headline, sick count)               |
 | `x` warning / bad / dim  | death; colour by cause (starved / predation / old age)    |
 | season glyph `♪ ☼ ♫ *`   | season of the event, in season colour                     |
 | species colour           | the last individual's name and tag                        |
@@ -78,14 +105,17 @@ statistics (peak, generation count).
 |----------|-------------------------------------------------------|---------|
 | `Enter`  | activate the focused button                           | see buttons |
 | `←` `→`  | move focus between buttons                            | stays here |
-| `l`      | shortcut for View lineage                             | [S08 Lineage](s08-lineage.md) |
+| `l`      | shortcut for View lineage (S12a only)                 | [S08 Lineage](s08-lineage.md) |
+| `o`      | shortcut for Show outbreak (S12b only; `l` is unbound) | [S02h Disease overlay](s02-map-overlay.md), paused |
 | `Space`  | shortcut for Pause (keep the modal closed but paused) | [S01 World Map](s01-world-map.md), paused |
 | `Esc`    | Continue                                              | [S01 World Map](s01-world-map.md), resumed |
 
 Buttons: **Continue** closes the modal and resumes the simulation at its previous speed.
 **View lineage** closes the modal and opens the lineage screen focused on the last
 individual, leaving the simulation paused. **Pause** closes the modal and leaves the
-simulation paused on the map.
+simulation paused on the map. **Show outbreak** (S12b) closes the modal, opens the disease
+overlay on the alert's pathogen and centres the map on the outbreak's origin region, leaving
+the simulation paused.
 
 All other global keys are swallowed while the modal is open.
 

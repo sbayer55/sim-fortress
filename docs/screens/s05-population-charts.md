@@ -11,7 +11,9 @@ see the predator–prey oscillation, spot the drought that bent it, and judge wh
 current state is a boom, a crash or a recovery. Three views of the same time series are
 offered: prey and predators over time, a predator-against-prey phase plot that shows the
 orbit around the equilibrium, and a stacked area that shows how the total population is
-divided between the six species and how it tracks vegetation.
+divided between the six species and how it tracks vegetation. A fourth view (C7) shows
+the disease side of the same window: active cases per pathogen and the mean Resistance
+of the host species.
 
 ## Variants
 | Id   | Variant                            | When it is shown                                           |
@@ -19,9 +21,11 @@ divided between the six species and how it tracks vegetation.
 | S05a | prey vs predator over time         | default view when the screen is opened with `g` or `1`     |
 | S05b | predator-prey phase plot           | second view: `g` from S05a, or `2` on any chart            |
 | S05c | stacked species + vegetation       | third view: `g` from S05b, or `3` on any chart             |
+| S05d | infections — cases and resistance  | fourth view: `g` from S05c, or `4` on any chart            |
 
-`g` cycles a → b → c → a. The status bar's right-hand text names the current view
-(`chart 1/3  populations`, `chart 2/3  phase plot`, `chart 3/3  stacked species`).
+`g` cycles a → b → c → d → a. The status bar's right-hand text names the current view
+(`chart 1/4  populations`, `chart 2/4  phase plot`, `chart 3/4  stacked species`,
+`chart 4/4  infections`).
 
 ## Layout
 Full-screen data screen (replaces the map). The body is 43 rows (rows 1–43) split into a
@@ -33,10 +37,10 @@ family's map/sidebar split so the eye does not have to re-adjust.
 flowchart TB
     subgraph body["155 × 43 body"]
         direction LR
-        chart["Chart panel 112 cols<br/>S05a: prey chart 20 rows / divider / predator chart 20 rows<br/>S05b: phase plot 38 rows + 3 note rows<br/>S05c: legend row, stacked plot 34 rows, axes, 2 note rows"]
-        side["Sidebar 43 cols<br/>S05a Statistics<br/>S05b Phase<br/>S05c Composition"]
+        chart["Chart panel 112 cols<br/>S05a: prey chart 20 rows / divider / predator chart 20 rows<br/>S05b: phase plot 38 rows + 3 note rows<br/>S05c: legend row, stacked plot 34 rows, axes, 2 note rows<br/>S05d: cases chart 20 rows / divider / resistance chart 20 rows"]
+        side["Sidebar 43 cols<br/>S05a Statistics<br/>S05b Phase<br/>S05c Composition<br/>S05d Outbreaks"]
     end
-    status["Status bar 155 × 1 — g next chart · 1-3 pick · +/- zoom · Esc back · chart n/3"]
+    status["Status bar 155 × 1 — g next chart · 1-4 pick · +/- zoom · Esc back · chart n/4"]
     body --> status
 ```
 
@@ -56,6 +60,13 @@ Title `Stacked populations + vegetation`, right hint `240 days, all six species`
 Row 0 is the legend row; the plot starts at row 2 and is 34 rows tall; below it come the
 x axis, its labels, a gap and two note rows. The plot is 98 columns wide: 6 columns are
 reserved on the left for the count axis, 6 on the right for the vegetation axis.
+
+### S05d chart panel
+Title `Infections — cases and resistance`, right hint `last 240 days`. Same split as
+S05a: an upper chart (20 rows, first row ` Active cases` followed by a `▀▄` swatch and
+name per drawn pathogen), one section-divider row titled `Mean Resistance (host
+species)`, and a lower chart (20 rows, first row `0..1` plus a species legend and
+`· base`).
 
 ## Content requirements
 
@@ -162,6 +173,36 @@ reserved on the left for the count axis, 6 on the right for the vegetation axis.
       percentage coloured good/bad/dim at ±3 %.
     - **How to read**: five short lines.
 
+### S05d — infections
+25. **Top chart — active cases per pathogen.** One half-block line per pathogen slot
+    (`Sample.active_by_pathogen`, slots 0–7, roster first then strains) that has any
+    nonzero value inside the window; slots that never had a case are not drawn. Line
+    colours rotate by slot: `SICK`, `WARN`, `MAGENTA`, `INFO`, `ACCENT`, lynx, deer, hare.
+    y axis 0 to the maximum rounded up to the next 10, five labels. **Epidemic windows**
+    (days between an outbreak's `started_day` and its `ended_day`, or today while open,
+    for outbreaks flagged `epidemic`) are shaded across empty cells like the drought band
+    (panel background tinted 22 % toward `SICK`) and labelled `☻ epidemic` at the band's
+    top-left. `now` marker as S05a. With no cases in the window the legend row reads
+    `no infections in the window` and the chart is an empty axis.
+26. **Bottom chart — mean Resistance.** One line per species with a nonzero population
+    inside the window (`Sample.genome_mean[i].resistance()`, 0..1, five labels `0.00` …
+    `1.00`), each in its species colour; the species' base Resistance
+    (`base_genome().resistance()`) is drawn behind it as a dim dotted reference row (`·`
+    on every other column). Epidemic windows are shaded here too.
+27. Sidebar `Outbreaks`:
+    - **Outbreaks** (top, no section title): the last eight outbreaks, newest first, two
+      rows each: `☻ <name>` bold in `SICK` (`MAGENTA` when the pathogen is a strain), the
+      start day as `Y D`, and `EPIDEMIC` in `SICK` when flagged; then the host species
+      glyph (the species with the most cases, in its colour) and
+      `cases N  dead D  δresist +.03` — the host's mean Resistance at burn-out minus at
+      the start, or `open` while `ended_day` is `None`. Empty: `no outbreaks yet`.
+      (`δ` is the CP437 lower-case delta; the capital Δ is not in CP437.)
+    - **Pathogens**: one line per drawn slot: swatch in the line colour, name, `now N
+      peak P`, and `strain` in `MAGENTA` for spillover strains. Empty: `none active in
+      the window`.
+    - **Legend**: the two `▀▄` swatches, the `·` base row and the `░` epidemic band.
+    - **Keys**: `[+/-] zoom 60/240/720d`.
+
 ## Glyphs and colors
 This screen must render entirely in CP437. **Chart markers are limited to half-block
 (`▀` `▄`), full block (`█`) and dot (`·` `•`) markers; braille and eighth-block markers
@@ -175,20 +216,23 @@ are not permitted.** The stacked area is drawn by hand from the same three block
 | `•`        | older-days scatter and equilibrium crosshair (S05b)       |
 | `♦`        | equilibrium label                                         |
 | `¡`        | drought                                                   |
+| `☻`        | outbreak / epidemic band label (S05d)                     |
+| `δ`        | resistance delta in the S05d sidebar                      |
 | `↑` `↓` `↔`| trend arrows                                              |
 | `─` `│` `┼`| hand-drawn axes (S05c)                                    |
 
 Palette roles: hare colour = prey total, wolf colour = predator total, per-species colours
 for the stack and census, vegetation green for the biomass line and right axis, accent for
 the recent path / `now` marker / highlighted numbers, info for the equilibrium label,
-warning for drought, good/bad for trend percentages, dim for axis labels and notes,
+warning for drought, good/bad for trend percentages, `SICK` for the epidemic band and
+outbreak rows, `MAGENTA` for spillover strains, dim for axis labels and notes,
 selection background nowhere (there is no cursor on this screen).
 
 ## Interaction
 | Key      | Action                                             | Goes to |
 |----------|----------------------------------------------------|---------|
-| `g`      | next chart (a → b → c → a)                         | stays on S05 |
-| `1` `2` `3` | pick S05a / S05b / S05c directly                 | stays on S05 |
+| `g`      | next chart (a → b → c → d → a)                     | stays on S05 |
+| `1` `2` `3` `4` | pick S05a / S05b / S05c / S05d directly     | stays on S05 |
 | `+` `-`  | zoom the time window 60 / 240 / 720 days           | stays on S05 |
 | `l`      | toggle log scale (advertised in the S05a sidebar)   | stays on S05 |
 | `Esc`    | back                                                | [S01 World Map](s01-world-map.md) |
@@ -204,6 +248,11 @@ global meaning and switch to [S04](s04-species-browser.md), [S06](s06-ecology.md
   available points; the 30-day and 7-day deltas, lag search (needs 61 points) and period
   estimate must degrade to `–` rather than reading outside the series.
 - **No drought in the window**: the band and the `Drought` sidebar sections are omitted.
+- **No disease in the window** (S05d): the cases chart draws only its axes with the
+  legend `no infections in the window`; the Resistance chart still draws every living
+  species; the sidebar says `no outbreaks yet` until the first outbreak record exists.
+- **Open outbreak** (S05d): its epidemic band runs to the right edge and the sidebar's
+  `δresist` reads `open`.
 - **Extinct species** (S05c): a species at zero contributes no stack cells; its row in the
   Today table shows 0 and 0 %; the share bar gives it no width.
 - **Predator total zero**: the ratio line must guard division (show `∞` or `–`); the phase

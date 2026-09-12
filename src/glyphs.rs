@@ -76,6 +76,9 @@ pub const EXTINCTION: char = '‼';
 pub const DROUGHT: char = '¡';
 pub const ALERT: char = '!';
 pub const NOTE: char = '¶';
+pub const DISEASE: char = '☻';
+pub const IMMUNE: char = '☺';
+pub const PARASITE: char = '∩';
 
 // ---- controls
 pub const PLAY: char = '►';

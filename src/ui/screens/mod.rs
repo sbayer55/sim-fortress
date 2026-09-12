@@ -407,8 +407,20 @@ mod tests {
         f.cycle();
         assert!(f.matches(EventKind::Migration));
         assert!(f.matches(EventKind::DroughtEased));
+        assert!(!f.matches(EventKind::Outbreak));
+        f.cycle();
+        assert!(f.matches(EventKind::Outbreak));
+        assert!(f.matches(EventKind::Recovery));
+        assert!(!f.matches(EventKind::DeathDisease), "disease deaths stay under the deaths chip");
         f.cycle();
         assert!(f.all);
+        // Key 8 is the disease chip; disease deaths live under deaths (key 3).
+        f.toggle(8);
+        assert_eq!(f.kinds, [false, false, false, false, false, false, true]);
+        assert!(f.matches(EventKind::Epidemic));
+        assert!(!f.matches(EventKind::DeathDisease));
+        f.toggle(3);
+        assert!(f.matches(EventKind::DeathDisease));
     }
 
     #[test]
@@ -449,6 +461,10 @@ mod tests {
         assert!(matches!(s.overlay, Overlay::Species(_)), "Region → Species, got {:?}", s.overlay);
         s.handle_key(key(KeyCode::Char('o')), &mut app);
         assert_eq!(s.overlay, Overlay::Health, "Species → Health");
+        s.handle_key(key(KeyCode::Char('o')), &mut app);
+        assert_eq!(s.overlay, Overlay::Disease(None), "Health → Disease (C7)");
+        s.handle_key(key(KeyCode::Char('o')), &mut app);
+        assert_eq!(s.overlay, Overlay::Parasites, "Disease → Parasites (C7)");
         s.handle_key(key(KeyCode::Char('o')), &mut app);
         assert_eq!(s.overlay, Overlay::None);
     }

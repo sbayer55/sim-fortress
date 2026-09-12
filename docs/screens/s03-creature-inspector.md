@@ -172,15 +172,26 @@ classDiagram
    `thirst`, `energy`, each with a one-word note to the right (`healthy/injured/critical`,
    `sated/peckish/starving`, `fine/thirsty/parched`, `rested/tiring/exhausted`). Bar and
    note use the vital colour; hunger and thirst are inverted (high = bad).
+   *Live since: C7* — three more rows follow: `sickness` (`☻ <Pathogen> infectious day
+   N/~M sev .80` in the sick colour, N = today − since_day + 1, M = ends_day − since_day;
+   or `☻ <Pathogen> incubating (shows in N days)`; or `healthy` dim), `immune` (`☺ <names>`
+   in the immune colour, `(for life)` for lifelong immunity, or `none` dim) and a
+   `∩ parasites` 24-cell bar (warn colour, inverted) with the note `light` (< 0.2) /
+   `heavy` (< 0.5) / `severe`.
 7. **Condition section (alive only).** `predation risk` bar (inverted vital colour),
    `local forage` bar (vegetation of the current cell, vegetation colour), and a line
-   `nearest water <n> cells   nearest den <n> cells`.
+   `nearest water <n> cells   nearest den <n> cells`. *Live since: C7* — a `contagion
+   risk` bar (inverted vital colour) sits under predation risk: infectious conspecifics
+   within `disease.contact_cheb` Chebyshev cells, over 8, clamped to 0..1.
 8. **Behaviour section (alive only).** Up to four lines explaining the current decision:
    an alert line (`!`) for the current stalking target (predator) or the stalking threat
    (prey), a detection line comparing camouflage and sense values, the strike/flee
    threshold in cells, and a `¶` note tying the behaviour to a vital (for example hunger
    driving pursuit, or heading to water). Source: the creature's AI state.
-9. **Death section (corpse only).** `x <cause of death>`, `died <n> days ago (<date>)`,
+   *Live since: C7* — an infectious creature gets a leading alert line `! sick — resting
+   more, no mating` in the sick colour.
+9. **Death section (corpse only).** `x <cause of death>` (*C7:* `x disease (<Pathogen>)`
+   when `died_infected` is set), `died <n> days ago (<date>)`,
    `lived <age> of <max> days (<pct>% of lifespan)`, then a `decay` bar (carcass colour),
    a `nutrition` bar (`1 − decay`, warn colour) and `<kg> kg of meat remaining; gone in
    ~<days> days` where meat ≈ size × 120 × nutrition.
@@ -188,16 +199,21 @@ classDiagram
     name, tag, distance, compass and current goal; then a `¶ crows circling (<n> within
     sight)` line.
 11. **Killer (corpse only).** Glyph, name and tag of the killer, its total kills and the
-    chase length in ticks.
+    chase length in ticks. *Live since: C7* — for a disease death the section is
+    **Outbreak** instead: `☻ <Pathogen> outbreak of Year Y, began <region>` and `N others
+    died in it`, from the outbreak record the lineage node (or the infection) points to.
 12. **Timeline section.** Chronological list of life milestones, each as glyph, `Y<y>
     D<d>` stamp and text: birth (`♥ born to <mother> and <father>`), adulthood (`↑`),
     first litter (`♥`, if offspring > 0), first kill and pack leadership (predators, `x`
     and `♦`), a narrow escape (prey, `!`), a migration (`→ migrated to <region>`) and, for a
     corpse, the death (`x`). Rows that do not fit in the panel are dropped from the end.
+    *Live since: C7* — `☻ fell ill with <Pathogen>` (stamped with the infection's
+    `since_day`) and, when `infections_survived > 0`, `☺ recovered N time(s)`.
 
 ### Middle panel — Genome
 13. **Header row.** `trait  individual  delta  species`.
-14. **Per-trait block (8 traits, two rows each).** Row A: trait name (in its trait colour),
+14. **Per-trait block (8 traits, two rows each; nine from C7, Resistance last in the sick
+    colour).** Row A: trait name (in its trait colour),
     a 14-cell bar of the individual's value, `±<delta>` versus the species mean coloured
     good/bad/dim (|delta| ≤ 0.005 counts as dim), and a 9-cell range bar showing species
     min / mean / max. Row B: the individual value to two decimals under the bar, and
@@ -211,7 +227,8 @@ classDiagram
     <2+sense·10> cells`, `move speed <0.5+speed·2.5> cells/tick`, `daily food need
     <0.2+metabolism·0.8+size·0.4> biomass`, `max lifespan <max_age_days> days`, `litter
     size <1+round(fertility·4)> young`, `detection chance <(1−camouflage)·100>% at 5
-    cells`.
+    cells`. *Live since: C7* — a seventh row `resistance cost +N % food`, N =
+    round(100 × `disease.resist_hunger_cost` × resistance).
 18. **Offspring forecast section.** For each trait, a 22-cell range bar centred on
     `(individual + species mean) / 2` with ±0.06 spread and the same numbers in text.
     Rows beyond the panel bottom are dropped.
@@ -228,7 +245,9 @@ classDiagram
     rate` bar (wolf colour), a `preferred prey` list with one bar per prey species showing
     its share of kills, `<pct>%  <kills> kills`, then `last kill <name tag>  <when>,
     <region>`, `♦ current target: <name tag>, <d> cells` and `avg chase <n> ticks; longest
-    <n> ticks (Year <y>)`.
+    <n> ticks (Year <y>)`. *Live since: C7* — the current-target line appends
+    ` (+.NN sick prey)` in the sick colour when the target is infectious
+    (`kill_sick_bonus × severity`).
 22. **Survival (S03a only).** `chased <n> times, escaped <n> (<pct>%)`, an `escape rate`
     bar (good colour), a `threats seen` list with one bar per predator species and its
     share, and `litters <n>  last: Y<y> D<d> (<n> young, <n> survived)`.
@@ -255,6 +274,7 @@ classDiagram
 | `♂ ♀`                    | sex                                                       |
 | `♥ ↑ x ♦ ! → §`          | timeline and event glyphs: birth, adulthood, death/kill, leadership, alert, migration, mutation |
 | `¶`                      | note / hint lines                                         |
+| `☻ ☺ ∩`                  | C7: infection (sick colour), immunity (immune colour), parasite load bar (warn) |
 | `%`                      | carcass marker (carcass colour)                           |
 | `±`                      | delta prefix in the genome table                          |
 | `[█░]`                   | bars; `bars::range` draws min–max span with a mean marker |
