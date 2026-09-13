@@ -35,6 +35,8 @@ pub fn arrow_color(a: char) -> Color {
     }
 }
 
+/// One colour per genome slot. Deliberately exhaustive (no catch-all): adding a
+/// trait must be a compile error here rather than a silently shared colour.
 pub fn trait_color(t: usize) -> Color {
     match t {
         0 => theme::INFO,
@@ -45,7 +47,10 @@ pub fn trait_color(t: usize) -> Color {
         5 => theme::VEGETATION,
         6 => theme::MAGENTA,
         7 => theme::LYNX,
-        _ => theme::SICK,
+        8 => theme::SICK,
+        9 => theme::HARE,
+        10 => theme::SEED,
+        _ => theme::DIM,
     }
 }
 

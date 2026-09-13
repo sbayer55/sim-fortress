@@ -955,7 +955,7 @@ fn emerge(store: &mut CreatureStore, world: &World, events: &mut EventRing, time
 mod tests {
     use super::*;
     use crate::sim::creatures::place_founders;
-    use crate::sim::params::{CreaturesParams, Params, WorldParams};
+    use crate::sim::params::{CreaturesParams, GeneticsParams, Params, WorldParams};
     use crate::sim::stats::census;
     use crate::sim::Sim;
 
@@ -965,7 +965,7 @@ mod tests {
 
     fn store() -> CreatureStore {
         let mut s = CreatureStore::new();
-        for c in place_founders(&world(), &CreaturesParams::default(), 0.20, &mut Rng::new(1)) {
+        for c in place_founders(&world(), &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(1)) {
             s.insert(c);
         }
         s

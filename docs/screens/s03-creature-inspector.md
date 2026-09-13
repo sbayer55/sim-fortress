@@ -51,7 +51,7 @@ flowchart LR
         end
         subgraph M["Genome — 52 cols"]
             direction TB
-            M1["8 traits: bar, delta, species range"]
+            M1["11 traits: bar, value, delta, species range"]
             M2["Mutation history"]
             M3["Derived values"]
             M4["Offspring forecast"]
@@ -109,7 +109,7 @@ classDiagram
         kind()
     }
     class Genome {
-        traits : f32 x8
+        traits : f32 x11
         sense_cells()
     }
     class Species {
@@ -212,23 +212,25 @@ classDiagram
 
 ### Middle panel — Genome
 13. **Header row.** `trait  individual  delta  species`.
-14. **Per-trait block (8 traits, two rows each; nine from C7, Resistance last in the sick
-    colour).** Row A: trait name (in its trait colour),
-    a 14-cell bar of the individual's value, `±<delta>` versus the species mean coloured
-    good/bad/dim (|delta| ≤ 0.005 counts as dim), and a 9-cell range bar showing species
-    min / mean / max. Row B: the individual value to two decimals under the bar, and
-    `min/mean/max` under the range bar, both dim.
+14. **One row per trait (eleven since C8).** Trait name (in its trait colour), a 12-cell bar
+    of the individual's value, the value to two decimals, `±<delta>` versus the species mean
+    coloured good/bad/dim (|delta| ≤ 0.005 counts as dim), and an 11-cell range bar showing
+    species min / mean / max. The C7/C8 traits are appended in slot order, so Resistance is
+    ninth (sick colour), Sociality tenth (hare colour) and Maturity eleventh (seed colour).
 15. **Summary lines.** `<n> traits above species mean, <8−n> below` and `most divergent:
     <trait> <±delta>`.
 16. **Mutation history section.** One `§ <text>` line per recorded mutation (for example
     `Speed +0.06 (gen 44)`), or `none recorded`; then a dim `from <n> lines; rate 0.04 per
     trait per birth` line.
-17. **Derived section.** Six label/value rows computed from the genome: `sense range
+17. **Derived section.** Nine label/value rows computed from the genome: `sense range
     <2+sense·10> cells`, `move speed <0.5+speed·2.5> cells/tick`, `daily food need
     <0.2+metabolism·0.8+size·0.4> biomass`, `max lifespan <max_age_days> days`, `litter
     size <1+round(fertility·4)> young`, `detection chance <(1−camouflage)·100>% at 5
     cells`. *Live since: C7* — a seventh row `resistance cost +N % food`, N =
-    round(100 × `disease.resist_hunger_cost` × resistance).
+    round(100 × `disease.resist_hunger_cost` × resistance). *Live since: C8* — `adult at
+    <adult_age_days(species, genome)> days`, `litter size` now reads
+    `<n> (fert {f}, mat {m})` because maturity scales it, and `kin nearby <n> (<herd|pack>)`
+    from the creature's last replan (`scattered`/`alone` when it is not herding).
 18. **Offspring forecast section.** For each trait, a 22-cell range bar centred on
     `(individual + species mean) / 2` with ±0.06 spread and the same numbers in text.
     Rows beyond the panel bottom are dropped.

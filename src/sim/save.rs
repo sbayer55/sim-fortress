@@ -12,8 +12,9 @@ use crate::sim::Sim;
 
 /// File magic: `b"SIMF"`.
 pub const MAGIC: [u8; 4] = *b"SIMF";
-/// Current on-disk format version. A newer version is rejected (FR1).
-pub const VERSION: u16 = 2;
+/// Current on-disk format version. A newer version is rejected (FR1), and so is
+/// an older one: C8 widened the genome, so pre-C8 files cannot be read.
+pub const VERSION: u16 = 3;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 
@@ -44,6 +45,8 @@ pub struct Loaded {
 pub struct SaveEntry {
     pub path: PathBuf,
     pub header: SaveHeader,
+    /// On-disk format version, so the list can flag a file `load` will reject.
+    pub version: u16,
 }
 
 #[derive(Debug)]
@@ -52,6 +55,9 @@ pub enum SaveError {
     Postcard(postcard::Error),
     /// `save is from another version (N ≠ M)`: the format is never kept compatible (C7 FR11).
     VersionMismatch { found: u16, supported: u16 },
+    /// A save written before the current format (C8): the genome gained two traits,
+    /// so the creature records cannot be decoded. There is no migration path.
+    OlderVersion { found: u16, supported: u16 },
     BadMagic,
     Truncated,
 }
@@ -64,6 +70,10 @@ impl fmt::Display for SaveError {
             SaveError::VersionMismatch { found, supported } => {
                 write!(f, "save is from another version ({found} ≠ {supported})")
             }
+            SaveError::OlderVersion { found, supported } => write!(
+                f,
+                "save is from an older version ({found}, now {supported}): the genome format changed, so it cannot be loaded"
+            ),
             SaveError::BadMagic => write!(f, "not a Sim Fortress save (bad magic)"),
             SaveError::Truncated => write!(f, "save file is truncated"),
         }
@@ -187,6 +197,9 @@ fn decode(bytes: &[u8]) -> Result<(SaveHeader, Sim), SaveError> {
         return Err(SaveError::BadMagic);
     }
     let version = u16::from_le_bytes([bytes[4], bytes[5]]);
+    if version < VERSION {
+        return Err(SaveError::OlderVersion { found: version, supported: VERSION });
+    }
     if version != VERSION {
         return Err(SaveError::VersionMismatch { found: version, supported: VERSION });
     }
@@ -228,8 +241,17 @@ pub fn load(path: &Path) -> Result<Loaded, SaveError> {
 }
 
 /// Read only the header (the `header_only_read` acceptance path).
+///
+/// Deliberately version-agnostic: the header record is the same in every format
+/// version, so the Load list can list old files and let `load` produce the
+/// friendly `OlderVersion` error.
 pub fn read_header(path: &Path) -> Result<SaveHeader, SaveError> {
     let bytes = std::fs::read(path)?;
+    Ok(read_header_bytes(&bytes)?.0)
+}
+
+/// Parse the header and report the format version beside it.
+pub fn read_header_bytes(bytes: &[u8]) -> Result<(SaveHeader, u16), SaveError> {
     if bytes.len() < 10 {
         return Err(SaveError::Truncated);
     }
@@ -237,15 +259,12 @@ pub fn read_header(path: &Path) -> Result<SaveHeader, SaveError> {
         return Err(SaveError::BadMagic);
     }
     let version = u16::from_le_bytes([bytes[4], bytes[5]]);
-    if version != VERSION {
-        return Err(SaveError::VersionMismatch { found: version, supported: VERSION });
-    }
     let header_len = u32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]) as usize;
     if bytes.len() < 10 + header_len {
         return Err(SaveError::Truncated);
     }
     let header: SaveHeader = postcard::from_bytes(&bytes[10..10 + header_len])?;
-    Ok(header)
+    Ok((header, version))
 }
 
 /// All `*.simf` saves in `dir`, newest first (FR3). Unreadable files are skipped.
@@ -259,8 +278,9 @@ pub fn list_saves(dir: &Path) -> Vec<SaveEntry> {
         if path.extension().and_then(|s| s.to_str()) != Some("simf") {
             continue;
         }
-        if let Ok(header) = read_header(&path) {
-            out.push(SaveEntry { path, header });
+        let Ok(bytes) = std::fs::read(&path) else { continue };
+        if let Ok((header, version)) = read_header_bytes(&bytes) {
+            out.push(SaveEntry { path, header, version });
         }
     }
     out.sort_by(|a, b| {
@@ -325,6 +345,34 @@ mod tests {
             }
             other => panic!("expected VersionMismatch, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn older_version_rejected() {
+        let dir = tmpdir("older-version");
+        let sim = Sim::new(7, Params::default());
+        let header = build_header(&sim, "v");
+        let mut bytes = encode(&header, &sim).unwrap();
+        // A file written before the C8 genome widening.
+        bytes[4..6].copy_from_slice(&(VERSION - 1).to_le_bytes());
+        let path = dir.join("older.simf");
+        std::fs::write(&path, &bytes).unwrap();
+        match load(&path) {
+            Err(SaveError::OlderVersion { found, supported }) => {
+                assert_eq!(found, VERSION - 1);
+                assert_eq!(supported, VERSION);
+            }
+            other => panic!("expected OlderVersion, got {other:?}"),
+        }
+        // The message names the version pair rather than a decode failure.
+        let msg = SaveError::OlderVersion { found: 1, supported: VERSION }.to_string();
+        assert!(msg.contains("older version"), "{msg}");
+        // The header still parses, so the Load list can show the file and let the
+        // player try it.
+        let entries = list_saves(&dir);
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].version, VERSION - 1);
+        assert!(read_header(&path).is_ok());
     }
 
     #[test]

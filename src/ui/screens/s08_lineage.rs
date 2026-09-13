@@ -9,6 +9,7 @@ use ratatui::Frame;
 
 use crate::sim::creatures::{Cause, CreatureId};
 use crate::sim::lineage::{LineageNode, Tree, TreeItem};
+use crate::sim::species::IDX_RESISTANCE;
 use crate::sim::{Genome, Kind, Sim, TRAIT_NAMES};
 use crate::ui::app::AppState;
 use crate::ui::screens::common::{day_stamp, sp};
@@ -425,7 +426,9 @@ fn details(f: &mut Frame, area: Rect, sim: &Sim, focus: CreatureId) {
         }
     };
     // C7: Resistance leads when the species has been through an outbreak.
-    const RESISTANCE: usize = Genome::LEN - 1;
+    // C8: the genome grew to eleven traits, so this must name the resistance
+    // *index*, not the last slot (which is now Maturity).
+    const RESISTANCE: usize = IDX_RESISTANCE;
     let had_outbreak = sim.disease.outbreaks.iter().any(|o| o.species_cases[n.species.index()] > 0);
     let mut order: Vec<usize> = (0..Genome::LEN).filter(|&t| !(had_outbreak && t == RESISTANCE)).collect();
     order.sort_by(|&a, &b| {

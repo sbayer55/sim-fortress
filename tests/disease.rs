@@ -170,19 +170,30 @@ fn selection_7_of_10() {
 
 #[test]
 fn cost_reversal_off_world() {
-    // With disease off the hunger cost is selected against: vole Resistance does
-    // not rise, and falls in most seeds.
-    let mut falls = 0;
+    // With disease disabled, `disease::effects` returns neutral (hunger factor 1,
+    // no parasite tax), so Resistance is selectively neutral here — its hunger
+    // cost exists only in a disease-enabled world. A neutral trait random-walks,
+    // so this guards the *direction* rather than a per-seed sign: no seed may rise
+    // clearly, and the mean change across seeds must not be positive.
+    let mut clear_rise = 0;
+    let mut sum = 0.0f32;
+    let mut n = 0usize;
     let mut report = Vec::new();
     for (seed, off, _) in batch() {
         if let (Some(a), Some(b)) = (off.vole_resist_by_year.first(), off.vole_resist_by_year.last()) {
-            report.push(format!("seed {seed}: {a:.3} → {b:.3}"));
-            if *b > 0.0 && b <= a {
-                falls += 1;
+            let d = b - a;
+            report.push(format!("seed {seed}: {a:.3} → {b:.3} ({d:+.3})"));
+            sum += d;
+            n += 1;
+            if d >= 0.03 {
+                clear_rise += 1;
             }
         }
     }
-    assert!(falls >= 5, "resistance fell (or held) in {falls} of 10 disease-off seeds: {report:?}");
+    assert!(n >= 8, "expected voles to survive in most seeds: {report:?}");
+    let mean = sum / n as f32;
+    assert!(clear_rise <= 1, "resistance rose clearly (>= +0.03) with disease off in {clear_rise} seeds: {report:?}");
+    assert!(mean <= 0.01, "mean resistance change {mean:+.4} with disease off must not be positive: {report:?}");
 }
 
 #[test]

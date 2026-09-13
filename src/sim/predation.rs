@@ -71,7 +71,7 @@ fn in_den(world: &World, x: usize, y: usize) -> bool {
 mod tests {
     use super::*;
     use crate::sim::creatures::{CreatureId, Sex};
-    use crate::sim::params::{CreaturesParams, PredationParams, WorldParams};
+    use crate::sim::params::{CreaturesParams, GeneticsParams, PredationParams, WorldParams};
     use crate::sim::species::SpeciesId;
     use crate::sim::world::Terrain;
 
@@ -80,6 +80,7 @@ mod tests {
         let mut c = crate::sim::creatures::place_founders(
             &World::generate(7, &WorldParams::default()),
             &CreaturesParams::default(),
+            &GeneticsParams::default(),
             0.20,
             &mut crate::sim::rng::Rng::new(1),
         )

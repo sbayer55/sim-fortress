@@ -425,6 +425,12 @@ pub struct GeneticsParams {
     pub pregnancy_hunger_factor: f32,
     /// Safety: no new pregnancies above this; a Note is logged once per crossing.
     pub max_population_soft_cap: u32,
+    /// Adult age × maturity factor: `1 + (maturity − 0.5) × 2 × span`.
+    pub maturity_age_span: f32,
+    /// Litter size × the same maturity factor.
+    pub maturity_litter_span: f32,
+    /// Maximum lifespan × the same maturity factor.
+    pub maturity_lifespan_span: f32,
     pub drift_every_generations: u32,
     pub lineage_keep_generations: u32,
     pub lineage_up: u32,
@@ -450,6 +456,9 @@ impl Default for GeneticsParams {
             newborn_hp: 0.6,
             pregnancy_hunger_factor: 1.3,
             max_population_soft_cap: 4000,
+            maturity_age_span: 0.5,
+            maturity_litter_span: 0.5,
+            maturity_lifespan_span: 0.25,
             drift_every_generations: 2,
             lineage_keep_generations: 8,
             lineage_up: 3,
@@ -468,9 +477,69 @@ impl GeneticsParams {
     pub fn cooldown(&self, id: SpeciesId) -> u32 {
         self.mate_cooldown_days.get(&id).copied().unwrap_or(1)
     }
-    /// Litter size for a given fertility: `1 + round(fertility × litter_max)`.
-    pub fn litter_size(&self, id: SpeciesId, fertility: f32) -> u32 {
-        1 + (fertility * self.litter_max(id)).round() as u32
+    /// Litter size for a given fertility and maturity:
+    /// `1 + round(fertility × litter_max × maturity_factor(maturity, litter_span))`,
+    /// floored at one pup so a slow, small litter is never empty.
+    pub fn litter_size(&self, id: SpeciesId, fertility: f32, maturity: f32) -> u32 {
+        let factor = self.maturity_factor(maturity, self.maturity_litter_span);
+        (1 + (fertility * self.litter_max(id) * factor).round() as u32).max(1)
+    }
+
+    /// The shared maturity multiplier `1 + (maturity − 0.5) × 2 × span`:
+    /// 1.0 at maturity 0.5, so the trait is balance-neutral where it starts.
+    pub fn maturity_factor(&self, maturity: f32, span: f32) -> f32 {
+        1.0 + (maturity - 0.5) * 2.0 * span
+    }
+}
+
+/// Herd and pack behaviour tunables (C8 FR1, the `[social]` table).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct SocialParams {
+    /// Preferred group size = `sociality × this`, for herds and packs alike.
+    pub group_size_max: f32,
+    /// Below this sociality a creature never herds: it wanders as before.
+    pub cohesion_min: f32,
+    /// Graze score ÷ `(1 + sociality × w × dist_to_kin_centroid / 8)` when herding.
+    pub graze_cohesion_w: f32,
+    /// A fleeing prey alerts same-species kin within `sociality × this` cells.
+    pub alarm_cells: f32,
+    /// Hunt score × `(1 + sociality × bonus × packmates_on_target(≤ 3))`.
+    pub pack_join_bonus: f32,
+    /// Kill chance `+= bonus × extra participants (≤ 3)`.
+    pub pack_kill_bonus: f32,
+    /// Hunger relief a non-killer participant gets, as a share of a full kill.
+    pub pack_share: f32,
+    /// A participant is a same-species hunter on that prey within this Chebyshev distance.
+    pub pack_share_cheb: usize,
+}
+
+impl Default for SocialParams {
+    fn default() -> Self {
+        SocialParams {
+            group_size_max: 12.0,
+            cohesion_min: 0.30,
+            graze_cohesion_w: 1.0,
+            alarm_cells: 6.0,
+            pack_join_bonus: 1.5,
+            pack_kill_bonus: 0.08,
+            pack_share: 0.5,
+            pack_share_cheb: 6,
+        }
+    }
+}
+
+impl SocialParams {
+    /// Preferred group size for a sociality value.
+    pub fn preferred_group(&self, sociality: f32) -> f32 {
+        sociality * self.group_size_max
+    }
+
+    /// Whether a creature with this sociality and this many visible kin is
+    /// herding (C8 FR2): social enough, not alone, and not over the dispersal
+    /// threshold. One rule, shared by cohesion, the graze bias and the inspector.
+    pub fn herding(&self, sociality: f32, kin_count: u8) -> bool {
+        sociality >= self.cohesion_min && kin_count > 0 && (kin_count as f32) <= 1.5 * self.preferred_group(sociality)
     }
 }
 
@@ -777,6 +846,7 @@ pub struct Params {
     pub ecology: EcologyParams,
     pub predation: PredationParams,
     pub disease: DiseaseParams,
+    pub social: SocialParams,
 }
 
 impl Params {
@@ -892,6 +962,9 @@ impl Params {
             ("genetics.newborn_hp", "HP of a newborn."),
             ("genetics.pregnancy_hunger_factor", "Hunger multiplier while pregnant."),
             ("genetics.max_population_soft_cap", "Soft cap on total population."),
+            ("genetics.maturity_age_span", "Adult age x (1 + (maturity - 0.5) x 2 x this)."),
+            ("genetics.maturity_litter_span", "Litter size x (1 + (maturity - 0.5) x 2 x this)."),
+            ("genetics.maturity_lifespan_span", "Max lifespan x (1 + (maturity - 0.5) x 2 x this)."),
             ("genetics.drift_every_generations", "Generations between drift samples."),
             ("genetics.lineage_keep_generations", "Generations kept in the lineage store."),
             ("genetics.lineage_up", "Generations up the S08 tree root."),
@@ -994,6 +1067,15 @@ impl Params {
             ("disease.parasite_baseline", "Minimum parasite load of founders and newborns."),
             ("disease.parasite_ground_rate", "Daily cell parasite growth x cell traffic (prey + predator pressure)."),
             ("disease.pathogens", "The pathogen roster: name, hosts, transmissibility, timings, lethality, immunity, severity, bonuses."),
+            // ---- social (C8)
+            ("social.group_size_max", "Preferred group size = sociality x this."),
+            ("social.cohesion_min", "Below this sociality a creature never herds."),
+            ("social.graze_cohesion_w", "Graze score divisor weight from distance to the kin centroid."),
+            ("social.alarm_cells", "A fleeing prey alerts same-species kin within sociality x this cells."),
+            ("social.pack_join_bonus", "Hunt score boost per packmate already on the target (max 3)."),
+            ("social.pack_kill_bonus", "Kill chance added per extra participant (max 3)."),
+            ("social.pack_share", "Hunger relief a non-killer participant gets, as a share of a kill."),
+            ("social.pack_share_cheb", "Chebyshev distance within which a hunter counts as a participant."),
         ]
     }
 }
@@ -1150,6 +1232,28 @@ mod tests {
         assert_eq!(p.genetics.mutation_strength, 0.12);
 
         assert_eq!(PRESETS[0].overlay, "", "Balanced is the defaults");
+    }
+
+    #[test]
+    fn maturity_factor_is_neutral_at_half() {
+        let p = GeneticsParams::default();
+        assert_eq!(p.maturity_factor(0.5, p.maturity_age_span), 1.0);
+        assert_eq!(p.maturity_factor(0.5, p.maturity_lifespan_span), 1.0);
+        // Slow (high maturity) means later, larger, longer; fast means the reverse.
+        assert!(p.maturity_factor(0.98, p.maturity_age_span) > 1.0);
+        assert!(p.maturity_factor(0.02, p.maturity_age_span) < 1.0);
+        assert!(p.maturity_factor(0.98, p.maturity_litter_span) > 1.0);
+        assert!(p.maturity_factor(0.98, p.maturity_lifespan_span) > 1.0);
+        // Litter never drops below one, however fast the life history.
+        assert_eq!(p.litter_size(SpeciesId::Deer, 0.0, 0.02), 1);
+    }
+
+    #[test]
+    fn social_defaults_documented() {
+        let s = SocialParams::default();
+        assert!(s.group_size_max > 0.0 && s.cohesion_min > 0.0);
+        assert!(s.pack_share > 0.0 && s.pack_share <= 1.0);
+        assert!((1..=3).contains(&(s.pack_share_cheb.min(3))));
     }
 
     #[test]

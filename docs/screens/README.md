@@ -172,3 +172,17 @@ Every screen is drawn in a fixed 155×45 frame:
 
 The map family splits the body into a 112-column map panel and a 43-column sidebar. Data
 screens choose their own columns but keep the status bar.
+
+## Renders
+
+`renders/<id>.txt` are text snapshots of the live screens: row 0 is the id/title line the
+table above describes, rows 1–44 are the screen drawn over a deterministic one-year
+`Sim` (seed 7) on a `ratatui::backend::TestBackend` at 155×45. The set is not regenerated
+automatically; refresh the ones a change touches with
+
+```bash
+cargo test --lib -- --ignored regenerate_screen_renders
+```
+
+which rewrites `S03a.txt` (oldest living prey), `S04a.txt` and `S04b.txt` (a predator with
+living members, else the most numerous species).

@@ -535,7 +535,7 @@ fn pearson(x: &[f32], y: &[f32], lag: usize) -> f32 {
 mod tests {
     use super::*;
     use crate::sim::creatures::place_founders;
-    use crate::sim::params::{CreaturesParams, WorldParams};
+    use crate::sim::params::{CreaturesParams, GeneticsParams, WorldParams};
     use crate::sim::rng::Rng;
     use crate::sim::world::World;
 
@@ -544,7 +544,7 @@ mod tests {
         let w = World::generate(7, &WorldParams::default());
         let params = CreaturesParams::default();
         let mut store = CreatureStore::new();
-        for c in place_founders(&w, &params, 0.20, &mut Rng::new(5)) {
+        for c in place_founders(&w, &params, &GeneticsParams::default(), 0.20, &mut Rng::new(5)) {
             store.insert(c);
         }
         let c = census(&store);
@@ -621,7 +621,7 @@ mod tests {
         assert_eq!(hist_bucket(1.0), 11);
         let w = World::generate(7, &WorldParams::default());
         let mut store = CreatureStore::new();
-        for c in place_founders(&w, &CreaturesParams::default(), 0.20, &mut Rng::new(5)) {
+        for c in place_founders(&w, &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(5)) {
             store.insert(c);
         }
         let c = census(&store);
@@ -674,7 +674,7 @@ mod tests {
     fn drift_sample_cadence() {
         let w = World::generate(7, &WorldParams::default());
         let mut store = CreatureStore::new();
-        for c in place_founders(&w, &CreaturesParams::default(), 0.20, &mut Rng::new(5)) {
+        for c in place_founders(&w, &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(5)) {
             store.insert(c);
         }
         let c = census(&store);
@@ -703,7 +703,7 @@ mod tests {
 
     fn lineage_creature(id: u32, gen: u32, parents: Option<(u32, u32)>, alive: bool) -> crate::sim::Creature {
         let w = World::generate(7, &WorldParams::default());
-        let mut c = place_founders(&w, &CreaturesParams::default(), 0.20, &mut Rng::new(1)).remove(0);
+        let mut c = place_founders(&w, &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(1)).remove(0);
         c.id = crate::sim::CreatureId(id);
         c.generation = gen;
         c.parents = parents.map(|(m, f)| (crate::sim::CreatureId(m), crate::sim::CreatureId(f)));

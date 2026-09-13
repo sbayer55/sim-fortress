@@ -1139,7 +1139,7 @@ impl WorldMap {
         ]));
         row += 1;
         let age = c.age_days(sim.time.day_index());
-        let max_age = c.max_age_days(&sim.params.creatures);
+        let max_age = c.max_age_days(&sim.params.creatures, &sim.params.genetics);
         let age_t = age as f32 / max_age.max(1) as f32;
         let age_color = if c.alive { bars::vital_color(1.0 - age_t * 0.8, false) } else { theme::DIM };
         bars::labeled(f.buffer_mut(), inner, row, " age", age_t, age_color, 6, 16);

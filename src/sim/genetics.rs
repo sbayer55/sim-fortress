@@ -3,7 +3,9 @@
 //! per-tick peer snapshot that lets a creature see potential partners and its
 //! mother while the store is being iterated mutably.
 
-use crate::sim::creatures::{Creature, CreatureId, CreatureStore, DeathTallies, Goal, Mutation, NameId, Sex};
+use crate::sim::creatures::{
+    adult_age_days, Creature, CreatureId, CreatureStore, DeathTallies, Goal, HuntPhase, Mutation, NameId, Sex,
+};
 use crate::sim::events::{Event, EventKind, EventRing};
 use crate::sim::geom;
 use crate::sim::lineage::Lineage;
@@ -33,6 +35,9 @@ pub struct Peer {
     /// for den protection / prey detection.
     pub camouflage: f32,
     pub goal: Goal,
+    /// C8 FR4: the prey this predator is currently hunting, so a packmate can see
+    /// the pack's shared target.
+    pub hunt_target: Option<CreatureId>,
 }
 
 /// A dead-but-not-freed prey carcass, for scavenging (C5).
@@ -74,6 +79,7 @@ impl TickView {
                 mate_ready: eligible(c, time, world, gp, dp),
                 camouflage: c.genome.camouflage(),
                 goal: c.goal,
+                hunt_target: if c.goal == Goal::Hunt && c.hunt_phase != HuntPhase::Eat { c.hunt_target } else { None },
             })
             .collect();
         peers.sort_unstable_by_key(|p| p.id);
@@ -251,8 +257,9 @@ pub fn deliver(
         let mother_genome = m.genome;
         let mother_gen = m.generation;
         let father_id = m.mate_id.unwrap_or(mother_id);
-        // C7 FR6: parasites lower the effective fertility.
-        let litter = gp.litter_size(species, m.genome.fertility() * disease::effects(m, dp).fertility_factor);
+        // C7 FR6: parasites lower the effective fertility; C8 maturity scales the
+        // litter (a slow life history has fewer, larger litters).
+        let litter = gp.litter_size(species, m.genome.fertility() * disease::effects(m, dp).fertility_factor, m.genome.maturity());
         let mother_label = format!("{} {}", m.name_str(), m.tag());
         let mother_water = m.last_water;
         let mother_snapshot = m.clone();
@@ -301,7 +308,7 @@ pub fn deliver(
                 hunger: 0.3,
                 thirst: 0.3,
                 energy: 0.8,
-                adult: cp.adult_age(species) == 0,
+                adult: adult_age_days(species, &genome, cp, gp) == 0,
                 goal: Goal::Wander,
                 target: None,
                 replan_at: time.tick,
@@ -338,6 +345,7 @@ pub fn deliver(
                 flee_until: 0,
                 threatened_by: None,
                 predation_risk: 0.0,
+                kin_nearby: 0,
                 migrate_until: 0,
                 // ---- C7 disease / parasites
                 infection: None,
@@ -449,7 +457,9 @@ pub fn follow_target(c: &Creature, view: &TickView, world: &World, time: &Time, 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sim::creatures::max_age_days;
     use crate::sim::params::{Params, WorldParams};
+    use crate::sim::species::{IDX_MATURITY, N_TRAITS};
     use crate::sim::world::Terrain;
     use crate::sim::Sim;
 
@@ -532,6 +542,7 @@ mod tests {
             flee_until: 0,
             threatened_by: None,
             predation_risk: 0.0,
+            kin_nearby: 0,
             migrate_until: 0,
                 // ---- C7 disease / parasites
                 infection: None,
@@ -599,12 +610,52 @@ mod tests {
     }
 
     #[test]
+    fn maturity_scales_adult_age_litter_and_lifespan() {
+        let gp = GeneticsParams::default();
+        let cp = CreaturesParams::default();
+        let id = SpeciesId::Deer;
+        let neutral = id.base_genome(); // maturity 0.5 by construction
+        let mut slow = id.base_genome();
+        slow.0[IDX_MATURITY] = 0.98;
+        let mut fast = id.base_genome();
+        fast.0[IDX_MATURITY] = 0.02;
+
+        // Maturity 0.5 reproduces the pre-maturity numbers exactly.
+        assert_eq!(adult_age_days(id, &neutral, &cp, &gp), cp.adult_age(id));
+        let old_max = cp.max_age_base + (neutral.longevity() * cp.max_age_per_longevity as f32) as u32;
+        assert_eq!(max_age_days(&neutral, &cp, &gp), old_max);
+        assert_eq!(gp.litter_size(id, neutral.fertility(), 0.5), 1 + (neutral.fertility() * gp.litter_max(id)).round() as u32);
+
+        // Slow: later, larger, longer. Fast: the reverse.
+        assert!(adult_age_days(id, &slow, &cp, &gp) > adult_age_days(id, &neutral, &cp, &gp));
+        assert!(adult_age_days(id, &neutral, &cp, &gp) > adult_age_days(id, &fast, &cp, &gp));
+        assert!(gp.litter_size(id, slow.fertility(), slow.maturity()) > gp.litter_size(id, fast.fertility(), fast.maturity()));
+        assert!(max_age_days(&slow, &cp, &gp) > old_max);
+        assert!(max_age_days(&fast, &cp, &gp) < old_max);
+    }
+
+    #[test]
+    fn inherit_covers_every_slot() {
+        // Every trait index, including the two C8 additions, is inherited and can
+        // mutate (mutation_rate 1 makes the draw deterministic).
+        let gp = GeneticsParams { mutation_rate: 1.0, mutation_strength: 0.0, ..GeneticsParams::default() };
+        let g = SpeciesId::Wolf.base_genome();
+        let (out, muts) = inherit(&g, &g, 4, &gp, &mut Rng::new(3));
+        assert_eq!(muts.len(), N_TRAITS, "one mutation per slot");
+        let mut idx: Vec<usize> = muts.iter().map(|m| m.trait_idx).collect();
+        idx.sort_unstable();
+        assert_eq!(idx, (0..N_TRAITS).collect::<Vec<usize>>());
+        assert_eq!(out.sociality(), g.sociality());
+        assert_eq!(out.maturity(), g.maturity());
+    }
+
+    #[test]
     fn litter_size_from_fertility() {
         let gp = gp();
-        assert_eq!(gp.litter_size(SpeciesId::Vole, 0.0), 1);
-        assert_eq!(gp.litter_size(SpeciesId::Vole, 0.9), 4);
-        assert_eq!(gp.litter_size(SpeciesId::Deer, 0.35), 1);
-        assert_eq!(gp.litter_size(SpeciesId::Hare, 0.75), 3);
+        assert_eq!(gp.litter_size(SpeciesId::Vole, 0.0, 0.5), 1);
+        assert_eq!(gp.litter_size(SpeciesId::Vole, 0.9, 0.5), 4);
+        assert_eq!(gp.litter_size(SpeciesId::Deer, 0.35, 0.5), 1);
+        assert_eq!(gp.litter_size(SpeciesId::Hare, 0.75, 0.5), 3);
     }
 
     #[test]
@@ -652,8 +703,8 @@ mod tests {
     fn inheritance_mean() {
         let gp = gp();
         let mut rng = Rng::new(11);
-        let mother = Genome([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.5]);
-        let father = Genome([0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.4, 0.3, 0.3]);
+        let mother = Genome([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.5, 0.6, 0.4]);
+        let father = Genome([0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.4, 0.3, 0.3, 0.2, 0.6]);
         let mut sum = [0.0f64; Genome::LEN];
         let n = 10_000;
         for _ in 0..n {
@@ -665,7 +716,12 @@ mod tests {
         for t in 0..Genome::LEN {
             let want = (mother.0[t] + father.0[t]) as f64 / 2.0;
             let got = sum[t] / n as f64;
-            assert!((got - want).abs() < 0.005, "trait {t}: mean {got} vs parental mean {want}");
+            // Per-sample sd: the parent draw (|m − f| / 2) plus the mutation term.
+            // A 4-sigma bound keeps the test honest about a systematic bias (an
+            // always-mother bug is ~0.3 off) without tripping on sampling noise.
+            let sd = (((mother.0[t] - father.0[t]) as f64 / 2.0).powi(2) + gp.mutation_rate as f64 * (gp.mutation_strength as f64).powi(2)).sqrt();
+            let tol = 4.0 * sd / (n as f64).sqrt();
+            assert!((got - want).abs() < tol, "trait {t}: mean {got} vs parental mean {want} (tol {tol:.4})");
         }
     }
 

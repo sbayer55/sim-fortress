@@ -157,7 +157,7 @@ impl Sim {
 
         // Place founders (FR3), then build the spatial index over them.
         let mut creatures = CreatureStore::new();
-        for mut c in creatures::place_founders(&world, &params.creatures, params.disease.resistance_founder_sd, &mut creature_rng) {
+        for mut c in creatures::place_founders(&world, &params.creatures, &params.genetics, params.disease.resistance_founder_sd, &mut creature_rng) {
             if params.disease.enabled {
                 c.parasite_load = params.disease.parasite_baseline;
             }
@@ -253,6 +253,7 @@ impl Sim {
             &self.params.genetics,
             &self.params.predation,
             &self.params.disease,
+            &self.params.social,
             &mut self.creature_rng,
             &mut self.deaths,
             &mut self.lineage,
@@ -283,6 +284,7 @@ impl Sim {
                 &mut self.events,
                 &self.time,
                 &self.params.creatures,
+                &self.params.genetics,
                 &self.params.disease,
                 &mut self.deaths,
                 &mut self.lineage,
@@ -583,7 +585,9 @@ mod tests {
         }
         assert_eq!(a.checksum(), b.checksum());
         // Lock the exact value so accidental algorithm changes fail loudly.
-        assert_eq!(a.checksum(), 0x47f5d08e70a07dd3);
+        // Re-baselined for C8: the genome grew to eleven traits (Sociality and
+        // Maturity), which shifts the founder jitter and every downstream draw.
+        assert_eq!(a.checksum(), 0x348e3c6eeec2e6d6);
     }
 
     #[test]

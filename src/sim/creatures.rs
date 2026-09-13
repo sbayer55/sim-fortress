@@ -10,9 +10,9 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::sim::disease::{Infection, PathogenId};
-use crate::sim::params::CreaturesParams;
+use crate::sim::params::{CreaturesParams, GeneticsParams};
 use crate::sim::rng::Rng;
-use crate::sim::species::{names, Genome, SpeciesId};
+use crate::sim::species::{names, Genome, SpeciesId, IDX_RESISTANCE};
 use crate::sim::world::World;
 
 /// Stable creature identifier, handed out monotonically and never reused.
@@ -262,6 +262,8 @@ pub struct Creature {
     pub threatened_by: Option<(usize, usize, SpeciesId)>,
     /// `min(1, 0.5 × pred_pressure + 0.5 × predators_in_range / 3)` (S03 Condition).
     pub predation_risk: f32,
+    /// C8: same-species neighbours seen at the last replan (S03 "kin nearby").
+    pub kin_nearby: u8,
     pub migrate_until: u64,
     pub migrate_target: Option<(usize, usize)>,
     // ---- C7 disease / parasites ----
@@ -291,10 +293,25 @@ impl Creature {
         (day_index as i64 - self.born_day as i64).max(0) as u32
     }
 
-    /// Maximum lifespan in days, from longevity and the C3 params.
-    pub fn max_age_days(&self, params: &CreaturesParams) -> u32 {
-        params.max_age_base + (self.genome.longevity() * params.max_age_per_longevity as f32) as u32
+    /// Maximum lifespan in days, from longevity, the C3 params and the maturity
+    /// trait (a slow life history lives longer).
+    pub fn max_age_days(&self, params: &CreaturesParams, gp: &GeneticsParams) -> u32 {
+        max_age_days(&self.genome, params, gp)
     }
+}
+
+/// Maximum lifespan in days for a genome; `Creature::max_age_days` delegates here
+/// so founder placement can use it before the `Creature` exists.
+pub fn max_age_days(genome: &Genome, params: &CreaturesParams, gp: &GeneticsParams) -> u32 {
+    let base = params.max_age_base + (genome.longevity() * params.max_age_per_longevity as f32) as u32;
+    (base as f32 * gp.maturity_factor(genome.maturity(), gp.maturity_lifespan_span)).round() as u32
+}
+
+/// Days to adulthood: the species' base age scaled by the individual's maturity
+/// trait, rounded to whole days. Maturity 0.5 reproduces `cp.adult_age` exactly.
+pub fn adult_age_days(species: SpeciesId, genome: &Genome, cp: &CreaturesParams, gp: &GeneticsParams) -> u32 {
+    let base = cp.adult_age(species) as f32;
+    (base * gp.maturity_factor(genome.maturity(), gp.maturity_age_span)).round() as u32
 }
 
 /// Slot storage: `Vec<Option<Creature>>` with a free list for reusable slots and
@@ -385,8 +402,9 @@ impl CreatureStore {
 }
 
 /// Place founders per FR3. Deterministic: iterates `SpeciesId::ALL` order and
-/// draws from `rng` in a fixed sequence.
-pub fn place_founders(world: &World, params: &CreaturesParams, resistance_sd: f32, rng: &mut Rng) -> Vec<Creature> {
+/// draws from `rng` in a fixed sequence. Adult age and lifespan are read from each
+/// founder's own genome, so a slow-maturing individual starts older.
+pub fn place_founders(world: &World, params: &CreaturesParams, gp: &GeneticsParams, resistance_sd: f32, rng: &mut Rng) -> Vec<Creature> {
     let mut out = Vec::new();
     for species in SpeciesId::ALL {
         let n = params.initial_counts.get(&species).copied().unwrap_or(0);
@@ -394,7 +412,6 @@ pub fn place_founders(world: &World, params: &CreaturesParams, resistance_sd: f3
             continue;
         }
         let base = species.base_genome();
-        let adult_age = params.adult_age(species);
         let name_pool_len = names(species).len();
         let mut placed = 0u32;
         let mut tries = 0u32;
@@ -414,10 +431,12 @@ pub fn place_founders(world: &World, params: &CreaturesParams, resistance_sd: f3
             let mut genome = base;
             for (t, v) in genome.0.iter_mut().enumerate() {
                 // C7: Resistance starts with a wider spread (`resistance_sd`).
-                let sd = if t == 8 { resistance_sd } else { 0.12 };
+                let sd = if t == IDX_RESISTANCE { resistance_sd } else { 0.12 };
                 *v = Genome::clamp_trait(*v + rng.gauss(0.0, sd));
             }
-            let max_age = params.max_age_base + (genome.longevity() * params.max_age_per_longevity as f32) as u32;
+            // Maturity moves both ends of the life history for this individual.
+            let adult_age = adult_age_days(species, &genome, params, gp);
+            let max_age = max_age_days(&genome, params, gp);
             let adult = rng.chance(0.7);
             let age_days = if adult {
                 let upper = adult_age.max((0.75 * max_age as f32) as u32);
@@ -479,6 +498,7 @@ pub fn place_founders(world: &World, params: &CreaturesParams, resistance_sd: f3
                 flee_until: 0,
                 threatened_by: None,
                 predation_risk: 0.0,
+                kin_nearby: 0,
                 migrate_until: 0,
                 // ---- C7 disease / parasites
                 infection: None,
@@ -498,7 +518,7 @@ pub fn place_founders(world: &World, params: &CreaturesParams, resistance_sd: f3
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::params::CreaturesParams;
+    use crate::sim::params::{CreaturesParams, GeneticsParams};
     use crate::sim::world::{Terrain, World};
 
     fn world() -> World {
@@ -510,7 +530,7 @@ mod tests {
         let w = world();
         let p = CreaturesParams::default();
         let mut rng = Rng::new(42);
-        let creatures = place_founders(&w, &p, 0.20, &mut rng);
+        let creatures = place_founders(&w, &p, &GeneticsParams::default(), 0.20, &mut rng);
         assert!(!creatures.is_empty(), "expected founders to be placed");
         for c in &creatures {
             let cell = w.cell(c.x, c.y);
@@ -530,16 +550,16 @@ mod tests {
         let w = world();
         let p = CreaturesParams::default();
         let mut rng = Rng::new(42);
-        for c in place_founders(&w, &p, 0.20, &mut rng) {
+        for c in place_founders(&w, &p, &GeneticsParams::default(), 0.20, &mut rng) {
             let age = c.age_days(0);
-            assert!(age < c.max_age_days(&p), "age {age} >= max {}", c.max_age_days(&p));
+            assert!(age < c.max_age_days(&p, &GeneticsParams::default()), "age {age} >= max {}", c.max_age_days(&p, &GeneticsParams::default()));
         }
     }
 
     #[test]
     fn slot_storage_free_list_and_stable_ids() {
         let mut store = CreatureStore::new();
-        let mut c = place_founders(&world(), &CreaturesParams::default(), 0.20, &mut Rng::new(1)).remove(0);
+        let mut c = place_founders(&world(), &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(1)).remove(0);
         c.id = CreatureId(0);
         let a = store.insert(c.clone());
         let b = store.insert(c.clone());

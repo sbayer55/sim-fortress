@@ -1,45 +1,45 @@
- S03a  Creature Inspector — prey (Hare)                                                                           11/27  [ ] prev/next   0-9 jump   q quit 
-╔ Identity & Vitals ═══════════════════════════════╗╔ Genome ═══════════════════════════ vs Hares mean ╗╔ Life ═══════════════════════════════════════════╗
-║ H Bramble  h#217  prey                           ║║ trait       individual             delta  species║║ days alive  412          ┌ Surroundings ───────┐║
-║   Hare  ♀ female  adult  diet: grass, bark       ║║ Speed      [██████████░░]    86% ±+0.07 [░░░░▒█▒]║║ escapes     4            │♠♠≈♠♠~≈♠♠♠♠♠♠♠♠♠~~♠♣"│║
-║                                                  ║║                              0.86  0.65/0.79/0.95║║ offspring   9            │♠♠·≈w♠♠♠≈♠♠♠♠♠♣♣♠♠♣♣"│║
-║ age  [████████████░░░░░░]    64% 412 / 640 days  ║║ Size       [███░░░░░░░░░]    22% ±-0.03 [░▒█░░░░]║║ grandkids   20           │♣∙∙≈≈♠♠♠♠╬≈╬♠D♣""·♣""│║
-║       1.1 years old   generation 47              ║║                              0.22  0.09/0.25/0.37║║ mates       4            │~~∙♣≈·♣♣∙∙H♣≈D""""≈""│║
-║                                                  ║║ Sense      [█████████░░░]    71% ±+0.06 [░░░▒█▒░]║║ distance    2884 cells   │""·∙∙∙"∙"╬"╬""·""""≈"│║
-║─ Family ─────────────────────────────────────────║║                              0.71  0.55/0.65/0.76║║ regions     5 visited    │,,,""∙∙∙"""",,,,~""≈≈│║
-║ mother  Clover h#188    father  Rowan h#173      ║║ Metabolism [███████░░░░░]    58% ±-0.02 [░░░▒█░░]║║                          │,,,,,,,,,,,,,,,,,,≈≈≈│║
-║ offspring 9   ¶ lineage: [l]                     ║║                              0.58  0.51/0.60/0.70║║                          └─────────────────────┘║
-║                                                  ║║ Aggression [█░░░░░░░░░░░]     8% ±-0.02 [▒█░░░░░]║║                                                 ║
-║─ Location ───────────────────────────────────────║║                              0.08  0.02/0.10/0.22║║─ Survival ──────────────────────────────────────║
-║ (77, 21)  The Long Meadow   ♣ meadow             ║║ Camouflage [████████░░░░]    63% ±+0.08 [░░░█▒░░]║║ chased 12 times, escaped 11  (92%)              ║
-║ goal    seeking water                            ║║                              0.63  0.44/0.55/0.68║║ escape rate  [█████████████████░]    92%        ║
-║ target  ♦ (68, 26)  7 cells SW                   ║║ Fertility  [█████████░░░]    79% ±+0.03 [░░░░▒█░]║║ threats seen                                    ║
-║ trail   (76,21) (75,21) (74,22) (74,23) (73,23)  ║║                              0.79  0.62/0.76/0.85║║  F Fox   [██████████░░░░░░░░]  58%              ║
-║                                                  ║║ Longevity  [█████░░░░░░░]    41% ±+0.07 [░▒█▒░░░]║║  W Wolf  [█████░░░░░░░░░░░░░]  25%              ║
-║─ Vitals ─────────────────────────────────────────║║                              0.41  0.21/0.34/0.46║║  L Lynx  [███░░░░░░░░░░░░░░░]  17%              ║
-║ health  [██████████████████░░░░]    82%healthy   ║║ 5 traits above species mean, 3 below             ║║ litters 4  last: Y11 D302 (3 young, 2 survived) ║
-║ hunger  [████████░░░░░░░░░░░░░░]    38%sated     ║║ most divergent: Camouflage +0.08                 ║║                                                 ║
-║ thirst  [█████████████░░░░░░░░░]    61%thirsty   ║║─ Mutation history ───────────────────────────────║║─ Recent events ─────────────────────────────────║
-║ energy  [██████████░░░░░░░░░░░░]    47%tiring    ║║ § Speed +0.06 (gen 44)                           ║║ ♥ Y12 D2   05h Sorrel h#058 gave birth to 3 yo· ║
-║                                                  ║║ § Camouflage +0.04 (gen 47)                      ║║ § Y12 D2   05h Yarrow v#033 born with Sense -0· ║
-║─ Condition ──────────────────────────────────────║║   from 4 lines; rate 0.04 per trait per birth    ║║ ¡ Y12 D2   06h Drought deepens in Ashen Ridge;· ║
-║ predation risk  [█████████░░░░░]    62%          ║║─ Derived ────────────────────────────────────────║║ ♥ Y12 D2   09h Clover v#031 gave birth to 4 yo· ║
-║ local forage    [████████████░░]    84%          ║║ sense range       9 cells                        ║║ x Y12 D2   12h Sorrel h#074 starved in Northma· ║
-║ nearest water 10 cells   nearest den 3 cells     ║║ move speed        2.7 cells/tick                 ║║ → Y12 D2   14h Lynx pair l#120 migrated from N· ║
-║                                                  ║║ daily food need   0.75 biomass                   ║║ § Y12 D2   16h Sable f#099 born with Aggressio· ║
-║─ Behaviour ──────────────────────────────────────║║ max lifespan      640 days                       ║║ ♥ Y12 D2   21h Sorrel v#040 gave birth to 1 yo· ║
-║ ! Ashfang w#042 stalking, 11 cells NW            ║║ litter size       4 young                        ║║ x Y12 D4   13h Thistle d#133 was killed by Ash· ║
-║   undetected (camo .19 vs sense .71)             ║║ detection chance  37% at 5 cells                 ║║ ¶ Y12 D4   14h Ashfang w#042 is stalking Bramb· ║
-║   flee threshold: predator within 7 cells        ║║                                                  ║║   [e] open full log filtered to this creature   ║
-║ ¶ heading to water; 14 cells to go               ║║─ Offspring forecast (with an average mate) ──────║║                                                 ║
-║                                                  ║║ Speed       [░░░░░░░░░░░░░░░▒█▒░░] 0.83 ±0.06    ║║─ Kin nearby ────────────────────────────────────║
-║                                                  ║║ Size        [░░░▒█▒▒░░░░░░░░░░░░░] 0.24 ±0.06    ║║ H Clover   h#059    5 cells NE   sibling        ║
-║─ Timeline ───────────────────────────────────────║║ Sense       [░░░░░░░░░░░░▒█▒░░░░░] 0.68 ±0.06    ║║ H Sorrel   h#058    7 cells NW   offspring      ║
-║ ♥ Y10 D312 born to Clover h#188 and Rowan h#173  ║║ Metabolism  [░░░░░░░░░░▒█▒░░░░░░░] 0.59 ±0.06    ║║ H Cress    h#057    9 cells NE   cousin         ║
-║ ↑ Y11 D42  reached adulthood                     ║║ Aggression  [░▒█▒░░░░░░░░░░░░░░░░] 0.09 ±0.06    ║║ H Burdock  h#063   11 cells NE   unrelated      ║
-║ ♥ Y11 D112 first litter (1 young)                ║║ Camouflage  [░░░░░░░░░░▒█▒░░░░░░░] 0.59 ±0.06    ║║ H Fern     h#073   11 cells NE   offspring      ║
-║ → Y11 D158 migrated to The Long Meadow           ║║ Fertility   [░░░░░░░░░░░░░░▒█▒░░░] 0.78 ±0.06    ║║                                                 ║
-║ ! Y11 D162 escaped a fox in the Long Meadow      ║║ Longevity   [░░░░░░▒█▒░░░░░░░░░░░] 0.38 ±0.06    ║║                                                 ║
+ S03a  Creature Inspector - prey (Deer)                                                                                                                    
+╔ Identity & Vitals ═══════════════════════════════╗╔ Genome ════════════════════════════ vs Deer mean ╗╔ Life ═══════════════════════════════════════════╗
+║ D Hazel  d#494  prey                             ║║ trait       individual  own  delta  species range║║ days alive  822          ┌ Surroundings ───────┐║
+║   Deer  ♂ male  adult  diet: grass, leaves       ║║ Speed      [███████░░░] 0.68 ±+0.04 [░░░░▒█▒░░]  ║║ offspring   4            │********.******.*.,*,│║
+║                                                  ║║ Size       [████████░░] 0.76 ±-0.05 [░░░░░▒█▒░]  ║║ distance    12 cells     │.******F*H.*H****..**│║
+║ age  [████████████████░░]    89% 822 / 922 days  ║║ Sense      [█████░░░░░] 0.50 ±-0.04 [░░░▒█▒░░░]  ║║                          │*▲▲***∙*d╬*╬∙********│║
+║       2.3 years old   generation 1               ║║ Metabolism [███░░░░░░░] 0.32 ±-0.08 [░░▒█▒░░░░]  ║║                          │**.***♦H∙DD∙∙∙*.****.│║
+║                                                  ║║ Aggression [██░░░░░░░░] 0.20 ±-0.01 [░▒█▒░░░░░]  ║║                          │****F*H*D╬*╬▲.**...▲▲│║
+║─ Family ─────────────────────────────────────────║║ Camouflage [████░░░░░░] 0.39 ±+0.03 [░░▒█░░░░░]  ║║                          │******.*******Ω****▲▲│║
+║ mother  founder            father  founder       ║║ Fertility  [███░░░░░░░] 0.35 ±-0.02 [░░▒█▒░░░░]  ║║                          │▲**************,.**▲▲│║
+║ offspring  4    ¶ lineage: [l]                   ║║ Longevity  [███████░░░] 0.75 ±+0.04 [░░░░░▒█▒░]  ║║                          └─────────────────────┘║
+║                                                  ║║ Resistance [█████░░░░░] 0.53 ±+0.05 [░░▒▒█▒░░░]  ║║                                                 ║
+║─ Location ───────────────────────────────────────║║ Sociality  [███████░░░] 0.69 ±-0.01 [░░░░▒▒█▒░]  ║║─ Survival ──────────────────────────────────────║
+║ (46, 10)  Northmarch   . bare dirt               ║║ Maturity   [██████░░░░] 0.61 ±+0.11 [░░░▒█▒░░░]  ║║ chased 58 times, escaped 58 (100%)              ║
+║ goal    wandering                                ║║                                                  ║║ escape rate    [██████████████]   100%          ║
+║ target  ♦ (42, 10)  2 cells                      ║║─ Mutation history ───────────────────────────────║║─ Threats seen ──────────────────────────────────║
+║ trail   (46,10) (47,9) (48,8) (48,9) (49,10)     ║║ none recorded                                    ║║ Foxes          [██████████░░░░]    69% 40 times ║
+║                                                  ║║ from 1 lines; rate 0.04 per trait per birth      ║║ Wolves         [████░░░░░░░░░░]    29% 17 times ║
+║─ Vitals ─────────────────────────────────────────║║                                                  ║║ Lynxes         [░░░░░░░░░░░░░░]     2% 1 times  ║
+║ health  [██████████████████████]   100%          ║║─ Derived ────────────────────────────────────────║║                                                 ║
+║ hunger  [████████░░░░░░░░░░░░░░]    35%          ║║ sense range       7 cells                        ║║─ Legacy ────────────────────────────────────────║
+║ thirst  [██████████░░░░░░░░░░░░]    44%          ║║ move speed        1.9 cells/tick                 ║║ 4 offspring, 0 living descendants, 0 notable    ║
+║ energy  [██████████████████████]    99%          ║║ daily food need   0.20 biomass                   ║║ no notable mutations among descendants          ║
+║ sicknesshealthy                                  ║║ adult at          201 days                       ║║                                                 ║
+║ immune  none                                     ║║ max lifespan      922 days                       ║║─ Kin nearby ────────────────────────────────────║
+║ ∩ parasites[███░░░░░░░░░░░░░░░░░░░]    12% light ║║ litter size       4 (fert 0.35, mat 0.61)        ║║ no kin within 15 cells                          ║
+║                                                  ║║ mate cooldown     30 days                        ║║                                                 ║
+║─ Condition ──────────────────────────────────────║║ resistance cost   +5 % food                      ║║─ Recent events ─────────────────────────────────║
+║ predation risk  [█████████████░]    92%          ║║ kin nearby        5 (herd)                       ║║ no events for this creature                     ║
+║ contagion risk  [░░░░░░░░░░░░░░]     0%          ║║                                                  ║║                                                 ║
+║ local forage    [███░░░░░░░░░░░]    20%          ║║─ Offspring forecast (with an average mate) ──────║║                                                 ║
+║ nearest water —   nearest den —                  ║║ Speed       [░░░░░░░░░░░▒▒█▒░░░░░] 0.58..0.74    ║║                                                 ║
+║                                                  ║║ Size        [░░░░░░░░░░░░░▒▒█▒▒░░] 0.70..0.87    ║║                                                 ║
+║─ Behaviour ──────────────────────────────────────║║ Sense       [░░░░░░░░▒▒█▒░░░░░░░░] 0.44..0.60    ║║                                                 ║
+║ wandering                                        ║║ Metabolism  [░░░░░▒▒█▒▒░░░░░░░░░░] 0.26..0.46    ║║                                                 ║
+║                                                  ║║ Aggression  [░░░▒█▒░░░░░░░░░░░░░░] 0.14..0.27    ║║                                                 ║
+║─ Timeline ───────────────────────────────────────║║ Camouflage  [░░░░░░▒█▒▒░░░░░░░░░░] 0.30..0.45    ║║                                                 ║
+║ ♥ founder   placed as a founder                  ║║ Fertility   [░░░░░▒▒█▒░░░░░░░░░░░] 0.29..0.42    ║║                                                 ║
+║ ♥ Y1 D091   litter of 4                          ║║ Longevity   [░░░░░░░░░░░░▒▒█▒░░░░] 0.65..0.81    ║║                                                 ║
+║                                                  ║║ Resistance  [░░░░░░░░▒▒█▒░░░░░░░░] 0.42..0.59    ║║                                                 ║
+║                                                  ║║ Sociality   [░░░░░░░░░░░░▒█▒▒░░░░] 0.63..0.76    ║║                                                 ║
+║                                                  ║║ Maturity    [░░░░░░░░▒▒▒█▒▒░░░░░░] 0.45..0.67    ║║                                                 ║
 ║                                                  ║║                                                  ║║                                                 ║
 ╚══════════════════════════════════════════════════╝╚══════════════════════════════════════════════════╝╚═════════════════════════════════════════════════╝
- [f] follow  [l] lineage  [Tab] next creature  [Esc] back                                                   Bramble h#217  Year 12, Day 4 of Autumn  14:00 
+ [f] follow  [l] lineage  [Tab] next creature  [Esc] back                                                      Hazel d#494  Year 2, Day 1 of Spring  06:00 

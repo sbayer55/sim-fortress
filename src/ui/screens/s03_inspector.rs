@@ -8,7 +8,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
-use crate::sim::creatures::{Cause, Creature, CreatureId, Goal};
+use crate::sim::creatures::{adult_age_days, Cause, Creature, CreatureId, Goal};
 use crate::sim::disease::{PathogenId, Stage};
 use crate::sim::{Genome, Kind, SpeciesId, TRAIT_NAMES};
 use crate::ui::app::AppState;
@@ -129,7 +129,7 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
 
     // Age bar (live: age from born_day, max from genome).
     let age = c.age_days(sim.time.day_index());
-    let max_age = c.max_age_days(&sim.params.creatures);
+    let max_age = c.max_age_days(&sim.params.creatures, &sim.params.genetics);
     let age_t = age as f32 / max_age.max(1) as f32;
     let age_color = if !c.alive { theme::DIM } else { bars::vital_color(1.0 - age_t * 0.8, false) };
     bars::labeled(f.buffer_mut(), inner, row, " age", age_t, age_color, 6, 20);
@@ -320,7 +320,7 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
         None => "placed as a founder".to_string(),
     };
     events.push((glyphs::BIRTH, theme::GOOD, c.born_day as i64, born_text));
-    let adult_day = c.born_day as i64 + sim.params.creatures.adult_age(c.species) as i64;
+    let adult_day = c.born_day as i64 + adult_age_days(c.species, &c.genome, &sim.params.creatures, &sim.params.genetics) as i64;
     if c.adult && adult_day >= 0 {
         events.push((glyphs::UP, theme::INFO, adult_day, "reached adulthood".to_string()));
     }
@@ -448,21 +448,25 @@ fn genome(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, c: &Creature) {
     let min = stats.min;
     let max = stats.max;
     let mut row = 0u16;
-    util::line(f, inner, row, Line::from(vec![
-        sp(" trait       individual", theme::dim_text()),
-        sp("             delta", theme::dim_text()),
-        sp("  species", theme::dim_text()),
-    ]));
+    util::line(f, inner, row, Line::from(sp(
+        format!(" {:<11}{:^12} {:<4} {:<6} {}", "trait", "individual", "own", "delta", "species range"),
+        theme::dim_text(),
+    )));
     row += 1;
+    // One row per trait (C8 widened the genome to eleven): label, own bar, value,
+    // delta against the species mean, then the species min/mean/max range.
     for t in 0..Genome::LEN {
         let v = c.genome.0[t];
         let d = v - mean.0[t];
         let color = trait_color(t);
-        bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", TRAIT_NAMES[t]), v, color, 12, 14);
-        f.buffer_mut().set_stringn(inner.x + 34, inner.y + row, format!("{}{:+.2}", glyphs::PLUS_MINUS, d), 6, delta_style(d));
-        let x = inner.x + 41;
-        bars::range(f.buffer_mut(), x, inner.y + row, 9, min.0[t], mean.0[t], max.0[t], color);
-        row += 2;
+        let y = inner.y + row;
+        let buf = f.buffer_mut();
+        buf.set_stringn(inner.x, y, format!(" {:<11}", TRAIT_NAMES[t]), 12, theme::text());
+        bars::bar(buf, inner.x + 12, y, 12, v, color);
+        buf.set_stringn(inner.x + 25, y, format!("{v:.2}"), 4, theme::text());
+        buf.set_stringn(inner.x + 30, y, format!("{}{:+.2}", glyphs::PLUS_MINUS, d), 6, delta_style(d));
+        bars::range(buf, inner.x + 37, y, 11, min.0[t], mean.0[t], max.0[t], color);
+        row += 1;
     }
     row += 1;
 
@@ -485,14 +489,41 @@ fn genome(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, c: &Creature) {
     panel::section(f, inner, row, "Derived");
     row += 1;
     let g = &c.genome;
+    let social = &sim.params.social;
+    let group_word = match c.species.kind() {
+        Kind::Prey => {
+            if social.herding(g.sociality(), c.kin_nearby) {
+                "herd"
+            } else {
+                "scattered"
+            }
+        }
+        Kind::Predator => {
+            if social.herding(g.sociality(), c.kin_nearby) {
+                "pack"
+            } else {
+                "alone"
+            }
+        }
+    };
     let derived: Vec<(String, String)> = vec![
         ("sense range".into(), format!("{} cells", g.sense_cells())),
         ("move speed".into(), format!("{:.1} cells/tick", 0.5 + g.speed() * 2.0)),
         ("daily food need".into(), format!("{:.2} biomass", 24.0 * sim.params.creatures.hunger_per_hour(g.size(), g.metabolism(), 1.0))),
-        ("max lifespan".into(), format!("{} days", c.max_age_days(&sim.params.creatures))),
-        ("litter size".into(), format!("{} (fertility {:.2})", sim.params.genetics.litter_size(c.species, g.fertility()), g.fertility())),
+        ("adult at".into(), format!("{} days", adult_age_days(c.species, g, &sim.params.creatures, &sim.params.genetics))),
+        ("max lifespan".into(), format!("{} days", c.max_age_days(&sim.params.creatures, &sim.params.genetics))),
+        (
+            "litter size".into(),
+            format!(
+                "{} (fert {:.2}, mat {:.2})",
+                sim.params.genetics.litter_size(c.species, g.fertility(), g.maturity()),
+                g.fertility(),
+                g.maturity()
+            ),
+        ),
         ("mate cooldown".into(), format!("{} days", sim.params.genetics.cooldown(c.species))),
         ("resistance cost".into(), format!("+{} % food", (100.0 * sim.params.disease.resist_hunger_cost * g.resistance()).round() as u32)),
+        ("kin nearby".into(), format!("{} ({})", c.kin_nearby, group_word)),
     ];
     for (k, v) in derived {
         util::line(f, inner, row, Line::from(vec![

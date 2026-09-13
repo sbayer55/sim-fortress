@@ -35,6 +35,11 @@ the tick: `the-valley-of-sunfall-4320.simf`; autosaves are
 `Enter` loads, `Del` deletes (with confirmation). Autosave runs every
 `ui.autosave_days` days (see Options; 0 = off).
 
+The on-disk format is versioned and never migrated: **the genome widened to eleven
+traits, so saves written before that change are rejected** with an "older version"
+message in the Load list rather than being half-read. Old files still appear in the
+list (marked `v<n>`) and can be deleted; only loading them fails.
+
 ## Parameters and presets
 
 Every tunable lives in `src/sim/params.rs` with a documented default. A

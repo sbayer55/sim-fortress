@@ -8,6 +8,7 @@ use ratatui::text::Line;
 use ratatui::Frame;
 
 use crate::sim::stats::SpeciesStats;
+use crate::sim::species::{IDX_MATURITY, TRAIT_ABBR};
 use crate::sim::{Genome, Kind, Sim, SpeciesId, TRAIT_NAMES};
 use crate::ui::app::AppState;
 use crate::ui::screens::common::{arrow_color, delta_style, downsample, sp, trait_color, trend_arrow, two};
@@ -157,10 +158,13 @@ fn table(f: &mut Frame, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesI
     let prey_n = sim.species.iter().filter(|s| s.count > 0 && s.species.kind() == Kind::Prey).count();
     let inner = panel::draw_with_hint(f, area, "Species", &format!("{} species, {} prey / {} predator", alive, prey_n, alive - prey_n), panel::Kind::Outer);
     let dim = theme::dim_text();
-    let header = Line::from(vec![
+    // C8: eleven genome columns, so the header is built from `TRAIT_ABBR` (never
+    // hand-typed) and the sparkline slot is trimmed to keep the row inside 153.
+    let trait_header: String = std::iter::once("  ".to_string()).chain(TRAIT_ABBR.iter().map(|a| format!("{a:>3} "))).collect();
+    let header = vec![
         sp("   ", dim),
         sp(format!("{:<8}", "Species"), dim),
-        sp(format!("{:<6}", "Kind"), dim),
+        sp(format!("{:<5}", "Kind"), dim),
         sp(format!("{:>6}", "Count"), dim),
         sp(format!("{:>7}", "Adults"), dim),
         sp(format!("{:>6}", "Juv"), dim),
@@ -169,12 +173,12 @@ fn table(f: &mut Frame, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesI
         sp(format!("{:>6}", "Sick"), dim),
         sp(format!("{:>6}", "Peak"), dim),
         sp(format!("{:>5}", "Gen"), dim),
-        sp("  30-day trend         ", dim),
+        sp(format!("{:<18}", "  30-day trend"), dim),
         sp("  ", dim),
-        sp("  Spd Siz Sen Met Agg Cam Fer Lon Res", dim),
+        sp(trait_header, dim),
         sp("   Diet", dim),
-    ]);
-    util::line(f, inner, 0, header);
+    ];
+    util::line(f, inner, 0, Line::from(header));
     let mut row = 2u16;
     for i in sorted_indices(sim, sort) {
         let s = &sim.species[i];
@@ -196,7 +200,7 @@ fn table(f: &mut Frame, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesI
             sp(marker.to_string(), Style::default().fg(theme::KEY).bg(bg).add_modifier(Modifier::BOLD)),
             sp(format!("{} ", id.glyph().to_ascii_uppercase()), Style::default().fg(if absent { theme::DIM } else { id.color() }).bg(bg).add_modifier(Modifier::BOLD)),
             sp(format!("{:<8}", id.name()), base),
-            sp(format!("{:<6}", kind_label(id)), dimmed),
+            sp(format!("{:<5}", kind_label(id)), dimmed),
             sp(format!("{:>6}", s.count), base),
             sp(format!("{:>7}", s.adults), base),
             sp(format!("{:>6}", s.juveniles), base),
@@ -206,7 +210,7 @@ fn table(f: &mut Frame, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesI
             sp(format!("{:>6}", s.sick), if s.sick > 0 { Style::default().fg(theme::SICK).bg(bg) } else { dimmed }),
             sp(format!("{:>6}", s.peak), base),
             sp(format!("{:>5}", s.generation), base),
-            sp(format!("{:<23}", ""), base), // sparkline slot
+            sp(format!("{:<18}", ""), base), // sparkline slot
             sp(format!("{} ", arrow), Style::default().fg(arrow_color(arrow)).bg(bg).add_modifier(Modifier::BOLD)),
             sp("  ", base),
         ];
@@ -225,7 +229,7 @@ fn table(f: &mut Frame, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesI
             }
         }
         if !s.trend.is_empty() {
-            bars::sparkline(f.buffer_mut(), inner.x + 71, inner.y + row, 20, &s.trend, if absent { theme::DIM } else { id.color() });
+            bars::sparkline(f.buffer_mut(), inner.x + 71, inner.y + row, 14, &s.trend, if absent { theme::DIM } else { id.color() });
         }
         row += 1;
     }
@@ -590,12 +594,16 @@ impl Screen for SpeciesDetail {
 fn histograms(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     let s = &sim.species[id.index()];
     let inner = panel::draw_with_hint(f, area, &format!("{}: trait distributions", id.name()), "12 buckets, living adults + juveniles", panel::Kind::Outer);
-    // C7: nine traits in a 3 × 3 grid of 26-column blocks (24-wide histograms).
+    // C8: eleven traits in a 3 x 4 grid of 25-column blocks (23-wide histograms).
+    // `block_h` is exactly the block height (name, hist, axis, labels) so the
+    // former spacer row is gone and the grid still leaves room for the two
+    // comparison sections below it inside 42 rows.
     let col_w = 25u16;
-    let block_h = 9u16;
+    let block_h = 7u16;
+    let rows = 4u16;
     for t in 0..Genome::LEN {
-        let col = (t / 3) as u16;
-        let r = (t % 3) as u16;
+        let col = (t / rows as usize) as u16;
+        let r = (t % rows as usize) as u16;
         let x = inner.x + 1 + col * (col_w + 1);
         let y = inner.y + 1 + r * block_h;
         let color = trait_color(t);
@@ -610,32 +618,32 @@ fn histograms(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
             14,
             theme::dim_text(),
         );
-        let hist_area = Rect::new(x, y + 1, 24, 5);
+        let hist_area = Rect::new(x, y + 1, 24, 4);
         if s.count > 0 {
             bars::histogram(buf, hist_area, &s.hist[t], color, 2);
         }
         let axis: String = std::iter::repeat_n(glyphs::H_LINE, 24).collect();
-        buf.set_stringn(x, y + 6, &axis, 24, theme::border());
+        buf.set_stringn(x, y + 5, &axis, 24, theme::border());
         let mx = x + ((mean * 23.0).round() as u16).min(23);
-        buf.set_stringn(mx, y + 6, glyphs::CROSS.to_string(), 1, Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG));
-        buf.set_stringn(x, y + 7, "0", 1, theme::dim_text());
-        buf.set_stringn(x + 23, y + 7, "1", 1, theme::dim_text());
+        buf.set_stringn(mx, y + 5, glyphs::CROSS.to_string(), 1, Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG));
+        buf.set_stringn(x, y + 6, "0", 1, theme::dim_text());
+        buf.set_stringn(x + 23, y + 6, "1", 1, theme::dim_text());
         let n: u32 = s.hist[t].iter().map(|&v| v as u32).sum();
         let peak_bucket = s.hist[t].iter().enumerate().max_by_key(|(_, v)| **v).map(|(i, _)| i).unwrap_or(0);
-        buf.set_stringn(x + 2, y + 7, format!("n={}", n), 7, theme::dim_text());
-        buf.set_stringn(x + 11, y + 7, format!("mode .{:02}", ((peak_bucket as f32 + 0.5) / 12.0 * 100.0).round() as u32), 11, theme::dim_text());
+        buf.set_stringn(x + 2, y + 6, format!("n={}", n), 7, theme::dim_text());
+        buf.set_stringn(x + 11, y + 6, format!("mode .{:02}", ((peak_bucket as f32 + 0.5) / 12.0 * 100.0).round() as u32), 11, theme::dim_text());
     }
-    let y = inner.y + 1 + 3 * block_h;
+    let y = inner.y + 1 + rows * block_h;
     let buf = f.buffer_mut();
     buf.set_stringn(
         inner.x + 1,
         y,
-        format!("{} mean   {} full  {} half bucket   columns = 1/12 of 0..1   header: min mean max", glyphs::CROSS, glyphs::FULL_BLOCK, glyphs::HALF_LOWER),
+        format!("{} mean  {} full  {} half  columns = 1/12 of 0..1  header: min mean max", glyphs::CROSS, glyphs::FULL_BLOCK, glyphs::HALF_LOWER),
         inner.width as usize - 2,
         theme::dim_text(),
     );
     // C7: the two trait-comparison sections moved here from the drift panel to
-    // make room for its Disease section (nine traits already fill the top).
+    // make room for its Disease section (eleven traits already fill the top).
     let mut row = y - inner.y + 1;
     panel::section(f, inner, row, "Selection pressure");
     row += 1;
@@ -646,7 +654,12 @@ fn histograms(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     row += 1;
     panel::section(f, inner, row, "Compared with other species (mean x100)");
     row += 1;
-    util::line(f, inner, row, Line::from(sp("              Spd Siz Sen Met Agg Cam Fer Lon Res   count  gen", theme::dim_text())));
+    let mut cmp_hdr = String::from("             ");
+    for a in TRAIT_ABBR {
+        cmp_hdr.push_str(&format!(" {a:>3}"));
+    }
+    cmp_hdr.push_str("   count  gen");
+    util::line(f, inner, row, Line::from(sp(cmp_hdr, theme::dim_text())));
     row += 1;
     for other in &sim.species {
         if row >= inner.height {
@@ -678,7 +691,7 @@ pub fn selection_pressure(s: &SpeciesStats) -> Vec<String> {
         for t in 0..Genome::LEN {
             let d = b.1 .0[t] - a.1 .0[t];
             if d.abs() > 0.02 {
-                out.push(format!("{} {} {} ({:+.2} over {} generations)", glyphs::MUTATION, TRAIT_NAMES[t], if d > 0.0 { "rising" } else { "falling" }, d, gens));
+                out.push(pressure_note(t, d, gens));
             }
         }
     }
@@ -686,6 +699,18 @@ pub fn selection_pressure(s: &SpeciesStats) -> Vec<String> {
         out.push(format!("{} no trait moving more than 0.02", glyphs::NOTE));
     }
     out
+}
+
+/// One selection-pressure sentence. C8: the maturity trait is the r/K dial, so
+/// its line names which way the life history moved.
+fn pressure_note(t: usize, d: f32, gens: u32) -> String {
+    let dir = if d > 0.0 { "rising" } else { "falling" };
+    let head = format!("{} {} {} ({:+.2} over {} generations)", glyphs::MUTATION, TRAIT_NAMES[t], dir, d, gens);
+    if t != IDX_MATURITY {
+        return head;
+    }
+    let rk = if d > 0.0 { "later, larger litters (K)" } else { "earlier, smaller litters (r)" };
+    format!("{head}: {rk}")
 }
 
 fn drift(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
@@ -748,19 +773,33 @@ fn drift(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     panel::section(f, inner, row, "Population");
     row += 1;
     let arrow = trend_arrow(&s.trend);
-    let stats: Vec<(String, String, Style)> = vec![
-        ("count".into(), format!("{}  ({} adults, {} juveniles)", s.count, s.adults, s.juveniles), theme::text()),
-        ("generation".into(), format!("{}", s.generation), theme::text()),
-        ("peak".into(), format!("{}  ({}% of peak now)", s.peak, s.count * 100 / s.peak.max(1)), theme::text()),
-        ("births today".into(), format!("{}", sim.births_today(id.index())), Style::default().fg(theme::GOOD).bg(theme::PANEL_BG)),
-        ("deaths today".into(), format!("{}", sim.deaths_today(id.index())), Style::default().fg(theme::BAD).bg(theme::PANEL_BG)),
-        ("trend".into(), format!("{} over 30 days", arrow), Style::default().fg(arrow_color(arrow)).bg(theme::PANEL_BG)),
-    ];
-    for (k, v, st) in stats {
-        util::line(f, inner, row, Line::from(vec![sp(format!(" {:<14}", k), theme::dim_text()), sp(v, st)]));
-        row += 1;
-    }
+    let arrow_st = Style::default().fg(arrow_color(arrow)).bg(theme::PANEL_BG);
+    // C8: two lines instead of six. The per-field breakdown is already on S04a
+    // (the S04 spec flags the duplication); the two extra genome rows need the
+    // space to keep the Disease section on screen.
+    util::line(f, inner, row, Line::from(vec![
+        sp(
+            format!(
+                " {}  ({} adults, {} juveniles)  peak {} ({}%)  generation {}",
+                s.count,
+                s.adults,
+                s.juveniles,
+                s.peak,
+                s.count * 100 / s.peak.max(1),
+                s.generation
+            ),
+            theme::text(),
+        ),
+    ]));
     row += 1;
+    util::line(f, inner, row, Line::from(vec![
+        sp(" births today ", theme::dim_text()),
+        sp(format!("{}", sim.births_today(id.index())), Style::default().fg(theme::GOOD).bg(theme::PANEL_BG)),
+        sp("  deaths today ", theme::dim_text()),
+        sp(format!("{}", sim.deaths_today(id.index())), Style::default().fg(theme::BAD).bg(theme::PANEL_BG)),
+        sp(format!("   {arrow} over 30 days (see S04a)"), arrow_st),
+    ]));
+    row += 2;
     disease_section(f, inner, row, sim, id);
 }
 

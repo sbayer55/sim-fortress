@@ -57,7 +57,7 @@ flowchart LR
         direction LR
         subgraph H["Trait distributions — 80 cols"]
             direction TB
-            H1["2 columns × 4 rows of 38×9 histogram blocks<br/>(one per trait)"]
+            H1["3 columns × 4 rows of 25×7 histogram blocks<br/>(one per trait)"]
             H2["legend footer"]
             H1 --> H2
         end
@@ -93,7 +93,7 @@ classDiagram
         mean : Genome
         min : Genome
         max : Genome
-        hist : u16 x8x12
+        hist : u16 x11x12
         drift : Vec~Genome~
         trend_arrow()
     }
@@ -106,7 +106,7 @@ classDiagram
         base_genome()
     }
     class Genome {
-        traits : f32 x8
+        traits : f32 x11
     }
     class Series {
         population : Vec~Vec~f32~~
@@ -137,16 +137,16 @@ classDiagram
 
 ### S04a — Species table panel
 1. **Header row** (dim): `Species  Kind  Count  Adults  Juv  Birth/d  Death/d  Sick  Peak
-   Gen  30-day trend  Spd Siz Sen Met Agg Cam Fer Lon Res  Diet` (`Sick` and `Res` live
-   since C7).
+   Gen  30-day trend  Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat  Diet` (`Sick` and
+   `Res` live since C7; `Soc` and `Mat` since C8).
 2. **One row per species**, starting on the second row under the header, sorted by count
    descending (the default sort; see Interaction). Columns: selection marker `►` (only on
    the selected row), species glyph upper-case in the species colour, name (8), kind
    `prey`/`pred` (6), count (6), adults (7), juveniles (6), births today (8, good colour),
    deaths today (8, bad colour), sick (6, sick colour when > 0; *live since: C7*), peak
-   (6), generation (5), a 20-cell sparkline of the 30-day
+   (6), generation (5), a 14-cell sparkline of the 30-day
    trend in the species colour followed by the trend arrow (`↑` good, `↓` bad, `↔` dim),
-   the eight trait means as two-digit integers (value × 100) each in its trait colour, and
+   the eleven trait means as two-digit integers (value × 100) each in its trait colour, and
    the diet text (dim). Source: species stats.
 3. **Selected row** is drawn in the selected style across the full inner width.
 4. **Totals row** (after one blank row): `totals <total>   prey <p>  pred <q>  ratio
@@ -191,10 +191,11 @@ classDiagram
     scaled to the largest region, count. Source: living creatures × world regions.
 
 ### S04b — Trait distributions panel
-15. **Eight histogram blocks** in a 2 × 4 grid, each 38 columns × 9 rows, in trait order
-    down the first column then the second (*C7:* nine blocks in a 3 × 3 grid of 26-column
-    blocks with 24-wide histograms, two cells per bucket, the mean marker at
-    `x + round(mean × 23)`). Each block: trait name in its trait colour with
+15. **Eleven histogram blocks** in a 3 × 4 grid of 25-column blocks (24-wide histograms,
+    two cells per bucket, the mean marker at `x + round(mean × 23)`), in trait order down
+    each column (*C7/C8:* the block height is exactly name + histogram + axis + labels, so
+    the former spacer row is gone and the two comparison sections below still fit inside
+    42 rows). Each block: trait name in its trait colour with
     `min .xx mean .xx max .xx`; a 36-column histogram of the 12 buckets (3 columns per
     bucket) built from `▄`/`█` stacks; an axis of `─` with a bright `┼` at the mean; tick
     labels `0.0`, `0.5`, `1.0`; `n=<sum of buckets>` and `mode <bucket centre>`.
@@ -202,7 +203,7 @@ classDiagram
 16. **Footer legend.** `┼ mean   █ full  ▄ half bucket   each column is 1/12 of the 0..1
     range`. *Live since: C7* — the **Selection pressure** (item 20, at most two lines) and
     **Compared with other species** (item 21) sections are drawn under the legend in this
-    panel, since nine traits leave the drift panel no room for them.
+    panel, since eleven traits leave the drift panel no room for them.
 
 ### S04b — Drift over generations panel
 17. **Drift sparklines.** Header `trait  gen 1  oldest … newest  g<current> change`, then
@@ -213,9 +214,10 @@ classDiagram
     `g<n>` (evenly spaced from 1 to the current generation) and a row per trait of two-digit
     means, each cell coloured green if it rose versus the previous sample, red if it fell,
     dim for the first column; legend line `green = rose vs previous sample, red = fell`.
-19. **Population.** `count <n> (<adults> adults, <juveniles> juveniles)`, `generation`,
-    `peak <n> (<pct>% of peak now)`, `births today` (good), `deaths today` (bad), `trend
-    <arrow> over 30 days`.
+19. **Population.** Two lines since C8 (the per-field breakdown is duplicated on S04a):
+    `<count>  (<adults> adults, <juveniles> juveniles)  peak <n> (<pct>%)  generation <g>`
+    and `births today <b> (good)  deaths today <d> (bad)  <arrow> over 30 days (see S04a)`.
+    The two rows the old six-line block used are needed by the two extra genome traits.
 19a. **Disease** (*live since: C7*, after Population). `active N · immune M (pct) ·
     disease deaths yesterday D` (active in the sick colour, immune in the immune colour),
     then one line per outbreak whose `species_cases` for this species is > 0 and that
@@ -224,9 +226,10 @@ classDiagram
     current mean while the outbreak is still open), or `no outbreaks in the last 3 years`.
 20. **Selection pressure.** Two or three `§`/`¶` lines explaining which traits are moving
     and why (for example aggression rising, camouflage falling, longevity flat).
-21. **Compared with other species (mean x100).** Header `Spd Siz Sen Met Agg Cam Fer Lon
-    Res count gen`, then one row per species (all six, absent ones dimmed): glyph, name (title
-    style for the selected species), eight means in trait colours, count and generation.
+21. **Compared with other species (mean x100).** Header built from `TRAIT_ABBR`
+    (`Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat`) plus `count gen`, then one row per
+    species (all six, absent ones dimmed): glyph, name (title style for the selected
+    species), eleven means in trait colours, count and generation.
     (C4 renamed the block from "Compared with other predators".)
 
 ### Status bar
@@ -247,7 +250,7 @@ classDiagram
 | `§ ¶`                 | selection-pressure notes and narrative notes                  |
 | `☻ ∩`                 | C7: outbreak rows / sick counts (SICK), worm load line (WARN) |
 | `±`                   | delta prefix                                                  |
-| trait colours         | Speed INFO, Size DEER, Sense ACCENT, Metabolism WARN, Aggression BAD, Camouflage VEGETATION, Fertility MAGENTA, Longevity LYNX (same as [S03](s03-creature-inspector.md)) |
+| trait colours         | Speed INFO, Size DEER, Sense ACCENT, Metabolism WARN, Aggression BAD, Camouflage VEGETATION, Fertility MAGENTA, Longevity LYNX, Resistance SICK, Sociality HARE, Maturity SEED (same as [S03](s03-creature-inspector.md)) |
 | GOOD / BAD / DIM      | births, deaths, deltas, rise/fall cells                       |
 | WARN                  | `drought` marker on the 240-day axis                          |
 | SELECT_BG             | selected row; Focus border on the summary panel               |

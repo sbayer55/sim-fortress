@@ -25,7 +25,7 @@ If you want, I can write the burrows-and-dens idea up as a seventh chunk doc in 
 
 ---
 
-The current genome has eight slots: speed, size, sense, metabolism, aggression, camouflage, fertility and longevity. The most interesting additions are ones that trade off against an existing slot or against a specific mechanic, so selection can pull them in different directions in different worlds.
+The current genome has eleven slots: speed, size, sense, metabolism, aggression, camouflage, fertility, longevity, resistance (C7), sociality and maturity (C8). The most interesting additions are ones that trade off against an existing slot or against a specific mechanic, so selection can pull them in different directions in different worlds.
 
 **Traits that exploit the existing environment**
 
@@ -39,12 +39,12 @@ The current genome has eight slots: speed, size, sense, metabolism, aggression, 
 - **Boldness.** The distance at which prey starts to flee. Timid animals lose grazing time, bold ones get eaten. Classic and very legible in the sense-ring overlay.
 - **Vigilance versus foraging.** Fraction of a graze tick spent scanning. It directly trades hunger against detection, and it is the natural counterpart to camouflage.
 - **Stamina.** Chase duration before speed collapses. Lets a slow predator with high stamina beat a fast prey, breaking the current speed arms race into two axes.
-- **Sociality.** Preferred group size. High values cluster into herds that detect predators earlier but strip vegetation; for predators it is the seed of pack hunting.
+- ~~**Sociality.** Preferred group size. High values cluster into herds that detect predators earlier but strip vegetation; for predators it is the seed of pack hunting.~~ **Shipped: genome slot 10 — herds cohere and bias grazing, a sighted prey alarms social kin, and predators join a packmate's target and share the kill.**
 - **Prey preference.** For predators, a bias toward small or large prey. A fox lineage that stops bothering voles is another route to the vole refuge your predator notes ask for.
 
 **Life-history traits**
 
-- **Maturity age.** Breed early with small litters or late with large ones, paired against longevity. This gives r-versus-K strategy shifts you could see in the species browser.
+- ~~**Maturity age.** Breed early with small litters or late with large ones, paired against longevity. This gives r-versus-K strategy shifts you could see in the species browser.~~ **Shipped: genome slot 11 — one trait scales adult age, litter size and max lifespan, and S04b names the r/K direction in Selection pressure.**
 - **Parental care.** Offspring start with more reserves and the parent loses hunger for a period after birth. Litters get smaller but survive. Nice interaction with any future dens.
 - **Dispersal.** How far a newborn wanders from its parent before settling. Low values create local inbred pockets, high values spread genes and spark migrations. Very visible on the lineage tree.
 - **Mutation rate itself.** Evolvability as a trait. Stable worlds select it down, worlds with droughts and epidemics select it up. Cheap to add and a genuinely interesting experiment.

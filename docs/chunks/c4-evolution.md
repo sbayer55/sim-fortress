@@ -44,7 +44,7 @@ mutation_strength = 0.06         # gaussian sd
 mutation_notable = 0.10          # |Δ| ≥ this emits a Mutation event
 # six-species maps; C5 only changes the predator values
 gestation_days = { vole = 3, hare = 6, deer = 30, fox = 20, wolf = 30, lynx = 30 }
-litter_max = { vole = 0, hare = 1, deer = 8, fox = 3, wolf = 2, lynx = 1 }   # litter = 1 + round(fertility × litter_max); fractional values allowed
+litter_max = { vole = 0, hare = 1, deer = 8, fox = 3, wolf = 2, lynx = 1 }   # litter = 1 + round(fertility × litter_max × maturity_factor); fractional values allowed
 mate_cooldown_days = { vole = 60, hare = 75, deer = 30, fox = 120, wolf = 180, lynx = 180 }
 mate_hunger_max = 0.45
 mate_thirst_max = 0.5
@@ -55,12 +55,19 @@ follow_mother_days = 20
 newborn_hp = 0.6
 pregnancy_hunger_factor = 1.3
 max_population_soft_cap = 4000   # safety: no new pregnancies above this; Note logged once per crossing
+# maturity (C8): one trait scales adult age, litter size and max lifespan.
+# factor = 1 + (maturity - 0.5) x 2 x span, so 0.5 is exactly the pre-C8 numbers.
+maturity_age_span = 0.5          # adult age   x factor
+maturity_litter_span = 0.5       # litter size x factor
+maturity_lifespan_span = 0.25    # max lifespan x factor
 drift_every_generations = 2
 lineage_keep_generations = 8
 lineage_up = 3
 lineage_rows_max = 400
 predation_difficulty = "normal"  # stored here (the former [evolution] table was folded into [genetics]); used in C5
 ```
+The herd and pack levers live in their own `[social]` table: `group_size_max`, `cohesion_min`, `graze_cohesion_w`, `alarm_cells`, `pack_join_bonus`, `pack_kill_bonus`, `pack_share` and `pack_share_cheb`.
+
 `adult_age_days` lives only in `params.creatures` (C3). The values above are the **balance
 table** after tuning (see Acceptance); the doc's starting point was
 `litter_max = { vole = 3, hare = 2, deer = 1 }`, `mate_cooldown_days = { vole = 20, hare = 30,
@@ -107,15 +114,18 @@ event with `subject` = child. Species drift is under selection because metabolis
 hunger (C3 FR1), speed scales movement, longevity scales max age, fertility scales litter.
 
 ### FR4 Maturity and following
-At `adult_age_days[species]` the glyph switches to uppercase and movement speed becomes
-full (C3 FR6). While `age_days < follow_mother_days` and the mother is alive, Wander targets
+At the individual's adult age the glyph switches to uppercase and movement speed becomes
+full (C3 FR6). Since C8 that age is `round(adult_age_days[species] × maturity_factor)`
+with the Maturity trait, and the same factor scales the litter and the maximum lifespan:
+one dial moves adult age, litter size and lifespan together, so the browser shows an
+r-versus-K shift (maturity 0.5 reproduces the pre-C8 numbers exactly). While `age_days < follow_mother_days` and the mother is alive, Wander targets
 a walkable cell within 3 cells of her; other goals are unaffected.
 
 ### FR5 Species record (daily, incremental)
 `count, adults, juveniles, births_today, deaths_today` (live counters reset at the day
 boundary, `yesterday` copies kept for the `/d` columns), `peak` (all-time), `first_birth_day: Option<u32>`, `generation`
 (high-water mark of the max generation among living members), `trend` (last 30 daily counts from `Series`), `mean/min/max` genome,
-`hist[8][12]` with bucket `min(floor(v × 12), 11)`, `drift` (last 12 samples of the mean
+`hist[11][12]` with bucket `min(floor(v × 12), 11)`, `drift` (last 12 samples of the mean
 genome, sampled when `generation` has grown by `drift_every_generations` since the last
 sample, with the sample generation stored for the S04b header). Extinct or absent species
 keep a dimmed row with count 0. The trend arrow rule is the C3 rule.

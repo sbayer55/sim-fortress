@@ -48,16 +48,16 @@ logic: every screen draws fixed fixture data.
   prey_pressure, pred_pressure }`, `dens`, `carcasses`, `seeds: Vec<(x,y)>`,
   `regions: Vec<(name, x0,y0,x1,y1)>`, `region_name(x,y)`, `width()`, `height()`.
 - `creatures: Vec<Creature>` — `id, name, species: SpeciesId, x, y, adult, sex, alive,
-  age_days, max_age_days, hp, hunger, thirst, energy (all 0..1), genome: Genome([f32;8]),
+  age_days, max_age_days, hp, hunger, thirst, energy (all 0..1), genome: Genome([f32;11]),
   generation, goal, target, kills, offspring, mutations: Vec<String>, parents: (String,String),
   trail, cause_of_death: Option<String>, decay`. `glyph()`, `tag()` ("h#217"), `kind()`.
   `fx.hero_prey` (Bramble the hare), `fx.hero_pred` (Ashfang the wolf), `fx.corpse`
   (Thistle the deer) are indices into `creatures`.
 - `Genome` accessors: `speed() size() sense() metabolism() aggression() camouflage()
-  fertility() longevity()`, `sense_cells()`. `fixtures::TRAIT_NAMES: [&str; 8]`.
+  fertility() longevity() resistance() sociality() maturity()`, `sense_cells()`. `fixtures::TRAIT_NAMES: [&str; 11]`.
 - `species: Vec<Species>` (order = `SpeciesId::ALL`) — `id, count, adults, juveniles,
   births_today, deaths_today, peak, generation, trend: Vec<u16> (30 days), mean/min/max: Genome,
-  hist: [[u16;12];8], drift: Vec<Genome> (12 generations)`, `trend_arrow()`.
+  hist: [[u16;12];11], drift: Vec<Genome> (12 generations)`, `trend_arrow()`.
   `SpeciesId::{name, plural, glyph, color, kind (Kind::Prey|Predator), diet, base_genome}`.
 - `series: Series` — `population: Vec<Vec<f32>>` (6 species x 240 days), `vegetation`,
   `water`, `carcasses: Vec<f32>` (0..1 or counts), `pop(id)`, `prey_total()`, `pred_total()`, `day0`.
