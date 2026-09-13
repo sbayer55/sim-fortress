@@ -14,6 +14,7 @@ use crate::widgets::map;
 use crate::widgets::{panel, status, util};
 use crate::{glyphs, theme};
 
+#[derive(Debug)]
 pub struct Help;
 
 impl Default for Help {
@@ -23,8 +24,8 @@ impl Default for Help {
 }
 
 impl Help {
-    pub fn new() -> Self {
-        Help
+    pub const fn new() -> Self {
+        Self
     }
 }
 
@@ -40,11 +41,11 @@ impl Screen for Help {
         }
     }
 
-    fn render(&self, _app: &AppState, f: &mut Frame, area: Rect) {
+    fn render(&self, _app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let modal = util::centered(area, 120.min(area.width.saturating_sub(2)), 38.min(area.height.saturating_sub(2)));
         let inner = panel::draw_with_hint(f, modal, "Legend & Help", "? or Esc closes", panel::Kind::Focus);
 
-        let col_w = (inner.width - 2) / 3;
+        let col_w = (inner.width - 2).div_euclid(3);
         let cols = [
             Rect::new(inner.x, inner.y, col_w, inner.height),
             Rect::new(inner.x + col_w + 1, inner.y, col_w, inner.height),
@@ -70,10 +71,10 @@ impl Screen for Help {
 }
 
 fn glyph_span(g: char, color: Color) -> Span<'static> {
-    Span::styled(format!(" {} ", g), Style::default().fg(color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD))
+    Span::styled(format!(" {g} "), Style::default().fg(color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD))
 }
 
-fn terrain_column(f: &mut Frame, col: Rect) {
+fn terrain_column(f: &mut Frame<'_>, col: Rect) {
     let mut row = 0u16;
     panel::section(f, col, row, "Terrain");
     row += 1;
@@ -94,7 +95,7 @@ fn terrain_column(f: &mut Frame, col: Rect) {
     for ((g, color, label), note) in map::legend().into_iter().zip(notes) {
         util::line(f, col, row, Line::from(vec![
             glyph_span(g, color),
-            Span::styled(format!("{:<14}", label), theme::text()),
+            Span::styled(format!("{label:<14}"), theme::text()),
             Span::styled(note, theme::dim_text()),
         ]));
         row += 1;
@@ -141,7 +142,7 @@ fn terrain_column(f: &mut Frame, col: Rect) {
     }
 }
 
-fn creature_column(f: &mut Frame, col: Rect) {
+fn creature_column(f: &mut Frame<'_>, col: Rect) {
     let mut row = 0u16;
     panel::section(f, col, row, "Creatures");
     row += 1;
@@ -187,7 +188,7 @@ fn creature_column(f: &mut Frame, col: Rect) {
     ]));
 }
 
-fn keys_column(f: &mut Frame, col: Rect) {
+fn keys_column(f: &mut Frame<'_>, col: Rect) {
     let mut row = 0u16;
     let groups: [(&str, &[(&str, &str)]); 5] = [
         ("Navigation", &[
@@ -235,9 +236,9 @@ fn keys_column(f: &mut Frame, col: Rect) {
     for (title, keys) in groups {
         panel::section(f, col, row, title);
         row += 1;
-        for (k, label) in keys.iter() {
+        for (k, label) in keys {
             util::line(f, col, row, Line::from(vec![
-                Span::styled(format!(" {:<10}", k), theme::key()),
+                Span::styled(format!(" {k:<10}"), theme::key()),
                 Span::styled(*label, theme::text()),
             ]));
             row += 1;

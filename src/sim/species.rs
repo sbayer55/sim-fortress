@@ -33,7 +33,7 @@ pub const PRED_NAMES: &[&str] = &[
 ];
 
 /// The name list for a species (prey share one pool, predators another).
-pub fn names(id: SpeciesId) -> &'static [&'static str] {
+pub const fn names(id: SpeciesId) -> &'static [&'static str] {
     match id.kind() {
         Kind::Prey => PREY_NAMES,
         Kind::Predator => PRED_NAMES,
@@ -43,7 +43,7 @@ pub fn names(id: SpeciesId) -> &'static [&'static str] {
 /// Resolve a `NameId` against a species' name list.
 pub fn name_for(id: SpeciesId, name_id: u32) -> &'static str {
     let list = names(id);
-    list[(name_id as usize) % list.len()]
+    list[(crate::cast!(name_id => usize)) % list.len()]
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -64,69 +64,69 @@ pub enum Kind {
 }
 
 impl SpeciesId {
-    pub const ALL: [SpeciesId; 6] = [
-        SpeciesId::Vole,
-        SpeciesId::Hare,
-        SpeciesId::Deer,
-        SpeciesId::Fox,
-        SpeciesId::Wolf,
-        SpeciesId::Lynx,
+    pub const ALL: [Self; 6] = [
+        Self::Vole,
+        Self::Hare,
+        Self::Deer,
+        Self::Fox,
+        Self::Wolf,
+        Self::Lynx,
     ];
 
     /// Position in `SpeciesId::ALL` (the index used by every per-species array).
-    pub fn index(self) -> usize {
-        self as usize
+    pub const fn index(self) -> usize {
+        crate::cast!(self => usize)
     }
 
-    pub fn name(self) -> &'static str {
+    pub const fn name(self) -> &'static str {
         match self {
-            SpeciesId::Vole => "Vole",
-            SpeciesId::Hare => "Hare",
-            SpeciesId::Deer => "Deer",
-            SpeciesId::Fox => "Fox",
-            SpeciesId::Wolf => "Wolf",
-            SpeciesId::Lynx => "Lynx",
+            Self::Vole => "Vole",
+            Self::Hare => "Hare",
+            Self::Deer => "Deer",
+            Self::Fox => "Fox",
+            Self::Wolf => "Wolf",
+            Self::Lynx => "Lynx",
         }
     }
 
     /// Lowercase species letter (adult/uppercase is a presentation concern).
-    pub fn glyph(self) -> char {
+    pub const fn glyph(self) -> char {
         match self {
-            SpeciesId::Vole => 'v',
-            SpeciesId::Hare => 'h',
-            SpeciesId::Deer => 'd',
-            SpeciesId::Fox => 'f',
-            SpeciesId::Wolf => 'w',
-            SpeciesId::Lynx => 'l',
+            Self::Vole => 'v',
+            Self::Hare => 'h',
+            Self::Deer => 'd',
+            Self::Fox => 'f',
+            Self::Wolf => 'w',
+            Self::Lynx => 'l',
         }
     }
 
-    pub fn plural(self) -> &'static str {
+    pub const fn plural(self) -> &'static str {
         match self {
-            SpeciesId::Vole => "Voles",
-            SpeciesId::Hare => "Hares",
-            SpeciesId::Deer => "Deer",
-            SpeciesId::Fox => "Foxes",
-            SpeciesId::Wolf => "Wolves",
-            SpeciesId::Lynx => "Lynxes",
+            Self::Vole => "Voles",
+            Self::Hare => "Hares",
+            Self::Deer => "Deer",
+            Self::Fox => "Foxes",
+            Self::Wolf => "Wolves",
+            Self::Lynx => "Lynxes",
         }
     }
 
-    pub fn kind(self) -> Kind {
+    pub const fn kind(self) -> Kind {
         match self {
-            SpeciesId::Vole | SpeciesId::Hare | SpeciesId::Deer => Kind::Prey,
+            Self::Vole | Self::Hare | Self::Deer => Kind::Prey,
             _ => Kind::Predator,
         }
     }
 
-    pub fn diet(self) -> &'static str {
+    pub const fn diet(self) -> &'static str {
         match self {
-            SpeciesId::Vole => "seeds, roots",
-            SpeciesId::Hare => "grass, bark",
-            SpeciesId::Deer => "grass, leaves",
-            SpeciesId::Fox => "voles, hares",
-            SpeciesId::Wolf => "deer, hares",
-            SpeciesId::Lynx => "hares, voles",
+            Self::Vole => "seeds, roots",
+            Self::Hare => "grass, bark",
+            Self::Deer => "grass, leaves",
+            Self::Fox => "voles, hares",
+            Self::Wolf => "deer, hares",
+            Self::Lynx => "hares, voles",
         }
     }
 
@@ -135,14 +135,14 @@ impl SpeciesId {
     /// Order: speed, size, sense, metabolism, aggression, camouflage, fertility,
     /// longevity, resistance, sociality, maturity. Maturity 0.5 everywhere keeps
     /// the starting balance identical to the pre-maturity numbers.
-    pub fn base_genome(self) -> Genome {
+    pub const fn base_genome(self) -> Genome {
         match self {
-            SpeciesId::Vole => Genome([0.45, 0.10, 0.40, 0.75, 0.05, 0.60, 0.90, 0.20, 0.30, 0.35, 0.5]),
-            SpeciesId::Hare => Genome([0.80, 0.25, 0.65, 0.60, 0.10, 0.55, 0.75, 0.35, 0.35, 0.25, 0.5]),
-            SpeciesId::Deer => Genome([0.65, 0.80, 0.55, 0.40, 0.20, 0.35, 0.35, 0.70, 0.45, 0.70, 0.5]),
-            SpeciesId::Fox => Genome([0.70, 0.35, 0.80, 0.55, 0.60, 0.50, 0.50, 0.45, 0.40, 0.15, 0.5]),
-            SpeciesId::Wolf => Genome([0.75, 0.70, 0.70, 0.50, 0.85, 0.25, 0.40, 0.60, 0.50, 0.70, 0.5]),
-            SpeciesId::Lynx => Genome([0.72, 0.50, 0.90, 0.45, 0.75, 0.70, 0.30, 0.55, 0.45, 0.10, 0.5]),
+            Self::Vole => Genome([0.45, 0.10, 0.40, 0.75, 0.05, 0.60, 0.90, 0.20, 0.30, 0.35, 0.5]),
+            Self::Hare => Genome([0.80, 0.25, 0.65, 0.60, 0.10, 0.55, 0.75, 0.35, 0.35, 0.25, 0.5]),
+            Self::Deer => Genome([0.65, 0.80, 0.55, 0.40, 0.20, 0.35, 0.35, 0.70, 0.45, 0.70, 0.5]),
+            Self::Fox => Genome([0.70, 0.35, 0.80, 0.55, 0.60, 0.50, 0.50, 0.45, 0.40, 0.15, 0.5]),
+            Self::Wolf => Genome([0.75, 0.70, 0.70, 0.50, 0.85, 0.25, 0.40, 0.60, 0.50, 0.70, 0.5]),
+            Self::Lynx => Genome([0.72, 0.50, 0.90, 0.45, 0.75, 0.70, 0.30, 0.55, 0.45, 0.10, 0.5]),
         }
     }
 }
@@ -154,55 +154,57 @@ impl Genome {
     /// Number of traits (kept as an alias of `N_TRAITS` for the many loops that
     /// already spell it this way).
     pub const LEN: usize = N_TRAITS;
-    pub fn speed(&self) -> f32 {
+    pub const fn speed(&self) -> f32 {
         self.0[0]
     }
-    pub fn size(&self) -> f32 {
+    pub const fn size(&self) -> f32 {
         self.0[1]
     }
-    pub fn sense(&self) -> f32 {
+    pub const fn sense(&self) -> f32 {
         self.0[2]
     }
-    pub fn metabolism(&self) -> f32 {
+    pub const fn metabolism(&self) -> f32 {
         self.0[3]
     }
-    pub fn aggression(&self) -> f32 {
+    pub const fn aggression(&self) -> f32 {
         self.0[4]
     }
-    pub fn camouflage(&self) -> f32 {
+    pub const fn camouflage(&self) -> f32 {
         self.0[5]
     }
-    pub fn fertility(&self) -> f32 {
+    pub const fn fertility(&self) -> f32 {
         self.0[6]
     }
-    pub fn longevity(&self) -> f32 {
+    pub const fn longevity(&self) -> f32 {
         self.0[7]
     }
     /// Disease resistance (C7): lowers susceptibility, lethality and duration; costs hunger.
-    pub fn resistance(&self) -> f32 {
+    pub const fn resistance(&self) -> f32 {
         self.0[IDX_RESISTANCE]
     }
     /// Preferred group size (sociality): herds for prey, packs for predators.
-    pub fn sociality(&self) -> f32 {
+    pub const fn sociality(&self) -> f32 {
         self.0[IDX_SOCIALITY]
     }
     /// Life-history pace (maturity): adult age, litter size and max lifespan all
     /// scale with it — low breeds early and small, high breeds late and large.
-    pub fn maturity(&self) -> f32 {
+    pub const fn maturity(&self) -> f32 {
         self.0[IDX_MATURITY]
     }
     /// Sense range in map cells.
     pub fn sense_cells(&self) -> u16 {
-        2 + (self.sense() * 10.0) as u16
+        2 + crate::cast!((self.sense() * 10.0) => u16)
     }
     /// Trait values live in `0.02..=0.98` (founders and inheritance alike).
-    pub fn clamp_trait(v: f32) -> f32 {
+    pub const fn clamp_trait(v: f32) -> f32 {
         v.clamp(0.02, 0.98)
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
+
     use super::*;
 
     #[test]

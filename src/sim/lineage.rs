@@ -36,7 +36,7 @@ pub struct LineageNode {
 }
 
 impl LineageNode {
-    pub fn alive(&self) -> bool {
+    pub const fn alive(&self) -> bool {
         self.died_day.is_none()
     }
 
@@ -54,14 +54,14 @@ impl LineageNode {
 }
 
 /// One drawn line of the S08 tree.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TreeItem {
     Node { id: CreatureId, depth: usize, prefix: String },
     /// `… and N more` for a truncated branch.
     More { depth: usize, prefix: String, count: usize },
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tree {
     pub root: CreatureId,
     pub focus: CreatureId,
@@ -90,7 +90,7 @@ pub struct Lineage {
 
 impl Lineage {
     pub fn new() -> Self {
-        Lineage::default()
+        Self::default()
     }
 
     pub fn get(&self, id: CreatureId) -> Option<&LineageNode> {
@@ -135,14 +135,15 @@ impl Lineage {
             },
         );
         if let Some((m, f)) = c.parents {
-            for p in [m, f] {
-                if let Some(n) = self.nodes.get_mut(&p) {
-                    if !n.children.contains(&c.id) {
-                        n.children.push(c.id);
-                    }
-                    if n.children.len() >= 10 {
-                        n.notable = true;
-                    }
+            for p in <[CreatureId; 2]>::from((m, f)) {
+                let Some(n) = self.nodes.get_mut(&p) else {
+                    continue;
+                };
+                if !n.children.contains(&c.id) {
+                    n.children.push(c.id);
+                }
+                if n.children.len() >= 10 {
+                    n.notable = true;
                 }
             }
         }
@@ -160,6 +161,25 @@ impl Lineage {
         }
     }
 
+    /// Push the parents of `id` that exist and were not seen before, mother
+    /// first, onto `out` and the next frontier.
+    fn push_parents(
+        &self,
+        id: CreatureId,
+        seen: &mut BTreeSet<CreatureId>,
+        out: &mut Vec<CreatureId>,
+        next: &mut Vec<CreatureId>,
+    ) {
+        let Some(n) = self.nodes.get(&id) else { return };
+        let Some((m, fa)) = n.parents else { return };
+        for p in <[CreatureId; 2]>::from((m, fa)) {
+            if self.nodes.contains_key(&p) && seen.insert(p) {
+                out.push(p);
+                next.push(p);
+            }
+        }
+    }
+
     /// Ancestors up to `depth` generations above `id` (breadth-first, mother
     /// before father, nearest first). Missing (pruned) ancestors are skipped.
     pub fn ancestors(&self, id: CreatureId, depth: u32) -> Vec<CreatureId> {
@@ -169,16 +189,7 @@ impl Lineage {
         for _ in 0..depth {
             let mut next = Vec::new();
             for f in frontier {
-                if let Some(n) = self.nodes.get(&f) {
-                    if let Some((m, fa)) = n.parents {
-                        for p in [m, fa] {
-                            if self.nodes.contains_key(&p) && seen.insert(p) {
-                                out.push(p);
-                                next.push(p);
-                            }
-                        }
-                    }
-                }
+                self.push_parents(f, &mut seen, &mut out, &mut next);
             }
             if next.is_empty() {
                 break;
@@ -186,6 +197,31 @@ impl Lineage {
             frontier = next;
         }
         out
+    }
+
+    /// Push each unseen child of `id` onto `out` and the next frontier, in the
+    /// stored child order. Returns false once `cap` is reached.
+    fn push_unseen_children(
+        &self,
+        id: CreatureId,
+        cap: usize,
+        seen: &mut BTreeSet<CreatureId>,
+        out: &mut Vec<CreatureId>,
+        next: &mut Vec<CreatureId>,
+    ) -> bool {
+        let Some(n) = self.nodes.get(&id) else {
+            return true;
+        };
+        for &ch in &n.children {
+            if out.len() >= cap {
+                return false;
+            }
+            if self.nodes.contains_key(&ch) && seen.insert(ch) {
+                out.push(ch);
+                next.push(ch);
+            }
+        }
+        true
     }
 
     /// Descendants up to `max_depth` generations below `id`, breadth-first,
@@ -197,16 +233,8 @@ impl Lineage {
         for _ in 0..max_depth {
             let mut next = Vec::new();
             for f in frontier {
-                if let Some(n) = self.nodes.get(&f) {
-                    for &ch in &n.children {
-                        if out.len() >= cap {
-                            return out;
-                        }
-                        if self.nodes.contains_key(&ch) && seen.insert(ch) {
-                            out.push(ch);
-                            next.push(ch);
-                        }
-                    }
+                if !self.push_unseen_children(f, cap, &mut seen, &mut out, &mut next) {
+                    return out;
                 }
             }
             if next.is_empty() {
@@ -240,7 +268,7 @@ impl Lineage {
     pub fn root_of(&self, focus: CreatureId, up: u32) -> CreatureId {
         let mut cur = focus;
         for _ in 0..up {
-            match self.nodes.get(&cur).and_then(|n| n.mother()) {
+            match self.nodes.get(&cur).and_then(LineageNode::mother) {
                 Some(m) if self.nodes.contains_key(&m) => cur = m,
                 _ => break,
             }
@@ -255,13 +283,15 @@ impl Lineage {
         let mut marked: BTreeSet<CreatureId> = BTreeSet::new();
         let mut stack: Vec<CreatureId> = store.living().map(|c| c.id).collect();
         while let Some(id) = stack.pop() {
-            if let Some(n) = self.nodes.get(&id) {
-                if let Some((m, f)) = n.parents {
-                    for p in [m, f] {
-                        if marked.insert(p) {
-                            stack.push(p);
-                        }
-                    }
+            let Some(n) = self.nodes.get(&id) else {
+                continue;
+            };
+            let Some((m, f)) = n.parents else {
+                continue;
+            };
+            for p in <[CreatureId; 2]>::from((m, f)) {
+                if marked.insert(p) {
+                    stack.push(p);
                 }
             }
         }
@@ -279,6 +309,40 @@ impl Lineage {
             n.children.retain(|c| ids.contains(c));
         }
         before - self.nodes.len()
+    }
+
+    /// One breadth-first level of the S08 tree fill: every included id's tree
+    /// children up to `max_gen`, keeping at most `rows_max` included nodes.
+    fn expand_tree_level<F>(
+        &self,
+        frontier: Vec<CreatureId>,
+        included: &mut BTreeSet<CreatureId>,
+        max_gen: u32,
+        rows_max: usize,
+        tree_children: &F,
+    ) -> Vec<CreatureId>
+    where
+        F: Fn(CreatureId) -> Vec<CreatureId>,
+    {
+        let mut next = Vec::new();
+        for id in frontier {
+            if !included.contains(&id) {
+                continue;
+            }
+            for ch in tree_children(id) {
+                let gen = self.nodes.get(&ch).map_or(u32::MAX, |n| n.generation);
+                if gen > max_gen {
+                    continue;
+                }
+                if included.contains(&ch) {
+                    next.push(ch);
+                } else if included.len() < rows_max && self.nodes.contains_key(&ch) {
+                    included.insert(ch);
+                    next.push(ch);
+                }
+            }
+        }
+        next
     }
 
     /// The S08 tree (FR8): always the root → focus mother chain, the focus's
@@ -329,7 +393,7 @@ impl Lineage {
         let mut chain = vec![focus];
         let mut cur = focus;
         while cur != root {
-            match self.nodes.get(&cur).and_then(|n| n.mother()) {
+            match self.nodes.get(&cur).and_then(LineageNode::mother) {
                 Some(m) if self.nodes.contains_key(&m) => {
                     chain.push(m);
                     cur = m;
@@ -364,22 +428,7 @@ impl Lineage {
         let max_gen = focus_node.generation.saturating_add(2);
         let mut frontier = vec![root];
         while !frontier.is_empty() && included.len() < rows_max {
-            let mut next = Vec::new();
-            for id in frontier {
-                if !included.contains(&id) {
-                    continue;
-                }
-                for ch in tree_children(id) {
-                    let gen = self.nodes.get(&ch).map(|n| n.generation).unwrap_or(u32::MAX);
-                    if gen > max_gen {
-                        continue;
-                    }
-                    if included.contains(&ch) || add(&mut included, ch) {
-                        next.push(ch);
-                    }
-                }
-            }
-            frontier = next;
+            frontier = self.expand_tree_level(frontier, &mut included, max_gen, rows_max, &tree_children);
         }
 
         // Render: depth-first from the root over the included nodes.

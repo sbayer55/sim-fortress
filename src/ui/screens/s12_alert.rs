@@ -20,19 +20,20 @@ const BUTTONS: [&str; 3] = ["[ Continue ]", "[ View lineage ]", "[ Pause ]"];
 /// S12b button set: *Show outbreak* replaces *View lineage*.
 const EPIDEMIC_BUTTONS: [&str; 3] = ["[ Continue ]", "[ Show outbreak ]", "[ Pause ]"];
 
+#[derive(Debug)]
 pub struct AlertModal {
     pub species: SpeciesId,
-    pub last: crate::sim::CreatureId,
+    pub last: CreatureId,
     pub focus: usize,
     /// C7 FR9: `Some((pathogen, outbreak))` for the epidemic variant (S12b).
     pub epidemic: Option<(PathogenId, u16)>,
 }
 
 impl AlertModal {
-    pub fn new(alert: &Alert) -> Self {
+    pub const fn new(alert: &Alert) -> Self {
         match alert {
-            Alert::Extinction { species, last, .. } => AlertModal { species: *species, last: *last, focus: 0, epidemic: None },
-            Alert::Epidemic { pathogen, outbreak, .. } => AlertModal { species: SpeciesId::Vole, last: CreatureId(0), focus: 0, epidemic: Some((*pathogen, *outbreak)) },
+            Alert::Extinction { species, last, .. } => Self { species: *species, last: *last, focus: 0, epidemic: None },
+            Alert::Epidemic { pathogen, outbreak, .. } => Self { species: SpeciesId::Vole, last: CreatureId(0), focus: 0, epidemic: Some((*pathogen, *outbreak)) },
         }
     }
 }
@@ -72,7 +73,7 @@ impl Screen for AlertModal {
         }
     }
 
-    fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
+    fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let Some(sim) = &app.sim else { return };
         if let Some((pathogen, outbreak)) = self.epidemic {
             self.render_epidemic(sim, f, area, pathogen, outbreak);
@@ -84,7 +85,7 @@ impl Screen for AlertModal {
         {
             let buf = f.buffer_mut();
             let title = format!(" {} EXTINCTION {} ", glyphs::EXTINCTION, glyphs::EXTINCTION);
-            let x = modal.x + (modal.width - title.chars().count() as u16) / 2;
+            let x = modal.x + (modal.width - crate::cast!(title.chars().count() => u16)).div_euclid(2);
             buf.set_stringn(x, modal.y, &title, title.chars().count(), Style::default().fg(theme::MAGENTA).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD));
         }
 
@@ -92,7 +93,7 @@ impl Screen for AlertModal {
         let record: Option<&ExtinctionRecord> = sim.last_extinct[self.species.index()].as_ref();
 
         let center = |s: &str| -> String {
-            let pad = (inner.width as usize).saturating_sub(s.chars().count()) / 2;
+            let pad = (crate::cast!(inner.width => usize)).saturating_sub(s.chars().count()).div_euclid(2);
             format!("{}{}", " ".repeat(pad), s)
         };
 
@@ -106,7 +107,7 @@ impl Screen for AlertModal {
         row += 2;
 
         // When and who.
-        let last_label = record.map(|r| format!("{} {}", r.name, r.tag)).unwrap_or_else(|| "#000".to_string());
+        let last_label = record.map_or_else(|| "#000".to_string(), |r| format!("{} {}", r.name, r.tag));
         util::line(f, inner, row, Line::from(vec![
             Span::styled(format!("  Year {}, Day {} of {} ", sim.time.year(), sim.time.day_of_season(), sim.time.season().name()), theme::text()),
             Span::styled(sim.time.season().glyph().to_string(), Style::default().fg(sim.time.season().color()).bg(theme::PANEL_BG)),
@@ -137,7 +138,7 @@ impl Screen for AlertModal {
 
         // Line summary.
         let years = match s.first_birth_day {
-            Some(fb) => record.map(|r| r.day.saturating_sub(fb) / 360).unwrap_or(0),
+            Some(fb) => record.map_or(0, |r| r.day.saturating_sub(fb).div_euclid(360)),
             None => sim.time.year().saturating_sub(1),
         };
         util::line(f, inner, row, Line::from(vec![
@@ -146,13 +147,13 @@ impl Screen for AlertModal {
             Span::styled("   generations survived ", theme::dim_text()),
             Span::styled(format!("{}", s.generation), theme::text()),
             Span::styled("   years ", theme::dim_text()),
-            Span::styled(format!("{}", years), theme::text()),
+            Span::styled(format!("{years}"), theme::text()),
         ]));
         row += 2;
 
         // Buttons.
         let total: usize = BUTTONS.iter().map(|b| b.chars().count()).sum::<usize>() + BUTTONS.len() * 4;
-        let pad = (inner.width as usize).saturating_sub(total) / 2;
+        let pad = (crate::cast!(inner.width => usize)).saturating_sub(total).div_euclid(2);
         let mut spans = vec![Span::styled(" ".repeat(pad), theme::text())];
         for (i, b) in BUTTONS.iter().enumerate() {
             let st = if i == self.focus { theme::selected() } else { theme::text() };
@@ -173,7 +174,7 @@ impl Screen for AlertModal {
 }
 
 impl AlertModal {
-    fn activate(&mut self, app: &mut AppState) -> Action {
+    fn activate(&self, app: &mut AppState) -> Action {
         match self.focus {
             0 => {
                 app.dismiss_alert(true);
@@ -231,14 +232,14 @@ impl AlertModal {
     /// *Show outbreak*: pop the modal, ask the map to open the disease overlay
     /// on this pathogen and centre the viewport on the origin region; the sim
     /// stays paused.
-    fn show_outbreak(&mut self, app: &mut AppState) -> Action {
+    fn show_outbreak(&self, app: &mut AppState) -> Action {
         let Some((pathogen, outbreak)) = self.epidemic else { return Action::Pop };
         app.dismiss_alert(false);
         app.pending_overlay = Some(pathogen);
         let centre = app.sim.as_ref().and_then(|sim| {
             let ob = sim.disease.outbreak(outbreak)?;
-            let r = sim.world.regions.get(ob.origin_region as usize)?;
-            Some(((r.1 + r.3) / 2, (r.2 + r.4) / 2))
+            let r = sim.world.regions.get(crate::cast!(ob.origin_region => usize))?;
+            Some(((r.1 + r.3).div_euclid(2), (r.2 + r.4).div_euclid(2)))
         });
         if let Some((cx, cy)) = centre {
             app.centre_viewport_on(cx, cy);
@@ -246,21 +247,13 @@ impl AlertModal {
         Action::Pop
     }
 
-    fn render_epidemic(&self, sim: &Sim, f: &mut Frame, area: Rect, pathogen: PathogenId, outbreak: u16) {
+    fn render_epidemic(&self, sim: &Sim, f: &mut Frame<'_>, area: Rect, pathogen: PathogenId, outbreak: u16) {
         let modal = util::centered(area, 64, 12);
         let inner = panel::draw(f, modal, "", panel::Kind::Focus);
         let sick_bold = Style::default().fg(theme::SICK).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD);
-        {
-            let buf = f.buffer_mut();
-            let title = format!(" {} EPIDEMIC {} ", glyphs::DISEASE, glyphs::DISEASE);
-            let x = modal.x + (modal.width - title.chars().count() as u16) / 2;
-            buf.set_stringn(x, modal.y, &title, title.chars().count(), sick_bold);
-        }
+        draw_epidemic_title(f, modal, sick_bold);
 
-        let center = |s: &str| -> String {
-            let pad = (inner.width as usize).saturating_sub(s.chars().count()) / 2;
-            format!("{}{}", " ".repeat(pad), s)
-        };
+        let center = |s: &str| -> String { center_line(inner, s) };
 
         let ob = sim.disease.outbreak(outbreak);
         let pth = sim.disease.pathogen(pathogen);
@@ -274,8 +267,8 @@ impl AlertModal {
         let mut row = 1u16;
 
         // Headline.
-        let headline = if pth.is_some_and(|p| p.is_strain()) {
-            format!("A new strain: {}", name)
+        let headline = if pth.is_some_and(crate::sim::disease::Pathogen::is_strain) {
+            format!("A new strain: {name}")
         } else {
             format!("{} is epidemic among the {}", name, host.plural())
         };
@@ -301,30 +294,21 @@ impl AlertModal {
                 o.active,
                 o.deaths,
                 o.started_day % 360 + 1,
-                sim.world.regions.get(o.origin_region as usize).map(|r| r.0.as_str()).unwrap_or("the wild"),
+                sim.world.regions.get(crate::cast!(o.origin_region => usize)).map_or("the wild", |r| r.0.as_str()),
             ),
             None => (0, 0, 1, "the wild"),
         };
-        let mut region_hit = [false; 8];
-        for c in sim.creatures.living() {
-            if c.infection.as_ref().is_some_and(|i| i.outbreak == outbreak) {
-                let r = sim.world.region_index(c.x, c.y);
-                if r < region_hit.len() {
-                    region_hit[r] = true;
-                }
-            }
-        }
-        let regions = region_hit.iter().filter(|&&b| b).count();
+        let regions = regions_with_active_cases(sim, outbreak);
         util::line(f, inner, row, Line::from(vec![
             Span::styled("  ", theme::text()),
-            Span::styled(format!("{} sick", sick), Style::default().fg(theme::SICK).bg(theme::PANEL_BG)),
+            Span::styled(format!("{sick} sick"), Style::default().fg(theme::SICK).bg(theme::PANEL_BG)),
             Span::styled(" · ", theme::dim_text()),
-            Span::styled(format!("{} dead", dead), Style::default().fg(theme::BAD).bg(theme::PANEL_BG)),
+            Span::styled(format!("{dead} dead"), Style::default().fg(theme::BAD).bg(theme::PANEL_BG)),
             Span::styled(" · ", theme::dim_text()),
             Span::styled(format!("{}/{} regions", regions, sim.world.regions.len().max(1)), theme::text()),
             Span::styled(" · ", theme::dim_text()),
             // Keep the row inside the 62-cell modal: `since D36, Southern Thicket`.
-            Span::styled(format!("since D{}, {}", began, origin), theme::text()),
+            Span::styled(format!("since D{began}, {origin}"), theme::text()),
         ]));
         row += 2;
 
@@ -332,37 +316,70 @@ impl AlertModal {
         let hs = &sim.species[host.index()];
         let mean = hs.mean.resistance();
         let base = host.base_genome().resistance();
-        let immune = sim.disease.stats.get(pathogen.0 as usize).map(|s| s.immune).unwrap_or(0);
-        let pct = if hs.count > 0 { (immune as f32 * 100.0 / hs.count as f32).round() as u32 } else { 0 };
+        let immune = sim.disease.stats.get(crate::cast!(pathogen.0 => usize)).map_or(0, |s| s.immune);
+        let pct = if hs.count > 0 { crate::cast!((crate::cast!(immune => f32) * 100.0 / crate::cast!(hs.count => f32)).round() => u32) } else { 0 };
         util::line(f, inner, row, Line::from(vec![
             Span::styled("  mean Resistance ", theme::dim_text()),
-            Span::styled(format!("{:.2}", mean), Style::default().fg(theme::SICK).bg(theme::PANEL_BG)),
-            Span::styled(format!(" (base {:.2})", base), theme::dim_text()),
+            Span::styled(format!("{mean:.2}"), Style::default().fg(theme::SICK).bg(theme::PANEL_BG)),
+            Span::styled(format!(" (base {base:.2})"), theme::dim_text()),
             Span::styled("   ", theme::text()),
-            Span::styled(format!("{}% immune", pct), Style::default().fg(theme::IMMUNE).bg(theme::PANEL_BG)),
+            Span::styled(format!("{pct}% immune"), Style::default().fg(theme::IMMUNE).bg(theme::PANEL_BG)),
         ]));
         row += 2;
 
-        // Buttons.
-        let total: usize = EPIDEMIC_BUTTONS.iter().map(|b| b.chars().count()).sum::<usize>() + EPIDEMIC_BUTTONS.len() * 4;
-        let pad = (inner.width as usize).saturating_sub(total) / 2;
-        let mut spans = vec![Span::styled(" ".repeat(pad), theme::text())];
-        for (i, b) in EPIDEMIC_BUTTONS.iter().enumerate() {
-            let st = if i == self.focus { theme::selected() } else { theme::text() };
-            spans.push(Span::styled(*b, st));
-            spans.push(Span::styled("    ", theme::text()));
-        }
-        util::line(f, inner, row, Line::from(spans));
-        row += 1;
-        util::line(f, inner, row, Line::from(Span::styled(center("Enter select   ←→ move   Esc continue"), theme::dim_text())));
-
-        // Status bar, repainted undimmed.
-        let status_row = area.y + area.height - 1;
-        util::fill(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1), Style::default().bg(theme::STATUS_BG));
-        let keys: &[(&str, &str)] = &[("Enter", "select"), ("←→", "move"), ("o", "show outbreak"), ("Space", "pause"), ("Esc", "continue")];
-        let right = format!("{} paused on epidemic", glyphs::PAUSE_STR);
-        status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, &right);
+        draw_epidemic_buttons(f, inner, row, self.focus);
+        draw_alert_status(f, area, &format!("{} paused on epidemic", glyphs::PAUSE_STR));
     }
+}
+
+/// Paint the bordered EPIDEMIC heading across the modal's top edge.
+fn draw_epidemic_title(f: &mut Frame<'_>, modal: Rect, style: Style) {
+    let buf = f.buffer_mut();
+    let title = format!(" {} EPIDEMIC {} ", glyphs::DISEASE, glyphs::DISEASE);
+    let x = modal.x + (modal.width - crate::cast!(title.chars().count() => u16)).div_euclid(2);
+    buf.set_stringn(x, modal.y, &title, title.chars().count(), style);
+}
+
+/// How many regions hold at least one active case of `outbreak`.
+fn regions_with_active_cases(sim: &Sim, outbreak: u16) -> usize {
+    let mut region_hit = [false; 8];
+    for c in sim.creatures.living() {
+        if c.infection.as_ref().is_some_and(|i| i.outbreak == outbreak) {
+            let r = sim.world.region_index(c.x, c.y);
+            if r < region_hit.len() {
+                region_hit[r] = true;
+            }
+        }
+    }
+    region_hit.iter().filter(|&&b| b).count()
+}
+
+/// The action buttons and the key hint under them.
+fn draw_epidemic_buttons(f: &mut Frame<'_>, inner: Rect, row: u16, focus: usize) {
+    let total: usize = EPIDEMIC_BUTTONS.iter().map(|b| b.chars().count()).sum::<usize>() + EPIDEMIC_BUTTONS.len() * 4;
+    let pad = (crate::cast!(inner.width => usize)).saturating_sub(total).div_euclid(2);
+    let mut spans = vec![Span::styled(" ".repeat(pad), theme::text())];
+    for (i, b) in EPIDEMIC_BUTTONS.iter().enumerate() {
+        let st = if i == focus { theme::selected() } else { theme::text() };
+        spans.push(Span::styled(*b, st));
+        spans.push(Span::styled("    ", theme::text()));
+    }
+    util::line(f, inner, row, Line::from(spans));
+    util::line(f, inner, row + 1, Line::from(Span::styled(center_line(inner, "Enter select   ←→ move   Esc continue"), theme::dim_text())));
+}
+
+/// A string centred inside `inner`.
+fn center_line(inner: Rect, s: &str) -> String {
+    let pad = (crate::cast!(inner.width => usize)).saturating_sub(s.chars().count()).div_euclid(2);
+    format!("{}{}", " ".repeat(pad), s)
+}
+
+/// The alert status bar, repainted undimmed over the underlying screen.
+fn draw_alert_status(f: &mut Frame<'_>, area: Rect, right: &str) {
+    let status_row = area.y + area.height - 1;
+    util::fill(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1), Style::default().bg(theme::STATUS_BG));
+    let keys: &[(&str, &str)] = &[("Enter", "select"), ("←→", "move"), ("o", "show outbreak"), ("Space", "pause"), ("Esc", "continue")];
+    status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, right);
 }
 
 /// `Name tag` and species of the index case: the creature record when still
@@ -377,13 +394,12 @@ fn index_case_label(sim: &Sim, id: CreatureId) -> (String, SpeciesId) {
     (format!("#{:03}", id.0), SpeciesId::Vole)
 }
 
-fn cause_kind(cause: Cause) -> EventKind {
+const fn cause_kind(cause: Cause) -> EventKind {
     match cause {
         Cause::Starved => EventKind::DeathStarved,
         Cause::Thirst => EventKind::DeathThirst,
         Cause::Predation => EventKind::DeathPredation,
-        Cause::Age => EventKind::DeathAge,
-        Cause::Injury => EventKind::DeathAge,
+        Cause::Age | Cause::Injury => EventKind::DeathAge,
         Cause::Disease => EventKind::DeathDisease,
     }
 }
@@ -400,7 +416,7 @@ mod tests {
     fn app_with_outbreak() -> AppState {
         let mut app = AppState::new(Params::default());
         let mut sim = Sim::new(7, Params::default());
-        let index_case = sim.creatures.living().next().map(|c| c.id).unwrap_or(CreatureId(0));
+        let index_case = sim.creatures.living().next().map_or(CreatureId(0), |c| c.id);
         sim.disease.first_index = 0;
         sim.disease.outbreaks.push(Outbreak {
             pathogen: PathogenId(0),
@@ -437,11 +453,11 @@ mod tests {
     }
 
     #[test]
-    fn s12b_buttons() {
+    fn s12b_renders_buttons() {
         let mut app = app_with_outbreak();
         let alert = Alert::Epidemic { event_index: 1, pathogen: PathogenId(0), outbreak: 0 };
         app.alert_shown = Some(alert.clone());
-        let mut modal = AlertModal::new(&alert);
+        let modal = AlertModal::new(&alert);
         let text = render(&app, &modal);
         assert!(text.contains("EPIDEMIC"), "title missing:\n{text}");
         assert!(text.contains("is epidemic among the Voles") || text.contains("A new strain:"), "headline missing:\n{text}");
@@ -450,6 +466,14 @@ mod tests {
         assert!(text.contains("mean Resistance"));
         assert!(text.contains("[ Continue ]    [ Show outbreak ]    [ Pause ]"));
         assert!(text.contains("paused on epidemic"));
+    }
+
+    #[test]
+    fn s12b_show_outbreak_shortcuts() {
+        let mut app = app_with_outbreak();
+        let alert = Alert::Epidemic { event_index: 1, pathogen: PathogenId(0), outbreak: 0 };
+        app.alert_shown = Some(alert.clone());
+        let mut modal = AlertModal::new(&alert);
 
         // `l` is not a shortcut on S12b.
         let a = modal.handle_key(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE), &mut app);

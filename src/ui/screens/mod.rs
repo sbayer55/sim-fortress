@@ -24,6 +24,7 @@ pub mod s11_help;
 pub mod s12_alert;
 pub mod s13_zoom;
 
+#[derive(Debug)]
 pub enum Action {
     None,
     Unhandled,
@@ -37,25 +38,26 @@ pub enum Action {
     EnterWorld { name: String },
 }
 
-pub trait Screen {
+pub trait Screen: std::fmt::Debug {
     /// `false` for modals (they dim what is drawn beneath them).
     fn opaque(&self) -> bool;
     /// The top screen sees every key first. Return `Unhandled` for keys it does
     /// not consume; only then does the stack apply the global key table.
     fn handle_key(&mut self, key: KeyEvent, app: &mut AppState) -> Action;
-    fn render(&self, app: &AppState, f: &mut Frame, area: Rect);
+    fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect);
 }
 
 /// Ordered screen stack; `stack` lives outside `AppState` so a screen is never
 /// borrowed twice when it receives `&mut AppState`.
 #[derive(Default)]
+#[derive(Debug)]
 pub struct Stack {
     pub screens: Vec<Box<dyn Screen>>,
 }
 
 impl Stack {
     pub fn new() -> Self {
-        Stack { screens: Vec::new() }
+        Self { screens: Vec::new() }
     }
 
     pub fn push(&mut self, s: Box<dyn Screen>) {
@@ -81,13 +83,13 @@ impl Stack {
     }
 
     pub fn top_mut(&mut self) -> Option<&mut (dyn Screen + 'static)> {
-        self.screens.last_mut().map(|b| b.as_mut())
+        self.screens.last_mut().map(AsMut::as_mut)
     }
 }
 
 /// Draw every screen from the lowest `opaque` one upward; before drawing a
 /// non-opaque screen, dim everything drawn so far by 55 % (modal backdrop).
-pub fn render_stack(stack: &Stack, app: &AppState, f: &mut Frame, area: Rect) {
+pub fn render_stack(stack: &Stack, app: &AppState, f: &mut Frame<'_>, area: Rect) {
     let start = stack.screens.iter().rposition(|s| s.opaque()).unwrap_or(0);
     for i in start..stack.screens.len() {
         let screen = &stack.screens[i];
@@ -100,26 +102,29 @@ pub fn render_stack(stack: &Stack, app: &AppState, f: &mut Frame, area: Rect) {
 
 /// Fractional tick accumulator: keeps the sub-tick remainder between frames.
 #[derive(Default)]
+#[derive(Debug)]
 pub struct TickAccumulator {
     frac: f64,
 }
 
 impl TickAccumulator {
-    pub fn new() -> Self {
-        TickAccumulator { frac: 0.0 }
+    pub const fn new() -> Self {
+        Self { frac: 0.0 }
     }
 
     /// Feed `elapsed_secs` at `ticks_per_sec` and return the whole ticks due.
     pub fn add(&mut self, elapsed_secs: f64, ticks_per_sec: f64) -> u64 {
         let total = self.frac + elapsed_secs * ticks_per_sec;
-        let whole = total.floor() as u64;
-        self.frac = total - whole as f64;
+        let whole = crate::cast!(total.floor() => u64);
+        self.frac = total - crate::cast!(whole => f64);
         whole
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
+
     use super::*;
     use crate::theme;
     use crate::ui::app::AppState;
@@ -136,6 +141,7 @@ mod tests {
         AppState::new(Params::default())
     }
 
+    #[derive(Debug)]
     struct Dummy {
         opaque: bool,
         mark: Option<(u16, u16, Color)>,
@@ -148,7 +154,7 @@ mod tests {
         fn handle_key(&mut self, _key: KeyEvent, _app: &mut AppState) -> Action {
             Action::Unhandled
         }
-        fn render(&self, _app: &AppState, f: &mut Frame, area: Rect) {
+        fn render(&self, _app: &AppState, f: &mut Frame<'_>, area: Rect) {
             let _ = area;
             if let Some((x, y, c)) = self.mark {
                 if let Some(cell) = f.buffer_mut().cell_mut((x, y)) {
@@ -306,16 +312,15 @@ mod tests {
     }
 
     #[test]
-    fn s09_space_opens_typed_entry_on_numeric_fields() {
+    fn s09_typed_size_entry_applies_and_cancels() {
         let mut app = state();
         let mut s = WorldGen::new();
         let k = |c| KeyEvent::new(c, KeyModifiers::NONE);
-        // Size field: Space, type "250x120", Enter.
+        // Size field: Space, type "250x120", Esc cancels rather than leaving.
         s.handle_key(k(KeyCode::Char(' ')), &mut app);
         for c in "250x120".chars() {
             s.handle_key(k(KeyCode::Char(c)), &mut app);
         }
-        // Esc cancels an open entry rather than leaving the screen.
         let a = s.handle_key(k(KeyCode::Esc), &mut app);
         assert!(matches!(a, Action::None));
         let p = s.form_params();
@@ -329,7 +334,13 @@ mod tests {
         assert!(matches!(a, Action::None), "Enter applies the typed value instead of generating");
         let p = s.form_params();
         assert_eq!((p.world.width, p.world.height), (250, 120));
+    }
 
+    #[test]
+    fn s09_typed_entry_clamps_and_edits() {
+        let mut app = state();
+        let mut s = WorldGen::new();
+        let k = |c| KeyEvent::new(c, KeyModifiers::NONE);
         // Water %: typed values are clamped to the field range.
         s.handle_key(k(KeyCode::Tab), &mut app);
         s.handle_key(k(KeyCode::Char(' ')), &mut app);
@@ -358,8 +369,13 @@ mod tests {
         }
         s.handle_key(k(KeyCode::Enter), &mut app);
         assert!((s.form_params().genetics.mutation_rate - 0.15).abs() < 1e-6);
+    }
 
-        // The open entry renders with a caret.
+    #[test]
+    fn s09_typed_entry_renders_caret() {
+        let mut app = state();
+        let mut s = WorldGen::new();
+        let k = |c| KeyEvent::new(c, KeyModifiers::NONE);
         s.handle_key(k(KeyCode::Char(' ')), &mut app);
         s.handle_key(k(KeyCode::Char('7')), &mut app);
         let backend = TestBackend::new(155, 45);
@@ -379,7 +395,7 @@ mod tests {
     }
 
     #[test]
-    fn s07_chip_sets() {
+    fn s07_chip_toggles() {
         use crate::sim::EventKind;
         use crate::ui::screens::s07_log::ChipFilter;
 
@@ -399,6 +415,14 @@ mod tests {
         f.toggle(2);
         f.toggle(3);
         assert!(f.all);
+    }
+
+    #[test]
+    fn s07_chip_cycle() {
+        use crate::sim::EventKind;
+        use crate::ui::screens::s07_log::ChipFilter;
+
+        let mut f = ChipFilter::new();
         // Cycle: all → deaths+extinctions → migrations+droughts → all.
         f.cycle();
         assert!(f.matches(EventKind::DeathStarved));
@@ -414,6 +438,14 @@ mod tests {
         assert!(!f.matches(EventKind::DeathDisease), "disease deaths stay under the deaths chip");
         f.cycle();
         assert!(f.all);
+    }
+
+    #[test]
+    fn s07_chip_disease_deaths() {
+        use crate::sim::EventKind;
+        use crate::ui::screens::s07_log::ChipFilter;
+
+        let mut f = ChipFilter::new();
         // Key 8 is the disease chip; disease deaths live under deaths (key 3).
         f.toggle(8);
         assert_eq!(f.kinds, [false, false, false, false, false, false, true]);
@@ -514,7 +546,7 @@ mod tests {
         let sim = app.sim.as_ref().unwrap();
         let mut seen = 0;
         for c in sim.creatures.living().filter(|c| c.alive && c.x < 110 && c.y < 40) {
-            let cell = &buf[(1 + c.x as u16, 1 + c.y as u16)];
+            let cell = &buf[(1 + crate::cast!(c.x => u16), 1 + crate::cast!(c.y => u16))];
             if cell.symbol() != c.species.glyph().to_string() && cell.symbol() != c.species.glyph().to_ascii_uppercase().to_string() {
                 continue; // another creature or resource drew over it
             }
@@ -601,7 +633,7 @@ mod tests {
         s.region_sel = n - 1;
         s.handle_key(key(KeyCode::Enter), &mut app);
         let r = app.sim.as_ref().unwrap().world.regions[n - 1].clone();
-        let (cx, cy) = ((r.1 + r.3) / 2, (r.2 + r.4) / 2);
+        let (cx, cy) = ((r.1 + r.3).div_euclid(2), (r.2 + r.4).div_euclid(2));
         let (mx, my) = app.viewport_max();
         assert_eq!(app.viewport_origin, (cx.saturating_sub(55).min(mx), cy.saturating_sub(20).min(my)));
     }

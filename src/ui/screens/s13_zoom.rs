@@ -1,6 +1,7 @@
 //! S13: live local zoom view — every world cell around the look cursor as a 3×3
 //! tile, with the look-sidebar readout and an in-view creature list.
 
+use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -19,6 +20,7 @@ use crate::{glyphs, theme};
 const TILE_W: u16 = 3;
 const TILE_H: u16 = 3;
 
+#[derive(Debug)]
 pub struct Zoom;
 
 impl Default for Zoom {
@@ -28,15 +30,15 @@ impl Default for Zoom {
 }
 
 impl Zoom {
-    pub fn new() -> Self {
-        Zoom
+    pub const fn new() -> Self {
+        Self
     }
 
     fn window(world: &World, cx: usize, cy: usize, inner: Rect) -> (usize, usize, usize, usize) {
-        let w = inner.width.div_ceil(TILE_W) as usize;
-        let h = inner.height.div_ceil(TILE_H) as usize;
-        let x0 = cx.saturating_sub(w / 2).min(world.width().saturating_sub(w));
-        let y0 = cy.saturating_sub(h / 2).min(world.height().saturating_sub(h));
+        let w = crate::cast!(inner.width.div_ceil(TILE_W) => usize);
+        let h = crate::cast!(inner.height.div_ceil(TILE_H) => usize);
+        let x0 = cx.saturating_sub(w.div_euclid(2)).min(world.width().saturating_sub(w));
+        let y0 = cy.saturating_sub(h.div_euclid(2)).min(world.height().saturating_sub(h));
         (x0, y0, w, h)
     }
 }
@@ -96,24 +98,23 @@ impl Screen for Zoom {
             }
             KeyCode::Tab => {
                 // Jump the cursor to the next in-view creature, by dist then id.
-                if let Some((cx, cy)) = cur {
-                    let ids = sim.creatures.living_ids();
-                    if !ids.is_empty() {
-                        let mut order: Vec<(f32, CreatureId)> = ids
-                            .iter()
-                            .filter_map(|&id| {
-                                let c = sim.creatures.get(id)?;
-                                Some((crate::sim::dist(cx, cy, c.x, c.y), id))
-                            })
-                            .collect();
-                        order.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.cmp(&b.1)));
-                        let cur_id = sim.creatures.living().find(|c| c.x == cx && c.y == cy).map(|c| c.id);
-                        let pos = cur_id.and_then(|id| order.iter().position(|&(_, x)| x == id)).unwrap_or(0);
-                        let next = order[(pos + 1) % order.len()].1;
-                        if let Some(c) = sim.creatures.get(next) {
-                            app.look_cursor = Some((c.x, c.y));
-                        }
-                    }
+                let Some((cx, cy)) = cur else {
+                    return Action::None;
+                };
+                let ids = sim.creatures.living_ids();
+                if ids.is_empty() {
+                    return Action::None;
+                }
+                let mut order: Vec<(f32, CreatureId)> = ids
+                    .iter()
+                    .filter_map(|&id| sim.creatures.get(id).map(|c| (crate::sim::dist(cx, cy, c.x, c.y), id)))
+                    .collect();
+                order.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.cmp(&b.1)));
+                let cur_id = sim.creatures.living().find(|c| c.x == cx && c.y == cy).map(|c| c.id);
+                let pos = cur_id.and_then(|id| order.iter().position(|&(_, x)| x == id)).unwrap_or(0);
+                let next = order[(pos + 1) % order.len()].1;
+                if let Some(c) = sim.creatures.get(next) {
+                    app.look_cursor = Some((c.x, c.y));
                 }
                 Action::None
             }
@@ -121,14 +122,14 @@ impl Screen for Zoom {
         }
     }
 
-    fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
+    fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let Some(sim) = &app.sim else { return };
         let world = &sim.world;
         let Some((cx, cy)) = app.look_cursor else { return };
 
         let status_row = area.y + area.height - 1;
         let body_h = area.height - 1;
-        let map_area = Rect::new(area.x, area.y, area.width * 2 / 3, body_h);
+        let map_area = Rect::new(area.x, area.y, (area.width * 2).div_euclid(3), body_h);
         let side_area = Rect::new(area.x + map_area.width, area.y, area.width - map_area.width, body_h);
 
         let probe = Rect::new(map_area.x + 1, map_area.y + 1, map_area.width - 2, map_area.height - 2);
@@ -149,7 +150,7 @@ impl Screen for Zoom {
     }
 }
 
-fn draw_tiles(f: &mut Frame, inner: Rect, sim: &Sim, win: (usize, usize, usize, usize), cursor: (usize, usize)) {
+fn draw_tiles(f: &mut Frame<'_>, inner: Rect, sim: &Sim, win: (usize, usize, usize, usize), cursor: (usize, usize)) {
     let (x0, y0, ww, wh) = win;
     let (cx, cy) = cursor;
     let world = &sim.world;
@@ -161,17 +162,11 @@ fn draw_tiles(f: &mut Frame, inner: Rect, sim: &Sim, win: (usize, usize, usize, 
             let (wx, wy) = (x0 + tx, y0 + ty);
             let cell = world.cell(wx, wy);
             let (g, fg, bg) = map::terrain_cell(cell, false);
-            let tile = Rect::new(inner.x + tx as u16 * TILE_W, inner.y + ty as u16 * TILE_H, TILE_W, TILE_H).intersection(inner);
+            let tile = Rect::new(inner.x + crate::cast!(tx => u16) * TILE_W, inner.y + crate::cast!(ty => u16) * TILE_H, TILE_W, TILE_H).intersection(inner);
             util::fill(buf, tile, Style::default().bg(bg));
             let faint = Style::default().fg(theme::lerp(bg, fg, 0.35)).bg(bg);
-            let full = Rect::new(inner.x + tx as u16 * TILE_W, inner.y + ty as u16 * TILE_H, TILE_W, TILE_H);
-            for (dx, dy) in [(0u16, 0u16), (2, 0), (0, 2), (2, 2), (1, 1)] {
-                let (px, py) = (full.x + dx, full.y + dy);
-                if px < inner.right() && py < inner.bottom() {
-                    let st = if (dx, dy) == (1, 1) { Style::default().fg(fg).bg(bg) } else { faint };
-                    buf.set_stringn(px, py, g.to_string(), 1, st);
-                }
-            }
+            let full = Rect::new(inner.x + crate::cast!(tx => u16) * TILE_W, inner.y + crate::cast!(ty => u16) * TILE_H, TILE_W, TILE_H);
+            draw_tile(buf, inner, full, g, fg, bg, faint);
         }
     }
 
@@ -179,13 +174,13 @@ fn draw_tiles(f: &mut Frame, inner: Rect, sim: &Sim, win: (usize, usize, usize, 
         if wx < x0 || wy < y0 || wx >= x0 + ww || wy >= y0 + wh {
             return None;
         }
-        let (sx, sy) = (inner.x + (wx - x0) as u16 * TILE_W + 1, inner.y + (wy - y0) as u16 * TILE_H + 1);
+        let (sx, sy) = (inner.x + crate::cast!((wx - x0) => u16) * TILE_W + 1, inner.y + crate::cast!((wy - y0) => u16) * TILE_H + 1);
         if sx >= inner.right() || sy >= inner.bottom() {
             return None;
         }
         Some((sx, sy))
     };
-    let mut put = |wx: usize, wy: usize, g: char, fg: Color, bold: bool| {
+    let put = |wx: usize, wy: usize, g: char, fg: Color, bold: bool| {
         if let Some((sx, sy)) = center(wx, wy) {
             if let Some(c) = buf.cell_mut((sx, sy)) {
                 c.set_char(g);
@@ -198,6 +193,29 @@ fn draw_tiles(f: &mut Frame, inner: Rect, sim: &Sim, win: (usize, usize, usize, 
         }
     };
 
+    draw_resources(world, sim, put);
+
+    // Cursor tile.
+    if let Some((sx, sy)) = center(cx, cy) {
+        paint_cursor_tile(buf, sx, sy);
+    }
+    draw_corners(buf, &center, cx, cy);
+}
+
+
+/// The five lit glyph cells of one 3x3 tile.
+fn draw_tile(buf: &mut Buffer, inner: Rect, full: Rect, g: char, fg: Color, bg: Color, faint: Style) {
+    for (dx, dy) in [(0u16, 0u16), (2, 0), (0, 2), (2, 2), (1, 1)] {
+        let (px, py) = (full.x + dx, full.y + dy);
+        let st = if (dx, dy) == (1, 1) { Style::default().fg(fg).bg(bg) } else { faint };
+        if px < inner.right() && py < inner.bottom() {
+            buf.set_stringn(px, py, g.to_string(), 1, st);
+        }
+    }
+}
+
+/// Seeds, dens, carcasses and living creatures, via the tile `put` closure.
+fn draw_resources(world: &World, sim: &Sim, mut put: impl FnMut(usize, usize, char, Color, bool)) {
     for &(x, y) in &world.seeds {
         put(x, y, glyphs::SEED, theme::SEED, false);
     }
@@ -211,27 +229,16 @@ fn draw_tiles(f: &mut Frame, inner: Rect, sim: &Sim, win: (usize, usize, usize, 
         let glyph = if c.adult { c.species.glyph().to_ascii_uppercase() } else { c.species.glyph() };
         put(c.x, c.y, glyph, c.species.color(), c.adult);
     }
+}
 
-    // Cursor tile.
-    if let Some((sx, sy)) = center(cx, cy) {
-        for dy in 0..TILE_H {
-            for dx in 0..TILE_W {
-                if let Some(c) = buf.cell_mut((sx - 1 + dx, sy - 1 + dy)) {
-                    let st = Style::default().fg(theme::CURSOR_FG).bg(theme::CURSOR_BG).add_modifier(Modifier::BOLD);
-                    c.set_style(st);
-                    if (dx, dy) != (1, 1) {
-                        c.set_char(' ');
-                    }
-                }
-            }
-        }
-    }
+/// The four corner ticks framing the cursor tile.
+fn draw_corners(buf: &mut Buffer, center: &impl Fn(usize, usize) -> Option<(u16, u16)>, cx: usize, cy: usize) {
     for (dx, dy) in [(-1i32, -1i32), (1, -1), (-1, 1), (1, 1)] {
-        let (wx, wy) = (cx as i32 + dx, cy as i32 + dy);
+        let (wx, wy) = (crate::cast!(cx => i32) + dx, crate::cast!(cy => i32) + dy);
         if wx >= 0 && wy >= 0 {
-            if let Some((sx, sy)) = center(wx as usize, wy as usize) {
-                let (ox, oy) = (sx as i32 - dx, sy as i32 - dy);
-                if let Some(c) = buf.cell_mut((ox as u16, oy as u16)) {
+            if let Some((sx, sy)) = center(crate::cast!(wx => usize), crate::cast!(wy => usize)) {
+                let (ox, oy) = (i32::from(sx) - dx, i32::from(sy) - dy);
+                if let Some(c) = buf.cell_mut((crate::cast!(ox => u16), crate::cast!(oy => u16))) {
                     c.set_char(glyphs::CORNER);
                     c.set_fg(theme::CURSOR_BG);
                 }
@@ -240,7 +247,22 @@ fn draw_tiles(f: &mut Frame, inner: Rect, sim: &Sim, win: (usize, usize, usize, 
     }
 }
 
-fn sidebar(f: &mut Frame, area: Rect, sim: &Sim, win: (usize, usize, usize, usize), cursor: (usize, usize)) {
+/// Paint the 3×3 cursor tile: every cell bold, keeping the centre glyph.
+fn paint_cursor_tile(buf: &mut Buffer, sx: u16, sy: u16) {
+    for dy in 0..TILE_H {
+        for dx in 0..TILE_W {
+            if let Some(c) = buf.cell_mut((sx - 1 + dx, sy - 1 + dy)) {
+                let st = Style::default().fg(theme::CURSOR_FG).bg(theme::CURSOR_BG).add_modifier(Modifier::BOLD);
+                c.set_style(st);
+                if (dx, dy) != (1, 1) {
+                    c.set_char(' ');
+                }
+            }
+        }
+    }
+}
+
+fn sidebar(f: &mut Frame<'_>, area: Rect, sim: &Sim, win: (usize, usize, usize, usize), cursor: (usize, usize)) {
     let inner = panel::draw(f, area, "Look", panel::Kind::Outer);
     let (x0, y0, ww, wh) = win;
     let (cx, cy) = cursor;
@@ -252,9 +274,9 @@ fn sidebar(f: &mut Frame, area: Rect, sim: &Sim, win: (usize, usize, usize, usiz
     let (g, fg, bg) = map::terrain_cell(cell, false);
     util::line(f, inner, row, Line::from(vec![
         Span::styled(" ", theme::text()),
-        Span::styled(format!(" {} ", g), Style::default().fg(fg).bg(bg)),
+        Span::styled(format!(" {g} "), Style::default().fg(fg).bg(bg)),
         Span::styled(format!(" {}", cell.terrain.name()), theme::title()),
-        Span::styled(format!("   ({}, {})", cx, cy), theme::text()),
+        Span::styled(format!("   ({cx}, {cy})"), theme::text()),
     ]));
     row += 1;
     util::line(f, inner, row, Line::from(vec![
@@ -273,25 +295,25 @@ fn sidebar(f: &mut Frame, area: Rect, sim: &Sim, win: (usize, usize, usize, usiz
     } else {
         "nothing is standing here".to_string()
     };
-    util::line(f, inner, row, Line::from(Span::styled(format!(" {}", occupant), theme::dim_text())));
+    util::line(f, inner, row, Line::from(Span::styled(format!(" {occupant}"), theme::dim_text())));
     row += 2;
 
-    let mut near: Vec<(f32, crate::sim::creatures::CreatureId)> = sim
+    let mut near: Vec<(f32, CreatureId)> = sim
         .creatures
         .living()
         .filter(|c| c.x >= x0 && c.x < x0 + ww && c.y >= y0 && c.y < y0 + wh)
         .map(|c| (crate::sim::dist(cx, cy, c.x, c.y), c.id))
         .collect();
-    near.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.cmp(&b.1)));
+    near.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.cmp(&b.1)));
     panel::section(f, inner, row, &format!("In view ({})", near.len()));
     row += 1;
     util::line(f, inner, row, Line::from(Span::styled("   tag    name     dist", theme::label())));
     row += 1;
     for (d, id) in near.iter().take(14) {
-        let c = sim.creatures.get(*id).unwrap();
+        let Some(c) = sim.creatures.get(*id) else { continue };
         let glyph = if c.adult { c.species.glyph().to_ascii_uppercase() } else { c.species.glyph() };
         util::line(f, inner, row, Line::from(vec![
-            Span::styled(format!(" {} ", glyph), Style::default().fg(c.species.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            Span::styled(format!(" {glyph} "), Style::default().fg(c.species.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
             Span::styled(format!("{:<6} {:<8} {:>4.0}", c.tag(), c.name_str(), d), theme::text()),
         ]));
         row += 1;

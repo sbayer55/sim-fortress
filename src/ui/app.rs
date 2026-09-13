@@ -30,11 +30,13 @@ use super::screens::s12_alert::AlertModal;
 use super::screens::{self, Action, Stack, TickAccumulator};
 
 /// A pending confirm-modal request (C6 FR4).
+#[derive(Debug)]
 pub struct ConfirmRequest {
     pub question: String,
     pub yes: ConfirmYes,
 }
 
+#[derive(Debug)]
 pub enum ConfirmYes {
     QuickLoad,
     DeleteSave(PathBuf),
@@ -42,6 +44,7 @@ pub enum ConfirmYes {
     ToTitle,
 }
 
+#[derive(Debug)]
 pub struct AppState {
     pub sim: Option<Sim>,
     pub paused: bool,
@@ -83,7 +86,7 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(params: Params) -> Self {
-        AppState {
+        Self {
             sim: None,
             paused: false,
             speed_idx: 0,
@@ -115,7 +118,7 @@ impl AppState {
     }
 
     /// Manual `F5` save. Returns the path on success.
-    pub fn save_now(&mut self) -> std::io::Result<Option<PathBuf>> {
+    pub fn save_now(&mut self) -> io::Result<Option<PathBuf>> {
         let Some(sim) = &self.sim else { return Ok(None) };
         let Some(name) = self.world_name.clone() else { return Ok(None) };
         let path = save::save(sim, &name, &self.saves_dir).map_err(io::Error::other)?;
@@ -124,7 +127,7 @@ impl AppState {
     }
 
     /// Autosave (overwrites `<slug>-autosave.simf`).
-    pub fn autosave_now(&mut self) -> std::io::Result<Option<PathBuf>> {
+    pub fn autosave_now(&mut self) -> io::Result<Option<PathBuf>> {
         let Some(sim) = &self.sim else { return Ok(None) };
         let Some(name) = self.world_name.clone() else { return Ok(None) };
         let path = save::autosave(sim, &name, &self.saves_dir).map_err(io::Error::other)?;
@@ -142,12 +145,14 @@ impl AppState {
         };
         match save::load(&entry.path) {
             Ok(loaded) => {
+                let params = loaded.sim.params.clone();
+                let tick = loaded.sim.time.tick;
                 self.sim = Some(loaded.sim);
-                self.params = self.sim.as_ref().unwrap().params.clone();
+                self.params = params;
                 if let Some(ui) = config::load_ui() {
                     self.params.ui = ui;
                 }
-                self.last_saved_tick = Some(self.sim.as_ref().unwrap().time.tick);
+                self.last_saved_tick = Some(tick);
                 self.viewport_origin = (0, 0);
                 self.alert_queue.clear();
                 self.alert_shown = None;
@@ -211,7 +216,7 @@ impl AppState {
     pub fn centre_viewport_on(&mut self, cx: usize, cy: usize) {
         let (vw, vh) = self.viewport_size.get();
         let (mx, my) = self.viewport_max();
-        self.viewport_origin = (cx.saturating_sub(vw / 2).min(mx), cy.saturating_sub(vh / 2).min(my));
+        self.viewport_origin = (cx.saturating_sub(vw.div_euclid(2)).min(mx), cy.saturating_sub(vh.div_euclid(2)).min(my));
     }
 
     pub fn speed(&self) -> u32 {
@@ -219,10 +224,10 @@ impl AppState {
     }
 
     pub fn ticks_per_sec(&self) -> f64 {
-        self.params.ui.base_ticks_per_second as f64 * self.speed() as f64
+        f64::from(self.params.ui.base_ticks_per_second) * f64::from(self.speed())
     }
 
-    pub fn toggle_pause(&mut self) {
+    pub const fn toggle_pause(&mut self) {
         self.paused = !self.paused;
     }
 
@@ -232,7 +237,7 @@ impl AppState {
         }
     }
 
-    pub fn speed_down(&mut self) {
+    pub const fn speed_down(&mut self) {
         self.speed_idx = self.speed_idx.saturating_sub(1);
     }
 
@@ -322,6 +327,7 @@ impl AppState {
     }
 }
 
+#[derive(Debug)]
 pub struct App {
     pub state: AppState,
     pub stack: Stack,
@@ -329,7 +335,7 @@ pub struct App {
 
 impl App {
     pub fn new(params: Params) -> Self {
-        App { state: AppState::new(params), stack: Stack::new() }
+        Self { state: AppState::new(params), stack: Stack::new() }
     }
 
     /// Apply the global key table to an unhandled key.
@@ -361,14 +367,14 @@ impl App {
             KeyCode::Char('s') => Action::Push(Box::new(SpeciesBrowser::new())),
             KeyCode::Char('l') => {
                 // Lineage of the followed creature, else the oldest living one.
-                let focus = self.state.follow.or_else(|| self.state.sim.as_ref().and_then(|s| s.oldest_living()));
+                let focus = self.state.follow.or_else(|| self.state.sim.as_ref().and_then(Sim::oldest_living));
                 match focus {
                     Some(id) => Action::Push(Box::new(LineageScreen::new(id))),
                     None => Action::None,
                 }
             }
             // `q`/`w` return to the title screen (confirm when dirty), C6 FR3.
-            KeyCode::Char('q') | KeyCode::Char('w') => self.quit_to_title(),
+            KeyCode::Char('q' | 'w') => self.quit_to_title(),
             KeyCode::F(5) => {
                 match self.state.save_now() {
                     Ok(Some(path)) => eprintln!("saved {}", path.display()),
@@ -450,7 +456,7 @@ impl App {
         }
     }
 
-    pub fn draw(&self, f: &mut Frame) {
+    pub fn draw(&self, f: &mut Frame<'_>) {
         let area = f.area();
         f.render_widget(Paragraph::new("").style(Style::default().bg(theme::BG)), area);
         screens::render_stack(&self.stack, &self.state, f, area);

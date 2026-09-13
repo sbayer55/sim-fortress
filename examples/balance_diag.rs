@@ -1,5 +1,10 @@
 //! Balance diagnostic (throwaway): per-year per-species counts and death causes.
-//!   cargo run --release --example balance_diag -- <years>
+//!   cargo run --release --example `balance_diag` -- <years>
+
+// Throwaway diagnostic: it is a separate compilation root and does not inherit
+// the allow list in `src/lib.rs`, where the `indexing_slicing` sites are
+// justified by the same checked-loop pattern.
+#![allow(clippy::indexing_slicing)]
 
 use sim_fortress::sim::{EventKind, Params, Sim, SpeciesId};
 
@@ -13,7 +18,7 @@ fn main() {
             sim.step();
         }
         let mut deaths = [[0u64; 5]; 6]; // [species][cause]
-        for e in sim.events.iter().skip(start_total as usize) {
+        for e in sim.events.iter().skip(sim_fortress::cast!(start_total => usize)) {
             let (sp, cause) = match (e.species, e.kind) {
                 (Some(s), EventKind::DeathStarved) => (s.index(), 0),
                 (Some(s), EventKind::DeathThirst) => (s.index(), 1),

@@ -1,8 +1,10 @@
 //! Disease and parasites (C7). Contagious pathogens spread by proximity and
+//!
 //! through carcasses; a continuous parasite load builds up from fouled ground
 //! and water; the Resistance gene gates both. Outbreaks are recorded as named
 //! events, and a pathogen can mutate into a predator's species when the predator
-//! eats infected prey (spillover, FR8b).
+//! eats infected prey (spillover, `FR8b`).
+//!
 //!
 //! Determinism: infectious creatures are visited in id order, queued infections
 //! are applied in `(target, source)` order, and every roll comes from the
@@ -51,7 +53,7 @@ pub struct Infection {
     pub outbreak: u16,
 }
 
-/// A live pathogen: the roster record plus strain bookkeeping (FR8b).
+/// A live pathogen: the roster record plus strain bookkeeping (`FR8b`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Pathogen {
     pub params: PathogenParams,
@@ -71,7 +73,7 @@ impl Pathogen {
         self.params.hosts.get(&s).copied().unwrap_or(0.0)
     }
 
-    pub fn is_strain(&self) -> bool {
+    pub const fn is_strain(&self) -> bool {
         self.parent.is_some()
     }
 }
@@ -109,7 +111,7 @@ impl Outbreak {
 }
 
 /// Per-pathogen running statistics, refreshed daily.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PathogenStats {
     pub outbreaks: u32,
     pub total_cases: u32,
@@ -145,7 +147,7 @@ impl DiseaseState {
             .take(dp.max_pathogens())
             .map(|p| Pathogen { params: p.clone(), parent: None, born_day: None, extinct: false })
             .collect();
-        DiseaseState {
+        Self {
             pathogens,
             last_case_day: [u32::MAX; MAX_PATHOGENS],
             stats: [PathogenStats::default(); MAX_PATHOGENS],
@@ -156,12 +158,12 @@ impl DiseaseState {
     }
 
     pub fn pathogen(&self, id: PathogenId) -> Option<&Pathogen> {
-        self.pathogens.get(id.0 as usize)
+        self.pathogens.get(crate::cast!(id.0 => usize))
     }
 
     /// The name of a pathogen slot, or `?` when the slot is empty.
     pub fn name(&self, id: PathogenId) -> &str {
-        self.pathogen(id).map(|p| p.name()).unwrap_or("?")
+        self.pathogen(id).map_or("?", Pathogen::name)
     }
 
     /// The roster ancestor of a strain (itself for roster pathogens).
@@ -177,12 +179,12 @@ impl DiseaseState {
     }
 
     pub fn outbreak(&self, index: u16) -> Option<&Outbreak> {
-        let i = index.checked_sub(self.first_index)? as usize;
+        let i = crate::cast!(index.checked_sub(self.first_index)? => usize);
         self.outbreaks.get(i)
     }
 
     pub fn outbreak_mut(&mut self, index: u16) -> Option<&mut Outbreak> {
-        let i = index.checked_sub(self.first_index)? as usize;
+        let i = crate::cast!(index.checked_sub(self.first_index)? => usize);
         self.outbreaks.get_mut(i)
     }
 
@@ -193,7 +195,7 @@ impl DiseaseState {
             .enumerate()
             .rev()
             .find(|(_, o)| o.pathogen == id && o.ended_day.is_none())
-            .map(|(i, o)| (self.first_index + i as u16, o))
+            .map(|(i, o)| (self.first_index + crate::cast!(i => u16), o))
     }
 
     fn push_outbreak(&mut self, o: Outbreak) -> u16 {
@@ -202,7 +204,7 @@ impl DiseaseState {
             self.first_index += 1;
         }
         self.outbreaks.push(o);
-        self.first_index + (self.outbreaks.len() - 1) as u16
+        self.first_index + crate::cast!((self.outbreaks.len() - 1) => u16)
     }
 
     /// Living hosts of a pathogen (host multiplier > 0), all species.
@@ -233,7 +235,7 @@ pub fn effects(c: &Creature, dp: &DiseaseParams) -> Effects {
     }
     let resistance = c.genome.resistance();
     let infectious = c.infection.filter(|i| i.stage == Stage::Infectious);
-    let severity = infectious.map(|i| i.severity).unwrap_or(0.0);
+    let severity = infectious.map_or(0.0, |i| i.severity);
     let load = c.parasite_load;
     Effects {
         hunger_factor: (1.0 + dp.resist_hunger_cost * resistance)
@@ -254,7 +256,7 @@ pub fn is_infectious(c: &Creature) -> bool {
 
 /// `true` while the creature is immune to `p` (day-indexed table, FR3).
 pub fn is_immune(c: &Creature, p: PathogenId, day: u32) -> bool {
-    c.immune_until.get(p.0 as usize).is_some_and(|&until| day < until)
+    c.immune_until.get(crate::cast!(p.0 => usize)).is_some_and(|&until| day < until)
 }
 
 /// Susceptibility of `c` to pathogen `p`: host multiplier, resistance, and
@@ -271,7 +273,7 @@ fn susceptibility(c: &Creature, p: PathogenId, day: u32, dp: &DiseaseParams, sta
     let mut s = host * (1.0 - dp.susceptibility_w * c.genome.resistance());
     if path.is_strain() {
         let root = state.root(p);
-        let immune_to_kin = (0..state.pathogens.len() as u8)
+        let immune_to_kin = (0..crate::cast!(state.pathogens.len() => u8))
             .map(PathogenId)
             .filter(|&q| q != p && state.root(q) == root)
             .any(|q| is_immune(c, q, day));
@@ -284,7 +286,9 @@ fn susceptibility(c: &Creature, p: PathogenId, day: u32, dp: &DiseaseParams, sta
 
 /// Build a fresh infection of `p` for `c` in the given stage.
 fn new_infection(c: &Creature, p: PathogenId, stage: Stage, day: u32, source: Option<CreatureId>, outbreak: u16, dp: &DiseaseParams, state: &DiseaseState) -> Infection {
-    let path = state.pathogen(p).expect("pathogen slot");
+    let Some(path) = state.pathogen(p) else {
+        return Infection { pathogen: p, stage, since_day: day, ends_day: day, severity: 0.0, source, outbreak };
+    };
     let r = c.genome.resistance();
     let ends_day = match stage {
         Stage::Incubating => day + path.params.incubation_days,
@@ -294,7 +298,7 @@ fn new_infection(c: &Creature, p: PathogenId, stage: Stage, day: u32, source: Op
 }
 
 fn infectious_days(p: &PathogenParams, resistance: f32, dp: &DiseaseParams) -> u32 {
-    ((p.infectious_days as f32 * (1.0 - dp.duration_resist_w * resistance)).round() as u32).max(2)
+    (crate::cast!((crate::cast!(p.infectious_days => f32) * (1.0 - dp.duration_resist_w * resistance)).round() => u32)).max(2)
 }
 
 // ------------------------------------------------------------------ per tick
@@ -304,7 +308,7 @@ pub fn contagion_pass(store: &mut CreatureStore, spatial: &SpatialIndex, world: 
     if !dp.enabled {
         return;
     }
-    let day = time.day_index() as u32;
+    let day = crate::cast!(time.day_index() => u32);
     let infectious: Vec<CreatureId> = {
         let mut v: Vec<CreatureId> = store.living().filter(|c| is_infectious(c)).map(|c| c.id).collect();
         v.sort_unstable();
@@ -313,7 +317,7 @@ pub fn contagion_pass(store: &mut CreatureStore, spatial: &SpatialIndex, world: 
     if infectious.is_empty() {
         return;
     }
-    let r = (dp.contact_cheb + 1) as u16;
+    let r = crate::cast!((dp.contact_cheb + 1) => u16);
     let mut queued: Vec<(CreatureId, CreatureId, PathogenId, u16)> = Vec::new();
     for src_id in infectious {
         let Some(src) = store.get(src_id) else { continue };
@@ -388,7 +392,7 @@ pub fn parasite_shed(c: &Creature, world: &mut World, dp: &DiseaseParams) {
 }
 
 /// FR7: an eater took a meal from `carcass`: parasite transfer, carcass
-/// transmission when the carcass died infectious, and (FR8b) the rare spillover
+/// transmission when the carcass died infectious, and (`FR8b`) the rare spillover
 /// into a non-host eater. Returns the events to log.
 #[allow(clippy::too_many_arguments)]
 pub fn on_eat(
@@ -405,7 +409,7 @@ pub fn on_eat(
     if !dp.enabled {
         return;
     }
-    let day = time.day_index() as u32;
+    let day = crate::cast!(time.day_index() => u32);
     let (carcass_load, died_infected, cx, cy, carcass_species) = match store.get(carcass_id) {
         Some(k) => (k.parasite_load, k.died_infected, k.x, k.y, k.species),
         None => return,
@@ -422,7 +426,7 @@ pub fn on_eat(
     if is_host {
         let s = susceptibility(eater, p, day, dp, state);
         if s > 0.0 && rng.chance((dp.carcass_transmission * s).clamp(0.0, 1.0)) {
-            let outbreak = state.open_outbreak(p).map(|(i, _)| i).unwrap_or(state.first_index);
+            let outbreak = state.open_outbreak(p).map_or(state.first_index, |(i, _)| i);
             let inf = new_infection(eater, p, Stage::Incubating, day, Some(carcass_id), outbreak, dp, state);
             if let Some(e) = store.get_mut(eater_id) {
                 e.infection = Some(inf);
@@ -433,74 +437,76 @@ pub fn on_eat(
     }
 }
 
-/// FR8b: create a strain of `parent` in the eater's species and seed it.
+/// `FR8b`: create a strain of `parent` in the eater's species and seed it.
 #[allow(clippy::too_many_arguments)]
-fn spillover(
-    store: &mut CreatureStore,
+/// A jittered, single-host copy of `parent` adapted to the eater's species.
+fn spillover_strain(
+    store: &CreatureStore,
     eater_id: CreatureId,
     parent: PathogenId,
-    carcass_pos: (usize, usize),
-    prey_species: SpeciesId,
-    world: &World,
-    events: &mut EventRing,
-    time: &Time,
+    day: u32,
     dp: &DiseaseParams,
-    state: &mut DiseaseState,
+    state: &DiseaseState,
     rng: &mut Rng,
-) {
-    let day = time.day_index() as u32;
-    let Some(eater) = store.get(eater_id) else { return };
-    let species = eater.species;
-    let Some(parent_p) = state.pathogen(parent).cloned() else { return };
-    let root = state.root(parent);
-    let root_name = state.name(root).to_string();
-
-    // Jittered copy with a single host.
+) -> Option<(Pathogen, SpeciesId)> {
+    let species = store.get(eater_id)?.species;
+    let parent_p = state.pathogen(parent)?.clone();
+    let root_name = state.name(state.root(parent)).to_string();
     let jitter = |rng: &mut Rng| (1.0 + rng.gauss(0.0, dp.spillover_jitter)).clamp(0.25, 2.0);
-    let mut params = parent_p.params.clone();
+    let mut params = parent_p.params;
     params.name = format!("{} ({} strain)", root_name, species.plural().to_lowercase());
-    params.hosts = [(species, 1.0)].into_iter().collect();
+    params.hosts = std::iter::once((species, 1.0)).collect();
     params.transmissibility *= jitter(rng);
     params.lethality_per_day *= jitter(rng);
-    params.infectious_days = ((params.infectious_days as f32 * jitter(rng)).round() as u32).max(2);
+    params.infectious_days = (crate::cast!((crate::cast!(params.infectious_days => f32) * jitter(rng)).round() => u32)).max(2);
     let strain = Pathogen { params, parent: Some(parent), born_day: Some(day), extinct: false };
+    Some((strain, species))
+}
 
-    // Slot rule: append, else reuse the oldest extinct strain past its reservoir.
-    let slot = if state.pathogens.len() < dp.max_pathogens() {
+/// Append the strain, or reuse the oldest extinct strain past its reservoir.
+fn strain_slot(
+    state: &mut DiseaseState,
+    store: &mut CreatureStore,
+    day: u32,
+    dp: &DiseaseParams,
+    strain: Pathogen,
+) -> Option<usize> {
+    if state.pathogens.len() < dp.max_pathogens() {
         state.pathogens.push(strain);
-        Some(state.pathogens.len() - 1)
-    } else {
-        let reusable = state
-            .pathogens
-            .iter()
-            .enumerate()
-            .filter(|(i, p)| p.is_strain() && p.extinct && day.saturating_sub(state.last_case_day[*i]) >= dp.reservoir_days)
-            .min_by_key(|(i, p)| (p.born_day.unwrap_or(0), *i))
-            .map(|(i, _)| i);
-        match reusable {
-            Some(i) => {
-                state.pathogens[i] = strain;
-                state.stats[i] = PathogenStats::default();
-                state.last_case_day[i] = u32::MAX;
-                for c in store.living_mut() {
-                    c.immune_until[i] = 0;
-                }
-                Some(i)
-            }
-            None => None,
-        }
-    };
-    let Some(slot) = slot else {
-        state.failed_spillovers += 1;
-        return;
-    };
-    let pid = PathogenId(slot as u8);
-    let region = world.region_index(carcass_pos.0, carcass_pos.1).min(7) as u8;
+        return Some(state.pathogens.len() - 1);
+    }
+    let reusable = state
+        .pathogens
+        .iter()
+        .enumerate()
+        .filter(|(i, p)| p.is_strain() && p.extinct && day.saturating_sub(state.last_case_day[*i]) >= dp.reservoir_days)
+        .min_by_key(|(i, p)| (p.born_day.unwrap_or(0), *i))
+        .map(|(i, _)| i)?;
+    state.pathogens[reusable] = strain;
+    state.stats[reusable] = PathogenStats::default();
+    state.last_case_day[reusable] = u32::MAX;
+    for c in store.living_mut() {
+        c.immune_until[reusable] = 0;
+    }
+    Some(reusable)
+}
+
+/// Open the index outbreak for a freshly seeded strain.
+#[allow(clippy::too_many_arguments)]
+fn open_strain_outbreak(
+    state: &mut DiseaseState,
+    store: &CreatureStore,
+    eater_id: CreatureId,
+    slot: usize,
+    species: SpeciesId,
+    region: u8,
+    day: u32,
+) -> u16 {
     let resist = mean_resistance(store);
     let mut cases = [0u32; 6];
     cases[species.index()] = 1;
     let index = state.push_outbreak(Outbreak {
-        pathogen: pid,
+        pathogen: PathogenId(crate::cast!(slot => u8)),
         started_day: day,
         ended_day: None,
         origin_region: region,
@@ -521,6 +527,34 @@ fn spillover(
     state.stats[slot].outbreaks += 1;
     state.stats[slot].total_cases += 1;
     state.last_case_day[slot] = day;
+    index
+}
+
+/// `FR8b`: create a strain of `parent` in the eater's species and seed it.
+#[allow(clippy::too_many_arguments)]
+fn spillover(
+    store: &mut CreatureStore,
+    eater_id: CreatureId,
+    parent: PathogenId,
+    carcass_pos: (usize, usize),
+    prey_species: SpeciesId,
+    world: &World,
+    events: &mut EventRing,
+    time: &Time,
+    dp: &DiseaseParams,
+    state: &mut DiseaseState,
+    rng: &mut Rng,
+) {
+    let day = crate::cast!(time.day_index() => u32);
+    let Some((strain, species)) = spillover_strain(store, eater_id, parent, day, dp, state, rng) else { return };
+    let root_name = state.name(state.root(parent)).to_string();
+    let Some(slot) = strain_slot(state, store, day, dp, strain) else {
+        state.failed_spillovers += 1;
+        return;
+    };
+    let pid = PathogenId(crate::cast!(slot => u8));
+    let region = crate::cast!(world.region_index(carcass_pos.0, carcass_pos.1).min(7) => u8);
+    let index = open_strain_outbreak(state, store, eater_id, slot, species, region, day);
     let inf = match store.get(eater_id) {
         Some(e) => new_infection(e, pid, Stage::Infectious, day, None, index, dp, state),
         None => return,
@@ -544,7 +578,6 @@ fn spillover(
         detail: format!("new strain {} in slot {}", state.name(pid), slot),
     });
 }
-
 /// FR7: a newborn of an infectious mother may start incubating; parasites
 /// pass down as a share of the mother's load.
 pub fn at_birth(child: &mut Creature, mother: &Creature, time: &Time, dp: &DiseaseParams, state: &DiseaseState, rng: &mut Rng) {
@@ -554,13 +587,119 @@ pub fn at_birth(child: &mut Creature, mother: &Creature, time: &Time, dp: &Disea
     child.parasite_load = (dp.parasite_birth_transfer * mother.parasite_load).max(dp.parasite_baseline).min(1.0);
     if let Some(inf) = mother.infection.filter(|i| i.stage == Stage::Infectious) {
         if rng.chance(dp.vertical_transmission) {
-            let day = time.day_index() as u32;
+            let day = crate::cast!(time.day_index() => u32);
             child.infection = Some(new_infection(child, inf.pathogen, Stage::Incubating, day, Some(mother.id), inf.outbreak, dp, state));
         }
     }
 }
 
 // ------------------------------------------------------------------ daily
+
+/// Move an incubating infection into its infectious stage.
+fn become_infectious(
+    store: &mut CreatureStore,
+    state: &mut DiseaseState,
+    id: CreatureId,
+    day: u32,
+    inf: Infection,
+    path: &Pathogen,
+    dp: &DiseaseParams,
+) {
+    let Some((r, species)) = store.get(id).map(|c| (c.genome.resistance(), c.species)) else { return };
+    let ends = day + infectious_days(&path.params, r, dp);
+    if let Some(i) = store.get_mut(id).and_then(|c| c.infection.as_mut()) {
+        i.stage = Stage::Infectious;
+        i.ends_day = ends;
+    }
+    let slot = crate::cast!(inf.pathogen.0 => usize);
+    state.stats[slot].total_cases += 1;
+    state.last_case_day[slot] = day;
+    if let Some(o) = state.outbreak_mut(inf.outbreak) {
+        o.cases += 1;
+        o.cases_today += 1;
+        o.species_cases[species.index()] += 1;
+    }
+}
+
+/// Kill a creature that failed its lethality roll.
+#[allow(clippy::too_many_arguments)]
+fn disease_death(
+    store: &mut CreatureStore,
+    world: &mut World,
+    events: &mut EventRing,
+    time: &Time,
+    tallies: &mut DeathTallies,
+    lineage: &mut Lineage,
+    state: &mut DiseaseState,
+    id: CreatureId,
+    day: u32,
+    inf: Infection,
+    path: &Pathogen,
+) {
+    let species = match store.get(id) {
+        Some(c) => c.species,
+        None => return,
+    };
+    if let Some(c) = store.get_mut(id) {
+        c.died_infected = Some(inf.pathogen);
+        crate::sim::behavior::kill(c, Cause::Disease, world, events, time, tallies, lineage, None, 0, Some(path.name()));
+    }
+    let slot = crate::cast!(inf.pathogen.0 => usize);
+    state.stats[slot].total_deaths += 1;
+    state.last_case_day[slot] = day;
+    if let Some(o) = state.outbreak_mut(inf.outbreak) {
+        o.deaths += 1;
+        o.species_deaths[species.index()] += 1;
+    }
+}
+
+/// Clear an infection that ran its course and grant immunity.
+#[allow(clippy::too_many_arguments)]
+fn recover(
+    store: &mut CreatureStore,
+    events: &mut EventRing,
+    time: &Time,
+    dp: &DiseaseParams,
+    state: &mut DiseaseState,
+    id: CreatureId,
+    day: u32,
+    inf: Infection,
+    path: &Pathogen,
+) {
+    let slot = crate::cast!(inf.pathogen.0 => usize);
+    let until = if path.params.immunity_days == 0 { u32::MAX } else { day + path.params.immunity_days };
+    let Some(c) = store.get_mut(id) else { return };
+    c.infection = None;
+    c.immune_until[slot] = until;
+    c.infections_survived = c.infections_survived.saturating_add(1);
+    let (name, tag, x, y, species) = (c.name_str().to_string(), c.tag(), c.x, c.y, c.species);
+    state.last_case_day[slot] = day;
+    if let Some(o) = state.outbreak_mut(inf.outbreak) {
+        o.recovered += 1;
+    }
+    if inf.severity >= dp.recovery_notable_min_severity {
+        events.push(Event {
+            year: time.year(),
+            day: time.day_of_year(),
+            hour: time.hour(),
+            kind: EventKind::Recovery,
+            species: Some(species),
+            subject: Some(id),
+            text: format!("{} {} recovered from {}", name, tag, path.name()),
+            pos: Some((x, y)),
+            detail: String::new(),
+        });
+    }
+}
+
+/// Bleed off parasite load towards zero across the living population.
+fn clear_parasites(store: &mut CreatureStore, dp: &DiseaseParams) {
+    for c in store.living_mut() {
+        if c.parasite_load > 0.0 {
+            c.parasite_load = (c.parasite_load - dp.parasite_clearance * (0.5 + c.genome.resistance())).max(0.0);
+        }
+    }
+}
 
 /// FR5: stage transitions, lethality rolls, recovery, parasite clearance.
 /// Runs in `day_boundary` before age death.
@@ -579,8 +718,8 @@ pub fn progress_daily(
     if !dp.enabled {
         return;
     }
-    let day = time.day_index() as u32;
-    for o in state.outbreaks.iter_mut() {
+    let day = crate::cast!(time.day_index() => u32);
+    for o in &mut state.outbreaks {
         o.cases_today = 0;
     }
     let ids = store.living_ids();
@@ -598,78 +737,21 @@ pub fn progress_daily(
         let host = path.host(c.species).max(0.0);
         let r = c.genome.resistance();
         match inf.stage {
-            Stage::Incubating => {
-                if day >= inf.ends_day {
-                    let ends = day + infectious_days(&path.params, r, dp);
-                    let species = c.species;
-                    if let Some(c) = store.get_mut(id) {
-                        if let Some(i) = c.infection.as_mut() {
-                            i.stage = Stage::Infectious;
-                            i.ends_day = ends;
-                        }
-                    }
-                    let slot = inf.pathogen.0 as usize;
-                    state.stats[slot].total_cases += 1;
-                    state.last_case_day[slot] = day;
-                    if let Some(o) = state.outbreak_mut(inf.outbreak) {
-                        o.cases += 1;
-                        o.cases_today += 1;
-                        o.species_cases[species.index()] += 1;
-                    }
-                }
+            Stage::Incubating if day >= inf.ends_day => {
+                become_infectious(store, state, id, day, inf, &path, dp);
             }
+            Stage::Incubating => {}
             Stage::Infectious => {
                 let hazard = (path.params.lethality_per_day * host * (1.0 - dp.lethality_resist_w * r)).clamp(0.0, 1.0);
                 if rng.chance(hazard) {
-                    let species = c.species;
-                    if let Some(c) = store.get_mut(id) {
-                        c.died_infected = Some(inf.pathogen);
-                        crate::sim::behavior::kill(c, Cause::Disease, world, events, time, tallies, lineage, None, 0, Some(path.name()));
-                    }
-                    let slot = inf.pathogen.0 as usize;
-                    state.stats[slot].total_deaths += 1;
-                    state.last_case_day[slot] = day;
-                    if let Some(o) = state.outbreak_mut(inf.outbreak) {
-                        o.deaths += 1;
-                        o.species_deaths[species.index()] += 1;
-                    }
+                    disease_death(store, world, events, time, tallies, lineage, state, id, day, inf, &path);
                 } else if day >= inf.ends_day {
-                    let until = if path.params.immunity_days == 0 { u32::MAX } else { day + path.params.immunity_days };
-                    let slot = inf.pathogen.0 as usize;
-                    let (name, tag, x, y, species) = {
-                        let c = store.get_mut(id).expect("living");
-                        c.infection = None;
-                        c.immune_until[slot] = until;
-                        c.infections_survived = c.infections_survived.saturating_add(1);
-                        (c.name_str().to_string(), c.tag(), c.x, c.y, c.species)
-                    };
-                    state.last_case_day[slot] = day;
-                    if let Some(o) = state.outbreak_mut(inf.outbreak) {
-                        o.recovered += 1;
-                    }
-                    if inf.severity >= dp.recovery_notable_min_severity {
-                        events.push(Event {
-                            year: time.year(),
-                            day: time.day_of_year(),
-                            hour: time.hour(),
-                            kind: EventKind::Recovery,
-                            species: Some(species),
-                            subject: Some(id),
-                            text: format!("{} {} recovered from {}", name, tag, path.name()),
-                            pos: Some((x, y)),
-                            detail: String::new(),
-                        });
-                    }
+                    recover(store, events, time, dp, state, id, day, inf, &path);
                 }
             }
         }
     }
-    // Parasite clearance.
-    for c in store.living_mut() {
-        if c.parasite_load > 0.0 {
-            c.parasite_load = (c.parasite_load - dp.parasite_clearance * (0.5 + c.genome.resistance())).max(0.0);
-        }
-    }
+    clear_parasites(store, dp);
 }
 
 /// FR7: daily decay of the cell parasite field (called with the pressure decay).
@@ -708,7 +790,7 @@ pub fn mean_resistance(store: &CreatureStore) -> [f32; 6] {
         sum[c.species.index()] += c.genome.resistance();
         n[c.species.index()] += 1;
     }
-    std::array::from_fn(|i| if n[i] > 0 { sum[i] / n[i] as f32 } else { 0.0 })
+    std::array::from_fn(|i| if n[i] > 0 { sum[i] / crate::cast!(n[i] => f32) } else { 0.0 })
 }
 
 /// FR8: after the census — refresh per-pathogen stats, track outbreaks
@@ -728,41 +810,68 @@ pub fn daily_update(
     if !dp.enabled {
         return alerts;
     }
-    let day = time.day_index() as u32;
+    let day = crate::cast!(time.day_index() => u32);
     let n = state.pathogens.len();
 
-    // 1. Stats from the living set.
-    for s in state.stats.iter_mut() {
+    tally_stats(store, state, n, day);
+    let resist = mean_resistance(store);
+    let (ended, epidemics) = track_outbreaks(store, state, day, dp, population, resist);
+    announce_epidemics(store, world, events, time, state, epidemics, &mut alerts);
+    announce_ended(events, time, state, day, ended);
+    seed_emergence(store, world, events, time, dp, state, n, day, population, resist, rng);
+    alerts
+}
+
+/// Section 1: per-pathogen active/immune counts from the living set.
+fn tally_stats(store: &CreatureStore, state: &mut DiseaseState, n: usize, day: u32) {
+    for s in &mut state.stats {
         s.active = 0;
         s.active_by_species = [0; 6];
         s.immune = 0;
     }
-    let mut active_by_outbreak: Vec<u32> = vec![0; state.outbreaks.len()];
     for c in store.living() {
-        if let Some(inf) = c.infection {
-            let slot = inf.pathogen.0 as usize;
-            if slot < n {
-                state.stats[slot].active += 1;
-                state.stats[slot].active_by_species[c.species.index()] += 1;
-            }
-            if let Some(i) = inf.outbreak.checked_sub(state.first_index) {
-                if let Some(a) = active_by_outbreak.get_mut(i as usize) {
-                    *a += 1;
-                }
-            }
-        }
-        for slot in 0..n {
-            if day < c.immune_until[slot] {
-                state.stats[slot].immune += 1;
-            }
-        }
+        count_one(state, c, n, day);
     }
     for slot in 0..n {
         state.stats[slot].peak_active = state.stats[slot].peak_active.max(state.stats[slot].active);
     }
+}
 
-    // 2. Outbreak tracking.
-    let resist = mean_resistance(store);
+/// Add one living creature to the per-pathogen active and immune tallies.
+fn count_one(state: &mut DiseaseState, c: &Creature, n: usize, day: u32) {
+    if let Some(inf) = c.infection {
+        let slot = crate::cast!(inf.pathogen.0 => usize);
+        if slot < n {
+            state.stats[slot].active += 1;
+            state.stats[slot].active_by_species[c.species.index()] += 1;
+        }
+    }
+    for slot in 0..n {
+        if day < c.immune_until[slot] {
+            state.stats[slot].immune += 1;
+        }
+    }
+}
+
+/// Section 2: advance outbreak bookkeeping and flag ended/epidemic outbreaks.
+fn track_outbreaks(
+    store: &CreatureStore,
+    state: &mut DiseaseState,
+    day: u32,
+    dp: &DiseaseParams,
+    population: &[u32; 6],
+    resist: [f32; 6],
+) -> (Vec<u16>, Vec<u16>) {
+    let mut active_by_outbreak: Vec<u32> = vec![0; state.outbreaks.len()];
+    for c in store.living() {
+        if let Some(inf) = c.infection {
+            if let Some(i) = inf.outbreak.checked_sub(state.first_index) {
+                if let Some(a) = active_by_outbreak.get_mut(crate::cast!(i => usize)) {
+                    *a += 1;
+                }
+            }
+        }
+    }
     let mut ended: Vec<u16> = Vec::new();
     let mut epidemics: Vec<u16> = Vec::new();
     for (i, o) in state.outbreaks.iter_mut().enumerate() {
@@ -775,7 +884,7 @@ pub fn daily_update(
             o.peak_active = active;
             o.peak_day = day;
         }
-        let index = state.first_index + i as u16;
+        let index = state.first_index + crate::cast!(i => u16);
         if active == 0 {
             o.ended_day = Some(day);
             o.resist_at_end = resist;
@@ -785,20 +894,33 @@ pub fn daily_update(
         let pid = o.pathogen;
         let hosts: u32 = SpeciesId::ALL
             .iter()
-            .filter(|s| state.pathogens.get(pid.0 as usize).is_some_and(|p| p.host(**s) > 0.0))
+            .filter(|s| state.pathogens.get(crate::cast!(pid.0 => usize)).is_some_and(|p| p.host(**s) > 0.0))
             .map(|s| population[s.index()])
             .sum();
-        if !o.epidemic && active >= dp.epidemic_min_cases && active as f32 >= dp.epidemic_share * hosts as f32 {
+        if !o.epidemic && active >= dp.epidemic_min_cases && crate::cast!(active => f32) >= dp.epidemic_share * crate::cast!(hosts => f32) {
             o.epidemic = true;
             epidemics.push(index);
         }
     }
+    (ended, epidemics)
+}
+
+/// Section 2b: emit an event and alert for each newly epidemic outbreak.
+fn announce_epidemics(
+    store: &CreatureStore,
+    world: &World,
+    events: &mut EventRing,
+    time: &Time,
+    state: &DiseaseState,
+    epidemics: Vec<u16>,
+    alerts: &mut Vec<Alert>,
+) {
     for index in epidemics {
         let Some(o) = state.outbreak(index) else { continue };
         let pid = o.pathogen;
         let (active, regions) = (o.active, regions_with_cases(store, world, index, state.first_index));
         let name = state.name(pid).to_string();
-        let strain = state.pathogen(pid).is_some_and(|p| p.is_strain());
+        let strain = state.pathogen(pid).is_some_and(Pathogen::is_strain);
         let subject = o.index_case;
         events.push(Event {
             year: time.year(),
@@ -808,22 +930,26 @@ pub fn daily_update(
             species: None,
             subject: Some(subject),
             text: if strain {
-                format!("A new strain is epidemic: {} — {} sick across {} regions", name, active, regions)
+                format!("A new strain is epidemic: {name} — {active} sick across {regions} regions")
             } else {
-                format!("{} is epidemic: {} sick across {} regions", name, active, regions)
+                format!("{name} is epidemic: {active} sick across {regions} regions")
             },
             pos: None,
             detail: String::new(),
         });
         alerts.push(Alert::Epidemic { event_index: events.total(), pathogen: pid, outbreak: index });
     }
+}
+
+/// Section 2c: emit a burn-out event for each outbreak that ended today.
+fn announce_ended(events: &mut EventRing, time: &Time, state: &mut DiseaseState, day: u32, ended: Vec<u16>) {
     for index in ended {
         let Some(o) = state.outbreak(index) else { continue };
         let pid = o.pathogen;
         let (days, dead, recovered, epidemic) = (o.duration_days(day), o.deaths, o.recovered, o.epidemic);
         let name = state.name(pid).to_string();
-        let slot = pid.0 as usize;
-        let strain = state.pathogens.get(slot).is_some_and(|p| p.is_strain());
+        let slot = crate::cast!(pid.0 => usize);
+        let strain = state.pathogens.get(slot).is_some_and(Pathogen::is_strain);
         if strain && state.stats[slot].active == 0 {
             state.pathogens[slot].extinct = true;
         }
@@ -846,29 +972,48 @@ pub fn daily_update(
             detail: String::new(),
         });
     }
+}
 
-    // 3. Emergence (roster pathogens only).
+/// Section 3: roll for reservoir emergence of roster pathogens.
+#[allow(clippy::too_many_arguments)]
+fn seed_emergence(
+    store: &mut CreatureStore,
+    world: &World,
+    events: &mut EventRing,
+    time: &Time,
+    dp: &DiseaseParams,
+    state: &mut DiseaseState,
+    n: usize,
+    day: u32,
+    population: &[u32; 6],
+    resist: [f32; 6],
+    rng: &mut Rng,
+) {
     for slot in 0..n {
-        let pid = PathogenId(slot as u8);
+        let pid = PathogenId(crate::cast!(slot => u8));
         let (is_strain, active) = (state.pathogens[slot].is_strain(), state.stats[slot].active);
         if is_strain || active > 0 {
             continue;
         }
         let last = state.last_case_day[slot];
-        if last != u32::MAX && day.saturating_sub(last) < dp.reservoir_days {
+        if last != u32::MAX && day_guard(last, day, dp) {
             continue;
         }
         let hosts = state.hosts_living(pid, population);
         if hosts < dp.emergence_host_min {
             continue;
         }
-        let hazard = dp.emergence_per_day * hosts as f32 / dp.emergence_host_ref.max(1) as f32;
+        let hazard = dp.emergence_per_day * crate::cast!(hosts => f32) / crate::cast!(dp.emergence_host_ref.max(1) => f32);
         if !rng.chance(hazard.clamp(0.0, 1.0)) {
             continue;
         }
         emerge(store, world, events, time, dp, state, pid, resist);
     }
-    alerts
+}
+
+/// True while a pathogen is still inside its post-case reservoir window.
+const fn day_guard(last: u32, day: u32, dp: &DiseaseParams) -> bool {
+    day.saturating_sub(last) < dp.reservoir_days
 }
 
 /// Regions holding at least one active case of `outbreak`.
@@ -886,7 +1031,7 @@ fn regions_with_cases(store: &CreatureStore, world: &World, outbreak: u16, _firs
 /// push the outbreak record and emit the `Outbreak` event.
 #[allow(clippy::too_many_arguments)]
 fn emerge(store: &mut CreatureStore, world: &World, events: &mut EventRing, time: &Time, dp: &DiseaseParams, state: &mut DiseaseState, pid: PathogenId, resist: [f32; 6]) {
-    let day = time.day_index() as u32;
+    let day = crate::cast!(time.day_index() => u32);
     let Some(path) = state.pathogen(pid).cloned() else { return };
     let mut region_hosts = [0u32; 8];
     for c in store.living() {
@@ -910,7 +1055,7 @@ fn emerge(store: &mut CreatureStore, world: &World, events: &mut EventRing, time
         pathogen: pid,
         started_day: day,
         ended_day: None,
-        origin_region: region as u8,
+        origin_region: crate::cast!(region => u8),
         index_case: id,
         cases: 1,
         deaths: 0,
@@ -925,7 +1070,7 @@ fn emerge(store: &mut CreatureStore, world: &World, events: &mut EventRing, time
         active: 1,
         cases_today: 1,
     });
-    let slot = pid.0 as usize;
+    let slot = crate::cast!(pid.0 => usize);
     state.stats[slot].outbreaks += 1;
     state.stats[slot].total_cases += 1;
     state.last_case_day[slot] = day;
@@ -952,7 +1097,9 @@ fn emerge(store: &mut CreatureStore, world: &World, events: &mut EventRing, time
 
 #[cfg(test)]
 #[allow(clippy::field_reassign_with_default)]
+#[allow(clippy::float_cmp)]
 mod tests {
+
     use super::*;
     use crate::sim::creatures::place_founders;
     use crate::sim::params::{CreaturesParams, GeneticsParams, Params, WorldParams};
@@ -1047,7 +1194,7 @@ mod tests {
                 hits += 1;
             }
         }
-        let got = hits as f32 / n as f32;
+        let got = crate::cast!(hits => f32) / crate::cast!(n => f32);
         // Other voles nearby may also be infected by `a`, but b's roll is independent.
         assert!((got - expect).abs() < expect * 0.15, "got {got} want ≈ {expect}");
         let mut idx = SpatialIndex::new(&w);
@@ -1092,7 +1239,7 @@ mod tests {
     }
 
     #[test]
-    fn incubation_lethality_recovery() {
+    fn incubation_progresses_and_recovers() {
         let mut dp = DiseaseParams::default();
         dp.pathogens[0].lethality_per_day = 0.0;
         let mut w = world();
@@ -1123,9 +1270,20 @@ mod tests {
         assert_eq!(c.immune_until[0], 11 + 360);
         assert_eq!(c.infections_survived, 1);
         assert!(events.iter().any(|e| e.kind == EventKind::Recovery), "severity 0.8 ≥ 0.7 emits Recovery");
+    }
 
-        // Lethality: hazard 1.0 kills on the first infectious day (the runtime
-        // pathogen list is what `progress_daily` reads, not the params roster).
+    #[test]
+    fn lethality_kills_on_first_infectious_day() {
+        let dp = DiseaseParams::default();
+        let mut w = world();
+        let mut state = DiseaseState::new(&dp);
+        let mut st = store();
+        let mut events = EventRing::new(100);
+        let mut tallies = DeathTallies::default();
+        let mut lineage = Lineage::new();
+        let mut rng = Rng::new(1);
+        // Hazard 1.0 kills on the first infectious day (the runtime pathogen list
+        // is what `progress_daily` reads, not the params roster).
         state.pathogens[0].params.lethality_per_day = 1.0;
         let b = first_of(&st, SpeciesId::Hare);
         st.get_mut(b).unwrap().genome.0[8] = 0.0;
@@ -1289,7 +1447,7 @@ mod tests {
         let idx = st.get(o.index_case).unwrap();
         assert_eq!(idx.infection.unwrap().stage, Stage::Infectious);
         // The index case is the lowest-resistance host of the densest region.
-        let region = o.origin_region as usize;
+        let region = crate::cast!(o.origin_region => usize);
         let min_r = st
             .living()
             .filter(|c| c.species.kind() == crate::sim::species::Kind::Prey && w.region_index(c.x, c.y).min(7) == region)

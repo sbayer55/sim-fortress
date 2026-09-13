@@ -69,7 +69,7 @@ pub fn lerp(a: Color, b: Color, t: f32) -> Color {
     let t = t.clamp(0.0, 1.0);
     match (a, b) {
         (Color::Rgb(r1, g1, b1), Color::Rgb(r2, g2, b2)) => {
-            let f = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+            let f = |x: u8, y: u8| crate::cast!((f32::from(x) + (f32::from(y) - f32::from(x)) * t).round() => u8);
             Color::Rgb(f(r1, r2), f(g1, g2), f(b1, b2))
         }
         _ => b,
@@ -82,9 +82,9 @@ pub fn ramp(stops: &[Color], t: f32) -> Color {
     if stops.len() == 1 {
         return stops[0];
     }
-    let scaled = t * (stops.len() - 1) as f32;
-    let i = (scaled.floor() as usize).min(stops.len() - 2);
-    lerp(stops[i], stops[i + 1], scaled - i as f32)
+    let scaled = t * crate::cast!((stops.len() - 1) => f32);
+    let i = (crate::cast!(scaled.floor() => usize)).min(stops.len() - 2);
+    lerp(stops[i], stops[i + 1], scaled - crate::cast!(i => f32))
 }
 
 /// Cold-to-hot ramp used for pressure/density overlays.
@@ -149,9 +149,9 @@ pub fn dim(c: Color, amount: f32) -> Color {
 pub fn night(c: Color) -> Color {
     match c {
         Color::Rgb(r, g, b) => {
-            let r = (r as f32 * 0.55) as u8;
-            let g = (g as f32 * 0.62) as u8;
-            let b = (b as f32 * 0.88 + 14.0).min(255.0) as u8;
+            let r = crate::cast!((f32::from(r) * 0.55) => u8);
+            let g = crate::cast!((f32::from(g) * 0.62) => u8);
+            let b = crate::cast!((f32::from(b) * 0.88 + 14.0).min(255.0) => u8);
             Color::Rgb(r, g, b)
         }
         other => other,
@@ -174,7 +174,7 @@ pub const REGION: [Color; 8] = [
 ];
 
 /// The tint colour for region `i`.
-pub fn region(i: usize) -> Color {
+pub const fn region(i: usize) -> Color {
     REGION[i % REGION.len()]
 }
 

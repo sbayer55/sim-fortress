@@ -11,8 +11,17 @@
 //! `kill_sick_bonus`, `spillover_chance`, `rain=dry|normal|wet`, `params=<file.toml>`,
 //! `preset=<name>`.
 
+// Developer tools, not shipped code: they are separate compilation roots and
+// do not inherit the allow list in `src/lib.rs`. Indexing follows the same
+// checked-loop pattern as the library, and `unwrap`/`expect`/`panic` are how a
+// benchmark or diagnostic script is supposed to fail loudly.
+#![allow(clippy::indexing_slicing, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use sim_fortress::sim::{EventKind, Params, Rainfall, Sim, SpeciesId, PRESETS};
 
+// One linear benchmark/diagnostic driver: splitting it would only scatter the
+// reporting it exists to print.
+#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut seed = 42u64;
@@ -46,7 +55,7 @@ fn main() {
     }
     for (k, v) in &overrides {
         let set_all = |d: &mut sim_fortress::sim::params::DiseaseParams, f: &dyn Fn(&mut sim_fortress::sim::params::PathogenParams)| {
-            for p in d.pathogens.iter_mut() {
+            for p in &mut d.pathogens {
                 f(p);
             }
         };
@@ -118,7 +127,7 @@ fn main() {
             b.outbreaks, b.epidemics, b.disease_deaths, b.resist[0], b.resist[1], b.resist[2]
         );
     }
-    println!("disease-off vole resistance: year1 {:.3} → end {:.3}", rows_off.first().map(|r| r.resist[0]).unwrap_or(0.0), rows_off.last().map(|r| r.resist[0]).unwrap_or(0.0));
+    println!("disease-off vole resistance: year1 {:.3} → end {:.3}", rows_off.first().map_or(0.0, |r| r.resist[0]), rows_off.last().map_or(0.0, |r| r.resist[0]));
     let _ = sim_off;
     if !quiet {
         println!("\noutbreaks:");
@@ -127,7 +136,7 @@ fn main() {
             let host = (0..6).max_by_key(|&s| o.species_cases[s]).unwrap_or(0);
             println!(
                 "  #{:<2} {:<26} day {:>5} → {:>5}  cases {:>4} dead {:>4} rec {:>4} peak {:>4}{}  resist {} {:.3} → {:.3}",
-                i, name, o.started_day, o.ended_day.map(|d| d.to_string()).unwrap_or_else(|| "open".into()),
+                i, name, o.started_day, o.ended_day.map_or_else(|| "open".into(), |d| d.to_string()),
                 o.cases, o.deaths, o.recovered, o.peak_active, if o.epidemic { " EPIDEMIC" } else { "" },
                 SpeciesId::ALL[host].name(), o.resist_at_start[host], o.resist_at_end[host]
             );

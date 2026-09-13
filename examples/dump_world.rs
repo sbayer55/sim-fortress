@@ -11,8 +11,8 @@ fn main() {
     for y in (0..h).step_by(scale) {
         let line: String = (0..w).step_by(scale).map(|x| match world.cell(x, y).terrain {
             Terrain::DeepWater => '#', Terrain::ShallowWater => '~', Terrain::Sand => '.',
-            Terrain::Dirt => ',', Terrain::GrassSparse => '"', Terrain::Grass => '"',
-            Terrain::GrassDense => '"', Terrain::Forest => 'T', Terrain::Rock => '^',
+            Terrain::Dirt => ',', Terrain::GrassSparse | Terrain::Grass | Terrain::GrassDense => '"',
+            Terrain::Forest => 'T', Terrain::Rock => '^',
         }).collect();
         println!("{line}");
     }

@@ -21,6 +21,7 @@ use crate::sim::world::{Terrain, World};
 
 /// What a creature can see at a replan. Creature ids feed mate selection (C4)
 /// and predation (C5).
+#[derive(Debug)]
 pub struct Perception {
     pub nearest_water: Option<(usize, usize)>,
     pub best_graze: Option<((usize, usize), f32)>,
@@ -42,8 +43,8 @@ pub struct Kin {
 }
 
 impl Kin {
-    pub fn centroid(&self) -> (usize, usize) {
-        (self.cx.round().max(0.0) as usize, self.cy.round().max(0.0) as usize)
+    pub fn centroid(self) -> (usize, usize) {
+        (crate::cast!(self.cx.round().max(0.0) => usize), crate::cast!(self.cy.round().max(0.0) => usize))
     }
 }
 
@@ -70,13 +71,13 @@ fn kin_summary(c: &Creature, candidates: &[CreatureId], view: &TickView) -> Kin 
             continue;
         }
         count += 1;
-        sx += p.x as f32;
-        sy += p.y as f32;
+        sx += crate::cast!(p.x => f32);
+        sy += crate::cast!(p.y => f32);
     }
     if count == 0 {
         Kin::default()
     } else {
-        Kin { count: count.min(u8::MAX as u32) as u8, cx: sx / count as f32, cy: sy / count as f32 }
+        Kin { count: crate::cast!(count.min(u32::from(u8::MAX)) => u8), cx: sx / crate::cast!(count => f32), cy: sy / crate::cast!(count => f32) }
     }
 }
 
@@ -146,7 +147,7 @@ pub fn day_boundary(
     }
 
     // 2. Carcass decay and slot freeing (FR7).
-    let decay_step = 1.0 / cp.carcass_decay_days.max(1) as f32;
+    let decay_step = 1.0 / crate::cast!(cp.carcass_decay_days.max(1) => f32);
     let mut to_free: Vec<CreatureId> = Vec::new();
     for c in store.carcasses_mut() {
         c.decay += decay_step;
@@ -208,7 +209,7 @@ pub fn migration_daily(
                 let r = &world.regions[ri];
                 let veg_mean = crate::sim::ecology::region_land_veg_mean(world, r);
                 let shortfall = season_cap > 0.0 && veg_mean / season_cap < pp.migrate_veg;
-                let group_pressure = occupied_pressure[si][ri] / counts[si][ri] as f32;
+                let group_pressure = occupied_pressure[si][ri] / crate::cast!(counts[si][ri] => f32);
                 let pressure = group_pressure > pp.migrate_pressure;
                 shortfall || pressure
             } else {
@@ -218,7 +219,7 @@ pub fn migration_daily(
                 days_below[key] += 1;
                 if days_below[key] >= pp.migrate_days {
                     days_below[key] = 0;
-                    cooldown_until[key] = time.tick + pp.migrate_cooldown_days as u64 * time.ticks_per_day as u64;
+                    cooldown_until[key] = time.tick + u64::from(pp.migrate_cooldown_days) * u64::from(time.ticks_per_day);
                     migrate_group(store, world, events, time, *id, ri);
                 }
             } else {
@@ -239,10 +240,10 @@ fn mean_pred_pressure(world: &World, r: &crate::sim::world::RegionRect) -> f32 {
             }
         }
     }
-    if n > 0 { sum / n as f32 } else { 0.0 }
+    if n > 0 { sum / crate::cast!(n => f32) } else { 0.0 }
 }
 
-fn regions_adjacent(a: &crate::sim::world::RegionRect, b: &crate::sim::world::RegionRect) -> bool {
+const fn regions_adjacent(a: &crate::sim::world::RegionRect, b: &crate::sim::world::RegionRect) -> bool {
     let (ax0, ay0, ax1, ay1) = (a.1, a.2, a.3, a.4);
     let (bx0, by0, bx1, by1) = (b.1, b.2, b.3, b.4);
     let overlap_y = ay0 < by1 && by0 < ay1;
@@ -259,7 +260,7 @@ fn migrate_group(store: &mut CreatureStore, world: &World, events: &mut EventRin
     if members.is_empty() {
         return;
     }
-    let n = members.len() as u32;
+    let n = crate::cast!(members.len() => u32);
 
     // Destination = adjacent region maximising the species' score.
     let mut best_dest: Option<usize> = None;
@@ -271,7 +272,7 @@ fn migrate_group(store: &mut CreatureStore, world: &World, events: &mut EventRin
         let score = if id.kind() == Kind::Prey {
             crate::sim::ecology::region_land_veg_mean(world, r) * (1.0 - mean_pred_pressure(world, r))
         } else {
-            store.living().filter(|c| c.species.kind() == Kind::Prey && world.region_index(c.x, c.y) == di).count() as f32
+            crate::cast!(store.living().filter(|c| c.species.kind() == Kind::Prey && world.region_index(c.x, c.y) == di).count() => f32)
         };
         if score > best_score {
             best_score = score;
@@ -281,7 +282,7 @@ fn migrate_group(store: &mut CreatureStore, world: &World, events: &mut EventRin
     let Some(dest) = best_dest else { return };
     let Some((tx, ty)) = migration_target_cell(world, id, dest) else { return };
 
-    let migrate_until = time.tick + 2 * time.ticks_per_day as u64;
+    let migrate_until = time.tick + 2 * u64::from(time.ticks_per_day);
     for mid in &members {
         if let Some(c) = store.get_mut(*mid) {
             c.goal = Goal::Migrate;
@@ -295,7 +296,7 @@ fn migrate_group(store: &mut CreatureStore, world: &World, events: &mut EventRin
     let group_word = if n <= 3 { "family" } else if id.kind() == Kind::Prey { "herd" } else { "pack" };
     let origin = &world.regions[origin_ri];
     let dest_name = world.regions[dest].0.clone();
-    let pos = ((origin.1 + origin.3) / 2, (origin.2 + origin.4) / 2);
+    let pos = ((origin.1 + origin.3).div_euclid(2), (origin.2 + origin.4).div_euclid(2));
     events.push(Event {
         year: time.year(),
         day: time.day_of_year(),
@@ -367,7 +368,7 @@ fn update_one(
         } else if threatened {
             if c.goal != Goal::Flee {
                 c.goal = Goal::Flee;
-                c.flee_until = time.tick + pp.flee_ticks as u64;
+                c.flee_until = time.tick + u64::from(pp.flee_ticks);
                 c.chased += 1;
                 if let Some((_, _, sp)) = c.threatened_by {
                     c.threats_by_species[sp.index()] += 1;
@@ -731,18 +732,18 @@ fn wander(
     let mut dir = random_dir(rng);
     if let Some((tx, ty)) = c.target {
         if rng.chance(0.7) {
-            let dx = (tx as i32 - c.x as i32).signum();
-            let dy = (ty as i32 - c.y as i32).signum();
+            let dx = (crate::cast!(tx => i32) - crate::cast!(c.x => i32)).signum();
+            let dy = (crate::cast!(ty => i32) - crate::cast!(c.y => i32)).signum();
             if dx != 0 || dy != 0 {
                 dir = (dx, dy);
             }
         }
     }
-    let steps = 4 + rng.below(5) as i32; // 4..=8
-    let nx = c.x as i32 + dir.0 * steps;
-    let ny = c.y as i32 + dir.1 * steps;
-    if world.in_bounds(nx, ny) && world.cell(nx as usize, ny as usize).terrain.walkable() {
-        c.target = Some((nx as usize, ny as usize));
+    let steps = 4 + crate::cast!(rng.below(5) => i32); // 4..=8
+    let nx = crate::cast!(c.x => i32) + dir.0 * steps;
+    let ny = crate::cast!(c.y => i32) + dir.1 * steps;
+    if world.in_bounds(nx, ny) && world.cell(crate::cast!(nx => usize), crate::cast!(ny => usize)).terrain.walkable() {
+        c.target = Some((crate::cast!(nx => usize), crate::cast!(ny => usize)));
     } else {
         c.target = find_walkable_near(c.x, c.y, world);
     }
@@ -758,28 +759,28 @@ fn cohesion_target(c: &Creature, world: &World, sp: &SocialParams, rng: &mut Rng
     }
     let preferred = sp.preferred_group(sociality);
     let (kx, ky) = kin.centroid();
-    if (kin.count as f32) < preferred {
+    if f32::from(kin.count) < preferred {
         // Join: with probability `sociality`, aim at a walkable cell near the kin
         // centroid (the `follow_target` pattern).
         if !rng.chance(sociality) {
             return None;
         }
-        let (dx, dy) = (rng.below(5) as i32 - 2, rng.below(5) as i32 - 2);
-        let (nx, ny) = (kx as i32 + dx, ky as i32 + dy);
+        let (dx, dy) = (crate::cast!(rng.below(5) => i32) - 2, crate::cast!(rng.below(5) => i32) - 2);
+        let (nx, ny) = (crate::cast!(kx => i32) + dx, crate::cast!(ky => i32) + dy);
         if walkable_cell(world, nx, ny) {
-            return Some((nx as usize, ny as usize));
+            return Some((crate::cast!(nx => usize), crate::cast!(ny => usize)));
         }
         return find_walkable_near(kx, ky, world);
     }
-    if (kin.count as f32) > 1.5 * preferred {
+    if f32::from(kin.count) > 1.5 * preferred {
         // Disperse: head away from the centroid.
-        let (dx, dy) = ((c.x as i32 - kx as i32).signum(), (c.y as i32 - ky as i32).signum());
+        let (dx, dy) = ((crate::cast!(c.x => i32) - crate::cast!(kx => i32)).signum(), (crate::cast!(c.y => i32) - crate::cast!(ky => i32)).signum());
         if dx == 0 && dy == 0 {
             return None;
         }
-        let (nx, ny) = (c.x as i32 + dx * 5, c.y as i32 + dy * 5);
+        let (nx, ny) = (crate::cast!(c.x => i32) + dx * 5, crate::cast!(c.y => i32) + dy * 5);
         if walkable_cell(world, nx, ny) {
-            return Some((nx as usize, ny as usize));
+            return Some((crate::cast!(nx => usize), crate::cast!(ny => usize)));
         }
     }
     None
@@ -787,10 +788,10 @@ fn cohesion_target(c: &Creature, world: &World, sp: &SocialParams, rng: &mut Rng
 
 /// In bounds and walkable.
 fn walkable_cell(world: &World, x: i32, y: i32) -> bool {
-    world.in_bounds(x, y) && world.cell(x as usize, y as usize).terrain.walkable()
+    world.in_bounds(x, y) && world.cell(crate::cast!(x => usize), crate::cast!(y => usize)).terrain.walkable()
 }
 
-fn random_dir(rng: &mut Rng) -> (i32, i32) {
+const fn random_dir(rng: &mut Rng) -> (i32, i32) {
     let i = rng.below(8);
     OFF8[i]
 }
@@ -800,9 +801,9 @@ pub(crate) fn find_walkable_near(x: usize, y: usize, world: &World) -> Option<(u
     for r in 1i32..=8 {
         for dy in -r..=r {
             for dx in -r..=r {
-                let (nx, ny) = (x as i32 + dx, y as i32 + dy);
-                if world.in_bounds(nx, ny) && world.cell(nx as usize, ny as usize).terrain.walkable() {
-                    return Some((nx as usize, ny as usize));
+                let (nx, ny) = (crate::cast!(x => i32) + dx, crate::cast!(y => i32) + dy);
+                if world.in_bounds(nx, ny) && world.cell(crate::cast!(nx => usize), crate::cast!(ny => usize)).terrain.walkable() {
+                    return Some((crate::cast!(nx => usize), crate::cast!(ny => usize)));
                 }
             }
         }
@@ -812,11 +813,11 @@ pub(crate) fn find_walkable_near(x: usize, y: usize, world: &World) -> Option<(u
 
 fn perceive(c: &Creature, spatial: &SpatialIndex, world: &World, cp: &CreaturesParams, view: &TickView, sp: &SocialParams) -> (Perception, Kin) {
     let r = c.genome.sense_cells(); // u16
-    let r_i = r as i32;
-    let r_f = r as f32;
+    let r_i = i32::from(r);
+    let r_f = f32::from(r);
     let (cx, cy) = (c.x, c.y);
-    let y0 = (cy as i32 - r_i).max(0) as usize;
-    let y1 = ((cy as i32 + r_i + 1).min(world.height as i32)).max(0) as usize;
+    let y0 = crate::cast!((crate::cast!(cy => i32) - r_i).max(0) => usize);
+    let y1 = crate::cast!(((crate::cast!(cy => i32) + r_i + 1).min(crate::cast!(world.height => i32))).max(0) => usize);
 
     // C8 FR2: the kin summary comes from the same spatial query the perception
     // already issues, and biases grazing so herds strip the same cells.
@@ -836,10 +837,10 @@ fn perceive(c: &Creature, spatial: &SpatialIndex, world: &World, cp: &CreaturesP
 
     // Visit only the rows of the ellipse; each row's cell span is contiguous.
     for y in y0..y1 {
-        let dy = y as f32 - cy as f32;
+        let dy = crate::cast!(y => f32) - crate::cast!(cy => f32);
         let half = 2.0 * (r_f * r_f - dy * dy).max(0.0).sqrt();
-        let x0 = ((cx as f32 - half).ceil() as i32).max(0) as usize;
-        let x1 = (((cx as f32 + half).floor() as i32) + 1).min(world.width as i32).max(0) as usize;
+        let x0 = crate::cast!((crate::cast!((crate::cast!(cx => f32) - half).ceil() => i32)).max(0) => usize);
+        let x1 = crate::cast!(((crate::cast!((crate::cast!(cx => f32) + half).floor() => i32)) + 1).min(crate::cast!(world.width => i32)).max(0) => usize);
         if x0 >= x1 {
             continue;
         }
@@ -850,7 +851,7 @@ fn perceive(c: &Creature, spatial: &SpatialIndex, world: &World, cp: &CreaturesP
             if cell.terrain.is_water() {
                 continue;
             }
-            let dx = (x as f32 - cx as f32) / 2.0;
+            let dx = (crate::cast!(x => f32) - crate::cast!(cx => f32)) / 2.0;
             let d = (dx * dx + dy * dy).sqrt();
             if d > r_f {
                 continue;
@@ -893,6 +894,34 @@ fn perceive(c: &Creature, spatial: &SpatialIndex, world: &World, cp: &CreaturesP
     (Perception { nearest_water, best_graze, nearest_den, best_patrol, creatures }, kin)
 }
 
+/// The next cell to step to: the planned path step when still valid, else a
+/// greedy step, else a BFS detour (FR6 fallback around an obstacle).
+fn next_move(c: &mut Creature, world: &World, target: (usize, usize)) -> Option<(usize, usize)> {
+    let planned = match c.path.last() {
+        Some(&(nx, ny)) if geom::cheb(c.x, c.y, nx, ny) == 1 && world.cell(nx, ny).terrain.walkable() => {
+            c.path.pop();
+            Some((nx, ny))
+        }
+        Some(_) => {
+            c.path.clear();
+            None
+        }
+        None => None,
+    };
+    planned.or_else(|| step_toward(c.x, c.y, target, world)).or_else(|| {
+        match bfs_path((c.x, c.y), target, world, PATH_KEEP) {
+            Some(mut path) => {
+                path.reverse();
+                let first = path.pop();
+                c.path = path;
+                c.path_for = Some(target);
+                first
+            }
+            None => None,
+        }
+    })
+}
+
 fn move_toward(c: &mut Creature, world: &World, time: &Time, cp: &CreaturesParams, pp: &PredationParams, speed_factor: f32) {
     if c.target.is_none() {
         c.path.clear();
@@ -912,7 +941,10 @@ fn move_toward(c: &mut Creature, world: &World, time: &Time, cp: &CreaturesParam
     if !c.path.is_empty() && c.path_for != c.target {
         c.path.clear();
     }
-    while c.move_budget >= 1.0 {
+    loop {
+        if c.move_budget < 1.0 {
+            break;
+        }
         let Some(target) = c.target else { break };
         if (c.x, c.y) == target {
             c.path.clear();
@@ -921,61 +953,30 @@ fn move_toward(c: &mut Creature, world: &World, time: &Time, cp: &CreaturesParam
             }
             break;
         }
-        // A planned step (from a path search) takes precedence when still valid.
-        let planned = match c.path.last() {
-            Some(&(nx, ny)) if geom::cheb(c.x, c.y, nx, ny) == 1 && world.cell(nx, ny).terrain.walkable() => {
-                c.path.pop();
-                Some((nx, ny))
+        if let Some((nx, ny)) = next_move(c, world, target) {
+            c.x = nx;
+            c.y = ny;
+            c.energy -= if c.goal == Goal::Flee { cp.move_cost_energy * pp.flee_energy_factor } else { cp.move_cost_energy };
+            c.move_budget -= 1.0;
+            c.trail.push((nx, ny));
+            if c.trail.len() > cp.trail_len {
+                c.trail.remove(0);
             }
-            Some(_) => {
-                c.path.clear();
-                None
-            }
-            None => None,
-        };
-        let next = match planned.or_else(|| step_toward(c.x, c.y, target, world)) {
-            Some(n) => Some(n),
-            None => {
-                // Greedy stalled at an obstacle (FR6 fallback): plan around it.
-                match bfs_path((c.x, c.y), target, world, PATH_KEEP) {
-                    Some(mut path) => {
-                        path.reverse();
-                        let first = path.pop();
-                        c.path = path;
-                        c.path_for = Some(target);
-                        first
-                    }
-                    None => None,
-                }
-            }
-        };
-        match next {
-            Some((nx, ny)) => {
-                c.x = nx;
-                c.y = ny;
-                c.energy -= if c.goal == Goal::Flee { cp.move_cost_energy * pp.flee_energy_factor } else { cp.move_cost_energy };
-                c.move_budget -= 1.0;
-                c.trail.push((nx, ny));
-                if c.trail.len() > cp.trail_len {
-                    c.trail.remove(0);
-                }
-                if (c.x, c.y) == target && c.goal == Goal::Wander {
-                    c.target = None;
-                    c.path.clear();
-                    break;
-                }
-            }
-            None => {
-                // Unreachable: drop the target and replan. A remembered water
-                // spot that cannot be reached is forgotten.
+            if (c.x, c.y) == target && c.goal == Goal::Wander {
                 c.target = None;
                 c.path.clear();
-                if c.goal == Goal::Drink {
-                    c.last_water = None;
-                }
-                c.replan_at = time.tick;
                 break;
             }
+        } else {
+            // Unreachable: drop the target and replan. A remembered water
+            // spot that cannot be reached is forgotten.
+            c.target = None;
+            c.path.clear();
+            if c.goal == Goal::Drink {
+                c.last_water = None;
+            }
+            c.replan_at = time.tick;
+            break;
         }
     }
     // FR6: a creature must never occupy an impassable cell.
@@ -992,12 +993,12 @@ fn step_toward(x: usize, y: usize, target: (usize, usize), world: &World) -> Opt
     let mut best: Option<(usize, usize)> = None;
     let mut best_d = f32::INFINITY;
     for &(dx, dy) in &OFF8 {
-        let (nx, ny) = (x as i32 + dx, y as i32 + dy);
-        if world.in_bounds(nx, ny) && world.cell(nx as usize, ny as usize).terrain.walkable() {
-            let d = geom::dist(nx as usize, ny as usize, tx, ty);
+        let (nx, ny) = (crate::cast!(x => i32) + dx, crate::cast!(y => i32) + dy);
+        if world.in_bounds(nx, ny) && world.cell(crate::cast!(nx => usize), crate::cast!(ny => usize)).terrain.walkable() {
+            let d = geom::dist(crate::cast!(nx => usize), crate::cast!(ny => usize), tx, ty);
             if d < best_d {
                 best_d = d;
-                best = Some((nx as usize, ny as usize));
+                best = Some((crate::cast!(nx => usize), crate::cast!(ny => usize)));
             }
         }
     }
@@ -1017,23 +1018,23 @@ const PATH_PAD_Y: i32 = 8;
 /// box of `from` and `target`. Returns the path (excluding `from`, including
 /// `target`) truncated to `keep` steps, or `None` when unreachable in the box.
 fn bfs_path(from: (usize, usize), target: (usize, usize), world: &World, keep: usize) -> Option<Vec<(usize, usize)>> {
-    let (fx, fy) = (from.0 as i32, from.1 as i32);
-    let (tx, ty) = (target.0 as i32, target.1 as i32);
+    let (fx, fy) = (crate::cast!(from.0 => i32), crate::cast!(from.1 => i32));
+    let (tx, ty) = (crate::cast!(target.0 => i32), crate::cast!(target.1 => i32));
     if !world.in_bounds(tx, ty) {
         return None;
     }
     let x0 = (fx.min(tx) - PATH_PAD_X).max(0);
     let y0 = (fy.min(ty) - PATH_PAD_Y).max(0);
-    let x1 = (fx.max(tx) + PATH_PAD_X + 1).min(world.width as i32);
-    let y1 = (fy.max(ty) + PATH_PAD_Y + 1).min(world.height as i32);
-    let bw = (x1 - x0) as usize;
-    let bh = (y1 - y0) as usize;
-    let idx = |x: i32, y: i32| ((y - y0) as usize) * bw + (x - x0) as usize;
+    let x1 = (fx.max(tx) + PATH_PAD_X + 1).min(crate::cast!(world.width => i32));
+    let y1 = (fy.max(ty) + PATH_PAD_Y + 1).min(crate::cast!(world.height => i32));
+    let bw = crate::cast!((x1 - x0) => usize);
+    let bh = crate::cast!((y1 - y0) => usize);
+    let idx = |x: i32, y: i32| (crate::cast!((y - y0) => usize)) * bw + crate::cast!((x - x0) => usize);
     // Parent index per box cell; u32::MAX = unvisited.
     let mut parent = vec![u32::MAX; bw * bh];
-    let mut queue: Vec<(i32, i32)> = Vec::with_capacity(bw * bh / 4);
+    let mut queue: Vec<(i32, i32)> = Vec::with_capacity((bw * bh).div_euclid(4));
     let start = idx(fx, fy);
-    parent[start] = start as u32;
+    parent[start] = crate::cast!(start => u32);
     queue.push((fx, fy));
     let mut head = 0;
     let mut found = false;
@@ -1053,10 +1054,10 @@ fn bfs_path(from: (usize, usize), target: (usize, usize), world: &World, keep: u
             if parent[ni] != u32::MAX {
                 continue;
             }
-            if !world.cell(nx as usize, ny as usize).terrain.walkable() {
+            if !world.cell(crate::cast!(nx => usize), crate::cast!(ny => usize)).terrain.walkable() {
                 continue;
             }
-            parent[ni] = idx(x, y) as u32;
+            parent[ni] = crate::cast!(idx(x, y) => u32);
             queue.push((nx, ny));
         }
     }
@@ -1067,10 +1068,10 @@ fn bfs_path(from: (usize, usize), target: (usize, usize), world: &World, keep: u
     let mut full: Vec<(usize, usize)> = Vec::new();
     let mut cur = idx(tx, ty);
     while cur != start {
-        let cx = (cur % bw) as i32 + x0;
-        let cy = (cur / bw) as i32 + y0;
-        full.push((cx as usize, cy as usize));
-        cur = parent[cur] as usize;
+        let cx = crate::cast!((cur % bw) => i32) + x0;
+        let cy = crate::cast!((cur.div_euclid(bw)) => i32) + y0;
+        full.push((crate::cast!(cx => usize), crate::cast!(cy => usize)));
+        cur = crate::cast!(parent[cur] => usize);
     }
     full.reverse();
     full.truncate(keep);
@@ -1106,7 +1107,7 @@ fn drink(c: &mut Creature, world: &World, cp: &CreaturesParams) {
     }
 }
 
-fn maybe_make_den(c: &mut Creature, world: &mut World, events: &mut EventRing, time: &Time, cp: &CreaturesParams, rng: &mut Rng) {
+fn maybe_make_den(c: &Creature, world: &mut World, events: &mut EventRing, time: &Time, cp: &CreaturesParams, rng: &mut Rng) {
     if !is_resting(c) || in_den(c, world) {
         return;
     }
@@ -1177,7 +1178,7 @@ fn maybe_die(c: &mut Creature, world: &mut World, events: &mut EventRing, time: 
     }
 }
 
-fn pressure(c: &mut Creature, world: &mut World, cp: &CreaturesParams) {
+fn pressure(c: &Creature, world: &mut World, cp: &CreaturesParams) {
     match c.species.kind() {
         Kind::Prey => {
             let cell = world.cell_mut(c.x, c.y);
@@ -1217,7 +1218,7 @@ pub(crate) fn kill(
     c.hp = 0.0;
     c.target = None;
     c.pregnant_due = None;
-    c.death = Some(Death { cause, day: time.day_index() as u32, killer, chase_ticks });
+    c.death = Some(Death { cause, day: crate::cast!(time.day_index() => u32), killer, chase_ticks });
     // C7: an animal that dies while infectious leaves an infectious carcass.
     if c.died_infected.is_none() && disease::is_infectious(c) {
         c.died_infected = c.infection.map(|i| i.pathogen);
@@ -1225,14 +1226,14 @@ pub(crate) fn kill(
     let outbreak = c.infection.map(|i| i.outbreak);
     world.carcasses.push((c.x, c.y));
     tallies.deaths[c.species.index()] += 1;
-    lineage.record_death(c.id, time.day_index() as u32, cause, if cause == Cause::Disease { outbreak } else { None }, c.infections_survived);
+    lineage.record_death(c.id, crate::cast!(time.day_index() => u32), cause, if cause == Cause::Disease { outbreak } else { None }, c.infections_survived);
     tallies.last_death[c.species.index()] = Some(crate::sim::creatures::ExtinctionRecord {
         species: c.species,
         last: c.id,
         name: c.name_str().to_string(),
         tag: c.tag(),
         cause,
-        day: time.day_index() as u32,
+        day: crate::cast!(time.day_index() => u32),
         age: c.age_days(time.day_index()),
         region: world.region_name(c.x, c.y).to_string(),
         pos: (c.x, c.y),
@@ -1306,19 +1307,50 @@ pub(crate) fn kill(
 /// exhausts itself (flee steps cost double) and dies of thirst in forced rest. A failed kill roll forces a Flee regardless (FR4); that
 /// forced threat is retained here until the flee timer expires so the
 /// away-vector survives ticks on which the prey cannot sense the predator.
+// `camouflage < sense` is intentional: two different 0..=1 traits.
+#[allow(clippy::suspicious_operation_groupings)]
+/// Per-prey facts accumulated while scanning predators.
+struct PreySnap {
+    id: CreatureId,
+    rest: bool,
+    sense: f32,
+    sense_cells: u16,
+    count: u32,
+    dist: f32,
+    pos: (usize, usize),
+    /// The predator species that threatens this prey (set with `dist`).
+    species: SpeciesId,
+    /// The prey's own species and sociality, for the alarm pass (C8 FR3).
+    own: SpeciesId,
+    sociality: f32,
+}
+
+/// The predator facts the prey rule needs (no `Creature` clones per tick).
+struct Pred {
+    id: CreatureId,
+    x: usize,
+    y: usize,
+    species: SpeciesId,
+    camouflage: f32,
+    hunting: Option<CreatureId>,
+    /// Hungry enough to hunt: a satiated predator at four cells is no danger.
+    hungry: bool,
+}
+
 fn mark_threats(store: &mut CreatureStore, spatial: &SpatialIndex, world: &World, tick: u64, pp: &PredationParams, sp: &SocialParams) {
-    /// The predator facts the prey rule needs (no `Creature` clones per tick).
-    struct Pred {
-        id: CreatureId,
-        x: usize,
-        y: usize,
-        species: SpeciesId,
-        camouflage: f32,
-        hunting: Option<CreatureId>,
-        /// Hungry enough to hunt: a satiated predator at four cells is no danger.
-        hungry: bool,
-    }
-    let mut preds: Vec<Pred> = store
+    let mut preds = build_preds(store, pp);
+    preds.sort_unstable_by_key(|p| p.id);
+    let mut prey = build_prey(store);
+    prey.sort_unstable_by_key(|p| p.id);
+
+    scan_prey(&preds, &mut prey, spatial, pp);
+    propagate_alarms(&mut prey, spatial, sp);
+    apply_threats(store, &prey, world, tick);
+}
+
+/// Snapshot every predator's threat-relevant facts.
+fn build_preds(store: &CreatureStore, pp: &PredationParams) -> Vec<Pred> {
+    store
         .living()
         .filter(|c| c.species.kind() == Kind::Predator)
         .map(|c| Pred {
@@ -1330,27 +1362,12 @@ fn mark_threats(store: &mut CreatureStore, spatial: &SpatialIndex, world: &World
             hunting: if c.goal == Goal::Hunt && c.hunt_phase != HuntPhase::Eat { c.hunt_target } else { None },
             hungry: c.hunger > pp.hunt_hunger_min,
         })
-        .collect();
-    preds.sort_unstable_by_key(|p| p.id);
+        .collect()
+}
 
-    // A flat prey snapshot (sorted by id) replaces the per-visit `BTreeMap`
-    // accumulation: the hot path is a binary search over contiguous memory and
-    // `for_each_within` does not allocate or sort (C6 FR9).
-    struct PreySnap {
-        id: CreatureId,
-        rest: bool,
-        sense: f32,
-        sense_cells: u16,
-        count: u32,
-        dist: f32,
-        pos: (usize, usize),
-        /// The predator species that threatens this prey (set with `dist`).
-        species: SpeciesId,
-        /// The prey's own species and sociality, for the alarm pass (C8 FR3).
-        own: SpeciesId,
-        sociality: f32,
-    }
-    let mut prey: Vec<PreySnap> = store
+/// Snapshot every prey's detection-relevant facts.
+fn build_prey(store: &CreatureStore) -> Vec<PreySnap> {
+    store
         .living()
         .filter(|c| c.species.kind() == Kind::Prey)
         .map(|c| PreySnap {
@@ -1365,16 +1382,20 @@ fn mark_threats(store: &mut CreatureStore, spatial: &SpatialIndex, world: &World
             own: c.species,
             sociality: c.genome.sociality(),
         })
-        .collect();
-    prey.sort_unstable_by_key(|p| p.id);
+        .collect()
+}
 
-    for pred in &preds {
+/// Detection pass: for each predator, mark the prey that see it as threatened.
+// `camouflage < sense` is intentional: two different 0..=1 traits.
+#[allow(clippy::suspicious_operation_groupings)]
+fn scan_prey(preds: &[Pred], prey: &mut [PreySnap], spatial: &SpatialIndex, pp: &PredationParams) {
+    for pred in preds {
         spatial.for_each_within(pred.x, pred.y, MAX_SENSE_CELLS, |prey_id, qx, qy| {
             let Ok(i) = prey.binary_search_by_key(&prey_id, |p| p.id) else { return };
             let p = &mut prey[i];
             let d = geom::dist(pred.x, pred.y, qx, qy);
-            let range = if p.rest { p.sense_cells as f32 * pp.rest_detect_factor } else { p.sense_cells as f32 };
-            let in_range = d <= p.sense_cells as f32;
+            let range = if p.rest { f32::from(p.sense_cells) * pp.rest_detect_factor } else { f32::from(p.sense_cells) };
+            let in_range = d <= f32::from(p.sense_cells);
             let detects = d <= range && pred.camouflage < p.sense;
             if in_range {
                 p.count += 1;
@@ -1388,68 +1409,67 @@ fn mark_threats(store: &mut CreatureStore, spatial: &SpatialIndex, world: &World
             }
         });
     }
+}
 
-    // C8 FR3: alarm propagation. A prey that has spotted a threat alerts
-    // same-species kin nearby. Only already-threatened prey run the query (bounded
-    // cost), the query radius is the constant `alarm_cells`, and the receiver's own
-    // sociality decides whether it heeds the alarm. Results are collected first and
-    // applied after the scan, so the first alarmer in id order wins.
-    let reach = sp.alarm_cells.max(0.0) as u16;
-    if reach > 0 {
-        let mut alarms: Vec<(CreatureId, (usize, usize), SpeciesId)> = Vec::new();
-        for p in prey.iter() {
-            if p.dist.is_infinite() {
-                continue;
-            }
-            let (sx, sy) = p.pos;
-            let (sender, threat_species) = (p.own, p.species);
-            spatial.for_each_within(sx, sy, reach, |other_id, qx, qy| {
-                let Ok(i) = prey.binary_search_by_key(&other_id, |q| q.id) else { return };
-                let q = &prey[i];
-                if !q.dist.is_infinite() || q.own != sender {
-                    return;
-                }
-                // The alarm reaches `q` only if `q` is social enough to heed it.
-                if geom::dist(sx, sy, qx, qy) <= q.sociality * sp.alarm_cells {
-                    alarms.push((other_id, (sx, sy), threat_species));
-                }
-            });
+/// C8 FR3: alarm propagation from already-threatened prey to nearby kin.
+fn propagate_alarms(prey: &mut [PreySnap], spatial: &SpatialIndex, sp: &SocialParams) {
+    let reach = crate::cast!(sp.alarm_cells.max(0.0) => u16);
+    if reach == 0 {
+        return;
+    }
+    let mut alarms: Vec<(CreatureId, (usize, usize), SpeciesId)> = Vec::new();
+    for p in prey.iter() {
+        if p.dist.is_infinite() {
+            continue;
         }
-        for (id, pos, threat_species) in alarms {
-            if let Ok(i) = prey.binary_search_by_key(&id, |q| q.id) {
-                let q = &mut prey[i];
-                if q.dist.is_infinite() {
-                    q.pos = pos;
-                    q.species = threat_species;
-                    q.dist = 0.0; // alerted, distance unknown: not a detection
-                }
+        let (sx, sy) = p.pos;
+        let (sender, threat_species) = (p.own, p.species);
+        spatial.for_each_within(sx, sy, reach, |other_id, qx, qy| {
+            let Ok(i) = prey.binary_search_by_key(&other_id, |q| q.id) else { return };
+            let q = &prey[i];
+            if !q.dist.is_infinite() || q.own != sender {
+                return;
+            }
+            // The alarm reaches `q` only if `q` is social enough to heed it.
+            if geom::dist(sx, sy, qx, qy) <= q.sociality * sp.alarm_cells {
+                alarms.push((other_id, (sx, sy), threat_species));
+            }
+        });
+    }
+    for (id, pos, threat_species) in alarms {
+        if let Ok(i) = prey.binary_search_by_key(&id, |q| q.id) {
+            let q = &mut prey[i];
+            if q.dist.is_infinite() {
+                q.pos = pos;
+                q.species = threat_species;
+                q.dist = 0.0; // alerted, distance unknown: not a detection
             }
         }
     }
+}
 
+/// Write the scan results (and predation risk) back onto the prey.
+fn apply_threats(store: &mut CreatureStore, prey: &[PreySnap], world: &World, tick: u64) {
     for c in store.living_mut() {
         if c.species.kind() != Kind::Prey {
             continue;
         }
         // A forced flee (FR4) keeps its last known threat until the timer ends.
         let keep_forced = c.goal == Goal::Flee && tick < c.flee_until && c.threatened_by.is_some();
-        match prey.binary_search_by_key(&c.id, |p| p.id) {
-            Ok(i) => {
-                let p = &prey[i];
-                if p.dist < f32::INFINITY {
-                    c.threatened_by = Some((p.pos.0, p.pos.1, p.species));
-                } else if !keep_forced {
-                    c.threatened_by = None;
-                }
-                let pressure = world.cell(c.x, c.y).pred_pressure;
-                c.predation_risk = (0.5 * pressure + 0.5 * (p.count as f32) / 3.0).min(1.0);
+        if let Ok(i) = prey.binary_search_by_key(&c.id, |p| p.id) {
+            let p = &prey[i];
+            if p.dist < f32::INFINITY {
+                c.threatened_by = Some((p.pos.0, p.pos.1, p.species));
+            } else if !keep_forced {
+                c.threatened_by = None;
             }
-            Err(_) => {
-                if !keep_forced {
-                    c.threatened_by = None;
-                }
-                c.predation_risk = (0.5 * world.cell(c.x, c.y).pred_pressure).min(1.0);
+            let pressure = world.cell(c.x, c.y).pred_pressure;
+            c.predation_risk = (0.5 * pressure + 0.5 * (crate::cast!(p.count => f32)) / 3.0).min(1.0);
+        } else {
+            if !keep_forced {
+                c.threatened_by = None;
             }
+            c.predation_risk = (0.5 * world.cell(c.x, c.y).pred_pressure).min(1.0);
         }
     }
 }
@@ -1457,14 +1477,14 @@ fn mark_threats(store: &mut CreatureStore, spatial: &SpatialIndex, world: &World
 /// The cell `flee_distance` away from the threatening predator (FR5).
 fn flee_target(c: &Creature, world: &World, pp: &PredationParams) -> Option<(usize, usize)> {
     let (px, py, _) = c.threatened_by?;
-    let dx = c.x as i32 - px as i32;
-    let dy = c.y as i32 - py as i32;
+    let dx = crate::cast!(c.x => i32) - crate::cast!(px => i32);
+    let dy = crate::cast!(c.y => i32) - crate::cast!(py => i32);
     if dx == 0 && dy == 0 {
         return Some((c.x, c.y));
     }
-    let k = pp.flee_distance.ceil() as i32;
-    let nx = (c.x as i32 + dx.signum() * k).clamp(0, world.width as i32 - 1) as usize;
-    let ny = (c.y as i32 + dy.signum() * k).clamp(0, world.height as i32 - 1) as usize;
+    let k = crate::cast!(pp.flee_distance.ceil() => i32);
+    let nx = crate::cast!((crate::cast!(c.x => i32) + dx.signum() * k).clamp(0, crate::cast!(world.width => i32) - 1) => usize);
+    let ny = crate::cast!((crate::cast!(c.y => i32) + dy.signum() * k).clamp(0, crate::cast!(world.height => i32) - 1) => usize);
     Some((nx, ny))
 }
 
@@ -1476,7 +1496,7 @@ fn update_hunt_stalk(c: &mut Creature, view: &TickView, time: &Time, pp: &Predat
         fail_hunt(c, time, pp, tallies);
         return;
     };
-    if geom::dist(c.x, c.y, prey.x, prey.y) > c.genome.sense_cells() as f32 {
+    if geom::dist(c.x, c.y, prey.x, prey.y) > f32::from(c.genome.sense_cells()) {
         fail_hunt(c, time, pp, tallies);
         return;
     }
@@ -1487,7 +1507,7 @@ fn update_hunt_stalk(c: &mut Creature, view: &TickView, time: &Time, pp: &Predat
     }
     if c.hunt_phase == HuntPhase::Chase {
         if let Some(start) = c.chase_start_tick {
-            if time.tick.saturating_sub(start) >= pp.chase_max_ticks as u64 {
+            if time.tick.saturating_sub(start) >= u64::from(pp.chase_max_ticks) {
                 fail_hunt(c, time, pp, tallies);
             }
         }
@@ -1498,7 +1518,7 @@ fn update_hunt_stalk(c: &mut Creature, view: &TickView, time: &Time, pp: &Predat
 fn fail_hunt(c: &mut Creature, time: &Time, pp: &PredationParams, tallies: &mut DeathTallies) {
     c.attempts += 1;
     tallies.hunt_attempts[c.species.index()] += 1;
-    c.hunt_cooldown_until = time.tick + pp.hunt_cooldown_hours as u64;
+    c.hunt_cooldown_until = time.tick + u64::from(pp.hunt_cooldown_hours);
     c.hunt_phase = HuntPhase::Stalk;
     c.hunt_target = None;
     c.chase_start_tick = None;
@@ -1512,7 +1532,7 @@ fn fail_hunt(c: &mut Creature, time: &Time, pp: &PredationParams, tallies: &mut 
 /// joining a pack worth the risk.
 fn join_kill(c: &mut Creature, time: &Time, pp: &PredationParams, prey_size: f32, sp: &SocialParams) {
     c.hunger -= pp.hunger_per_kill(prey_size) * sp.pack_share;
-    c.hunt_cooldown_until = time.tick + pp.hunt_cooldown_hours as u64;
+    c.hunt_cooldown_until = time.tick + u64::from(pp.hunt_cooldown_hours);
     c.hunt_phase = HuntPhase::Stalk;
     c.hunt_target = None;
     c.chase_start_tick = None;
@@ -1567,7 +1587,7 @@ fn pick_hunt_target(
             continue;
         }
         let d = geom::dist(c.x, c.y, peer.x, peer.y);
-        let join = 1.0 + sociality * sp.pack_join_bonus * packed.min(3) as f32;
+        let join = 1.0 + sociality * sp.pack_join_bonus * crate::cast!(packed.min(3) => f32);
         let score = pref * join / (1.0 + d / 4.0);
         if best.is_none_or(|b| score > b.2) {
             best = Some((id, (peer.x, peer.y), score));
@@ -1578,8 +1598,8 @@ fn pick_hunt_target(
 
 /// Nearest prey carcass within sense range (ties by id).
 fn pick_scavenge_target(c: &Creature, view: &TickView) -> Option<(CreatureId, (usize, usize))> {
-    let r = c.genome.sense_cells() as f32;
-    let mut cs: Vec<&crate::sim::genetics::Carcass> = view.carcasses.iter().filter(|k| k.species.kind() == Kind::Prey).collect();
+    let r = f32::from(c.genome.sense_cells());
+    let mut cs: Vec<&genetics::Carcass> = view.carcasses.iter().filter(|k| k.species.kind() == Kind::Prey).collect();
     cs.sort_unstable_by_key(|k| k.id);
     let mut best: Option<(CreatureId, (usize, usize))> = None;
     let mut best_d = f32::INFINITY;
@@ -1596,6 +1616,40 @@ fn pick_scavenge_target(c: &Creature, view: &TickView) -> Option<(CreatureId, (u
 /// Post-loop pass: resolve hunt contacts (single kill roll), the Eat phase and
 /// the failure Flee (FR4).
 #[allow(clippy::too_many_arguments)]
+/// The prey enters Flee regardless of whether it had detected the predator: the
+/// threat is forced in so the away-vector exists, and `mark_threats` retains it
+/// until the flee timer expires.
+fn force_flee(q: &mut Creature, world: &World, pp: &PredationParams, time: &Time, pred_at: (usize, usize, SpeciesId)) {
+    if q.alive {
+        if q.goal != Goal::Flee {
+            q.chased += 1;
+            q.threats_by_species[pred_at.2.index()] += 1;
+        }
+        q.goal = Goal::Flee;
+        q.flee_until = time.tick + u64::from(pp.flee_ticks);
+        q.threatened_by = Some(pred_at);
+        q.target = flee_target(q, world, pp);
+        q.replan_at = time.tick + 1;
+    }
+}
+
+/// Facts about a predator/prey pair, snapshotted before either is mutated.
+struct HuntSnap {
+    pred_speed: f32,
+    pred_aggr: f32,
+    chase_start: Option<u64>,
+    prey_species: SpeciesId,
+    prey_size: f32,
+    prey_speed: f32,
+    px: usize,
+    py: usize,
+    cheb: usize,
+    killer_label: String,
+    pred_at: (usize, usize, SpeciesId),
+    sick_bonus: f32,
+}
+
+#[allow(clippy::too_many_arguments)]
 fn hunt_contacts(
     store: &mut CreatureStore,
     world: &mut World,
@@ -1610,128 +1664,169 @@ fn hunt_contacts(
     dstate: &mut DiseaseState,
     drng: &mut Rng,
 ) {
-    let hunters: Vec<(CreatureId, CreatureId)> = store
+    let mut hunters: Vec<(CreatureId, CreatureId)> = store
         .living()
         .filter(|c| c.goal == Goal::Hunt && c.hunt_phase != HuntPhase::Eat)
         .filter_map(|c| c.hunt_target.map(|t| (c.id, t)))
         .collect();
-    let mut hunters = hunters;
     hunters.sort_unstable();
 
     for (pred_id, prey_id) in hunters {
-        // Snapshot the facts we need before mutating either creature.
-        let snap = match (store.get(pred_id), store.get(prey_id)) {
-            (Some(p), Some(q)) if p.alive && q.alive && p.goal == Goal::Hunt && p.hunt_target == Some(prey_id) => {
-                Some((
-                    p.genome.speed(),
-                    p.genome.aggression(),
-                    p.chase_start_tick,
-                    q.species,
-                    q.genome.size(),
-                    q.genome.speed(),
-                    q.x,
-                    q.y,
-                    geom::cheb(p.x, p.y, q.x, q.y),
-                    format!("{} {}", p.name_str(), p.tag()),
-                    (p.x, p.y, p.species),
-                    disease::effects(q, dp).kill_bonus,
-                ))
-            }
-            _ => None,
-        };
-        let Some((pred_speed, pred_aggr, chase_start, prey_species, prey_size, prey_speed, px, py, cheb, killer_label, pred_at, sick_bonus)) = snap
-        else {
-            continue;
-        };
-        if cheb > pp.catch_distance_cheb {
+        let Some(snap) = hunt_snapshot(store, pred_id, prey_id, dp) else { continue };
+        if snap.cheb > pp.catch_distance_cheb {
             continue;
         }
-
         // C8 FR4: a pack converging on one prey kills more reliably, and the meal
         // is shared with the packmates within `pack_share_cheb` of the kill.
-        let pred_species = pred_at.2;
-        let participants: Vec<CreatureId> = store
-            .living()
-            .filter(|o| {
-                o.id != pred_id
-                    && o.species == pred_species
-                    && o.goal == Goal::Hunt
-                    && o.hunt_phase != HuntPhase::Eat
-                    && o.hunt_target == Some(prey_id)
-                    && geom::cheb(o.x, o.y, px, py) <= sp.pack_share_cheb
-            })
-            .map(|o| o.id)
-            .collect();
+        let participants = pack_participants(store, pred_id, snap.pred_at.2, prey_id, snap.px, snap.py, sp);
         let extra = participants.len().min(3);
-
         // C7 FR6: a sick prey is easier to catch.
-        let chance = (pp.kill_chance(pred_speed, prey_speed, pred_aggr, prey_size) + sick_bonus + sp.pack_kill_bonus * extra as f32)
-            .clamp(pp.kill_min, pp.kill_max);
-        let success = rng.chance(chance);
-        let chase_ticks = chase_start.map(|s| time.tick.saturating_sub(s) as u16).unwrap_or(0);
-
-        if success {
-            if let Some(prey) = store.get_mut(prey_id) {
-                if prey.alive {
-                    kill(prey, Cause::Predation, world, events, time, tallies, lineage, Some(pred_id), chase_ticks, Some(&killer_label));
-                }
-            }
-            if let Some(p) = store.get_mut(pred_id) {
-                p.kills += 1;
-                p.kills_by_species[prey_species.index()] += 1;
-                p.attempts += 1;
-                tallies.hunt_attempts[p.species.index()] += 1;
-                tallies.hunt_kills[p.species.index()] += 1;
-                p.chase_stats.0 += chase_ticks as u32;
-                if chase_ticks as u32 > p.chase_stats.1 {
-                    p.chase_stats.1 = chase_ticks as u32;
-                    p.chase_longest_year = time.year();
-                }
-                p.last_kill = Some((prey_id, time.day_index() as u32, world.region_index(px, py) as u8));
-                p.hunt_cooldown_until = time.tick + pp.hunt_cooldown_hours as u64;
-                p.hunt_phase = HuntPhase::Eat;
-                p.hunt_target = None;
-                p.chase_start_tick = None;
-                p.eat_until = Some(time.tick + pp.eat_hours(prey_size) as u64);
-                p.target = Some((px, py));
-                // FR4: `hunger −= hunger_per_kill` — allowed to go negative, so a
-                // big kill extends the satiation period and bounds the hunt rate.
-                p.hunger -= pp.hunger_per_kill(prey_size);
-            }
-            // C8 FR4: the pack shares the kill. Rewards are not attempts, so this
-            // never goes through `fail_hunt`; the kill itself is counted once.
-            for pid in participants {
-                if let Some(o) = store.get_mut(pid) {
-                    join_kill(o, time, pp, prey_size, sp);
-                }
-            }
-            if let Some(carcass) = store.get_mut(prey_id) {
-                let eaten = pp.kill_consumes_decay * (1.0 + sp.pack_share * extra as f32);
-                carcass.decay = (carcass.decay + eaten).min(1.0);
-            }
-            // C7 FR7/FR8b: the meal carries parasites, infection or a spillover.
-            disease::on_eat(store, pred_id, prey_id, world, events, time, dp, dstate, drng);
+        let chance = (pp.kill_chance(snap.pred_speed, snap.prey_speed, snap.pred_aggr, snap.prey_size)
+            + snap.sick_bonus
+            + sp.pack_kill_bonus * crate::cast!(extra => f32))
+        .clamp(pp.kill_min, pp.kill_max);
+        let chase_ticks = snap.chase_start.map_or(0, |s| crate::cast!(time.tick.saturating_sub(s) => u16));
+        if rng.chance(chance) {
+            resolve_kill(store, world, events, time, pp, dp, sp, tallies, lineage, dstate, drng, pred_id, prey_id, &snap, participants, extra, chase_ticks);
         } else {
-            if let Some(p) = store.get_mut(pred_id) {
-                fail_hunt(p, time, pp, tallies);
-            }
-            // The prey enters Flee regardless of whether it had detected the
-            // predator: the threat is forced in so the away-vector exists, and
-            // `mark_threats` retains it until the flee timer expires.
-            if let Some(q) = store.get_mut(prey_id) {
-                if q.alive {
-                    if q.goal != Goal::Flee {
-                        q.chased += 1;
-                        q.threats_by_species[pred_at.2.index()] += 1;
-                    }
-                    q.goal = Goal::Flee;
-                    q.flee_until = time.tick + pp.flee_ticks as u64;
-                    q.threatened_by = Some(pred_at);
-                    q.target = flee_target(q, world, pp);
-                    q.replan_at = time.tick + 1;
-                }
-            }
+            resolve_miss(store, world, time, pp, tallies, pred_id, prey_id, snap.pred_at);
         }
+    }
+}
+
+/// Snapshot the pair, or `None` when the hunt is no longer valid.
+fn hunt_snapshot(store: &CreatureStore, pred_id: CreatureId, prey_id: CreatureId, dp: &DiseaseParams) -> Option<HuntSnap> {
+    // Snapshot the facts we need before mutating either creature.
+    let (p, q) = (store.get(pred_id)?, store.get(prey_id)?);
+    if !(p.alive && q.alive && p.goal == Goal::Hunt && p.hunt_target == Some(prey_id)) {
+        return None;
+    }
+    Some(HuntSnap {
+        pred_speed: p.genome.speed(),
+        pred_aggr: p.genome.aggression(),
+        chase_start: p.chase_start_tick,
+        prey_species: q.species,
+        prey_size: q.genome.size(),
+        prey_speed: q.genome.speed(),
+        px: q.x,
+        py: q.y,
+        cheb: geom::cheb(p.x, p.y, q.x, q.y),
+        killer_label: format!("{} {}", p.name_str(), p.tag()),
+        pred_at: (p.x, p.y, p.species),
+        sick_bonus: disease::effects(q, dp).kill_bonus,
+    })
+}
+
+/// Packmates hunting the same prey within sharing range of the kill.
+fn pack_participants(
+    store: &CreatureStore,
+    pred_id: CreatureId,
+    pred_species: SpeciesId,
+    prey_id: CreatureId,
+    px: usize,
+    py: usize,
+    sp: &SocialParams,
+) -> Vec<CreatureId> {
+    store
+        .living()
+        .filter(|o| {
+            o.id != pred_id
+                && o.species == pred_species
+                && o.goal == Goal::Hunt
+                && o.hunt_phase != HuntPhase::Eat
+                && o.hunt_target == Some(prey_id)
+                && geom::cheb(o.x, o.y, px, py) <= sp.pack_share_cheb
+        })
+        .map(|o| o.id)
+        .collect()
+}
+
+/// A successful catch: kill, credit the hunter, share with the pack, feed.
+#[allow(clippy::too_many_arguments)]
+fn resolve_kill(
+    store: &mut CreatureStore,
+    world: &mut World,
+    events: &mut EventRing,
+    time: &Time,
+    pp: &PredationParams,
+    dp: &DiseaseParams,
+    sp: &SocialParams,
+    tallies: &mut DeathTallies,
+    lineage: &mut Lineage,
+    dstate: &mut DiseaseState,
+    drng: &mut Rng,
+    pred_id: CreatureId,
+    prey_id: CreatureId,
+    snap: &HuntSnap,
+    participants: Vec<CreatureId>,
+    extra: usize,
+    chase_ticks: u16,
+) {
+    let (px, py) = (snap.px, snap.py);
+    let prey_species = snap.prey_species;
+    let prey_size = snap.prey_size;
+    if let Some(prey) = store.get_mut(prey_id) {
+        if prey.alive {
+            kill(prey, Cause::Predation, world, events, time, tallies, lineage, Some(pred_id), chase_ticks, Some(&snap.killer_label));
+        }
+    }
+    if let Some(p) = store.get_mut(pred_id) {
+        p.kills += 1;
+        p.kills_by_species[prey_species.index()] += 1;
+        p.attempts += 1;
+        tallies.hunt_attempts[p.species.index()] += 1;
+        tallies.hunt_kills[p.species.index()] += 1;
+        p.chase_stats.0 += u32::from(chase_ticks);
+        if u32::from(chase_ticks) > p.chase_stats.1 {
+            p.chase_stats.1 = u32::from(chase_ticks);
+            p.chase_longest_year = time.year();
+        }
+        p.last_kill = Some((prey_id, crate::cast!(time.day_index() => u32), crate::cast!(world.region_index(px, py) => u8)));
+        p.hunt_cooldown_until = time.tick + u64::from(pp.hunt_cooldown_hours);
+        p.hunt_phase = HuntPhase::Eat;
+        p.hunt_target = None;
+        p.chase_start_tick = None;
+        p.eat_until = Some(time.tick + u64::from(pp.eat_hours(prey_size)));
+        p.target = Some((px, py));
+        // FR4: `hunger −= hunger_per_kill` — allowed to go negative, so a
+        // big kill extends the satiation period and bounds the hunt rate.
+        p.hunger -= pp.hunger_per_kill(prey_size);
+    }
+    // C8 FR4: the pack shares the kill. Rewards are not attempts, so this
+    // never goes through `fail_hunt`; the kill itself is counted once.
+    for pid in participants {
+        if let Some(o) = store.get_mut(pid) {
+            join_kill(o, time, pp, prey_size, sp);
+        }
+    }
+    if let Some(carcass) = store.get_mut(prey_id) {
+        let eaten = pp.kill_consumes_decay * (1.0 + sp.pack_share * crate::cast!(extra => f32));
+        carcass.decay = (carcass.decay + eaten).min(1.0);
+    }
+    // C7 FR7/FR8b: the meal carries parasites, infection or a spillover.
+    disease::on_eat(store, pred_id, prey_id, world, events, time, dp, dstate, drng);
+}
+
+/// A missed catch: the predator re-plans, the prey is forced to flee.
+#[allow(clippy::too_many_arguments)]
+fn resolve_miss(
+    store: &mut CreatureStore,
+    world: &World,
+    time: &Time,
+    pp: &PredationParams,
+    tallies: &mut DeathTallies,
+    pred_id: CreatureId,
+    prey_id: CreatureId,
+    pred_at: (usize, usize, SpeciesId),
+) {
+    if let Some(p) = store.get_mut(pred_id) {
+        fail_hunt(p, time, pp, tallies);
+    }
+    // The prey enters Flee regardless of whether it had detected the
+    // predator: the threat is forced in so the away-vector exists, and
+    // `mark_threats` retains it until the flee timer expires.
+    if let Some(q) = store.get_mut(prey_id) {
+        force_flee(q, world, pp, time, pred_at);
     }
 }
 
@@ -1782,7 +1877,9 @@ fn scavenge_contacts(store: &mut CreatureStore, world: &World, events: &mut Even
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
+
     use super::*;
     use crate::sim::creatures::{place_founders, CreatureStore, Sex};
     use crate::sim::params::{CreaturesParams, EcologyParams, GeneticsParams, WorldParams};
@@ -1836,7 +1933,7 @@ mod tests {
             last_kill: None,
             chase_stats: (0, 0),
             chase_longest_year: 0,
-            hunt_phase: crate::sim::creatures::HuntPhase::Stalk,
+            hunt_phase: HuntPhase::Stalk,
             hunt_target: None,
             chase_start_tick: None,
             hunt_cooldown_until: 0,
@@ -1870,7 +1967,7 @@ mod tests {
         // start_hour 6: hour = (tick + 6) % 24.
         let tick = (hour + 24 - 6) % 24;
         let mut t = Time::new(6, 90, 24, 6, 20);
-        t.tick = tick as u64;
+        t.tick = u64::from(tick);
         t
     }
 
@@ -2070,7 +2167,7 @@ mod tests {
         c.target = None;
         w.cell_mut(40, 5).terrain = Terrain::Dirt;
         w.cell_mut(40, 5).vegetation = 0.0;
-        maybe_make_den(&mut c, &mut w, &mut events, &t, &cp, &mut rng);
+        maybe_make_den(&c, &mut w, &mut events, &t, &cp, &mut rng);
         assert_eq!(w.dens.len(), 1);
 
         // Second resting creature in the same region: capped.
@@ -2080,7 +2177,7 @@ mod tests {
         c2.target = None;
         w.cell_mut(41, 5).terrain = Terrain::Dirt;
         w.cell_mut(41, 5).vegetation = 0.0;
-        maybe_make_den(&mut c2, &mut w, &mut events, &t, &cp, &mut rng);
+        maybe_make_den(&c2, &mut w, &mut events, &t, &cp, &mut rng);
         assert_eq!(w.dens.len(), 1, "region den cap should hold");
     }
 
@@ -2112,7 +2209,7 @@ mod tests {
         for dy in -1i32..=1 {
             for dx in -1i32..=1 {
                 if dx != 0 || dy != 0 {
-                    w.cell_mut((30 + dx) as usize, (5 + dy) as usize).terrain = Terrain::Rock;
+                    w.cell_mut(crate::cast!((30 + dx) => usize), crate::cast!((5 + dy) => usize)).terrain = Terrain::Rock;
                 }
             }
         }
@@ -2144,7 +2241,7 @@ mod tests {
     fn founders_are_placed() {
         let sim = Sim::new(42, Params::default());
         let total: u32 = sim.params.creatures.initial_counts.values().sum();
-        assert_eq!(sim.creatures.len_living(), total as usize);
+        assert_eq!(sim.creatures.len_living(), crate::cast!(total => usize));
         let _ = place_founders;
     }
 
@@ -2167,11 +2264,11 @@ mod tests {
         let cp = CreaturesParams { pressure_per_creature_tick: 1.0, ..CreaturesParams::default() };
         let mut wolf = test_creature(75, 20);
         wolf.species = SpeciesId::Wolf;
-        pressure(&mut wolf, &mut w, &cp);
+        pressure(&wolf, &mut w, &cp);
         assert_eq!(w.cell(75, 20).pred_pressure, 1.0, "predator traffic clamps at 1.0");
         let mut vole = test_creature(75, 20);
         vole.species = SpeciesId::Vole;
-        pressure(&mut vole, &mut w, &cp);
+        pressure(&vole, &mut w, &cp);
         assert_eq!(w.cell(75, 20).prey_pressure, 1.0, "prey traffic clamps at 1.0");
     }
 
@@ -2345,9 +2442,9 @@ mod tests {
             let (tx, ty) = h.migrate_target.expect("target cell");
             assert_eq!(w.region_index(tx, ty), dest);
             assert!(w.cell(tx, ty).terrain.walkable());
-            assert_eq!(h.migrate_until, time.tick + 2 * time.ticks_per_day as u64, "for up to 2 days");
+            assert_eq!(h.migrate_until, time.tick + 2 * u64::from(time.ticks_per_day), "for up to 2 days");
         }
-        assert_eq!(ev.pos, Some(((w.regions[0].1 + w.regions[0].3) / 2, (w.regions[0].2 + w.regions[0].4) / 2)), "pos = origin region centre");
+        assert_eq!(ev.pos, Some(((w.regions[0].1 + w.regions[0].3).div_euclid(2), (w.regions[0].2 + w.regions[0].4).div_euclid(2))), "pos = origin region centre");
     }
 
     /// Four wolves in region 0 and no prey anywhere: the predator trigger holds every day.
@@ -2367,7 +2464,7 @@ mod tests {
     fn run_migration_days(w: &World, store: &mut CreatureStore, events: &mut EventRing, time: &mut Time, cd: &mut [u64; 48], db: &mut [u32; 48], days: u32) {
         let pp = PredationParams::default();
         for _ in 0..days {
-            time.tick += time.ticks_per_day as u64;
+            time.tick += u64::from(time.ticks_per_day);
             migration_daily(store, w, events, time, &EcologyParams::default(), &pp, cd, db);
         }
     }
@@ -2408,7 +2505,7 @@ mod tests {
             run_migration_days(&w, &mut store, &mut events, &mut time, &mut cd, &mut db, 1);
         }
         assert_eq!(count(&events), 1, "no second migration within migrate_cooldown_days");
-        for _ in 0..(pp.migrate_days + 1) {
+        for _ in 0..=pp.migrate_days {
             for c in store.living_mut() {
                 c.x = x;
                 c.y = y;
@@ -2516,14 +2613,11 @@ mod tests {
         assert!(!sp.herding(0.02, 2) && sp.herding(0.98, 2), "the herding rule is the gate");
     }
 
-    #[test]
-    fn pack_joins_the_shared_target_and_shares_the_kill() {
-        let mut w = all_grass_world();
-        let pp = PredationParams { kill_max: 1.0, ..PredationParams::default() };
-        let sp = SocialParams::default();
-        let t = day_time(12);
+    /// Two deer (the far one camouflaged) and two wolves (one already hunting
+    /// the far deer, one focal) in an all-grass world.
+    fn pack_fixture() -> (World, CreatureStore, CreatureId, CreatureId, CreatureId, CreatureId) {
+        let w = all_grass_world();
         let mut store = CreatureStore::new();
-        // Two deer: the far one is hidden, the near one is in the open.
         let mut far = test_creature(33, 5);
         far.species = SpeciesId::Deer;
         far.genome = SpeciesId::Deer.base_genome();
@@ -2546,6 +2640,15 @@ mod tests {
         focal.species = SpeciesId::Wolf;
         focal.genome = SpeciesId::Wolf.base_genome();
         let focal_id = store.insert(focal);
+        (w, store, far_id, near_id, mate_id, focal_id)
+    }
+
+    #[test]
+    fn pack_joins_the_shared_target() {
+        let (w, store, far_id, near_id, mate_id, focal_id) = pack_fixture();
+        let pp = PredationParams { kill_max: 1.0, ..PredationParams::default() };
+        let sp = SocialParams::default();
+        let t = day_time(12);
         let mut idx = SpatialIndex::new(&w);
         idx.rebuild(&store, &w);
         let view = TickView::build(&store, &t, &w, &GeneticsParams::default(), &DiseaseParams::default());
@@ -2559,8 +2662,15 @@ mod tests {
         alone.genome.0[IDX_SOCIALITY] = 0.0;
         let (solo, _) = pick_hunt_target(&alone, &candidates, &view, &w, &pp, &sp).unwrap();
         assert_eq!(solo, near_id, "no pack bonus, no join: the visible prey wins");
+    }
 
-        // Now let the focal wolf kill it, with the packmate in support range.
+    #[test]
+    fn pack_shares_the_kill() {
+        let (mut w, mut store, far_id, _near_id, mate_id, focal_id) = pack_fixture();
+        let pp = PredationParams { kill_max: 1.0, ..PredationParams::default() };
+        let sp = SocialParams::default();
+        let t = day_time(12);
+        // Let the focal wolf kill the far deer, with the packmate in support range.
         {
             let f = store.get_mut(focal_id).unwrap();
             f.goal = Goal::Hunt;

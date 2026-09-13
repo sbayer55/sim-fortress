@@ -87,7 +87,7 @@ fn food_is_findable() {
     let start = sim.creatures.len_living();
     run_days(&mut sim, 30);
     let alive = sim.creatures.len_living();
-    assert!(alive as f32 >= start as f32 * 0.5, "only {alive}/{start} alive after 30 days — food unreachable?");
+    assert!(sim_fortress::cast!(alive => f32) >= sim_fortress::cast!(start => f32) * 0.5, "only {alive}/{start} alive after 30 days — food unreachable?");
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn deer_deaths_not_all_starvation() {
     }
     let starved = deer_deaths.iter().filter(|e| e.kind == EventKind::DeathStarved).count();
     let not_starved = deer_deaths.len() - starved;
-    assert!(not_starved as f32 >= deer_deaths.len() as f32 * 0.6, "too many deer starved early: {starved}/{}", deer_deaths.len());
+    assert!(sim_fortress::cast!(not_starved => f32) >= sim_fortress::cast!(deer_deaths.len() => f32) * 0.6, "too many deer starved early: {starved}/{}", deer_deaths.len());
 }
 
 #[test]

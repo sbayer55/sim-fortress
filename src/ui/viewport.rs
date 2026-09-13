@@ -2,8 +2,9 @@
 
 /// Clamp the scroll origin so a `viewport_w × viewport_h` window never slides
 /// past the edge of a `world_w × world_h` grid. Defined once and reused by every
+///
 /// centring rule in later chunks. World size and viewport size are independent.
-pub fn max_origin(world_w: usize, world_h: usize, viewport_w: usize, viewport_h: usize) -> (usize, usize) {
+pub const fn max_origin(world_w: usize, world_h: usize, viewport_w: usize, viewport_h: usize) -> (usize, usize) {
     (world_w.saturating_sub(viewport_w), world_h.saturating_sub(viewport_h))
 }
 

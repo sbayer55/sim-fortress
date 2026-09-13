@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::sim::creatures::{CreatureStore, DeathTallies};
 use crate::sim::species::{Genome, SpeciesId, TRAIT_NAMES};
+use std::fmt::Write as _;
 
 pub use crate::sim::lineage::{Lineage, LineageNode, Tree, TreeItem};
 
@@ -13,7 +14,7 @@ pub type Hist = [[u16; 12]; Genome::LEN];
 
 /// Histogram bucket for a trait value: `min(floor(v × 12), 11)`.
 pub fn hist_bucket(v: f32) -> usize {
-    ((v * 12.0).floor().max(0.0) as usize).min(11)
+    (crate::cast!((v * 12.0).floor().max(0.0) => usize)).min(11)
 }
 
 /// Per-species population and genome statistics, computed from the living set.
@@ -44,12 +45,12 @@ impl Census {
         if self.population[i] == 0 {
             0.0
         } else {
-            self.generation_sum[i] as f32 / self.population[i] as f32
+            crate::cast!(self.generation_sum[i] => f32) / crate::cast!(self.population[i] => f32)
         }
     }
 
     /// Total living prey (voles + hares + deer).
-    pub fn prey_total(&self) -> u32 {
+    pub const fn prey_total(&self) -> u32 {
         self.population[0] + self.population[1] + self.population[2]
     }
 }
@@ -85,7 +86,7 @@ pub fn census(store: &CreatureStore) -> Census {
             juveniles[i] += 1;
         }
         max_generation[i] = max_generation[i].max(c.generation);
-        generation_sum[i] += c.generation as u64;
+        generation_sum[i] += u64::from(c.generation);
         for t in 0..Genome::LEN {
             let v = c.genome.0[t];
             sum[i][t] += v;
@@ -101,7 +102,7 @@ pub fn census(store: &CreatureStore) -> Census {
     for i in 0..6 {
         if population[i] > 0 {
             for t in 0..Genome::LEN {
-                sum[i][t] /= population[i] as f32;
+                sum[i][t] /= crate::cast!(population[i] => f32);
             }
             genome_mean[i] = Genome(sum[i]);
             genome_min[i] = Genome(min[i]);
@@ -146,8 +147,8 @@ pub struct SpeciesStats {
 }
 
 impl SpeciesStats {
-    pub fn new(species: SpeciesId) -> Self {
-        SpeciesStats {
+    pub const fn new(species: SpeciesId) -> Self {
+        Self {
             species,
             count: 0,
             adults: 0,
@@ -174,8 +175,8 @@ impl SpeciesStats {
     }
 
     /// All six records in `SpeciesId::ALL` order, seeded from an initial census.
-    pub fn all(c: &Census, day: u32, drift_every: u32) -> [SpeciesStats; 6] {
-        let mut out = SpeciesId::ALL.map(SpeciesStats::new);
+    pub fn all(c: &Census, day: u32, drift_every: u32) -> [Self; 6] {
+        let mut out = SpeciesId::ALL.map(Self::new);
         for (i, s) in out.iter_mut().enumerate() {
             s.refresh(c, i, day, drift_every);
             // The founding census is the first drift sample.
@@ -190,8 +191,8 @@ impl SpeciesStats {
     /// 30-day change in percent (`None` when the trend has fewer than two points
     /// or started from zero).
     pub fn change_pct(&self) -> Option<f32> {
-        let first = *self.trend.first()? as f32;
-        let last = *self.trend.last()? as f32;
+        let first = f32::from(*self.trend.first()?);
+        let last = f32::from(*self.trend.last()?);
         if self.trend.len() < 2 || first == 0.0 {
             return None;
         }
@@ -213,7 +214,7 @@ impl SpeciesStats {
         self.hist = c.hist[i];
         self.sick = c.infected[i];
         self.immune = c.immune[i];
-        self.trend.push(self.count.min(u16::MAX as u32) as u16);
+        self.trend.push(crate::cast!(self.count.min(u32::from(u16::MAX)) => u16));
         if self.trend.len() > 30 {
             let excess = self.trend.len() - 30;
             self.trend.drain(0..excess);
@@ -309,10 +310,12 @@ pub struct Series {
 }
 
 impl Series {
-    pub fn new(cap: usize) -> Self {
-        Series { cap, buf: Vec::new(), day0: 0 }
+    pub const fn new(cap: usize) -> Self {
+        Self { cap, buf: Vec::new(), day0: 0 }
     }
 
+    /// `Sample` is `Copy`; passing it by value is cheaper than a reference here.
+    #[allow(clippy::large_types_passed_by_value)]
     pub fn push(&mut self, s: Sample) {
         if self.cap == 0 {
             return;
@@ -324,7 +327,7 @@ impl Series {
         let excess = self.buf.len().saturating_sub(self.cap);
         if excess > 0 {
             self.buf.drain(0..excess);
-            self.day0 = self.buf.first().map(|s| s.day).unwrap_or(self.day0);
+            self.day0 = self.buf.first().map_or(self.day0, |s| s.day);
         }
     }
 
@@ -346,98 +349,111 @@ impl Series {
     }
 
     /// Absolute day index of the first (oldest) sample.
-    pub fn day0(&self) -> u32 {
+    pub const fn day0(&self) -> u32 {
         self.day0
     }
 
     /// Serialize the series as CSV: a header row plus one row per sample.
     /// C3 appends per-species daily counts and deaths by cause (FR16).
-    pub fn to_csv(&self, region_names: &[String]) -> String {
+    /// CSV header row for [`Series::to_csv`].
+    fn csv_header(region_names: &[String]) -> String {
         let mut out = String::from("day,biomass_total,veg_mean,water_cells,water_level,moisture_mean,seeds,drought_regions");
         for name in region_names.iter().take(8) {
-            out.push_str(&format!(",veg_{name}"));
+            let _ = write!(out, ",veg_{name}");
         }
         for name in region_names.iter().take(8) {
-            out.push_str(&format!(",moist_{name}"));
+            let _ = write!(out, ",moist_{name}");
         }
         out.push_str(",vole,hare,deer,fox,wolf,lynx,d_starved,d_thirst,d_age");
         // C4 FR12: births, generation stats (all species) and trait means (prey).
         for id in SpeciesId::ALL {
-            out.push_str(&format!(",births_{}", id.name().to_lowercase()));
+            let _ = write!(out, ",births_{}", id.name().to_lowercase());
         }
         for id in SpeciesId::ALL {
-            out.push_str(&format!(",deaths_{}", id.name().to_lowercase()));
+            let _ = write!(out, ",deaths_{}", id.name().to_lowercase());
         }
         for id in SpeciesId::ALL {
             let n = id.name().to_lowercase();
-            out.push_str(&format!(",{n}_generation_mean,{n}_generation_max"));
+            let _ = write!(out, ",{n}_generation_mean,{n}_generation_max");
         }
         for id in SpeciesId::ALL.iter().take(3) {
             let n = id.name().to_lowercase();
             for t in TRAIT_NAMES {
-                out.push_str(&format!(",{n}_{}_mean", t.to_lowercase()));
+                let _ = write!(out, ",{n}_{}_mean", t.to_lowercase());
             }
         }
         // C7 FR10: infections, disease deaths, parasite loads, active cases per pathogen slot.
         for id in SpeciesId::ALL {
-            out.push_str(&format!(",infected_{}", id.name().to_lowercase()));
+            let _ = write!(out, ",infected_{}", id.name().to_lowercase());
         }
         out.push_str(",d_disease");
         for id in SpeciesId::ALL {
-            out.push_str(&format!(",parasite_{}", id.name().to_lowercase()));
+            let _ = write!(out, ",parasite_{}", id.name().to_lowercase());
         }
         for i in 0..8 {
-            out.push_str(&format!(",active_p{i}"));
+            let _ = write!(out, ",active_p{i}");
         }
         out.push('\n');
+        out
+    }
+
+    /// Append one sample's CSV row to `out`.
+    fn write_csv_row(out: &mut String, s: &Sample) {
+        let _ = write!(out,
+            "{},{},{},{},{},{},{},{}",
+            s.day, s.biomass_total, s.veg_mean, s.water_cells, s.water_level, s.moisture_mean, s.seeds, s.drought_regions
+        );
+        for i in 0..8 {
+            let _ = write!(out, ",{}", s.region_veg[i]);
+        }
+        for i in 0..8 {
+            let _ = write!(out, ",{}", s.region_moist[i]);
+        }
+        for i in 0..6 {
+            let _ = write!(out, ",{}", s.population[i]);
+        }
+        let _ = write!(out, ",{},{},{}", s.deaths_starved, s.deaths_thirst, s.deaths_age);
+        for i in 0..6 {
+            let _ = write!(out, ",{}", s.births[i]);
+        }
+        for i in 0..6 {
+            let _ = write!(out, ",{}", s.deaths[i]);
+        }
+        for i in 0..6 {
+            let _ = write!(out, ",{},{}", s.generation_mean[i], s.generation_max[i]);
+        }
+        for i in 0..3 {
+            for t in 0..Genome::LEN {
+                let _ = write!(out, ",{}", s.genome_mean[i].0[t]);
+            }
+        }
+        for i in 0..6 {
+            let _ = write!(out, ",{}", s.infected[i]);
+        }
+        let _ = write!(out, ",{}", s.deaths_disease);
+        for i in 0..6 {
+            let _ = write!(out, ",{}", s.parasite_mean[i]);
+        }
+        for i in 0..8 {
+            let _ = write!(out, ",{}", s.active_by_pathogen[i]);
+        }
+        out.push('\n');
+    }
+
+    pub fn to_csv(&self, region_names: &[String]) -> String {
+        let mut out = Self::csv_header(region_names);
         for s in &self.buf {
-            out.push_str(&format!(
-                "{},{},{},{},{},{},{},{}",
-                s.day, s.biomass_total, s.veg_mean, s.water_cells, s.water_level, s.moisture_mean, s.seeds, s.drought_regions
-            ));
-            for i in 0..8 {
-                out.push_str(&format!(",{}", s.region_veg[i]));
-            }
-            for i in 0..8 {
-                out.push_str(&format!(",{}", s.region_moist[i]));
-            }
-            for i in 0..6 {
-                out.push_str(&format!(",{}", s.population[i]));
-            }
-            out.push_str(&format!(",{},{},{}", s.deaths_starved, s.deaths_thirst, s.deaths_age));
-            for i in 0..6 {
-                out.push_str(&format!(",{}", s.births[i]));
-            }
-            for i in 0..6 {
-                out.push_str(&format!(",{}", s.deaths[i]));
-            }
-            for i in 0..6 {
-                out.push_str(&format!(",{},{}", s.generation_mean[i], s.generation_max[i]));
-            }
-            for i in 0..3 {
-                for t in 0..Genome::LEN {
-                    out.push_str(&format!(",{}", s.genome_mean[i].0[t]));
-                }
-            }
-            for i in 0..6 {
-                out.push_str(&format!(",{}", s.infected[i]));
-            }
-            out.push_str(&format!(",{}", s.deaths_disease));
-            for i in 0..6 {
-                out.push_str(&format!(",{}", s.parasite_mean[i]));
-            }
-            for i in 0..8 {
-                out.push_str(&format!(",{}", s.active_by_pathogen[i]));
-            }
-            out.push('\n');
+            Self::write_csv_row(&mut out, s);
         }
         out
     }
 }
 
 /// C5 FR11: the lag (in days) at which the predator series best tracks the prey
+///
 /// series. Skips the first 360 days, smooths both with a 30-day centred moving
 /// average, mean-subtracts and returns the `argmax` Pearson correlation lag
+///
 /// `L ∈ 0..=120` (lowest index on ties), or `None` when either series has fewer
 /// than two local maxima.
 pub fn peak_lag(prey: &[f32], pred: &[f32]) -> Option<u32> {
@@ -459,10 +475,10 @@ pub fn peak_lag(prey: &[f32], pred: &[f32]) -> Option<u32> {
     let qs = mean_subtract(&qs);
     let mut best: Option<(u32, f32)> = None;
     for l in 0..=120u32 {
-        if l as usize >= n {
+        if crate::cast!(l => usize) >= n {
             break;
         }
-        let corr = pearson(&ps, &qs, l as usize);
+        let corr = pearson(&ps, &qs, crate::cast!(l => usize));
         if best.is_none_or(|b| corr > b.1) {
             best = Some((l, corr));
         }
@@ -474,7 +490,7 @@ pub fn peak_lag(prey: &[f32], pred: &[f32]) -> Option<u32> {
 /// ≥ 1.15 × the series mean.
 pub fn local_maxima(v: &[f32]) -> Vec<usize> {
     let n = v.len();
-    let mean = v.iter().sum::<f32>() / n.max(1) as f32;
+    let mean = v.iter().sum::<f32>() / crate::cast!(n.max(1) => f32);
     let mut out = Vec::new();
     for i in 0..n {
         let lo = i.saturating_sub(45);
@@ -489,18 +505,18 @@ pub fn local_maxima(v: &[f32]) -> Vec<usize> {
 
 fn centred_ma(v: &[f32], window: usize) -> Vec<f32> {
     let n = v.len();
-    let half = (window / 2) as isize;
+    let half = crate::cast!((window.div_euclid(2)) => isize);
     let mut out = vec![0.0f32; n];
     for i in 0..n {
-        let lo = (i as isize - half).max(0) as usize;
-        let hi = (i as isize + half + 1).min(n as isize) as usize;
-        out[i] = v[lo..hi].iter().sum::<f32>() / (hi - lo) as f32;
+        let lo = crate::cast!((crate::cast!(i => isize) - half).max(0) => usize);
+        let hi = crate::cast!((crate::cast!(i => isize) + half + 1).min(crate::cast!(n => isize)) => usize);
+        out[i] = v[lo..hi].iter().sum::<f32>() / crate::cast!((hi - lo) => f32);
     }
     out
 }
 
 fn mean_subtract(v: &[f32]) -> Vec<f32> {
-    let mean = v.iter().sum::<f32>() / v.len().max(1) as f32;
+    let mean = v.iter().sum::<f32>() / crate::cast!(v.len().max(1) => f32);
     v.iter().map(|x| x - mean).collect()
 }
 
@@ -521,7 +537,7 @@ fn pearson(x: &[f32], y: &[f32], lag: usize) -> f32 {
         syy += b * b;
         sxy += a * b;
     }
-    let m = m as f32;
+    let m = crate::cast!(m => f32);
     let cov = sxy - sx * sy / m;
     let varx = sxx - sx * sx / m;
     let vary = syy - sy * sy / m;
@@ -532,7 +548,9 @@ fn pearson(x: &[f32], y: &[f32], lag: usize) -> f32 {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
+
     use super::*;
     use crate::sim::creatures::place_founders;
     use crate::sim::params::{CreaturesParams, GeneticsParams, WorldParams};
@@ -550,8 +568,8 @@ mod tests {
         let c = census(&store);
         for (i, id) in SpeciesId::ALL.iter().enumerate() {
             let want = params.initial_counts.get(id).copied().unwrap_or(0);
-            assert_eq!(c.population[i], want, "{:?}", id);
-            assert_eq!(c.adults[i] + c.juveniles[i], want, "{:?}", id);
+            assert_eq!(c.population[i], want, "{id:?}");
+            assert_eq!(c.adults[i] + c.juveniles[i], want, "{id:?}");
             if want > 0 {
                 for t in 0..Genome::LEN {
                     assert!(c.genome_min[i].0[t] <= c.genome_mean[i].0[t]);
@@ -627,7 +645,7 @@ mod tests {
         let c = census(&store);
         for i in 0..6 {
             for t in 0..Genome::LEN {
-                let n: u32 = c.hist[i][t].iter().map(|&v| v as u32).sum();
+                let n: u32 = c.hist[i][t].iter().map(|&v| u32::from(v)).sum();
                 assert_eq!(n, c.population[i], "histogram {i}/{t} must count every living member");
             }
         }
@@ -648,10 +666,10 @@ mod tests {
         for (i, s) in sim.species.iter().enumerate() {
             let id = SpeciesId::ALL[i];
             let full = census(&sim.creatures);
-            assert_eq!(s.count, full.population[i], "{:?} count", id);
-            assert_eq!(s.adults, full.adults[i], "{:?} adults", id);
-            assert_eq!(s.juveniles, full.juveniles[i], "{:?} juveniles", id);
-            assert_eq!(s.hist, full.hist[i], "{:?} histogram", id);
+            assert_eq!(s.count, full.population[i], "{id:?} count");
+            assert_eq!(s.adults, full.adults[i], "{id:?} adults");
+            assert_eq!(s.juveniles, full.juveniles[i], "{id:?} juveniles");
+            assert_eq!(s.hist, full.hist[i], "{id:?} histogram");
             let births_series: u32 = sim.series.samples().iter().map(|x| x.births[i]).sum();
             let deaths_series: u32 = sim.series.samples().iter().map(|x| x.deaths[i]).sum();
             let births_events: u32 = sim
@@ -660,10 +678,10 @@ mod tests {
                 .filter(|e| e.kind == crate::sim::EventKind::Birth && e.species == Some(id))
                 .map(|e| e.text.split_whitespace().skip_while(|w| *w != "bore").nth(1).and_then(|w| w.parse::<u32>().ok()).unwrap_or(0))
                 .sum();
-            assert_eq!(births_series, births_events, "{:?} births: series vs events", id);
+            assert_eq!(births_series, births_events, "{id:?} births: series vs events");
             let last = sim.series.last().unwrap();
-            assert_eq!(s.births_yesterday, last.births[i], "{:?} births_yesterday", id);
-            assert_eq!(s.deaths_yesterday, last.deaths[i], "{:?} deaths_yesterday", id);
+            assert_eq!(s.births_yesterday, last.births[i], "{id:?} births_yesterday");
+            assert_eq!(s.deaths_yesterday, last.deaths[i], "{id:?} deaths_yesterday");
             assert!(s.peak >= s.count);
             assert!(s.generation >= full.max_generation[i]);
             let _ = deaths_series;
@@ -707,7 +725,7 @@ mod tests {
         c.id = crate::sim::CreatureId(id);
         c.generation = gen;
         c.parents = parents.map(|(m, f)| (crate::sim::CreatureId(m), crate::sim::CreatureId(f)));
-        c.born_day = gen as i32 * 10;
+        c.born_day = crate::cast!(gen => i32) * 10;
         c.alive = alive;
         c
     }
@@ -828,7 +846,7 @@ mod tests {
         let n = 800usize;
         let mut prey = vec![0.0f32; n];
         for i in 0..n {
-            prey[i] = ((i as f32 / 60.0).sin() + 1.0) * 100.0;
+            prey[i] = ((crate::cast!(i => f32) / 60.0).sin() + 1.0) * 100.0;
         }
         let mut pred = vec![0.0f32; n];
         pred[20..n].copy_from_slice(&prey[..n - 20]);

@@ -3,6 +3,12 @@ name = "sim-fortress"
 version = "0.1.0"
 edition = "2021"
 description = "Static UI prototypes for Sim Fortress, a terminal predator/prey/evolution simulation"
+# Internal application: never published, so `clippy::cargo_common_metadata`
+# (license/categories/keywords/repository) does not apply.
+publish = false
+
+[lints]
+workspace = true
 
 [dependencies]
 ratatui = "0.30"
@@ -31,13 +37,13 @@ nursery = { level = "warn", priority = -1 }
 cargo = { level = "warn", priority = -1 }
 
 # --- correctness / footguns worth denying outright ---
-unwrap_used = "warn"
-expect_used = "warn"
-panic = "warn"
-todo = "warn"
-unimplemented = "warn"
-indexing_slicing = "warn"
-integer_division = "warn"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
+integer_division = "deny"
 float_cmp = "deny"
 mem_forget = "deny"
 lossy_float_literal = "deny"
@@ -46,8 +52,8 @@ cast_possible_truncation = "warn"
 cast_sign_loss = "warn"
 
 # --- the maintainability metrics from earlier ---
-cognitive_complexity = "warn"
-too_many_lines = "warn"
+cognitive_complexity = "deny"
+too_many_lines = "deny"
 
 # --- pedantic/nursery lints that are mostly noise ---
 module_name_repetitions = "allow"

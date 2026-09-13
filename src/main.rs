@@ -11,6 +11,11 @@
 //! `params.toml` in the cwd is applied automatically; `--params FILE` is an
 //! overlay. `--saves-dir DIR` overrides the save directory (live app).
 
+// The binary is a separate compilation root from `src/lib.rs`, so it does not
+// inherit that file's allow list. The `indexing_slicing` sites here follow the
+// same checked-loop pattern as the library.
+#![allow(clippy::indexing_slicing)]
+
 use std::path::Path;
 
 use sim_fortress::sim::{self, Params, Sim, SpeciesId};
@@ -33,7 +38,7 @@ fn main() -> std::io::Result<()> {
     let profile = has_flag(&args, "--profile");
     let headless = has_flag(&args, "--headless") || has_flag(&args, "--seeds") || summary || row || profile;
     let seed = flag_value(&args, "--seed").and_then(|s| s.parse().ok()).unwrap_or(0);
-    let seeds = flag_value(&args, "--seeds").and_then(|s| parse_seed_range(s));
+    let seeds = flag_value(&args, "--seeds").and_then(parse_seed_range);
     let ticks = flag_value(&args, "--ticks").and_then(|s| s.parse().ok()).unwrap_or(0);
     let years = flag_value(&args, "--years").and_then(|s| s.parse::<u64>().ok());
     let params_file = flag_value(&args, "--params");
@@ -43,7 +48,7 @@ fn main() -> std::io::Result<()> {
     let saves_dir = flag_value(&args, "--saves-dir").map(Path::new);
 
     if headless {
-        return run_headless(seed, seeds, ticks, years, params_file, width, height, csv, summary, row, profile);
+        return run_headless(seed, seeds, ticks, years, params_file, width, height, csv, &Outputs { summary, row, profile });
     }
 
     let params = load_params(params_file, width, height)?;
@@ -52,6 +57,13 @@ fn main() -> std::io::Result<()> {
     let result = ui::app::run(&mut terminal, params, saves_dir, params_file.is_some());
     ratatui::restore();
     result
+}
+
+/// Which human-readable outputs the headless mode should emit.
+struct Outputs {
+    summary: bool,
+    row: bool,
+    profile: bool,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -64,22 +76,20 @@ fn run_headless(
     width: Option<usize>,
     height: Option<usize>,
     csv: Option<&str>,
-    summary: bool,
-    row: bool,
-    profile: bool,
+    out: &Outputs,
 ) -> std::io::Result<()> {
     let params = load_params(params_file, width, height)?;
-    let ticks_per_year = 4 * params.time.season_days as u64 * params.time.ticks_per_day as u64;
-    let ticks = years.map(|y| y * ticks_per_year).unwrap_or(ticks);
+    let ticks_per_year = 4 * u64::from(params.time.season_days) * u64::from(params.time.ticks_per_day);
+    let ticks = years.map_or(ticks, |y| y * ticks_per_year);
 
     if let Some((first, last)) = seeds {
         // In-process sequential sweep (FR8).
         let mut rows: Vec<String> = Vec::new();
         for s in first..=last {
-            let sim = run_one(s, ticks, &params, profile);
-            rows.push(summary_row(&sim, s, ticks as f64 / ticks_per_year as f64));
+            let sim = run_one(s, ticks, &params, out.profile);
+            rows.push(summary_row(&sim, s, sim_fortress::cast!(ticks => f64) / sim_fortress::cast!(ticks_per_year => f64)));
         }
-        let mut out = String::from(summary_header());
+        let mut out = summary_header();
         out.push('\n');
         out.push_str(&rows.join("\n"));
         out.push('\n');
@@ -88,19 +98,19 @@ fn run_headless(
         return Ok(());
     }
 
-    if row {
+    if out.row {
         // One headerless CSV row (used by scripts/sweep.sh).
-        let sim = run_one(seed, ticks, &params, profile);
-        println!("{}", summary_row(&sim, seed, ticks as f64 / ticks_per_year as f64));
+        let sim = run_one(seed, ticks, &params, out.profile);
+        println!("{}", summary_row(&sim, seed, sim_fortress::cast!(ticks => f64) / sim_fortress::cast!(ticks_per_year => f64)));
         return Ok(());
     }
 
-    let sim = run_one(seed, ticks, &params, profile);
+    let sim = run_one(seed, ticks, &params, out.profile);
 
-    if summary {
-        let mut out = String::from(summary_header());
+    if out.summary {
+        let mut out = summary_header();
         out.push('\n');
-        out.push_str(&summary_row(&sim, seed, ticks as f64 / ticks_per_year as f64));
+        out.push_str(&summary_row(&sim, seed, sim_fortress::cast!(ticks => f64) / sim_fortress::cast!(ticks_per_year => f64)));
         out.push('\n');
         print!("{out}");
         std::fs::write("summary.csv", &out)?;
@@ -112,7 +122,7 @@ fn run_headless(
     for e in sim.events.tail(5) {
         println!("Y{} D{:03} {:02}:00 {} {}", e.year, e.day, e.hour, e.kind.label(), e.text);
     }
-    if profile {
+    if out.profile {
         print_profile(&sim);
     }
     if let Some(path) = csv {
@@ -163,13 +173,13 @@ fn summary_row(sim: &Sim, seed: u64, years: f64) -> String {
         .series
         .samples()
         .iter()
-        .map(|s| (s.population[0] + s.population[1] + s.population[2]) as f32)
+        .map(|s| sim_fortress::cast!((s.population[0] + s.population[1] + s.population[2]) => f32))
         .collect();
     let pred: Vec<f32> = sim
         .series
         .samples()
         .iter()
-        .map(|s| (s.population[3] + s.population[4] + s.population[5]) as f32)
+        .map(|s| sim_fortress::cast!((s.population[3] + s.population[4] + s.population[5]) => f32))
         .collect();
     let lag = sim::stats::peak_lag(&prey, &pred).map(|l| l.to_string()).unwrap_or_default();
     cols.push(lag);
@@ -191,7 +201,7 @@ fn summary_row(sim: &Sim, seed: u64, years: f64) -> String {
 fn print_profile(sim: &Sim) {
     let p = sim.profile;
     let ticks = sim.time.tick.max(1);
-    let per1k = |ns: u64| ns as f64 / 1e9 / ticks as f64 * 1000.0;
+    let per1k = |ns: u64| sim_fortress::cast!(ns => f64) / 1e9 / sim_fortress::cast!(ticks => f64) * 1000.0;
     println!("profile (seconds per 1 000 ticks over {ticks} ticks):");
     println!("  behavior:      {:>8.4}", per1k(p.behavior_ns));
     println!("  day boundary:  {:>8.4}", per1k(p.day_boundary_ns));

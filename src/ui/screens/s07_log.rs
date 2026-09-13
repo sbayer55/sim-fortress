@@ -23,7 +23,7 @@ const MINI_W: u16 = 25;
 const MINI_H: u16 = 9;
 
 /// The S07 filter-chip state. `all` is active, or a subset of the seven kinds.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ChipFilter {
     pub all: bool,
     /// births, deaths, mutations, migrations, extinctions, droughts, disease.
@@ -40,8 +40,8 @@ impl Default for ChipFilter {
 }
 
 impl ChipFilter {
-    pub fn new() -> Self {
-        ChipFilter { all: true, kinds: [false; KIND_CHIPS] }
+    pub const fn new() -> Self {
+        Self { all: true, kinds: [false; KIND_CHIPS] }
     }
 
     /// Toggle chip `key` (1 = all, 2..=8 = births..disease).
@@ -68,7 +68,7 @@ impl ChipFilter {
     }
 
     /// Cycle presets: all → deaths+extinctions → migrations+droughts → disease → all.
-    pub fn cycle(&mut self) {
+    pub const fn cycle(&mut self) {
         if self.all {
             self.all = false;
             self.kinds = [false; KIND_CHIPS];
@@ -87,7 +87,7 @@ impl ChipFilter {
         }
     }
 
-    pub fn matches(&self, kind: EventKind) -> bool {
+    pub const fn matches(self, kind: EventKind) -> bool {
         if self.all {
             return true;
         }
@@ -104,6 +104,7 @@ impl ChipFilter {
     }
 }
 
+#[derive(Debug)]
 pub struct EventLog {
     filter: ChipFilter,
     selected: usize,
@@ -116,8 +117,8 @@ impl Default for EventLog {
 }
 
 impl EventLog {
-    pub fn new() -> Self {
-        EventLog { filter: ChipFilter::new(), selected: 0 }
+    pub const fn new() -> Self {
+        Self { filter: ChipFilter::new(), selected: 0 }
     }
 
     fn filtered<'a>(&self, sim: &'a Sim) -> Vec<&'a Event> {
@@ -138,7 +139,7 @@ impl Screen for EventLog {
                 Action::None
             }
             KeyCode::Char(c @ '2'..='8') => {
-                self.filter.toggle(c.to_digit(10).unwrap() as usize);
+                self.filter.toggle(crate::cast!(c.to_digit(10).unwrap_or(0) => usize));
                 self.selected = 0;
                 Action::None
             }
@@ -168,13 +169,13 @@ impl Screen for EventLog {
                 Action::None
             }
             KeyCode::Char('i') => {
-                if let Some(sim) = &app.sim {
-                    let events = self.filtered(sim);
-                    if let Some(subject) = events.get(self.selected).and_then(|e| e.subject) {
-                        if sim.creatures.get(subject).is_some() {
-                            return Action::Push(Box::new(Inspector::new(subject)));
-                        }
-                    }
+                let Some(sim) = &app.sim else {
+                    return Action::None;
+                };
+                let events = self.filtered(sim);
+                let subject = events.get(self.selected).and_then(|e| e.subject);
+                if let Some(subject) = subject.filter(|s| sim.creatures.get(*s).is_some()) {
+                    return Action::Push(Box::new(Inspector::new(subject)));
                 }
                 Action::None
             }
@@ -183,7 +184,7 @@ impl Screen for EventLog {
         }
     }
 
-    fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
+    fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let Some(sim) = &app.sim else {
             return;
         };
@@ -202,7 +203,7 @@ impl Screen for EventLog {
         if detail {
             let detail_area = Rect::new(area.x + list_w, area.y, DETAIL_W, body_h);
             let selected = events.get(self.selected).copied();
-            self.detail(f, detail_area, app, sim, selected);
+            Self::detail(f, detail_area, app, sim, selected);
         }
 
         let right = format!("{}  {} {}", sim.time.clock_label(), glyphs::SUN, "day");
@@ -216,7 +217,7 @@ impl Screen for EventLog {
 }
 
 impl EventLog {
-    fn chips(&self, f: &mut Frame, inner: Rect) {
+    fn chips(&self, f: &mut Frame<'_>, inner: Rect) {
         let chips: [(char, &str, EventKind); KIND_CHIPS + 1] = [
             ('*', " all", EventKind::Note),
             ('♥', " births", EventKind::Birth),
@@ -236,24 +237,24 @@ impl EventLog {
                 c.set_style(if i == 0 { theme::key() } else { Style::default().fg(kind.color()).bg(theme::PANEL_BG) });
             }
             buf.set_stringn(x + 1, inner.y, name, name.chars().count(), if active { theme::selected() } else { theme::text() });
-            x += 1 + name.chars().count() as u16 + 1;
+            x += 1 + crate::cast!(name.chars().count() => u16) + 1;
         }
         let hint = "[f] cycles, [1-8] toggles";
-        let hint_w = hint.len() as u16;
+        let hint_w = crate::cast!(hint.len() => u16);
         if x + 2 + hint_w <= inner.right() {
             f.buffer_mut().set_stringn(inner.right() - hint_w - 1, inner.y, hint, hint.len(), theme::dim_text());
         }
         util::line(f, inner, 1, Line::from(Span::styled(" when         kind        sp  event", theme::dim_text())));
     }
 
-    fn list(&self, f: &mut Frame, area: Rect, sim: &Sim, events: &[&Event], compact: bool) {
-        let text_w = area.width.saturating_sub(1) as usize;
-        for (i, e) in events.iter().take(area.height as usize).enumerate() {
+    fn list(&self, f: &mut Frame<'_>, area: Rect, sim: &Sim, events: &[&Event], compact: bool) {
+        let text_w = crate::cast!(area.width.saturating_sub(1) => usize);
+        for (i, e) in events.iter().take(crate::cast!(area.height => usize)).enumerate() {
             let selected = i == self.selected;
-            let y = area.y + i as u16;
+            let y = area.y + crate::cast!(i => u16);
             let buf = f.buffer_mut();
             let bg = if selected { theme::SELECT_BG } else { theme::PANEL_BG };
-            for cx in area.x..area.right().min(area.x + text_w as u16) {
+            for cx in area.x..area.right().min(area.x + crate::cast!(text_w => u16)) {
                 if let Some(c) = buf.cell_mut((cx, y)) {
                     c.set_bg(bg);
                 }
@@ -284,7 +285,7 @@ impl EventLog {
         let _ = compact;
     }
 
-    fn detail(&self, f: &mut Frame, area: Rect, app: &AppState, sim: &Sim, e: Option<&Event>) {
+    fn detail(f: &mut Frame<'_>, area: Rect, app: &AppState, sim: &Sim, e: Option<&Event>) {
         let inner = panel::draw(f, area, "Event detail", panel::Kind::Focus);
         let bg = theme::PANEL_BG;
         let mut row = 0u16;
@@ -306,13 +307,13 @@ impl EventLog {
         // Outbreak events show the outbreak record instead of the creature vitals.
         let is_outbreak_event = matches!(e.kind, EventKind::Outbreak | EventKind::Epidemic | EventKind::EpidemicOver | EventKind::Spillover);
         if is_outbreak_event {
-            row = self.outbreak_record(f, inner, row, sim, e);
+            row = Self::outbreak_record(f, inner, row, sim, e);
         }
 
         // Subject creature.
         if let Some(subject) = e.subject.filter(|_| !is_outbreak_event) {
             if let Some(c) = sim.creatures.get(subject) {
-                let state = if c.alive { "alive".to_string() } else { format!("dead: {}", c.death.map(|d| d.cause.label()).unwrap_or("?")) };
+                let state = if c.alive { "alive".to_string() } else { format!("dead: {}", c.death.map_or("?", |d| d.cause.label())) };
                 util::line(f, inner, row, Line::from(vec![
                     Span::styled(format!(" {} ", if c.alive { c.species.glyph().to_ascii_uppercase() } else { glyphs::CARCASS }), Style::default().fg(c.species.color()).bg(bg).add_modifier(Modifier::BOLD)),
                     Span::styled(format!("{} {}  ", c.name_str(), c.tag()), theme::text()),
@@ -330,8 +331,8 @@ impl EventLog {
 
         // Mini-map.
         if let Some((x, y)) = e.pos {
-            let ox = (x as i64 - MINI_W as i64 / 2).clamp(0, sim.world.width() as i64 - MINI_W as i64) as usize;
-            let oy = (y as i64 - MINI_H as i64 / 2).clamp(0, sim.world.height() as i64 - MINI_H as i64) as usize;
+            let ox = crate::cast!((crate::cast!(x => i64) - i64::from(MINI_W).div_euclid(2)).clamp(0, crate::cast!(sim.world.width() => i64) - i64::from(MINI_W)) => usize);
+            let oy = crate::cast!((crate::cast!(y => i64) - i64::from(MINI_H).div_euclid(2)).clamp(0, crate::cast!(sim.world.height() => i64) - i64::from(MINI_H)) => usize);
             let mini = Rect::new(inner.x + 1, inner.y + row, MINI_W + 2, MINI_H + 2);
             let mini_inner = panel::draw(f, mini, "", panel::Kind::Inner);
             let opts = MapOptions {
@@ -344,7 +345,7 @@ impl EventLog {
                 creatures: true,
                 fade_creatures: false,
                 selected_region: None,
-                species_color: crate::theme::TEXT,
+                species_color: theme::TEXT,
                 creature_tint: None,
             };
             map::render(f.buffer_mut(), mini_inner, sim, &opts);
@@ -353,18 +354,18 @@ impl EventLog {
         let _ = app;
     }
 
-    /// The outbreak record for an Outbreak / Epidemic / EpidemicOver / Spillover
+    /// The outbreak record for an Outbreak / Epidemic / `EpidemicOver` / Spillover
     /// event: the pathogen named in the event text, and its latest outbreak
     /// started on or before the event day. Returns the next free row.
-    fn outbreak_record(&self, f: &mut Frame, inner: Rect, mut row: u16, sim: &Sim, e: &Event) -> u16 {
+    fn outbreak_record(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, e: &Event) -> u16 {
         let bg = theme::PANEL_BG;
         let Some((pid, o)) = find_outbreak(sim, e) else {
             util::line(f, inner, row, Line::from(Span::styled(" no outbreak record for this event", theme::dim_text())));
             return row + 1;
         };
-        let strain = sim.disease.pathogen(pid).is_some_and(|p| p.is_strain());
+        let strain = sim.disease.pathogen(pid).is_some_and(crate::sim::disease::Pathogen::is_strain);
         let color = if strain { theme::MAGENTA } else { theme::SICK };
-        let region = sim.world.regions.get(o.origin_region as usize).map(|r| r.0.as_str()).unwrap_or("?");
+        let region = sim.world.regions.get(crate::cast!(o.origin_region => usize)).map_or("?", |r| r.0.as_str());
         let state = match o.ended_day {
             None => "ongoing".to_string(),
             Some(d) => format!("over after {} days", d.saturating_sub(o.started_day)),
@@ -378,7 +379,7 @@ impl EventLog {
         row += 1;
         util::line(f, inner, row, Line::from(vec![
             Span::styled(" began ", theme::dim_text()),
-            Span::styled(day_stamp(o.started_day as i64, sim.time.season_days), theme::text()),
+            Span::styled(day_stamp(i64::from(o.started_day), sim.time.season_days), theme::text()),
             Span::styled(" in ", theme::dim_text()),
             Span::styled(region.to_string(), theme::text()),
         ]));
@@ -396,7 +397,7 @@ impl EventLog {
         row += 1;
         if let Some((i, _)) = o.species_cases.iter().enumerate().filter(|(_, n)| **n > 0).max_by_key(|(i, n)| (**n, std::cmp::Reverse(*i))) {
             let id = SpeciesId::ALL[i];
-            let end = if o.ended_day.is_some() { o.resist_at_end[i] } else { sim.series.last().map(|s| s.genome_mean[i].resistance()).unwrap_or(o.resist_at_start[i]) };
+            let end = if o.ended_day.is_some() { o.resist_at_end[i] } else { sim.series.last().map_or(o.resist_at_start[i], |s| s.genome_mean[i].resistance()) };
             util::line(f, inner, row, Line::from(vec![
                 Span::styled(" resist ", theme::dim_text()),
                 Span::styled(format!("{} ", id.glyph().to_ascii_uppercase()), Style::default().fg(id.color()).bg(bg).add_modifier(Modifier::BOLD)),
@@ -418,7 +419,7 @@ impl EventLog {
 
 /// `.31` for 0.31 (two decimals, no leading zero).
 fn short2(v: f32) -> String {
-    format!("{:.2}", v).replace("0.", ".")
+    format!("{v:.2}").replace("0.", ".")
 }
 
 /// The pathogen named in an event's text (longest matching name wins, so a
@@ -434,7 +435,7 @@ fn find_outbreak<'a>(sim: &'a Sim, e: &Event) -> Option<(PathogenId, &'a Outbrea
         .enumerate()
         .filter(|(_, p)| !p.name().is_empty() && e.text.contains(p.name()))
         .max_by_key(|(i, p)| (p.name().len(), std::cmp::Reverse(*i)))
-        .map(|(i, _)| PathogenId(i as u8))?;
+        .map(|(i, _)| PathogenId(crate::cast!(i => u8)))?;
     let o = sim.disease.outbreaks.iter().filter(|o| o.pathogen == pid && o.started_day <= event_day).max_by_key(|o| o.started_day)?;
     Some((pid, o))
 }
@@ -485,7 +486,7 @@ mod tests {
         let mk = |kind: EventKind, text: String| Event { year: 1, day: 1, hour: 6, kind, species: None, subject: None, text, pos: None, detail: String::new() };
         sim.events.push(mk(EventKind::Birth, "a birth".into()));
         sim.events.push(mk(EventKind::DeathDisease, "died of disease".into()));
-        sim.events.push(mk(EventKind::Outbreak, format!("{} breaks out among the hares of {}", name, region)));
+        sim.events.push(mk(EventKind::Outbreak, format!("{name} breaks out among the hares of {region}")));
         app.sim = Some(sim);
 
         let mut s = EventLog::new();
@@ -501,7 +502,7 @@ mod tests {
         assert!(!text.contains("died of disease"), "{text}");
         assert!(!text.contains("a birth"), "{text}");
         // The detail panel shows the outbreak record.
-        assert!(text.contains(&format!("began Y1 D001 in {}", region)), "{text}");
+        assert!(text.contains(&format!("began Y1 D001 in {region}")), "{text}");
         assert!(text.contains("cases 9 / dead 2 / recovered 3 / peak 4"), "{text}");
         assert!(text.contains(&format!("resist H .31 {} ", glyphs::RIGHT)), "{text}");
 

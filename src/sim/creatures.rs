@@ -105,37 +105,38 @@ pub struct DeathTallies {
 
 impl DeathTallies {
     /// A fresh daily tally that keeps the cumulative C5 fields.
-    pub fn next_day(&self) -> DeathTallies {
-        DeathTallies {
+    #[must_use]
+    pub fn next_day(&self) -> Self {
+        Self {
             hunt_attempts: self.hunt_attempts,
             hunt_kills: self.hunt_kills,
             last_death: self.last_death.clone(),
-            ..DeathTallies::default()
+            ..Self::default()
         }
     }
 }
 
 impl Goal {
     /// "resting in den" when resting inside a den, else the plain label.
-    pub fn label(self, in_den: bool) -> &'static str {
+    pub const fn label(self, in_den: bool) -> &'static str {
         match self {
-            Goal::Rest if in_den => "resting in den",
+            Self::Rest if in_den => "resting in den",
             _ => self.plain(),
         }
     }
 
-    pub fn plain(self) -> &'static str {
+    pub const fn plain(self) -> &'static str {
         match self {
-            Goal::Graze => "grazing",
-            Goal::Drink => "seeking water",
-            Goal::Rest => "resting",
-            Goal::Wander => "wandering",
-            Goal::Mate => "seeking mate",
-            Goal::Flee => "fleeing",
-            Goal::Hunt => "hunting",
-            Goal::Scavenge => "scavenging",
-            Goal::Migrate => "migrating",
-            Goal::Patrol => "patrolling",
+            Self::Graze => "grazing",
+            Self::Drink => "seeking water",
+            Self::Rest => "resting",
+            Self::Wander => "wandering",
+            Self::Mate => "seeking mate",
+            Self::Flee => "fleeing",
+            Self::Hunt => "hunting",
+            Self::Scavenge => "scavenging",
+            Self::Migrate => "migrating",
+            Self::Patrol => "patrolling",
         }
     }
 }
@@ -159,14 +160,14 @@ pub enum Cause {
 }
 
 impl Cause {
-    pub fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
-            Cause::Starved => "starved",
-            Cause::Thirst => "thirst",
-            Cause::Age => "old age",
-            Cause::Injury => "injury",
-            Cause::Predation => "predation",
-            Cause::Disease => "disease",
+            Self::Starved => "starved",
+            Self::Thirst => "thirst",
+            Self::Age => "old age",
+            Self::Injury => "injury",
+            Self::Predation => "predation",
+            Self::Disease => "disease",
         }
     }
 }
@@ -290,7 +291,7 @@ impl Creature {
 
     /// Current age in days (derived from `born_day` and the day index).
     pub fn age_days(&self, day_index: u64) -> u32 {
-        (day_index as i64 - self.born_day as i64).max(0) as u32
+        crate::cast!((crate::cast!(day_index => i64) - i64::from(self.born_day)).max(0) => u32)
     }
 
     /// Maximum lifespan in days, from longevity, the C3 params and the maturity
@@ -303,15 +304,15 @@ impl Creature {
 /// Maximum lifespan in days for a genome; `Creature::max_age_days` delegates here
 /// so founder placement can use it before the `Creature` exists.
 pub fn max_age_days(genome: &Genome, params: &CreaturesParams, gp: &GeneticsParams) -> u32 {
-    let base = params.max_age_base + (genome.longevity() * params.max_age_per_longevity as f32) as u32;
-    (base as f32 * gp.maturity_factor(genome.maturity(), gp.maturity_lifespan_span)).round() as u32
+    let base = params.max_age_base + crate::cast!((genome.longevity() * crate::cast!(params.max_age_per_longevity => f32)) => u32);
+    crate::cast!((crate::cast!(base => f32) * GeneticsParams::maturity_factor(genome.maturity(), gp.maturity_lifespan_span)).round() => u32)
 }
 
 /// Days to adulthood: the species' base age scaled by the individual's maturity
 /// trait, rounded to whole days. Maturity 0.5 reproduces `cp.adult_age` exactly.
 pub fn adult_age_days(species: SpeciesId, genome: &Genome, cp: &CreaturesParams, gp: &GeneticsParams) -> u32 {
-    let base = cp.adult_age(species) as f32;
-    (base * gp.maturity_factor(genome.maturity(), gp.maturity_age_span)).round() as u32
+    let base = crate::cast!(cp.adult_age(species) => f32);
+    crate::cast!((base * GeneticsParams::maturity_factor(genome.maturity(), gp.maturity_age_span)).round() => u32)
 }
 
 /// Slot storage: `Vec<Option<Creature>>` with a free list for reusable slots and
@@ -331,8 +332,8 @@ impl Default for CreatureStore {
 }
 
 impl CreatureStore {
-    pub fn new() -> Self {
-        CreatureStore { slots: Vec::new(), free: Vec::new(), id_to_slot: BTreeMap::new(), next_id: 1 }
+    pub const fn new() -> Self {
+        Self { slots: Vec::new(), free: Vec::new(), id_to_slot: BTreeMap::new(), next_id: 1 }
     }
 
     /// Insert a creature, assigning a fresh id (ignoring any id on the input).
@@ -340,33 +341,30 @@ impl CreatureStore {
         let id = CreatureId(self.next_id);
         self.next_id += 1;
         c.id = id;
-        let slot = match self.free.pop() {
-            Some(i) => i,
-            None => {
-                self.slots.push(None);
-                (self.slots.len() - 1) as u32
-            }
+        let slot = if let Some(i) = self.free.pop() { i } else {
+            self.slots.push(None);
+            crate::cast!((self.slots.len() - 1) => u32)
         };
-        self.slots[slot as usize] = Some(c);
+        self.slots[crate::cast!(slot => usize)] = Some(c);
         self.id_to_slot.insert(id, slot);
         id
     }
 
     pub fn get(&self, id: CreatureId) -> Option<&Creature> {
-        let slot = *self.id_to_slot.get(&id)? as usize;
+        let slot = crate::cast!(*self.id_to_slot.get(&id)? => usize);
         self.slots[slot].as_ref()
     }
 
     pub fn get_mut(&mut self, id: CreatureId) -> Option<&mut Creature> {
-        let slot = *self.id_to_slot.get(&id)? as usize;
+        let slot = crate::cast!(*self.id_to_slot.get(&id)? => usize);
         self.slots[slot].as_mut()
     }
 
     /// Free a creature's slot entirely (carcass fully decayed).
     pub fn remove(&mut self, id: CreatureId) -> Option<Creature> {
-        let slot = self.id_to_slot.remove(&id)? as usize;
+        let slot = crate::cast!(self.id_to_slot.remove(&id)? => usize);
         let out = self.slots[slot].take();
-        self.free.push(slot as u32);
+        self.free.push(crate::cast!(slot => u32));
         out
     }
 
@@ -402,59 +400,21 @@ impl CreatureStore {
 }
 
 /// Place founders per FR3. Deterministic: iterates `SpeciesId::ALL` order and
+///
 /// draws from `rng` in a fixed sequence. Adult age and lifespan are read from each
 /// founder's own genome, so a slow-maturing individual starts older.
-pub fn place_founders(world: &World, params: &CreaturesParams, gp: &GeneticsParams, resistance_sd: f32, rng: &mut Rng) -> Vec<Creature> {
-    let mut out = Vec::new();
-    for species in SpeciesId::ALL {
-        let n = params.initial_counts.get(&species).copied().unwrap_or(0);
-        if n == 0 {
-            continue;
-        }
-        let base = species.base_genome();
-        let name_pool_len = names(species).len();
-        let mut placed = 0u32;
-        let mut tries = 0u32;
-        while placed < n && tries < 100_000 {
-            tries += 1;
-            let x = rng.below(world.width);
-            let y = rng.below(world.height);
-            let cell = world.cell(x, y);
-            if !cell.terrain.walkable() || cell.terrain.is_water() {
-                continue;
-            }
-            // Prey prefer vegetation (FR3 acceptance probability).
-            if !rng.chance(0.3 + 0.7 * cell.vegetation) {
-                continue;
-            }
-
-            let mut genome = base;
-            for (t, v) in genome.0.iter_mut().enumerate() {
-                // C7: Resistance starts with a wider spread (`resistance_sd`).
-                let sd = if t == IDX_RESISTANCE { resistance_sd } else { 0.12 };
-                *v = Genome::clamp_trait(*v + rng.gauss(0.0, sd));
-            }
-            // Maturity moves both ends of the life history for this individual.
-            let adult_age = adult_age_days(species, &genome, params, gp);
-            let max_age = max_age_days(&genome, params, gp);
-            let adult = rng.chance(0.7);
-            let age_days = if adult {
-                let upper = adult_age.max((0.75 * max_age as f32) as u32);
-                adult_age + rng.below((upper - adult_age + 1) as usize) as u32
-            } else {
-                rng.below(adult_age.max(1) as usize) as u32
-            };
-            let sex = if rng.chance(0.5) { Sex::Male } else { Sex::Female };
-            let name = rng.below(name_pool_len) as NameId;
-
-            out.push(Creature {
+/// Build one founder creature (all per-founder state at its defaults).
+#[allow(clippy::too_many_arguments)]
+fn founder(species: SpeciesId, name: NameId, sex: Sex, pos: (usize, usize), age_days: u32, genome: Genome, adult_age: u32, rng: &mut Rng) -> Creature {
+    let (x, y) = pos;
+    Creature {
                 id: CreatureId(0),
                 species,
                 name,
                 sex,
                 x,
                 y,
-                born_day: -(age_days as i32),
+                born_day: -(crate::cast!(age_days => i32)),
                 generation: 1,
                 parents: None,
                 genome,
@@ -508,7 +468,53 @@ pub fn place_founders(world: &World, params: &CreaturesParams, gp: &GeneticsPara
                 died_infected: None,
                 migrate_target: None,
                 path_for: None,
-            });
+            }
+}
+
+pub fn place_founders(world: &World, params: &CreaturesParams, gp: &GeneticsParams, resistance_sd: f32, rng: &mut Rng) -> Vec<Creature> {
+    let mut out = Vec::new();
+    for species in SpeciesId::ALL {
+        let n = params.initial_counts.get(&species).copied().unwrap_or(0);
+        if n == 0 {
+            continue;
+        }
+        let base = species.base_genome();
+        let name_pool_len = names(species).len();
+        let mut placed = 0u32;
+        let mut tries = 0u32;
+        while placed < n && tries < 100_000 {
+            tries += 1;
+            let x = rng.below(world.width);
+            let y = rng.below(world.height);
+            let cell = world.cell(x, y);
+            if !cell.terrain.walkable() || cell.terrain.is_water() {
+                continue;
+            }
+            // Prey prefer vegetation (FR3 acceptance probability).
+            if !rng.chance(0.3 + 0.7 * cell.vegetation) {
+                continue;
+            }
+
+            let mut genome = base;
+            for (t, v) in genome.0.iter_mut().enumerate() {
+                // C7: Resistance starts with a wider spread (`resistance_sd`).
+                let sd = if t == IDX_RESISTANCE { resistance_sd } else { 0.12 };
+                *v = Genome::clamp_trait(*v + rng.gauss(0.0, sd));
+            }
+            // Maturity moves both ends of the life history for this individual.
+            let adult_age = adult_age_days(species, &genome, params, gp);
+            let max_age = max_age_days(&genome, params, gp);
+            let adult = rng.chance(0.7);
+            let age_days = if adult {
+                let upper = adult_age.max(crate::cast!((0.75 * crate::cast!(max_age => f32)) => u32));
+                adult_age + crate::cast!(rng.below(crate::cast!((upper - adult_age + 1) => usize)) => u32)
+            } else {
+                crate::cast!(rng.below(crate::cast!(adult_age.max(1) => usize)) => u32)
+            };
+            let sex = if rng.chance(0.5) { Sex::Male } else { Sex::Female };
+            let name = crate::cast!(rng.below(name_pool_len) => NameId);
+
+            out.push(founder(species, name, sex, (x, y), age_days, genome, adult_age, rng));
             placed += 1;
         }
     }
@@ -540,8 +546,8 @@ mod tests {
         // Counts match the requested initial_counts (within the retry budget).
         for id in SpeciesId::ALL {
             let want = p.initial_counts.get(&id).copied().unwrap_or(0);
-            let got = creatures.iter().filter(|c| c.species == id).count() as u32;
-            assert_eq!(got, want, "{:?}: placed {got}, want {want}", id);
+            let got = crate::cast!(creatures.iter().filter(|c| c.species == id).count() => u32);
+            assert_eq!(got, want, "{id:?}: placed {got}, want {want}");
         }
     }
 

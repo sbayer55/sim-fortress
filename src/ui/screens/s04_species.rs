@@ -3,8 +3,8 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
-use ratatui::text::Line;
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
 use crate::sim::stats::SpeciesStats;
@@ -16,6 +16,7 @@ use crate::ui::screens::{Action, Screen};
 use crate::ui::style::SpeciesStyle;
 use crate::widgets::{bars, panel, status, util};
 use crate::{glyphs, theme};
+use std::fmt::Write as _;
 
 const TABLE_H: u16 = 13;
 
@@ -29,23 +30,24 @@ pub enum SortCol {
 }
 
 impl SortCol {
-    pub fn next(self) -> SortCol {
+    #[must_use]
+    pub const fn next(self) -> Self {
         match self {
-            SortCol::Count => SortCol::Births,
-            SortCol::Births => SortCol::Deaths,
-            SortCol::Deaths => SortCol::Generation,
-            SortCol::Generation => SortCol::Name,
-            SortCol::Name => SortCol::Count,
+            Self::Count => Self::Births,
+            Self::Births => Self::Deaths,
+            Self::Deaths => Self::Generation,
+            Self::Generation => Self::Name,
+            Self::Name => Self::Count,
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
-            SortCol::Count => "count",
-            SortCol::Births => "births",
-            SortCol::Deaths => "deaths",
-            SortCol::Generation => "generation",
-            SortCol::Name => "name",
+            Self::Count => "count",
+            Self::Births => "births",
+            Self::Deaths => "deaths",
+            Self::Generation => "generation",
+            Self::Name => "name",
         }
     }
 }
@@ -56,10 +58,10 @@ pub fn sorted_indices(sim: &Sim, sort: SortCol) -> Vec<usize> {
     let key = |i: usize| -> (i64, usize) {
         let s = &sim.species[i];
         let v = match sort {
-            SortCol::Count => s.count as i64,
-            SortCol::Births => s.births_yesterday as i64,
-            SortCol::Deaths => s.deaths_yesterday as i64,
-            SortCol::Generation => s.generation as i64,
+            SortCol::Count => i64::from(s.count),
+            SortCol::Births => i64::from(s.births_yesterday),
+            SortCol::Deaths => i64::from(s.deaths_yesterday),
+            SortCol::Generation => i64::from(s.generation),
             SortCol::Name => 0,
         };
         (-v, i)
@@ -71,6 +73,7 @@ pub fn sorted_indices(sim: &Sim, sort: SortCol) -> Vec<usize> {
     idx
 }
 
+#[derive(Debug)]
 pub struct SpeciesBrowser {
     /// Position in the sorted table.
     pub sel: usize,
@@ -84,8 +87,8 @@ impl Default for SpeciesBrowser {
 }
 
 impl SpeciesBrowser {
-    pub fn new() -> Self {
-        SpeciesBrowser { sel: 0, sort: SortCol::Count }
+    pub const fn new() -> Self {
+        Self { sel: 0, sort: SortCol::Count }
     }
 
     fn selected_species(&self, sim: &Sim) -> SpeciesId {
@@ -128,7 +131,7 @@ impl Screen for SpeciesBrowser {
         }
     }
 
-    fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
+    fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let Some(sim) = &app.sim else { return };
         let status_row = area.y + area.height - 1;
         let body_h = area.height - 1;
@@ -144,7 +147,7 @@ impl Screen for SpeciesBrowser {
     }
 }
 
-fn kind_label(id: SpeciesId) -> &'static str {
+const fn kind_label(id: SpeciesId) -> &'static str {
     match id.kind() {
         Kind::Prey => "prey",
         Kind::Predator => "pred",
@@ -153,7 +156,7 @@ fn kind_label(id: SpeciesId) -> &'static str {
 
 // ------------------------------------------------------------------ S04a
 
-fn table(f: &mut Frame, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesId) {
+fn table(f: &mut Frame<'_>, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesId) {
     let alive = sim.species.iter().filter(|s| s.count > 0).count();
     let prey_n = sim.species.iter().filter(|s| s.count > 0 && s.species.kind() == Kind::Prey).count();
     let inner = panel::draw_with_hint(f, area, "Species", &format!("{} species, {} prey / {} predator", alive, prey_n, alive - prey_n), panel::Kind::Outer);
@@ -181,58 +184,80 @@ fn table(f: &mut Frame, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesI
     util::line(f, inner, 0, Line::from(header));
     let mut row = 2u16;
     for i in sorted_indices(sim, sort) {
-        let s = &sim.species[i];
-        let id = s.species;
-        let is_sel = id == selected;
-        let absent = s.count == 0;
-        let base = if is_sel {
-            theme::selected()
-        } else if absent {
-            theme::dim_text()
-        } else {
-            theme::text()
-        };
-        let bg = if is_sel { theme::SELECT_BG } else { theme::PANEL_BG };
-        let dimmed = if is_sel { base } else { theme::dim_text() };
-        let marker = if is_sel { glyphs::PLAY } else { ' ' };
-        let arrow = trend_arrow(&s.trend);
-        let mut spans = vec![
-            sp(marker.to_string(), Style::default().fg(theme::KEY).bg(bg).add_modifier(Modifier::BOLD)),
-            sp(format!("{} ", id.glyph().to_ascii_uppercase()), Style::default().fg(if absent { theme::DIM } else { id.color() }).bg(bg).add_modifier(Modifier::BOLD)),
-            sp(format!("{:<8}", id.name()), base),
-            sp(format!("{:<5}", kind_label(id)), dimmed),
-            sp(format!("{:>6}", s.count), base),
-            sp(format!("{:>7}", s.adults), base),
-            sp(format!("{:>6}", s.juveniles), base),
-            sp(format!("{:>8}", s.births_yesterday), Style::default().fg(if absent { theme::DIM } else { theme::GOOD }).bg(bg)),
-            sp(format!("{:>8}", s.deaths_yesterday), Style::default().fg(if absent { theme::DIM } else { theme::BAD }).bg(bg)),
-            // C7: living infected members, in SICK when any.
-            sp(format!("{:>6}", s.sick), if s.sick > 0 { Style::default().fg(theme::SICK).bg(bg) } else { dimmed }),
-            sp(format!("{:>6}", s.peak), base),
-            sp(format!("{:>5}", s.generation), base),
-            sp(format!("{:<18}", ""), base), // sparkline slot
-            sp(format!("{} ", arrow), Style::default().fg(arrow_color(arrow)).bg(bg).add_modifier(Modifier::BOLD)),
-            sp("  ", base),
-        ];
-        for t in 0..Genome::LEN {
-            let st = if absent { Style::default().fg(theme::DIM).bg(bg) } else { Style::default().fg(trait_color(t)).bg(bg) };
-            spans.push(sp(format!("{:>3} ", two(s.mean.0[t])), st));
-        }
-        spans.push(sp(format!("  {}", id.diet()), dimmed));
-        util::line(f, inner, row, Line::from(spans));
-        if is_sel {
-            let buf = f.buffer_mut();
-            for x in 0..inner.width {
-                if let Some(c) = buf.cell_mut((inner.x + x, inner.y + row)) {
-                    c.set_bg(bg);
-                }
-            }
-        }
-        if !s.trend.is_empty() {
-            bars::sparkline(f.buffer_mut(), inner.x + 71, inner.y + row, 14, &s.trend, if absent { theme::DIM } else { id.color() });
-        }
+        table_row(f, inner, row, sim, i, selected);
         row += 1;
     }
+
+    table_totals(f, inner, row, sim);
+}
+/// One species row of the S04 table, with its selection highlight and sparkline.
+fn table_row(f: &mut Frame<'_>, inner: Rect, row: u16, sim: &Sim, i: usize, selected: SpeciesId) {
+    let s = &sim.species[i];
+    let id = s.species;
+    let is_sel = id == selected;
+    let absent = s.count == 0;
+    let base = if is_sel {
+        theme::selected()
+    } else if absent {
+        theme::dim_text()
+    } else {
+        theme::text()
+    };
+    let st = RowStyle { base, bg: if is_sel { theme::SELECT_BG } else { theme::PANEL_BG }, dimmed: if is_sel { base } else { theme::dim_text() }, absent };
+    let arrow = trend_arrow(&s.trend);
+    let marker = if is_sel { glyphs::PLAY } else { ' ' };
+    let mut spans = vec![
+            sp(marker.to_string(), Style::default().fg(theme::KEY).bg(st.bg).add_modifier(Modifier::BOLD)),
+            sp(format!("{} ", id.glyph().to_ascii_uppercase()), Style::default().fg(if st.absent { theme::DIM } else { id.color() }).bg(st.bg).add_modifier(Modifier::BOLD)),
+            sp(format!("{:<8}", id.name()), st.base),
+            sp(format!("{:<5}", kind_label(id)), st.dimmed),
+            sp(format!("{:>6}", s.count), st.base),
+            sp(format!("{:>7}", s.adults), st.base),
+            sp(format!("{:>6}", s.juveniles), st.base),
+            sp(format!("{:>8}", s.births_yesterday), Style::default().fg(if st.absent { theme::DIM } else { theme::GOOD }).bg(st.bg)),
+            sp(format!("{:>8}", s.deaths_yesterday), Style::default().fg(if st.absent { theme::DIM } else { theme::BAD }).bg(st.bg)),
+            // C7: living infected members, in SICK when any.
+            sp(format!("{:>6}", s.sick), if s.sick > 0 { Style::default().fg(theme::SICK).bg(st.bg) } else { st.dimmed }),
+            sp(format!("{:>6}", s.peak), st.base),
+            sp(format!("{:>5}", s.generation), st.base),
+            sp(format!("{:<18}", ""), st.base), // sparkline slot
+            sp(format!("{arrow} "), Style::default().fg(arrow_color(arrow)).bg(st.bg).add_modifier(Modifier::BOLD)),
+            sp("  ", st.base),
+        ];
+    trait_spans(s, &st, &mut spans);
+    spans.push(sp(format!("  {}", id.diet()), st.dimmed));
+    util::line(f, inner, row, Line::from(spans));
+    if is_sel {
+        let buf = f.buffer_mut();
+        for x in 0..inner.width {
+            if let Some(c) = buf.cell_mut((inner.x + x, inner.y + row)) {
+                c.set_bg(st.bg);
+            }
+        }
+    }
+    if !s.trend.is_empty() {
+        bars::sparkline(f.buffer_mut(), inner.x + 71, inner.y + row, 14, &s.trend, if absent { theme::DIM } else { id.color() });
+    }
+}
+
+/// Colours shared by the cells of one species table row.
+struct RowStyle {
+    base: Style,
+    bg: Color,
+    dimmed: Style,
+    absent: bool,
+}
+
+/// The per-trait genome columns.
+fn trait_spans(s: &SpeciesStats, st: &RowStyle, spans: &mut Vec<Span<'static>>) {
+    for t in 0..Genome::LEN {
+        let style = if st.absent { Style::default().fg(theme::DIM).bg(st.bg) } else { Style::default().fg(trait_color(t)).bg(st.bg) };
+        spans.push(sp(format!("{:>3} ", two(s.mean.0[t])), style));
+    }
+}
+
+/// The totals row under the S04 table.
+fn table_totals(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim) {
     // Totals row.
     row += 1;
     let prey: u32 = sim.species.iter().filter(|s| s.species.kind() == Kind::Prey).map(|s| s.count).sum();
@@ -242,10 +267,10 @@ fn table(f: &mut Frame, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesI
     util::line(f, inner, row, Line::from(vec![
         sp(format!("   {:<14}", "totals"), theme::label()),
         sp(format!("{:>6}", prey + pred), theme::text()),
-        sp(format!("   prey {}  pred {}  ratio {:.1}:1", prey, pred, prey as f32 / pred.max(1) as f32), theme::dim_text()),
-        sp(format!("   births {}", births), Style::default().fg(theme::GOOD).bg(theme::PANEL_BG)),
-        sp(format!("  deaths {}", deaths), Style::default().fg(theme::BAD).bg(theme::PANEL_BG)),
-        sp(format!("   net {:+} today", births as i32 - deaths as i32), theme::text()),
+        sp(format!("   prey {}  pred {}  ratio {:.1}:1", prey, pred, crate::cast!(prey => f32) / crate::cast!(pred.max(1) => f32)), theme::dim_text()),
+        sp(format!("   births {births}"), Style::default().fg(theme::GOOD).bg(theme::PANEL_BG)),
+        sp(format!("  deaths {deaths}"), Style::default().fg(theme::BAD).bg(theme::PANEL_BG)),
+        sp(format!("   net {:+} today", crate::cast!(births => i32) - crate::cast!(deaths => i32)), theme::text()),
         sp("     traits = species means x100;  /d = yesterday", theme::dim_text()),
     ]));
 }
@@ -266,7 +291,7 @@ fn narrative(s: &SpeciesStats) -> (String, Style) {
     }
 }
 
-fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
+fn summary(f: &mut Frame<'_>, area: Rect, sim: &Sim, id: SpeciesId) {
     let s = &sim.species[id.index()];
     let inner = panel::draw_with_hint(f, area, &format!("Selected: {}", id.name()), "Enter for full detail", panel::Kind::Focus);
     let left_w = 64u16;
@@ -289,6 +314,13 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     row += 1;
     util::line(f, left, row, Line::from(sp(" trait        base   current            delta   spread", theme::dim_text())));
     row += 1;
+    row = summary_genome(f, left, row, id, s);
+    row = summary_interactions(f, left, row, sim, id);
+    summary_notable(f, left, row, sim, id);
+    summary_history(f, right, sim, id, s);
+}
+/// Base genome vs the current mean, per trait.
+fn summary_genome(f: &mut Frame<'_>, left: Rect, mut row: u16, id: SpeciesId, s: &SpeciesStats) -> u16 {
     let base = id.base_genome();
     for t in 0..Genome::LEN {
         let b = base.0[t];
@@ -298,12 +330,12 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         let y = left.y + row;
         let buf = f.buffer_mut();
         buf.set_stringn(left.x, y, format!(" {:<12}", TRAIT_NAMES[t]), 13, theme::text());
-        buf.set_stringn(left.x + 13, y, format!("{:.2}", b), 4, theme::dim_text());
-        buf.set_stringn(left.x + 20, y, format!("{:.2}", m), 4, theme::text());
+        buf.set_stringn(left.x + 13, y, format!("{b:.2}"), 4, theme::dim_text());
+        buf.set_stringn(left.x + 20, y, format!("{m:.2}"), 4, theme::text());
         bars::bar(buf, left.x + 25, y, 14, m, color);
-        let bx = left.x + 26 + (b * 11.0).round() as u16;
+        let bx = left.x + 26 + crate::cast!((b * 11.0).round() => u16);
         buf.set_stringn(bx, y, glyphs::V_LINE.to_string(), 1, Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG));
-        buf.set_stringn(left.x + 42, y, format!("{:+.2}", d), 5, delta_style(d));
+        buf.set_stringn(left.x + 42, y, format!("{d:+.2}"), 5, delta_style(d));
         bars::range(buf, left.x + 49, y, 13, s.min.0[t], m, s.max.0[t], color);
         row += 1;
     }
@@ -311,10 +343,22 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         sp(format!(" {} base marker   spread = min/mean/max across living {}", glyphs::V_LINE, id.plural()), theme::dim_text()),
     ]));
     row += 2;
+    row
+}
+
+/// Kill shares, competition and pathogens/parasites for the selected species.
+fn summary_interactions(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: SpeciesId) -> u16 {
     panel::section(f, left, row, "Interactions");
-    row += 1;
-    // Kill shares from every predator's `kills_by_species` (living and carcasses);
-    // params preference stands in while fewer than 5 kills are recorded.
+    let kills = kill_matrix(sim);
+    if id.kind() == Kind::Prey {
+        prey_interactions(f, left, row + 1, sim, id, &kills)
+    } else {
+        predator_interactions(f, left, row + 1, sim, id, &kills)
+    }
+}
+
+/// Total kills per `[predator][prey]` pair, living and carcasses alike.
+fn kill_matrix(sim: &Sim) -> [[u32; 6]; 6] {
     let mut kills = [[0u32; 6]; 6]; // [predator][prey]
     for c in sim.creatures.living().chain(sim.creatures.carcasses()) {
         if c.species.kind() == Kind::Predator {
@@ -323,14 +367,19 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
             }
         }
     }
-    if id.kind() == Kind::Prey {
+    kills
+}
+
+/// Prey view: who eats it, and what it competes with for grass.
+fn prey_interactions(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: SpeciesId, kills: &[[u32; 6]; 6]) -> u16 {
+    let mut row = row;
         let by_pred: u32 = SpeciesId::ALL.iter().map(|p| kills[p.index()][id.index()]).sum();
         let hunters: Vec<String> = SpeciesId::ALL
             .iter()
             .filter(|p| p.kind() == Kind::Predator && (sim.params.predation.preference(**p, id) > 0.0 || kills[p.index()][id.index()] > 0))
             .map(|p| {
                 if by_pred >= 5 {
-                    format!("{} {} {:.0}%", p.glyph().to_ascii_uppercase(), p.name(), kills[p.index()][id.index()] as f32 / by_pred as f32 * 100.0)
+                    format!("{} {} {:.0}%", p.glyph().to_ascii_uppercase(), p.name(), crate::cast!(kills[p.index()][id.index()] => f32) / crate::cast!(by_pred => f32) * 100.0)
                 } else {
                     format!("{} {}", p.glyph().to_ascii_uppercase(), p.name())
                 }
@@ -352,15 +401,19 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
             sp(others.join(" and "), theme::text()),
             sp(" for grass", theme::dim_text()),
         ]));
-        row += 1;
-    } else {
+    susceptibility_lines(f, left, row, sim, id)
+}
+
+/// Predator view: what it hunts, and its rivals.
+fn predator_interactions(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: SpeciesId, kills: &[[u32; 6]; 6]) -> u16 {
+    let mut row = row;
         let total: u32 = kills[id.index()].iter().sum();
         let prey: Vec<String> = SpeciesId::ALL
             .iter()
             .filter(|p| p.kind() == Kind::Prey && (sim.params.predation.preference(id, **p) > 0.0 || kills[id.index()][p.index()] > 0))
             .map(|p| {
                 let share = if total >= 5 {
-                    kills[id.index()][p.index()] as f32 / total as f32
+                    crate::cast!(kills[id.index()][p.index()] => f32) / crate::cast!(total => f32)
                 } else {
                     sim.params.predation.preference(id, *p)
                 };
@@ -388,10 +441,14 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
             sp(if rivals.is_empty() { "no one".to_string() } else { rivals.join(" and ") }, theme::text()),
             sp(" for prey", theme::dim_text()),
         ]));
-        row += 1;
-    }
+    susceptibility_lines(f, left, row, sim, id)
+}
+
+/// C7: pathogens that can infect this species, and the mean worm load.
+fn susceptibility_lines(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: SpeciesId) -> u16 {
+    let mut row = row;
     // C7: pathogens that can infect this species, and the mean worm load.
-    let pathogens: Vec<&str> = sim.disease.pathogens.iter().filter(|p| !p.extinct && p.host(id) > 0.0).map(|p| p.name()).collect();
+    let pathogens: Vec<&str> = sim.disease.pathogens.iter().filter(|p| !p.extinct && p.host(id) > 0.0).map(crate::sim::disease::Pathogen::name).collect();
     util::line(f, left, row, Line::from(vec![
         sp(" susceptible to: ", theme::dim_text()),
         if pathogens.is_empty() {
@@ -402,12 +459,17 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     ]));
     row += 1;
     let (load_sum, load_n) = sim.creatures.living().filter(|c| c.species == id).fold((0.0f32, 0u32), |(a, n), c| (a + c.parasite_load, n + 1));
-    let load = if load_n > 0 { load_sum / load_n as f32 } else { 0.0 };
+    let load = if load_n > 0 { load_sum / crate::cast!(load_n => f32) } else { 0.0 };
     util::line(f, left, row, Line::from(vec![
         sp(format!(" {} worms: mean load ", glyphs::PARASITE), theme::dim_text()),
-        sp(format!(".{:02}", ((load * 100.0).round() as u32).min(99)), Style::default().fg(if load >= 0.2 { theme::WARN } else { theme::TEXT }).bg(theme::PANEL_BG)),
+        sp(format!(".{:02}", (crate::cast!((load * 100.0).round() => u32)).min(99)), Style::default().fg(if load >= 0.2 { theme::WARN } else { theme::TEXT }).bg(theme::PANEL_BG)),
     ]));
     row += 2;
+    row
+}
+
+/// Notable living individuals of the selected species.
+fn summary_notable(f: &mut Frame<'_>, left: Rect, mut row: u16, sim: &Sim, id: SpeciesId) -> u16 {
     panel::section(f, left, row, "Notable individuals");
     row += 1;
     let day = sim.time.day_index();
@@ -428,49 +490,29 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         ]));
         row += 1;
     }
+    row
+}
 
+/// The right-hand 240-day population history plot.
+fn summary_history(f: &mut Frame<'_>, right: Rect, sim: &Sim, id: SpeciesId, s: &SpeciesStats) {
     // ---- right: population history
     let mut row = 0u16;
     panel::section(f, right, row, "Population, last 240 days");
     row += 1;
     let samples = sim.series.samples();
     let start = samples.len().saturating_sub(240);
-    let series: Vec<f32> = samples[start..].iter().map(|x| x.population[id.index()] as f32).collect();
+    let series: Vec<f32> = samples[start..].iter().map(|x| crate::cast!(x.population[id.index()] => f32)).collect();
     let drought: Vec<bool> = samples[start..].iter().map(|x| x.drought_regions >= 2).collect();
     let cols = 100usize;
     let data = downsample(&series, cols);
-    let max = *data.iter().max().unwrap_or(&1) as f32;
-    let min = *data.iter().min().unwrap_or(&0) as f32;
+    let max = f32::from(*data.iter().max().unwrap_or(&1));
+    let min = f32::from(*data.iter().min().unwrap_or(&0));
     let rows = 6u16;
-    {
-        let buf = f.buffer_mut();
-        for (i, v) in data.iter().enumerate() {
-            let t = if max > min { (*v as f32 - min) / (max - min) } else { 0.5 };
-            let halves = (t * rows as f32 * 2.0).round() as u16;
-            let di = i * drought.len().max(1) / cols;
-            let dry = drought.get(di).copied().unwrap_or(false);
-            for r in 0..rows {
-                let y = right.y + row + rows - 1 - r;
-                let level = halves.saturating_sub(r * 2);
-                let ch = if level >= 2 {
-                    glyphs::FULL_BLOCK
-                } else if level == 1 {
-                    glyphs::HALF_LOWER
-                } else {
-                    glyphs::SHADE_1
-                };
-                let color = if level >= 1 { id.color() } else { theme::dim(theme::DIM, 0.6) };
-                let bg = if dry { theme::dim(theme::WARN, 0.78) } else { theme::PANEL_BG };
-                buf.set_stringn(right.x + 6 + i as u16, y, ch.to_string(), 1, Style::default().fg(color).bg(bg));
-            }
-        }
-        buf.set_stringn(right.x, right.y + row, format!("{:>4} ", max as u32), 5, theme::dim_text());
-        buf.set_stringn(right.x, right.y + row + rows - 1, format!("{:>4} ", min as u32), 5, theme::dim_text());
-    }
+    history_plot(f, right, row, id, &data, &drought, cols, rows, max, min);
     row += rows;
     let span_days = series.len().max(1);
     util::line(f, right, row, Line::from(vec![
-        sp(format!("      D-{:<3}", span_days), theme::dim_text()),
+        sp(format!("      D-{span_days:<3}"), theme::dim_text()),
         sp(format!("{:>34}", if drought.iter().any(|&d| d) { "drought bands shaded" } else { "" }), Style::default().fg(theme::WARN).bg(theme::PANEL_BG)),
         sp(format!("{:>49}", "today"), theme::dim_text()),
     ]));
@@ -489,11 +531,11 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     );
     row += 2;
     let first = series.first().copied().unwrap_or(0.0);
-    let last = s.count as f32;
-    let lo = series.iter().cloned().fold(f32::MAX, f32::min);
-    let hi = series.iter().cloned().fold(0.0f32, f32::max);
+    let last = crate::cast!(s.count => f32);
+    let lo = series.iter().copied().fold(f32::MAX, f32::min);
+    let hi = series.iter().copied().fold(0.0f32, f32::max);
     let stats: Vec<(String, String, Style)> = vec![
-        (format!("{} days ago", span_days), format!("{:.0}", first), theme::text()),
+        (format!("{span_days} days ago"), format!("{first:.0}"), theme::text()),
         ("today".into(), format!("{}", s.count), theme::text()),
         ("change".into(), format!("{:+.0} ({:+.0}%)", last - first, (last - first) / first.max(1.0) * 100.0), delta_style(last - first)),
         ("low / high".into(), format!("{:.0} / {:.0}", if lo == f32::MAX { 0.0 } else { lo }, hi), theme::text()),
@@ -502,21 +544,56 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         (
             "first birth".into(),
             match s.first_birth_day {
-                Some(d) => crate::ui::screens::common::day_stamp(d as i64, sim.time.season_days),
+                Some(d) => crate::ui::screens::common::day_stamp(i64::from(d), sim.time.season_days),
                 None => "none yet".into(),
             },
             theme::text(),
         ),
     ];
     for (k, v, st) in stats {
-        util::line(f, right, row, Line::from(vec![sp(format!(" {:<14}", k), theme::dim_text()), sp(v, st)]));
+        util::line(f, right, row, Line::from(vec![sp(format!(" {k:<14}"), theme::dim_text()), sp(v, st)]));
         row += 1;
     }
     row += 1;
     let (text, st) = narrative(s);
     util::line(f, right, row, Line::from(vec![sp(format!(" {} ", glyphs::NOTE), theme::label()), sp(text, st)]));
     row += 2;
-    panel::section(f, right, row, "Habitat (living individuals by region)");
+    habitat_section(f, right, row, sim, id);
+}
+
+/// The bar-style population history plot.
+#[allow(clippy::too_many_arguments)]
+fn history_plot(f: &mut Frame<'_>, right: Rect, row: u16, id: SpeciesId, data: &[u16], drought: &[bool], cols: usize, rows: u16, max: f32, min: f32) {
+    {
+        let buf = f.buffer_mut();
+        for (i, v) in data.iter().enumerate() {
+            let t = if max > min { (f32::from(*v) - min) / (max - min) } else { 0.5 };
+            let halves = crate::cast!((t * f32::from(rows) * 2.0).round() => u16);
+            let di = (i * drought.len().max(1)).div_euclid(cols);
+            let dry = drought.get(di).copied().unwrap_or(false);
+            for r in 0..rows {
+                let y = right.y + row + rows - 1 - r;
+                let level = halves.saturating_sub(r * 2);
+                let ch = if level >= 2 {
+                    glyphs::FULL_BLOCK
+                } else if level == 1 {
+                    glyphs::HALF_LOWER
+                } else {
+                    glyphs::SHADE_1
+                };
+                let color = if level >= 1 { id.color() } else { theme::dim(theme::DIM, 0.6) };
+                let bg = if dry { theme::dim(theme::WARN, 0.78) } else { theme::PANEL_BG };
+                buf.set_stringn(right.x + 6 + crate::cast!(i => u16), y, ch.to_string(), 1, Style::default().fg(color).bg(bg));
+            }
+        }
+        buf.set_stringn(right.x, right.y + row, format!("{:>4} ", crate::cast!(max => u32)), 5, theme::dim_text());
+        buf.set_stringn(right.x, right.y + row + rows - 1, format!("{:>4} ", crate::cast!(min => u32)), 5, theme::dim_text());
+    }
+
+}
+
+/// Living individuals per region, two columns at a time.
+fn habitat_section(f: &mut Frame<'_>, right: Rect, mut row: u16, sim: &Sim, id: SpeciesId) {
     row += 1;
     let mut per_region: Vec<(&str, usize)> = sim.world.regions.iter().map(|r| (r.0.as_str(), 0usize)).collect();
     for c in sim.creatures.living().filter(|c| c.species == id) {
@@ -526,32 +603,33 @@ fn summary(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         }
     }
     per_region.sort_by(|a, b| b.1.cmp(&a.1));
-    let max = per_region.first().map(|e| e.1).unwrap_or(1).max(1) as f32;
-    let half = right.width / 2;
+    let max = crate::cast!(per_region.first().map_or(1, |e| e.1).max(1) => f32);
+    let half = right.width.div_euclid(2);
     for (i, (name, n)) in per_region.iter().enumerate() {
-        let col = (i % 2) as u16;
-        let r = row + (i / 2) as u16;
+        let col = crate::cast!((i % 2) => u16);
+        let r = row + crate::cast!((i.div_euclid(2)) => u16);
         if r >= right.height {
             break;
         }
         let x = right.x + 1 + col * half;
         let y = right.y + r;
         let buf = f.buffer_mut();
-        buf.set_stringn(x, y, format!("{:<17}", name), 17, theme::text());
-        bars::bar(buf, x + 17, y, 14, *n as f32 / max, id.color());
-        buf.set_stringn(x + 32, y, format!("{:>4}", n), 4, theme::dim_text());
+        buf.set_stringn(x, y, format!("{name:<17}"), 17, theme::text());
+        bars::bar(buf, x + 17, y, 14, crate::cast!(*n => f32) / max, id.color());
+        buf.set_stringn(x + 32, y, format!("{n:>4}"), 4, theme::dim_text());
     }
 }
 
 // ------------------------------------------------------------------ S04b
 
+#[derive(Debug)]
 pub struct SpeciesDetail {
     pub species: SpeciesId,
 }
 
 impl SpeciesDetail {
-    pub fn new(species: SpeciesId) -> Self {
-        SpeciesDetail { species }
+    pub const fn new(species: SpeciesId) -> Self {
+        Self { species }
     }
 }
 
@@ -575,7 +653,7 @@ impl Screen for SpeciesDetail {
         }
     }
 
-    fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
+    fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let Some(sim) = &app.sim else { return };
         let status_row = area.y + area.height - 1;
         let body_h = area.height - 1;
@@ -591,7 +669,7 @@ impl Screen for SpeciesDetail {
     }
 }
 
-fn histograms(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
+fn histograms(f: &mut Frame<'_>, area: Rect, sim: &Sim, id: SpeciesId) {
     let s = &sim.species[id.index()];
     let inner = panel::draw_with_hint(f, area, &format!("{}: trait distributions", id.name()), "12 buckets, living adults + juveniles", panel::Kind::Outer);
     // C8: eleven traits in a 3 x 4 grid of 25-column blocks (23-wide histograms).
@@ -602,8 +680,8 @@ fn histograms(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     let block_h = 7u16;
     let rows = 4u16;
     for t in 0..Genome::LEN {
-        let col = (t / rows as usize) as u16;
-        let r = (t % rows as usize) as u16;
+        let col = crate::cast!((t.div_euclid(crate::cast!(rows => usize))) => u16);
+        let r = crate::cast!((t % crate::cast!(rows => usize)) => u16);
         let x = inner.x + 1 + col * (col_w + 1);
         let y = inner.y + 1 + r * block_h;
         let color = trait_color(t);
@@ -614,7 +692,7 @@ fn histograms(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         buf.set_stringn(
             x + 11,
             y,
-            format!(".{:02} .{:02} .{:02}", (min * 100.0).round() as u32 % 100, (mean * 100.0).round() as u32 % 100, (max * 100.0).round() as u32 % 100),
+            format!(".{:02} .{:02} .{:02}", crate::cast!((min * 100.0).round() => u32) % 100, crate::cast!((mean * 100.0).round() => u32) % 100, crate::cast!((max * 100.0).round() => u32) % 100),
             14,
             theme::dim_text(),
         );
@@ -624,14 +702,14 @@ fn histograms(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         }
         let axis: String = std::iter::repeat_n(glyphs::H_LINE, 24).collect();
         buf.set_stringn(x, y + 5, &axis, 24, theme::border());
-        let mx = x + ((mean * 23.0).round() as u16).min(23);
+        let mx = x + (crate::cast!((mean * 23.0).round() => u16)).min(23);
         buf.set_stringn(mx, y + 5, glyphs::CROSS.to_string(), 1, Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG));
         buf.set_stringn(x, y + 6, "0", 1, theme::dim_text());
         buf.set_stringn(x + 23, y + 6, "1", 1, theme::dim_text());
-        let n: u32 = s.hist[t].iter().map(|&v| v as u32).sum();
-        let peak_bucket = s.hist[t].iter().enumerate().max_by_key(|(_, v)| **v).map(|(i, _)| i).unwrap_or(0);
-        buf.set_stringn(x + 2, y + 6, format!("n={}", n), 7, theme::dim_text());
-        buf.set_stringn(x + 11, y + 6, format!("mode .{:02}", ((peak_bucket as f32 + 0.5) / 12.0 * 100.0).round() as u32), 11, theme::dim_text());
+        let n: u32 = s.hist[t].iter().map(|&v| u32::from(v)).sum();
+        let peak_bucket = s.hist[t].iter().enumerate().max_by_key(|(_, v)| **v).map_or(0, |(i, _)| i);
+        buf.set_stringn(x + 2, y + 6, format!("n={n}"), 7, theme::dim_text());
+        buf.set_stringn(x + 11, y + 6, format!("mode .{:02}", crate::cast!(((crate::cast!(peak_bucket => f32) + 0.5) / 12.0 * 100.0).round() => u32)), 11, theme::dim_text());
     }
     let y = inner.y + 1 + rows * block_h;
     let buf = f.buffer_mut();
@@ -639,7 +717,7 @@ fn histograms(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         inner.x + 1,
         y,
         format!("{} mean  {} full  {} half  columns = 1/12 of 0..1  header: min mean max", glyphs::CROSS, glyphs::FULL_BLOCK, glyphs::HALF_LOWER),
-        inner.width as usize - 2,
+        crate::cast!(inner.width => usize) - 2,
         theme::dim_text(),
     );
     // C7: the two trait-comparison sections moved here from the drift panel to
@@ -648,7 +726,7 @@ fn histograms(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     panel::section(f, inner, row, "Selection pressure");
     row += 1;
     for note in selection_pressure(s).into_iter().take(2) {
-        util::line(f, inner, row, Line::from(sp(format!(" {}", note), theme::dim_text())));
+        util::line(f, inner, row, Line::from(sp(format!(" {note}"), theme::dim_text())));
         row += 1;
     }
     row += 1;
@@ -656,7 +734,7 @@ fn histograms(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     row += 1;
     let mut cmp_hdr = String::from("             ");
     for a in TRAIT_ABBR {
-        cmp_hdr.push_str(&format!(" {a:>3}"));
+        let _ = write!(cmp_hdr, " {a:>3}");
     }
     cmp_hdr.push_str("   count  gen");
     util::line(f, inner, row, Line::from(sp(cmp_hdr, theme::dim_text())));
@@ -713,21 +791,27 @@ fn pressure_note(t: usize, d: f32, gens: u32) -> String {
     format!("{head}: {rk}")
 }
 
-fn drift(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
+fn drift(f: &mut Frame<'_>, area: Rect, sim: &Sim, id: SpeciesId) {
     let s = &sim.species[id.index()];
     let inner = panel::draw_with_hint(f, area, "Drift over generations", &format!("{} sampled generations", s.drift.len()), panel::Kind::Outer);
-    let mut row = 0u16;
     let n = s.drift.len();
-    let first_gen = s.drift.first().map(|d| d.0).unwrap_or(1);
+    let first_gen = s.drift.first().map_or(1, |d| d.0);
     {
-        let y = inner.y + row;
+        let y = inner.y;
         let buf = f.buffer_mut();
-        buf.set_stringn(inner.x, y, format!(" trait       g{:<4}", first_gen), 18, theme::dim_text());
+        buf.set_stringn(inner.x, y, format!(" trait       g{first_gen:<4}"), 18, theme::dim_text());
         buf.set_stringn(inner.x + 21, y, "oldest", 6, theme::dim_text());
         buf.set_stringn(inner.x + 51, y, "newest", 6, theme::dim_text());
         buf.set_stringn(inner.x + 58, y, format!(" g{:<3} change", s.generation), 12, theme::dim_text());
     }
-    row += 1;
+    let row = drift_trait_rows(f, inner, s, n, 1);
+    let row = drift_means_table(f, inner, s, n, row + 1);
+    population_section(f, inner, row + 2, sim, id, s);
+}
+
+/// One sparkline row per trait, oldest to newest sample.
+fn drift_trait_rows(f: &mut Frame<'_>, inner: Rect, s: &SpeciesStats, n: usize, row: u16) -> u16 {
+    let mut row = row;
     for t in 0..Genome::LEN {
         let color = trait_color(t);
         let y = inner.y + row;
@@ -736,11 +820,11 @@ fn drift(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         if n > 0 {
             let first = s.drift[0].1 .0[t];
             let last = s.drift[n - 1].1 .0[t];
-            let vals: Vec<u16> = s.drift.iter().map(|g| (g.1 .0[t] * 100.0).round() as u16).collect();
-            buf.set_stringn(inner.x + 13, y, format!("{:.2}", first), 4, theme::dim_text());
+            let vals: Vec<u16> = s.drift.iter().map(|g| crate::cast!((g.1 .0[t] * 100.0).round() => u16)).collect();
+            buf.set_stringn(inner.x + 13, y, format!("{first:.2}"), 4, theme::dim_text());
             let wide: Vec<u16> = vals.iter().flat_map(|v| [*v, *v, *v]).collect();
             bars::sparkline(buf, inner.x + 21, y, 36, &wide, color);
-            buf.set_stringn(inner.x + 59, y, format!("{:.2}", last), 4, theme::text());
+            buf.set_stringn(inner.x + 59, y, format!("{last:.2}"), 4, theme::text());
             buf.set_stringn(inner.x + 66, y, format!("{:+.2}", last - first), 5, delta_style(last - first));
         } else {
             buf.set_stringn(inner.x + 13, y, "no samples yet", 14, theme::dim_text());
@@ -748,11 +832,17 @@ fn drift(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
         row += 1;
     }
     row += 1;
+    row
+}
+
+/// The per-generation mean table.
+fn drift_means_table(f: &mut Frame<'_>, inner: Rect, s: &SpeciesStats, n: usize, row: u16) -> u16 {
+    let mut row = row;
     panel::section(f, inner, row, "Per-generation means (x100)");
     row += 1;
     let mut hdr = String::from("              ");
     for g in &s.drift {
-        hdr.push_str(&format!("g{:<3}", g.0));
+        let _ = write!(hdr, "g{:<3}", g.0);
     }
     util::line(f, inner, row, Line::from(sp(hdr, theme::dim_text())));
     row += 1;
@@ -769,8 +859,12 @@ fn drift(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
     }
     util::line(f, inner, row, Line::from(sp(" green = rose vs previous sample, red = fell", theme::dim_text())));
     row += 2;
+    row
+}
 
-    panel::section(f, inner, row, "Population");
+/// The population summary above the disease section.
+fn population_section(f: &mut Frame<'_>, inner: Rect, row: u16, sim: &Sim, id: SpeciesId, s: &SpeciesStats) {
+    let mut row = row;
     row += 1;
     let arrow = trend_arrow(&s.trend);
     let arrow_st = Style::default().fg(arrow_color(arrow)).bg(theme::PANEL_BG);
@@ -785,7 +879,7 @@ fn drift(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
                 s.adults,
                 s.juveniles,
                 s.peak,
-                s.count * 100 / s.peak.max(1),
+                (s.count * 100).div_euclid(s.peak.max(1)),
                 s.generation
             ),
             theme::text(),
@@ -805,7 +899,7 @@ fn drift(f: &mut Frame, area: Rect, sim: &Sim, id: SpeciesId) {
 
 /// C7 (S04b): the species' current disease picture and the outbreaks that
 /// touched it in the last three years, newest first (at most four).
-fn disease_section(f: &mut Frame, inner: Rect, mut row: u16, sim: &Sim, id: SpeciesId) {
+fn disease_section(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, id: SpeciesId) {
     let s = &sim.species[id.index()];
     let si = id.index();
     panel::section(f, inner, row, "Disease");
@@ -820,7 +914,7 @@ fn disease_section(f: &mut Frame, inner: Rect, mut row: u16, sim: &Sim, id: Spec
         sp(format!("{}", s.deaths_disease_yesterday), Style::default().fg(if s.deaths_disease_yesterday > 0 { theme::BAD } else { theme::TEXT }).bg(theme::PANEL_BG)),
     ]));
     row += 1;
-    let today = sim.time.day_index() as u32;
+    let today = crate::cast!(sim.time.day_index() => u32);
     let year_len = 4 * sim.time.season_days;
     let horizon = today.saturating_sub(3 * year_len);
     let recent: Vec<_> = sim
@@ -843,10 +937,10 @@ fn disease_section(f: &mut Frame, inner: Rect, mut row: u16, sim: &Sim, id: Spec
         let end = if o.ended_day.is_some() { o.resist_at_end[si] } else { s.mean.resistance() };
         util::line(f, inner, row, Line::from(vec![
             sp(format!(" {} ", glyphs::DISEASE), Style::default().fg(theme::SICK).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-            sp(format!("{:<8} ", crate::ui::screens::common::day_stamp(o.started_day as i64, sim.time.season_days)), theme::dim_text()),
+            sp(format!("{:<8} ", crate::ui::screens::common::day_stamp(i64::from(o.started_day), sim.time.season_days)), theme::dim_text()),
             sp(format!("{:<10}", sim.disease.name(o.pathogen)), Style::default().fg(theme::SICK).bg(theme::PANEL_BG)),
             sp(format!(" {} cases, {} dead, ", o.species_cases[si], o.species_deaths[si]), theme::text()),
-            sp(format!("resist .{:02} {} .{:02}", ((o.resist_at_start[si] * 100.0).round() as u32).min(99), glyphs::RIGHT, ((end * 100.0).round() as u32).min(99)), theme::dim_text()),
+            sp(format!("resist .{:02} {} .{:02}", (crate::cast!((o.resist_at_start[si] * 100.0).round() => u32)).min(99), glyphs::RIGHT, (crate::cast!((end * 100.0).round() => u32)).min(99)), theme::dim_text()),
         ]));
         row += 1;
     }

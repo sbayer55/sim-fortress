@@ -9,6 +9,7 @@ use ratatui::Frame;
 use crate::theme;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum Kind {
     Outer,
     Inner,
@@ -16,12 +17,12 @@ pub enum Kind {
 }
 
 /// Draw a titled panel and return the inner area.
-pub fn draw(f: &mut Frame, area: Rect, title: &str, kind: Kind) -> Rect {
+pub fn draw(f: &mut Frame<'_>, area: Rect, title: &str, kind: Kind) -> Rect {
     draw_with_hint(f, area, title, "", kind)
 }
 
 /// Draw a titled panel with a right-aligned hint in the top border.
-pub fn draw_with_hint(f: &mut Frame, area: Rect, title: &str, hint: &str, kind: Kind) -> Rect {
+pub fn draw_with_hint(f: &mut Frame<'_>, area: Rect, title: &str, hint: &str, kind: Kind) -> Rect {
     let (border_type, border_style) = match kind {
         Kind::Outer => (BorderType::Double, theme::border()),
         Kind::Inner => (BorderType::Plain, theme::border()),
@@ -56,14 +57,14 @@ pub fn draw_with_hint(f: &mut Frame, area: Rect, title: &str, hint: &str, kind: 
 }
 
 /// A single-row section title inside a panel: `── Title ────`.
-pub fn section(f: &mut Frame, area: Rect, row: u16, title: &str) {
+pub fn section(f: &mut Frame<'_>, area: Rect, row: u16, title: &str) {
     if row >= area.height {
         return;
     }
     let y = area.y + row;
     let buf = f.buffer_mut();
-    let line: String = std::iter::repeat_n('─', area.width as usize).collect();
-    buf.set_stringn(area.x, y, &line, area.width as usize, theme::border());
-    let t = format!(" {} ", title);
-    buf.set_stringn(area.x + 1, y, &t, (area.width as usize).saturating_sub(2), theme::label());
+    let line: String = std::iter::repeat_n('─', crate::cast!(area.width => usize)).collect();
+    buf.set_stringn(area.x, y, &line, crate::cast!(area.width => usize), theme::border());
+    let t = format!(" {title} ");
+    buf.set_stringn(area.x + 1, y, &t, (crate::cast!(area.width => usize)).saturating_sub(2), theme::label());
 }

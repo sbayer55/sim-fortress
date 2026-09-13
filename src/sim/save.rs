@@ -20,6 +20,7 @@ pub const BLANK_TERRAIN: u8 = u8::MAX;
 
 /// The header that precedes the `Sim` payload (FR1). `counts` are the six
 /// per-species living counts; `strip_rows` are 4 × 120 terrain codes for the S00
+///
 /// decorative strips (world rows at H × {0.45, 0.475, 0.75, 0.775}).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SaveHeader {
@@ -65,17 +66,17 @@ pub enum SaveError {
 impl fmt::Display for SaveError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SaveError::Io(e) => write!(f, "{e}"),
-            SaveError::Postcard(e) => write!(f, "{e}"),
-            SaveError::VersionMismatch { found, supported } => {
+            Self::Io(e) => write!(f, "{e}"),
+            Self::Postcard(e) => write!(f, "{e}"),
+            Self::VersionMismatch { found, supported } => {
                 write!(f, "save is from another version ({found} ≠ {supported})")
             }
-            SaveError::OlderVersion { found, supported } => write!(
+            Self::OlderVersion { found, supported } => write!(
                 f,
                 "save is from an older version ({found}, now {supported}): the genome format changed, so it cannot be loaded"
             ),
-            SaveError::BadMagic => write!(f, "not a Sim Fortress save (bad magic)"),
-            SaveError::Truncated => write!(f, "save file is truncated"),
+            Self::BadMagic => write!(f, "not a Sim Fortress save (bad magic)"),
+            Self::Truncated => write!(f, "save file is truncated"),
         }
     }
 }
@@ -84,13 +85,13 @@ impl std::error::Error for SaveError {}
 
 impl From<std::io::Error> for SaveError {
     fn from(e: std::io::Error) -> Self {
-        SaveError::Io(e)
+        Self::Io(e)
     }
 }
 
 impl From<postcard::Error> for SaveError {
     fn from(e: postcard::Error) -> Self {
-        SaveError::Postcard(e)
+        Self::Postcard(e)
     }
 }
 
@@ -137,7 +138,7 @@ pub fn saves_dir(override_dir: Option<&Path>) -> PathBuf {
 /// Autosave fires at the day boundary when `autosave_days > 0` and the 0-based
 /// day index is a positive multiple of `autosave_days` (FR1).
 pub fn autosave_due(day_index: u64, autosave_days: u32) -> bool {
-    autosave_days > 0 && day_index > 0 && day_index % autosave_days as u64 == 0
+    autosave_days > 0 && day_index > 0 && day_index % u64::from(autosave_days) == 0
 }
 
 /// Per-species living counts, `SpeciesId::ALL` order.
@@ -152,12 +153,12 @@ pub fn strip_rows(sim: &Sim) -> [Vec<u8>; 4] {
     let fractions = [0.45f64, 0.475, 0.75, 0.775];
     let mut out: [Vec<u8>; 4] = std::array::from_fn(|_| vec![BLANK_TERRAIN; 120]);
     let center = w.min(120);
-    let left_pad = (120 - center) / 2;
-    let start_col = (w - center) / 2;
+    let left_pad = (120 - center).div_euclid(2);
+    let start_col = (w - center).div_euclid(2);
     for (i, frac) in fractions.iter().enumerate() {
-        let row = ((h as f64 * frac).round() as usize).min(h.saturating_sub(1));
+        let row = (crate::cast!((crate::cast!(h => f64) * frac).round() => usize)).min(h.saturating_sub(1));
         for j in 0..center {
-            out[i][left_pad + j] = sim.world.cell(start_col + j, row).terrain as u8;
+            out[i][left_pad + j] = crate::cast!(sim.world.cell(start_col + j, row).terrain => u8);
         }
     }
     out
@@ -182,7 +183,7 @@ fn encode(header: &SaveHeader, sim: &Sim) -> Result<Vec<u8>, SaveError> {
     bytes.extend_from_slice(&MAGIC);
     bytes.extend_from_slice(&VERSION.to_le_bytes());
     let header_bytes = postcard::to_allocvec(header)?;
-    bytes.extend_from_slice(&(header_bytes.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(&(crate::cast!(header_bytes.len() => u32)).to_le_bytes());
     bytes.extend_from_slice(&header_bytes);
     let sim_bytes = postcard::to_allocvec(sim)?;
     bytes.extend_from_slice(&sim_bytes);
@@ -203,7 +204,7 @@ fn decode(bytes: &[u8]) -> Result<(SaveHeader, Sim), SaveError> {
     if version != VERSION {
         return Err(SaveError::VersionMismatch { found: version, supported: VERSION });
     }
-    let header_len = u32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]) as usize;
+    let header_len = crate::cast!(u32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]) => usize);
     if bytes.len() < 10 + header_len {
         return Err(SaveError::Truncated);
     }
@@ -259,7 +260,7 @@ pub fn read_header_bytes(bytes: &[u8]) -> Result<(SaveHeader, u16), SaveError> {
         return Err(SaveError::BadMagic);
     }
     let version = u16::from_le_bytes([bytes[4], bytes[5]]);
-    let header_len = u32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]) as usize;
+    let header_len = crate::cast!(u32::from_le_bytes([bytes[6], bytes[7], bytes[8], bytes[9]]) => usize);
     if bytes.len() < 10 + header_len {
         return Err(SaveError::Truncated);
     }

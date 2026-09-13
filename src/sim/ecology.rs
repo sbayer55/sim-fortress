@@ -10,6 +10,60 @@ use crate::sim::world::{Terrain, World};
 
 type RegionRect = (String, usize, usize, usize, usize);
 
+/// True when any of the eight neighbours of `(x, y)` is a water cell.
+fn has_adjacent_water(world: &World, x: usize, y: usize, w: usize, h: usize) -> bool {
+    for dy in -1i32..=1 {
+        for dx in -1i32..=1 {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            let (nx, ny) = (crate::cast!(x => i32) + dx, crate::cast!(y => i32) + dy);
+            if nx >= 0
+                && ny >= 0
+                && (crate::cast!(nx => usize)) < w
+                && (crate::cast!(ny => usize)) < h
+                && world.cells[crate::cast!(ny => usize) * w + crate::cast!(nx => usize)].terrain.is_water()
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Index and moisture of every shallow-water cell in `r`, in row-major order.
+fn shallow_water_candidates(world: &World, r: &RegionRect, w: usize) -> Vec<(usize, f32)> {
+    let mut out = Vec::new();
+    for y in r.2..r.4 {
+        for x in r.1..r.3 {
+            let idx = y * w + x;
+            if world.cells[idx].terrain == Terrain::ShallowWater {
+                out.push((idx, world.cells[idx].moisture));
+            }
+        }
+    }
+    out
+}
+
+/// Refill up to `limit` dried-from cells in `r` to shallow water, row-major.
+fn refill_dried_cells(world: &mut World, r: &RegionRect, w: usize, limit: usize) {
+    let mut done = 0usize;
+    'refill: for y in r.2..r.4 {
+        for x in r.1..r.3 {
+            let idx = y * w + x;
+            if world.cells[idx].dried_from == Some(Terrain::ShallowWater) {
+                world.cells[idx].terrain = Terrain::ShallowWater;
+                world.cells[idx].dried_from = None;
+                world.cells[idx].vegetation = 0.0;
+                done += 1;
+                if done >= limit {
+                    break 'refill;
+                }
+            }
+        }
+    }
+}
+
 /// Run one day's ecology update. Called from `Sim::step` when `hour() == 0`.
 ///
 /// The order of the sub-steps is fixed for determinism (FR2).
@@ -36,9 +90,20 @@ pub fn daily_update(
     let season_cap = ecology.season_cap.get(&season).copied().unwrap_or(1.0);
     let season_regrowth = ecology.season_regrowth.get(&season).copied().unwrap_or(1.0);
     let season_evap = ecology.season_evaporation.get(&season).copied().unwrap_or(1.0);
+    step_rain(world, rng, &regions, rain_chance, ecology, w);
+    step_water_adjacency(world, w, h);
+    step_vegetation(world, ecology, season_cap, season_regrowth, w, h);
+    step_evaporate_clamp(world, ecology, season_evap);
+    step_drought(world, time, events, &regions, drought, drought_days_below, ecology);
+    step_water_sand(world, &regions, *drought, ecology, w);
+    world.refresh_shore();
+    step_regrowth_sites(world, rng, time, events, &regions, ecology, w, h);
+    series.push(sample_series(world, time, *drought, &regions, c, deaths, disease));
+}
 
-    // 1. Rain: one chance roll per region; on success, moisten every cell in it.
-    for r in &regions {
+/// Step 1: one rain roll per region; on success every cell in it is moistened.
+fn step_rain(world: &mut World, rng: &mut Rng, regions: &[RegionRect], rain_chance: f32, ecology: &EcologyParams, w: usize) {
+    for r in regions {
         if rng.chance(rain_chance) {
             for y in r.2..r.4 {
                 for x in r.1..r.3 {
@@ -47,36 +112,25 @@ pub fn daily_update(
             }
         }
     }
+}
 
-    // 2. Water adjacency: land cells next to any water gain 0.01.
+/// Step 2: land cells touching water gain a little moisture.
+fn step_water_adjacency(world: &mut World, w: usize, h: usize) {
     for y in 0..h {
         for x in 0..w {
             let idx = y * w + x;
             if world.cells[idx].terrain.is_water() {
                 continue;
             }
-            let mut has_water = false;
-            'adj: for dy in -1i32..=1 {
-                for dx in -1i32..=1 {
-                    if dx == 0 && dy == 0 {
-                        continue;
-                    }
-                    let (nx, ny) = (x as i32 + dx, y as i32 + dy);
-                    if nx >= 0 && ny >= 0 && (nx as usize) < w && (ny as usize) < h
-                        && world.cells[ny as usize * w + nx as usize].terrain.is_water()
-                    {
-                        has_water = true;
-                        break 'adj;
-                    }
-                }
-            }
-            if has_water {
+            if has_adjacent_water(world, x, y, w, h) {
                 world.cells[idx].moisture += 0.01;
             }
         }
     }
+}
 
-    // 3. Vegetation: grow toward / decay toward the seasonal target.
+/// Step 3: vegetation grows toward, or decays toward, its seasonal target.
+fn step_vegetation(world: &mut World, ecology: &EcologyParams, season_cap: f32, season_regrowth: f32, w: usize, h: usize) {
     let seed_grid = seed_mask(world);
     for y in 0..h {
         for x in 0..w {
@@ -102,8 +156,10 @@ pub fn daily_update(
             world.cells[idx].vegetation = new_v;
         }
     }
+}
 
-    // 4. Evaporation for every cell, including water.
+/// Steps 4 and 5: evaporate, then clamp moisture and vegetation to 0..1.
+fn step_evaporate_clamp(world: &mut World, ecology: &EcologyParams, season_evap: f32) {
     for cell in &mut world.cells {
         cell.moisture -= ecology.evap_k * season_evap * cell.moisture;
     }
@@ -113,8 +169,18 @@ pub fn daily_update(
         cell.moisture = cell.moisture.clamp(0.0, 1.0);
         cell.vegetation = cell.vegetation.clamp(0.0, 1.0);
     }
+}
 
-    // 6. Drought detection per region (land-cell stored moisture, water excluded).
+/// Step 6: per-region drought detection on land-cell stored moisture.
+fn step_drought(
+    world: &World,
+    time: &Time,
+    events: &mut EventRing,
+    regions: &[RegionRect],
+    drought: &mut [bool; 8],
+    drought_days_below: &mut [u32; 8],
+    ecology: &EcologyParams,
+) {
     for ri in 0..regions.len() {
         let mean = region_land_moisture_mean(world, &regions[ri]);
         if drought[ri] {
@@ -134,22 +200,16 @@ pub fn daily_update(
             drought_days_below[ri] = 0;
         }
     }
+}
 
-    // 7. Water ⇄ sand.
+/// Step 7: dry or refill shallow water depending on regional moisture.
+fn step_water_sand(world: &mut World, regions: &[RegionRect], drought: [bool; 8], ecology: &EcologyParams, w: usize) {
     for ri in 0..regions.len() {
         let r = &regions[ri];
         let mean = region_land_moisture_mean(world, r);
         if drought[ri] && mean < ecology.water_dry_region_moisture {
             // Dry the lowest-moisture shallow water first (ties by row-major index).
-            let mut candidates: Vec<(usize, f32)> = Vec::new();
-            for y in r.2..r.4 {
-                for x in r.1..r.3 {
-                    let idx = y * w + x;
-                    if world.cells[idx].terrain == Terrain::ShallowWater {
-                        candidates.push((idx, world.cells[idx].moisture));
-                    }
-                }
-            }
+            let mut candidates = shallow_water_candidates(world, r, w);
             candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal).then(a.0.cmp(&b.0)));
             for (idx, _) in candidates.into_iter().take(ecology.water_changes_per_region_per_day) {
                 world.cells[idx].terrain = Terrain::Sand;
@@ -159,25 +219,13 @@ pub fn daily_update(
         }
         if mean > ecology.water_refill_region_moisture {
             // Refill dried-from cells in row-major order.
-            let mut done = 0usize;
-            'refill: for y in r.2..r.4 {
-                for x in r.1..r.3 {
-                    let idx = y * w + x;
-                    if world.cells[idx].dried_from == Some(Terrain::ShallowWater) {
-                        world.cells[idx].terrain = Terrain::ShallowWater;
-                        world.cells[idx].dried_from = None;
-                        world.cells[idx].vegetation = 0.0;
-                        done += 1;
-                        if done >= ecology.water_changes_per_region_per_day {
-                            break 'refill;
-                        }
-                    }
-                }
-            }
+            refill_dried_cells(world, r, w, ecology.water_changes_per_region_per_day);
         }
     }
+}
 
-    world.refresh_shore();
+/// Step 8: sprout new regrowth sites and retire ones that have recovered.
+fn step_regrowth_sites(world: &mut World, rng: &mut Rng, time: &Time, events: &mut EventRing, regions: &[RegionRect], ecology: &EcologyParams, w: usize, h: usize) {
 
     // 8. Regrowth sites.
     let mut note_emitted = [false; 8];
@@ -191,7 +239,7 @@ pub fn daily_update(
                 && !world.seeds.contains(&(x, y))
             {
                 world.seeds.push((x, y));
-                let ri = region_index(&regions, x, y);
+                let ri = region_index(regions, x, y);
                 if !note_emitted[ri] {
                     note_emitted[ri] = true;
                     events.push(region_event(time, EventKind::Note, &regions[ri], format!("A regrowth site sprouted in {}", regions[ri].0)));
@@ -205,8 +253,10 @@ pub fn daily_update(
         let max_v = ecology.max_vegetation.get(&c.terrain).copied().unwrap_or(0.0);
         c.vegetation < 0.8 * max_v
     });
+}
 
-    // 9. Series sample.
+/// Step 9: build the daily series sample.
+fn sample_series(world: &World, time: &Time, drought: [bool; 8], regions: &[RegionRect], c: &Census, deaths: &DeathTallies, disease: &crate::sim::disease::DiseaseState) -> Sample {
     let mut biomass_total = 0.0;
     let mut veg_sum = 0.0;
     let mut veg_count = 0usize;
@@ -223,10 +273,10 @@ pub fn daily_update(
             moist_sum += c.moisture;
         }
     }
-    let veg_mean = if veg_count > 0 { veg_sum / veg_count as f32 } else { 0.0 };
-    let moisture_mean = moist_sum / world.cells.len().max(1) as f32;
+    let veg_mean = if veg_count > 0 { veg_sum / crate::cast!(veg_count => f32) } else { 0.0 };
+    let moisture_mean = moist_sum / crate::cast!(world.cells.len().max(1) => f32);
     let water_level = if world.water_cells_at_generation > 0 {
-        water_cells as f32 / world.water_cells_at_generation as f32
+        crate::cast!(water_cells => f32) / crate::cast!(world.water_cells_at_generation => f32)
     } else {
         0.0
     };
@@ -236,8 +286,8 @@ pub fn daily_update(
         region_veg[ri] = region_land_veg_mean(world, r);
         region_moist[ri] = region_display_moisture_mean(world, r);
     }
-    series.push(Sample {
-        day: time.day_index() as u32,
+    Sample {
+        day: crate::cast!(time.day_index() => u32),
         biomass_total,
         veg_mean,
         water_cells,
@@ -247,7 +297,7 @@ pub fn daily_update(
         dens: world.dens.len(),
         carcasses: world.carcasses.len(),
         drought_regions: drought.iter().filter(|&&f| f).count(),
-        drought_flags: *drought,
+        drought_flags: drought,
         region_veg,
         region_moist,
         population: c.population,
@@ -266,9 +316,9 @@ pub fn daily_update(
         infected: c.infected,
         immune: c.immune,
         deaths_disease: deaths.disease,
-        parasite_mean: std::array::from_fn(|i| if c.population[i] > 0 { c.parasite_sum[i] / c.population[i] as f32 } else { 0.0 }),
+        parasite_mean: std::array::from_fn(|i| if c.population[i] > 0 { c.parasite_sum[i] / crate::cast!(c.population[i] => f32) } else { 0.0 }),
         active_by_pathogen: std::array::from_fn(|i| disease.stats[i].active),
-    });
+    }
 }
 
 fn region_event(time: &Time, kind: EventKind, r: &RegionRect, text: String) -> Event {
@@ -280,7 +330,7 @@ fn region_event(time: &Time, kind: EventKind, r: &RegionRect, text: String) -> E
         species: None,
         subject: None,
         text,
-        pos: Some(((r.1 + r.3) / 2, (r.2 + r.4) / 2)),
+        pos: Some(((r.1 + r.3).div_euclid(2), (r.2 + r.4).div_euclid(2))),
         detail: String::new(),
     }
 }
@@ -324,7 +374,7 @@ pub fn region_land_veg_mean(world: &World, r: &RegionRect) -> f32 {
             }
         }
     }
-    if n > 0 { sum / n as f32 } else { 0.0 }
+    if n > 0 { sum / crate::cast!(n => f32) } else { 0.0 }
 }
 
 /// Mean stored moisture over land cells (water excluded, rock included) — the
@@ -340,7 +390,7 @@ pub fn region_land_moisture_mean(world: &World, r: &RegionRect) -> f32 {
             }
         }
     }
-    if n > 0 { sum / n as f32 } else { 0.0 }
+    if n > 0 { sum / crate::cast!(n => f32) } else { 0.0 }
 }
 
 /// Mean moisture over all cells, water treated as 1.0 (the display convention).
@@ -354,11 +404,13 @@ pub fn region_display_moisture_mean(world: &World, r: &RegionRect) -> f32 {
             n += 1;
         }
     }
-    if n > 0 { sum / n as f32 } else { 0.0 }
+    if n > 0 { sum / crate::cast!(n => f32) } else { 0.0 }
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
+
     use super::*;
     use crate::sim::{Cell, Params, Sim};
 
@@ -410,7 +462,7 @@ mod tests {
                     .iter()
                     .filter(|c| !c.terrain.is_water())
                     .fold((0.0f32, 0usize), |(s, n), c| (s + c.moisture, n + 1));
-                s / n as f32
+                s / crate::cast!(n => f32)
             })
             .collect();
         assert!(means[0] < means[1], "dry {} not < normal {}", means[0], means[1]);
@@ -542,7 +594,7 @@ mod tests {
         assert!(!droughts.is_empty());
         for e in droughts {
             let pos = e.pos.expect("drought event should carry a position");
-            let is_centre = sim.world.regions.iter().any(|r| ((r.1 + r.3) / 2, (r.2 + r.4) / 2) == pos);
+            let is_centre = sim.world.regions.iter().any(|r| ((r.1 + r.3).div_euclid(2), (r.2 + r.4).div_euclid(2)) == pos);
             assert!(is_centre, "pos {pos:?} is not a region centre");
         }
     }

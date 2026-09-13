@@ -104,7 +104,7 @@ pub const PLUS_MINUS: char = '±';
 
 /// Pick a shade glyph for `t` in 0..=1 (0 = empty, 1 = full block).
 pub fn shade(t: f32) -> char {
-    let i = (t.clamp(0.0, 1.0) * 4.0).round() as usize;
+    let i = crate::cast!((t.clamp(0.0, 1.0) * 4.0).round() => usize);
     SHADES[i.min(4)]
 }
 
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn all_glyphs_are_cp437() {
         for &c in ALL {
-            assert!(is_cp437(c), "{c:?} (U+{:04X}) is not in CP437", c as u32);
+            assert!(is_cp437(c), "{c:?} (U+{:04X}) is not in CP437", crate::cast!(c => u32));
             assert_eq!(c.width(), Some(1), "{c:?} is not one cell wide");
         }
         for s in [PAUSE_STR, FAST_STR, STEP_STR] {

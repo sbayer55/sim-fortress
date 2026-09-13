@@ -109,11 +109,13 @@ fn confirm_modal_keys() {
 fn options_persist() {
     let dir = tmpdir("options");
     let path = dir.join("ui.toml");
-    let mut ui = UiParams::default();
-    ui.autosave_days = 7;
-    ui.day_night_tint = false;
-    ui.log_births = true;
-    ui.pause_on_follow_death = false;
+    let ui = UiParams {
+        autosave_days: 7,
+        day_night_tint: false,
+        log_births: true,
+        pause_on_follow_death: false,
+        ..UiParams::default()
+    };
     save_ui_to(&path, &ui).unwrap();
     assert_eq!(load_ui_from(&path).unwrap(), ui);
 }

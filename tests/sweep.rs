@@ -2,6 +2,11 @@
 //! at least 14 seeds (aligned with C5's seed-42 criterion). Slow — run in release:
 //! `cargo test --release --test sweep -- --ignored`.
 
+// Test crate: a separate compilation root, so it does not inherit the allow
+// list in `src/lib.rs`. The indexing follows the same checked pattern as the
+// library.
+#![allow(clippy::indexing_slicing)]
+
 use sim_fortress::sim::{Params, Sim, SpeciesId};
 
 const TEN_YEARS: u64 = 10 * 360 * 24;

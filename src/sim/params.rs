@@ -1,7 +1,7 @@
 //! All simulation tunables, serializable to/from TOML.
 //!
 //! `Params::from_toml` accepts a *partial* table: missing fields and sections
-//! deep-merge over `Default`. Unknown keys are an error (deny_unknown_fields).
+//! deep-merge over `Default`. Unknown keys are an error (`deny_unknown_fields`).
 
 use std::collections::BTreeMap;
 
@@ -27,7 +27,7 @@ pub enum Difficulty {
     Hard,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct WorldParams {
     pub width: usize,
@@ -40,7 +40,7 @@ pub struct WorldParams {
 
 impl Default for WorldParams {
     fn default() -> Self {
-        WorldParams {
+        Self {
             width: 150,
             height: 40,
             water_pct: 20,
@@ -51,7 +51,7 @@ impl Default for WorldParams {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct TimeParams {
     pub season_days: u32,
@@ -63,7 +63,7 @@ pub struct TimeParams {
 
 impl Default for TimeParams {
     fn default() -> Self {
-        TimeParams { season_days: 90, ticks_per_day: 24, start_hour: 6, sunrise_hour: 6, sunset_hour: 20 }
+        Self { season_days: 90, ticks_per_day: 24, start_hour: 6, sunrise_hour: 6, sunset_hour: 20 }
     }
 }
 
@@ -79,7 +79,7 @@ pub struct ScarcityThresholds {
 
 impl Default for ScarcityThresholds {
     fn default() -> Self {
-        ScarcityThresholds {
+        Self {
             scarce: 0.365,
             strained: 0.40,
             plenty: 0.45,
@@ -108,7 +108,7 @@ pub struct UiParams {
 
 impl Default for UiParams {
     fn default() -> Self {
-        UiParams {
+        Self {
             speeds: vec![1, 2, 5, 10, 25],
             base_ticks_per_second: 2.0,
             auto_pause_on_extinction: true,
@@ -122,7 +122,7 @@ impl Default for UiParams {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct EventsParams {
     pub capacity: usize,
@@ -130,11 +130,11 @@ pub struct EventsParams {
 
 impl Default for EventsParams {
     fn default() -> Self {
-        EventsParams { capacity: 5000 }
+        Self { capacity: 5000 }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct StatsParams {
     pub series_days: usize,
@@ -142,7 +142,7 @@ pub struct StatsParams {
 
 impl Default for StatsParams {
     fn default() -> Self {
-        StatsParams { series_days: 720 }
+        Self { series_days: 720 }
     }
 }
 
@@ -180,7 +180,7 @@ pub struct CreaturesParams {
 
 impl Default for CreaturesParams {
     fn default() -> Self {
-        CreaturesParams {
+        Self {
             initial_counts: counts([240, 180, 90, 8, 6, 4]),
             adult_age_days: counts([30, 60, 180, 90, 120, 120]),
             hunger_base: 0.004,
@@ -271,7 +271,7 @@ pub struct PredationParams {
     pub carcass_nutrition: f32,
     pub scavenge_hours: u32,
     pub scavenge_consumes_decay: f32,
-    /// easy | normal | hard — stored here, given meaning in C6 (never mutates kill_base).
+    /// easy | normal | hard — stored here, given meaning in C6 (never mutates `kill_base`).
     pub difficulty: Difficulty,
     /// Per-predator prey preference shares (preference 0 = never targeted).
     pub prey_preference: BTreeMap<SpeciesId, BTreeMap<SpeciesId, f32>>,
@@ -291,9 +291,9 @@ pub struct PredationParams {
 
 impl Default for PredationParams {
     fn default() -> Self {
-        use Terrain::*;
+        use Terrain::{Forest, GrassDense, Grass, GrassSparse, Dirt, Sand, ShallowWater};
         let prey = |vals: [(SpeciesId, f32); 3]| -> BTreeMap<SpeciesId, f32> { vals.into_iter().collect() };
-        PredationParams {
+        Self {
             detect_threshold: 0.8,
             cover_by_terrain: BTreeMap::from([
                 (Forest, 1.0),
@@ -380,7 +380,7 @@ impl PredationParams {
 
     /// `ceil(eat_hours_base + eat_hours_per_size × prey.size)` hours (ticks).
     pub fn eat_hours(&self, prey_size: f32) -> u32 {
-        (self.eat_hours_base + self.eat_hours_per_size * prey_size).ceil() as u32
+        crate::cast!((self.eat_hours_base + self.eat_hours_per_size * prey_size).ceil() => u32)
     }
 
     /// `hunger_per_kill_base + hunger_per_kill_per_size × prey.size`.
@@ -439,7 +439,7 @@ pub struct GeneticsParams {
 
 impl Default for GeneticsParams {
     fn default() -> Self {
-        GeneticsParams {
+        Self {
             mutation_rate: 0.04,
             mutation_strength: 0.06,
             mutation_notable: 0.10,
@@ -481,13 +481,13 @@ impl GeneticsParams {
     /// `1 + round(fertility × litter_max × maturity_factor(maturity, litter_span))`,
     /// floored at one pup so a slow, small litter is never empty.
     pub fn litter_size(&self, id: SpeciesId, fertility: f32, maturity: f32) -> u32 {
-        let factor = self.maturity_factor(maturity, self.maturity_litter_span);
-        (1 + (fertility * self.litter_max(id) * factor).round() as u32).max(1)
+        let factor = Self::maturity_factor(maturity, self.maturity_litter_span);
+        (1 + crate::cast!((fertility * self.litter_max(id) * factor).round() => u32)).max(1)
     }
 
     /// The shared maturity multiplier `1 + (maturity − 0.5) × 2 × span`:
     /// 1.0 at maturity 0.5, so the trait is balance-neutral where it starts.
-    pub fn maturity_factor(&self, maturity: f32, span: f32) -> f32 {
+    pub fn maturity_factor(maturity: f32, span: f32) -> f32 {
         1.0 + (maturity - 0.5) * 2.0 * span
     }
 }
@@ -516,7 +516,7 @@ pub struct SocialParams {
 
 impl Default for SocialParams {
     fn default() -> Self {
-        SocialParams {
+        Self {
             group_size_max: 12.0,
             cohesion_min: 0.30,
             graze_cohesion_w: 1.0,
@@ -539,7 +539,7 @@ impl SocialParams {
     /// herding (C8 FR2): social enough, not alone, and not over the dispersal
     /// threshold. One rule, shared by cohesion, the graze bias and the inspector.
     pub fn herding(&self, sociality: f32, kin_count: u8) -> bool {
-        sociality >= self.cohesion_min && kin_count > 0 && (kin_count as f32) <= 1.5 * self.preferred_group(sociality)
+        sociality >= self.cohesion_min && kin_count > 0 && f32::from(kin_count) <= 1.5 * self.preferred_group(sociality)
     }
 }
 
@@ -569,8 +569,8 @@ pub struct EcologyParams {
 
 impl Default for EcologyParams {
     fn default() -> Self {
-        use Terrain::*;
-        EcologyParams {
+        use Terrain::{Sand, Dirt, GrassSparse, Grass, GrassDense, Forest};
+        Self {
             regrowth_rate: 1.0,
             // C4 balance lever (C2 shipped 0.08); see docs/chunks/c4-evolution.md FR1.
             growth_k: 0.18,
@@ -625,7 +625,7 @@ impl Default for EcologyParams {
     }
 }
 
-/// One contagious pathogen of the roster (C7 FR2). Runtime strains (FR8b) are
+/// One contagious pathogen of the roster (C7 FR2). Runtime strains (`FR8b`) are
 /// copies of these records with a single host.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -650,7 +650,7 @@ pub struct PathogenParams {
 
 impl Default for PathogenParams {
     fn default() -> Self {
-        PathogenParams {
+        Self {
             name: String::new(),
             hosts: BTreeMap::new(),
             transmissibility: 0.01,
@@ -705,7 +705,7 @@ pub struct DiseaseParams {
     pub emergence_host_min: u32,
     /// A Recovery event is emitted only for cases at least this severe.
     pub recovery_notable_min_severity: f32,
-    /// Chance per infected meal that the pathogen mutates into the eater's species (FR8b).
+    /// Chance per infected meal that the pathogen mutates into the eater's species (`FR8b`).
     pub spillover_chance: f32,
     /// Strain parameters × N(1, jitter), clamped 0.25..2.
     pub spillover_jitter: f32,
@@ -744,7 +744,7 @@ pub struct DiseaseParams {
 impl Default for DiseaseParams {
     fn default() -> Self {
         let hosts = |vals: &[(SpeciesId, f32)]| -> BTreeMap<SpeciesId, f32> { vals.iter().copied().collect() };
-        DiseaseParams {
+        Self {
             enabled: true,
             resist_hunger_cost: 0.10,
             susceptibility_w: 1.2,
@@ -849,44 +849,8 @@ pub struct Params {
     pub social: SocialParams,
 }
 
-impl Params {
-    /// Parse a (possibly partial) TOML table, deep-merged over defaults.
-    pub fn from_toml(s: &str) -> Result<Self, toml::de::Error> {
-        toml::from_str(s)
-    }
-
-    pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
-        toml::to_string_pretty(self)
-    }
-
-    /// Deep-merge a partial TOML overlay onto `self` (C6 FR6). Unknown keys are
-    /// still rejected by `deny_unknown_fields`; missing keys keep their value.
-    pub fn apply_overlay(&mut self, s: &str) -> Result<(), String> {
-        let base = toml::Value::try_from(self.clone()).map_err(|e| e.to_string())?;
-        let overlay: toml::Value = toml::from_str(s).map_err(|e| e.to_string())?;
-        let merged = deep_merge(base, overlay);
-        *self = merged.try_into().map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    /// Dump the defaults as TOML with one `#` comment per leaf (C6 FR6).
-    pub fn dump_toml() -> String {
-        let default = Params::default();
-        let text = toml::to_string_pretty(&default).unwrap_or_default();
-        let mut doc: toml_edit::DocumentMut = match text.parse() {
-            Ok(d) => d,
-            Err(_) => return text,
-        };
-        for (path, comment) in Params::field_docs() {
-            attach_comment(&mut doc, path, comment);
-        }
-        doc.to_string()
-    }
-
-    /// `(path, doc)` for every leaf parameter (C6 FR6). One entry per struct
-    /// field that is not itself a nested `*Params` struct.
-    pub fn field_docs() -> &'static [(&'static str, &'static str)] {
-        &[
+/// `(path, doc)` for every leaf parameter (C6 FR6).
+const FIELD_DOCS: &[(&str, &str)] = &[
             // ---- world
             ("world.width", "World width in cells."),
             ("world.height", "World height in cells."),
@@ -1076,7 +1040,46 @@ impl Params {
             ("social.pack_kill_bonus", "Kill chance added per extra participant (max 3)."),
             ("social.pack_share", "Hunger relief a non-killer participant gets, as a share of a kill."),
             ("social.pack_share_cheb", "Chebyshev distance within which a hunter counts as a participant."),
-        ]
+        ];
+
+impl Params {
+    /// Parse a (possibly partial) TOML table, deep-merged over defaults.
+    pub fn from_toml(s: &str) -> Result<Self, toml::de::Error> {
+        toml::from_str(s)
+    }
+
+    pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
+        toml::to_string_pretty(self)
+    }
+
+    /// Deep-merge a partial TOML overlay onto `self` (C6 FR6). Unknown keys are
+    /// still rejected by `deny_unknown_fields`; missing keys keep their value.
+    pub fn apply_overlay(&mut self, s: &str) -> Result<(), String> {
+        let base = toml::Value::try_from(self.clone()).map_err(|e| e.to_string())?;
+        let overlay: toml::Value = toml::from_str(s).map_err(|e| e.to_string())?;
+        let merged = deep_merge(base, overlay);
+        *self = merged.try_into().map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Dump the defaults as TOML with one `#` comment per leaf (C6 FR6).
+    pub fn dump_toml() -> String {
+        let default = Self::default();
+        let text = toml::to_string_pretty(&default).unwrap_or_default();
+        let mut doc: toml_edit::DocumentMut = match text.parse() {
+            Ok(d) => d,
+            Err(_) => return text,
+        };
+        for (path, comment) in Self::field_docs() {
+            attach_comment(&mut doc, path, comment);
+        }
+        doc.to_string()
+    }
+
+    /// `(path, doc)` for every leaf parameter (C6 FR6). One entry per struct
+    /// field that is not itself a nested `*Params` struct.
+pub const fn field_docs() -> &'static [(&'static str, &'static str)] {
+        FIELD_DOCS
     }
 }
 
@@ -1164,7 +1167,9 @@ fn attach_comment(doc: &mut toml_edit::DocumentMut, path: &str, comment: &str) {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
+
     use super::*;
 
     #[test]
@@ -1237,13 +1242,13 @@ mod tests {
     #[test]
     fn maturity_factor_is_neutral_at_half() {
         let p = GeneticsParams::default();
-        assert_eq!(p.maturity_factor(0.5, p.maturity_age_span), 1.0);
-        assert_eq!(p.maturity_factor(0.5, p.maturity_lifespan_span), 1.0);
+        assert_eq!(GeneticsParams::maturity_factor(0.5, p.maturity_age_span), 1.0);
+        assert_eq!(GeneticsParams::maturity_factor(0.5, p.maturity_lifespan_span), 1.0);
         // Slow (high maturity) means later, larger, longer; fast means the reverse.
-        assert!(p.maturity_factor(0.98, p.maturity_age_span) > 1.0);
-        assert!(p.maturity_factor(0.02, p.maturity_age_span) < 1.0);
-        assert!(p.maturity_factor(0.98, p.maturity_litter_span) > 1.0);
-        assert!(p.maturity_factor(0.98, p.maturity_lifespan_span) > 1.0);
+        assert!(GeneticsParams::maturity_factor(0.98, p.maturity_age_span) > 1.0);
+        assert!(GeneticsParams::maturity_factor(0.02, p.maturity_age_span) < 1.0);
+        assert!(GeneticsParams::maturity_factor(0.98, p.maturity_litter_span) > 1.0);
+        assert!(GeneticsParams::maturity_factor(0.98, p.maturity_lifespan_span) > 1.0);
         // Litter never drops below one, however fast the life history.
         assert_eq!(p.litter_size(SpeciesId::Deer, 0.0, 0.02), 1);
     }
@@ -1259,7 +1264,7 @@ mod tests {
     #[test]
     fn field_docs_complete() {
         let value = toml::Value::try_from(Params::default()).unwrap();
-        let docs: std::collections::BTreeMap<&str, &str> = Params::field_docs().iter().copied().collect();
+        let docs: BTreeMap<&str, &str> = Params::field_docs().iter().copied().collect();
         let map_fields: &[&str] = &[
             "creatures.initial_counts",
             "creatures.adult_age_days",

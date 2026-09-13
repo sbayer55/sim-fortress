@@ -6,6 +6,7 @@ use crate::sim::world::World;
 
 /// Compressed-row layout: `entries` holds `(id, x, y)` grouped by cell in
 /// row-major cell order (ids ascending within a cell); `cell_start[i]..cell_start[i+1]`
+///
 /// is cell `i`'s slice. A row's `[x0, x1)` span is therefore one contiguous slice.
 #[derive(Clone, Debug, Default)]
 pub struct SpatialIndex {
@@ -17,7 +18,7 @@ pub struct SpatialIndex {
 
 impl SpatialIndex {
     pub fn new(world: &World) -> Self {
-        SpatialIndex {
+        Self {
             entries: Vec::new(),
             cell_start: vec![0; world.width * world.height + 1],
             width: world.width,
@@ -51,13 +52,13 @@ impl SpatialIndex {
         for c in store.living() {
             let idx = c.y * world.width + c.x;
             if idx < cells {
-                let at = cursor[idx] as usize;
+                let at = crate::cast!(cursor[idx] => usize);
                 self.entries[at] = (c.id, c.x, c.y);
                 cursor[idx] += 1;
             }
         }
         for i in 0..cells {
-            let (a, b) = (self.cell_start[i] as usize, self.cell_start[i + 1] as usize);
+            let (a, b) = (crate::cast!(self.cell_start[i] => usize), crate::cast!(self.cell_start[i + 1] => usize));
             if b - a > 1 {
                 self.entries[a..b].sort_unstable();
             }
@@ -66,8 +67,8 @@ impl SpatialIndex {
 
     /// The entries of row `y` for cells `[x0, x1)`.
     fn row_span(&self, y: usize, x0: usize, x1: usize) -> &[(CreatureId, usize, usize)] {
-        let a = self.cell_start[y * self.width + x0] as usize;
-        let b = self.cell_start[y * self.width + x1] as usize;
+        let a = crate::cast!(self.cell_start[y * self.width + x0] => usize);
+        let b = crate::cast!(self.cell_start[y * self.width + x1] => usize);
         &self.entries[a..b]
     }
 
@@ -104,23 +105,23 @@ impl SpatialIndex {
     /// a cell). Used by the hot perception/threat queries where order is not
     /// significant (C6 FR9).
     pub fn for_each_within(&self, cx: usize, cy: usize, r: u16, mut f: impl FnMut(CreatureId, usize, usize)) {
-        let r = r as i64;
-        let cx = cx as i64;
-        let cy = cy as i64;
+        let r = i64::from(r);
+        let cx = crate::cast!(cx => i64);
+        let cy = crate::cast!(cy => i64);
         let y0 = (cy - r).max(0);
-        let y1 = (cy + r + 1).min(self.height as i64).max(0);
-        let r2 = (r * r) as f32;
+        let y1 = (cy + r + 1).min(crate::cast!(self.height => i64)).max(0);
+        let r2 = crate::cast!((r * r) => f32);
         for y in y0..y1 {
-            let dy = (y - cy) as f32;
+            let dy = crate::cast!((y - cy) => f32);
             // (dx/2)² + dy² ≤ r²  →  |dx| ≤ 2·sqrt(r² − dy²)
             let half = 2.0 * (r2 - dy * dy).max(0.0).sqrt();
-            let x0 = ((cx as f32 - half).ceil() as i64).max(0) as usize;
-            let x1 = ((cx as f32 + half).floor() as i64 + 1).min(self.width as i64).max(0) as usize;
+            let x0 = crate::cast!((crate::cast!((crate::cast!(cx => f32) - half).ceil() => i64)).max(0) => usize);
+            let x1 = crate::cast!((crate::cast!((crate::cast!(cx => f32) + half).floor() => i64) + 1).min(crate::cast!(self.width => i64)).max(0) => usize);
             if x0 >= x1 {
                 continue;
             }
-            for &(id, px, py) in self.row_span(y as usize, x0, x1) {
-                if geom::dist(cx as usize, cy as usize, px, py) <= r as f32 {
+            for &(id, px, py) in self.row_span(crate::cast!(y => usize), x0, x1) {
+                if geom::dist(crate::cast!(cx => usize), crate::cast!(cy => usize), px, py) <= crate::cast!(r => f32) {
                     f(id, px, py);
                 }
             }
@@ -157,7 +158,7 @@ mod tests {
             let got = idx.within(cx, cy, r);
             let mut want: Vec<CreatureId> = store
                 .living()
-                .filter(|c| crate::sim::geom::dist(cx, cy, c.x, c.y) <= r as f32)
+                .filter(|c| geom::dist(cx, cy, c.x, c.y) <= f32::from(r))
                 .map(|c| c.id)
                 .collect();
             want.sort_unstable();

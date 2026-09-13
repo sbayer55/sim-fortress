@@ -1,5 +1,6 @@
 //! S03: the live creature inspector (S03a prey / S03c corpse; S03b predator is
 //! placeholder until C5). Mirrors the three-column layout with live
+//!
 //! data; C4 adds family names, offspring forecast, kin, legacy and timeline.
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
@@ -23,13 +24,14 @@ use crate::{glyphs, theme};
 const LEFT_W: u16 = 52;
 const MID_W: u16 = 52;
 
+#[derive(Debug)]
 pub struct Inspector {
     pub id: CreatureId,
 }
 
 impl Inspector {
-    pub fn new(id: CreatureId) -> Self {
-        Inspector { id }
+    pub const fn new(id: CreatureId) -> Self {
+        Self { id }
     }
 }
 
@@ -61,7 +63,7 @@ impl Screen for Inspector {
         }
     }
 
-    fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
+    fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let Some(sim) = &app.sim else { return };
         let Some(c) = sim.creatures.get(self.id) else { return };
         let status_row = area.y + area.height - 1;
@@ -93,8 +95,8 @@ fn species_style(id: SpeciesId) -> Style {
     Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)
 }
 
-fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
-    let sim = app.sim.as_ref().unwrap();
+fn identity(f: &mut Frame<'_>, area: Rect, app: &AppState, c: &Creature) {
+    let Some(sim) = app.sim.as_ref() else { return };
     let title = if c.alive { "Identity & Vitals" } else { "Identity & Death" };
     let inner = panel::draw(f, area, title, panel::Kind::Outer);
     let mut row = 0u16;
@@ -121,26 +123,33 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
     util::line(f, inner, row, Line::from(vec![
         sp("   ", theme::text()),
         sp(c.species.name(), species_style(c.species)),
-        sp(format!("  {} {}", sex_g, sex_name), theme::text()),
+        sp(format!("  {sex_g} {sex_name}"), theme::text()),
         sp(format!("  {}", if c.adult { "adult" } else { "juvenile" }), theme::text()),
         sp(format!("  diet: {}", c.species.diet()), theme::dim_text()),
     ]));
     row += 2;
 
     // Age bar (live: age from born_day, max from genome).
-    let age = c.age_days(sim.time.day_index());
     let max_age = c.max_age_days(&sim.params.creatures, &sim.params.genetics);
-    let age_t = age as f32 / max_age.max(1) as f32;
-    let age_color = if !c.alive { theme::DIM } else { bars::vital_color(1.0 - age_t * 0.8, false) };
+    let age = c.age_days(sim.time.day_index());
+    let age_t = crate::cast!(age => f32) / crate::cast!(max_age.max(1) => f32);
+    let age_color = if c.alive { bars::vital_color(1.0 - age_t * 0.8, false) } else { theme::DIM };
     bars::labeled(f.buffer_mut(), inner, row, " age", age_t, age_color, 6, 20);
     f.buffer_mut().set_stringn(inner.x + 34, inner.y + row, format!("{age} / {max_age} days"), 16, theme::dim_text());
     row += 1;
     util::line(f, inner, row, Line::from(vec![
-        sp(format!("       {:.1} years old", age as f32 / 360.0), theme::dim_text()),
+        sp(format!("       {:.1} years old", crate::cast!(age => f32) / 360.0), theme::dim_text()),
         sp(format!("   generation {}", c.generation), theme::text()),
     ]));
     row += 2;
 
+    row = identity_family(f, inner, row, sim, c);
+    row = identity_location(f, inner, row, sim, c);
+    identity_state(f, inner, row, sim, c);
+    identity_timeline(f, inner, row, sim, c);
+}
+/// The identity panel's family rows.
+fn identity_family(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
     panel::section(f, inner, row, "Family");
     row += 1;
     let (mother, father) = match c.parents {
@@ -149,7 +158,7 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
     };
     util::line(f, inner, row, Line::from(vec![
         sp(" mother  ", theme::dim_text()),
-        sp(format!("{:<18}", mother), theme::text()),
+        sp(format!("{mother:<18}"), theme::text()),
         sp(" father  ", theme::dim_text()),
         sp(father, theme::text()),
     ]));
@@ -162,7 +171,11 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
         sp(format!("    {} lineage: [l]", glyphs::NOTE), theme::dim_text()),
     ]));
     row += 2;
+    row
+}
 
+/// The identity panel's location block.
+fn identity_location(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
     panel::section(f, inner, row, "Location");
     row += 1;
     let cell = sim.world.cell(c.x, c.y);
@@ -170,7 +183,7 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
     util::line(f, inner, row, Line::from(vec![
         sp(format!(" ({}, {})  ", c.x, c.y), theme::text()),
         sp(sim.world.region_name(c.x, c.y), theme::title()),
-        sp(format!("   {} ", tg), Style::default().fg(tfg).bg(theme::PANEL_BG)),
+        sp(format!("   {tg} "), Style::default().fg(tfg).bg(theme::PANEL_BG)),
         sp(cell.terrain.name(), theme::dim_text()),
     ]));
     row += 1;
@@ -195,121 +208,140 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
         row += 1;
     }
     row += 1;
+    row
+}
 
+/// Vitals, condition and behaviour (living) or the death summary (dead).
+fn identity_state(f: &mut Frame<'_>, inner: Rect, row: u16, sim: &crate::sim::Sim, c: &Creature) {
     if c.alive {
-        panel::section(f, inner, row, "Vitals");
-        row += 1;
-        for (label, v, inv) in [("health", c.hp, false), ("hunger", c.hunger, true), ("thirst", c.thirst, true), ("energy", c.energy, false)] {
-            bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", label), v, bars::vital_color(v, inv), 9, 24);
-            row += 1;
-        }
-        // C7: sickness, immunity and parasite load.
-        let today = sim.time.day_index() as u32;
-        let sick_style = Style::default().fg(theme::SICK).bg(theme::PANEL_BG);
-        let sickness = match c.infection {
-            Some(i) if i.stage == Stage::Infectious => {
-                let n = today.saturating_sub(i.since_day) + 1;
-                let m = i.ends_day.saturating_sub(i.since_day);
-                sp(format!("{} {} infectious day {}/~{} sev .{:02}", glyphs::DISEASE, sim.disease.name(i.pathogen), n, m, (i.severity * 100.0).round() as u32 % 100), sick_style)
-            }
-            Some(i) => sp(format!("{} {} incubating (shows in {} days)", glyphs::DISEASE, sim.disease.name(i.pathogen), i.ends_day.saturating_sub(today)), sick_style),
-            None => sp("healthy", theme::dim_text()),
-        };
-        util::line(f, inner, row, Line::from(vec![sp(format!("{:<9}", " sickness"), theme::text()), sickness]));
-        row += 1;
-        let immune: Vec<String> = c
-            .immune_until
-            .iter()
-            .enumerate()
-            .filter(|(_, &until)| until > today)
-            .map(|(slot, &until)| {
-                let name = sim.disease.name(PathogenId(slot as u8));
-                if until == u32::MAX { format!("{name} (for life)") } else { name.to_string() }
-            })
-            .collect();
-        let immune_span = if immune.is_empty() {
-            sp("none", theme::dim_text())
-        } else {
-            sp(format!("{} {}", glyphs::IMMUNE, immune.join(", ")), Style::default().fg(theme::IMMUNE).bg(theme::PANEL_BG))
-        };
-        util::line(f, inner, row, Line::from(vec![sp(format!("{:<9}", " immune"), theme::text()), immune_span]));
-        row += 1;
-        let load = c.parasite_load;
-        bars::labeled(f.buffer_mut(), inner, row, &format!(" {} parasites", glyphs::PARASITE), load, theme::WARN, 12, 24);
-        let note = if load < 0.2 { "light" } else if load < 0.5 { "heavy" } else { "severe" };
-        f.buffer_mut().set_stringn(inner.x + 44, inner.y + row, note, 6, Style::default().fg(bars::vital_color(load, true)).bg(theme::PANEL_BG));
-        row += 2;
-        panel::section(f, inner, row, "Condition");
-        row += 1;
-        bars::labeled(f.buffer_mut(), inner, row, " predation risk", c.predation_risk, bars::vital_color(c.predation_risk, true), 17, 16);
-        row += 1;
-        let contagion = contagion_risk(sim, c);
-        bars::labeled(f.buffer_mut(), inner, row, " contagion risk", contagion, bars::vital_color(contagion, true), 17, 16);
-        row += 1;
-        // Local forage: mean vegetation within 3 cells.
-        let forage = local_forage(sim, c.x, c.y);
-        bars::labeled(f.buffer_mut(), inner, row, " local forage", forage, theme::VEGETATION, 17, 16);
-        row += 1;
-        util::line(f, inner, row, Line::from(vec![sp(" nearest water", theme::dim_text()), sp(" —", theme::text()), sp("   nearest den", theme::dim_text()), sp(" —", theme::text())]));
-        row += 2;
-
-        panel::section(f, inner, row, "Behaviour");
-        row += 1;
-        if crate::sim::disease::is_infectious(c) {
-            util::line(f, inner, row, Line::from(vec![
-                sp(format!(" {} ", glyphs::ALERT), Style::default().fg(theme::SICK).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-                sp("sick — resting more, no mating", Style::default().fg(theme::SICK).bg(theme::PANEL_BG)),
-            ]));
-            row += 1;
-        }
-        let line = match c.goal {
-            Goal::Drink => format!(" {} because thirst = {:.2}", c.goal.label(false), c.thirst),
-            Goal::Graze => format!(" {} because hunger = {:.2}", c.goal.label(false), c.hunger),
-            Goal::Rest => format!(" {} because energy = {:.2}", c.goal.label(false), c.energy),
-            Goal::Mate => match c.mate_id {
-                Some(m) => format!(" {} — heading for {}", c.goal.label(false), kin_name(sim, m)),
-                None => format!(" {}", c.goal.label(false)),
-            },
-            _ => {
-                if !c.adult && c.mother.is_some_and(|m| sim.creatures.get(m).is_some_and(|m| m.alive)) && c.age_days(sim.time.day_index()) < sim.params.genetics.follow_mother_days {
-                    " wandering near its mother".to_string()
-                } else {
-                    format!(" {}", c.goal.label(false))
-                }
-            }
-        };
-        util::line(f, inner, row, Line::from(sp(line, theme::text())));
+        identity_vitals(f, inner, row, sim, c);
     } else {
-        panel::section(f, inner, row, "Death");
-        row += 1;
-        let cause = c.death.map(|d| d.cause.label()).unwrap_or("unknown");
-        let cause = match c.died_infected {
-            Some(p) => format!("{} ({})", cause, sim.disease.name(p)),
-            None => cause.to_string(),
-        };
         let age = c.age_days(sim.time.day_index());
-        util::line(f, inner, row, Line::from(vec![
-            sp(format!(" {} ", glyphs::DEATH), Style::default().fg(theme::BAD).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-            sp(cause, theme::text()),
-        ]));
-        row += 1;
-        util::line(f, inner, row, Line::from(vec![
-            sp(format!("   lived {age} of {max_age} days ({}% of lifespan)", (age_t * 100.0).round() as u32), theme::dim_text()),
-        ]));
-        row += 2;
-        bars::labeled(f.buffer_mut(), inner, row, " decay", c.decay, theme::CARCASS, 12, 24);
-        row += 1;
-        let nutrition = 1.0 - c.decay;
-        let kg = (c.genome.size() * 120.0 * nutrition).round() as u32;
-        let gone_in = ((1.0 - c.decay) * sim.params.creatures.carcass_decay_days as f32).ceil() as u32;
-        util::line(f, inner, row, Line::from(vec![
-            sp(format!("   {kg} kg of meat remaining; gone in ~{gone_in} days"), theme::dim_text()),
-        ]));
-        row += 2;
-        row = killer_and_scavengers(f, inner, row, sim, c);
+        let max_age = c.max_age_days(&sim.params.creatures, &sim.params.genetics);
+        let age_t = crate::cast!(age => f32) / crate::cast!(max_age.max(1) => f32);
+        identity_death(f, inner, row, sim, c, age, max_age, age_t);
     }
+}
+/// Vitals, condition and behaviour for a living creature.
+fn identity_vitals(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) {
+
+    panel::section(f, inner, row, "Vitals");
+    row += 1;
+    for (label, v, inv) in [("health", c.hp, false), ("hunger", c.hunger, true), ("thirst", c.thirst, true), ("energy", c.energy, false)] {
+        bars::labeled(f.buffer_mut(), inner, row, &format!(" {label}"), v, bars::vital_color(v, inv), 9, 24);
+        row += 1;
+    }
+    // C7: sickness, immunity and parasite load.
+    let today = crate::cast!(sim.time.day_index() => u32);
+    let sick_style = Style::default().fg(theme::SICK).bg(theme::PANEL_BG);
+    let sickness = match c.infection {
+        Some(i) if i.stage == Stage::Infectious => {
+            let n = today.saturating_sub(i.since_day) + 1;
+            let m = i.ends_day.saturating_sub(i.since_day);
+            sp(format!("{} {} infectious day {}/~{} sev .{:02}", glyphs::DISEASE, sim.disease.name(i.pathogen), n, m, crate::cast!((i.severity * 100.0).round() => u32) % 100), sick_style)
+        }
+        Some(i) => sp(format!("{} {} incubating (shows in {} days)", glyphs::DISEASE, sim.disease.name(i.pathogen), i.ends_day.saturating_sub(today)), sick_style),
+        None => sp("healthy", theme::dim_text()),
+    };
+    util::line(f, inner, row, Line::from(vec![sp(format!("{:<9}", " sickness"), theme::text()), sickness]));
+    row += 1;
+    let immune: Vec<String> = c
+        .immune_until
+        .iter()
+        .enumerate()
+        .filter(|(_, &until)| until > today)
+        .map(|(slot, &until)| {
+            let name = sim.disease.name(PathogenId(crate::cast!(slot => u8)));
+            if until == u32::MAX { format!("{name} (for life)") } else { name.to_string() }
+        })
+        .collect();
+    let immune_span = if immune.is_empty() {
+        sp("none", theme::dim_text())
+    } else {
+        sp(format!("{} {}", glyphs::IMMUNE, immune.join(", ")), Style::default().fg(theme::IMMUNE).bg(theme::PANEL_BG))
+    };
+    util::line(f, inner, row, Line::from(vec![sp(format!("{:<9}", " immune"), theme::text()), immune_span]));
+    row += 1;
+    let load = c.parasite_load;
+    bars::labeled(f.buffer_mut(), inner, row, &format!(" {} parasites", glyphs::PARASITE), load, theme::WARN, 12, 24);
+    let note = if load < 0.2 { "light" } else if load < 0.5 { "heavy" } else { "severe" };
+    f.buffer_mut().set_stringn(inner.x + 44, inner.y + row, note, 6, Style::default().fg(bars::vital_color(load, true)).bg(theme::PANEL_BG));
+    row += 2;
+    panel::section(f, inner, row, "Condition");
+    row += 1;
+    bars::labeled(f.buffer_mut(), inner, row, " predation risk", c.predation_risk, bars::vital_color(c.predation_risk, true), 17, 16);
+    row += 1;
+    let contagion = contagion_risk(sim, c);
+    bars::labeled(f.buffer_mut(), inner, row, " contagion risk", contagion, bars::vital_color(contagion, true), 17, 16);
+    row += 1;
+    // Local forage: mean vegetation within 3 cells.
+    let forage = local_forage(sim, c.x, c.y);
+    bars::labeled(f.buffer_mut(), inner, row, " local forage", forage, theme::VEGETATION, 17, 16);
+    row += 1;
+    util::line(f, inner, row, Line::from(vec![sp(" nearest water", theme::dim_text()), sp(" —", theme::text()), sp("   nearest den", theme::dim_text()), sp(" —", theme::text())]));
     row += 2;
 
+    panel::section(f, inner, row, "Behaviour");
+    row += 1;
+    if crate::sim::disease::is_infectious(c) {
+        util::line(f, inner, row, Line::from(vec![
+            sp(format!(" {} ", glyphs::ALERT), Style::default().fg(theme::SICK).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp("sick — resting more, no mating", Style::default().fg(theme::SICK).bg(theme::PANEL_BG)),
+        ]));
+        row += 1;
+    }
+    let line = match c.goal {
+        Goal::Drink => format!(" {} because thirst = {:.2}", c.goal.label(false), c.thirst),
+        Goal::Graze => format!(" {} because hunger = {:.2}", c.goal.label(false), c.hunger),
+        Goal::Rest => format!(" {} because energy = {:.2}", c.goal.label(false), c.energy),
+        Goal::Mate => match c.mate_id {
+            Some(m) => format!(" {} — heading for {}", c.goal.label(false), kin_name(sim, m)),
+            None => format!(" {}", c.goal.label(false)),
+        },
+        _ => {
+            if !c.adult && c.mother.is_some_and(|m| sim.creatures.get(m).is_some_and(|m| m.alive)) && c.age_days(sim.time.day_index()) < sim.params.genetics.follow_mother_days {
+                " wandering near its mother".to_string()
+            } else {
+                format!(" {}", c.goal.label(false))
+            }
+        }
+    };
+    util::line(f, inner, row, Line::from(sp(line, theme::text())));
+}
+
+/// The death summary for a dead creature.
+#[allow(clippy::too_many_arguments)]
+fn identity_death(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature, age: u32, max_age: u32, age_t: f32) {
+
+    panel::section(f, inner, row, "Death");
+    row += 1;
+    let cause = c.death.map_or("unknown", |d| d.cause.label());
+    let cause = match c.died_infected {
+        Some(p) => format!("{} ({})", cause, sim.disease.name(p)),
+        None => cause.to_string(),
+    };
+    util::line(f, inner, row, Line::from(vec![
+        sp(format!(" {} ", glyphs::DEATH), Style::default().fg(theme::BAD).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+        sp(cause, theme::text()),
+    ]));
+    row += 1;
+    util::line(f, inner, row, Line::from(vec![
+        sp(format!("   lived {age} of {max_age} days ({}% of lifespan)", crate::cast!((age_t * 100.0).round() => u32)), theme::dim_text()),
+    ]));
+    row += 2;
+    bars::labeled(f.buffer_mut(), inner, row, " decay", c.decay, theme::CARCASS, 12, 24);
+    row += 1;
+    let nutrition = 1.0 - c.decay;
+    let kg = crate::cast!((c.genome.size() * 120.0 * nutrition).round() => u32);
+    let gone_in = crate::cast!(((1.0 - c.decay) * crate::cast!(sim.params.creatures.carcass_decay_days => f32)).ceil() => u32);
+    util::line(f, inner, row, Line::from(vec![
+        sp(format!("   {kg} kg of meat remaining; gone in ~{gone_in} days"), theme::dim_text()),
+    ]));
+    row += 2;
+    killer_and_scavengers(f, inner, row, sim, c);
+}
+
+fn identity_timeline(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) {
     // Timeline (C4 FR10): born, adult, each litter, death.
     panel::section(f, inner, row, "Timeline");
     row += 1;
@@ -319,8 +351,8 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
         Some((m, fa)) => format!("born to {} and {}", kin_name(sim, m), kin_name(sim, fa)),
         None => "placed as a founder".to_string(),
     };
-    events.push((glyphs::BIRTH, theme::GOOD, c.born_day as i64, born_text));
-    let adult_day = c.born_day as i64 + adult_age_days(c.species, &c.genome, &sim.params.creatures, &sim.params.genetics) as i64;
+    events.push((glyphs::BIRTH, theme::GOOD, i64::from(c.born_day), born_text));
+    let adult_day = i64::from(c.born_day) + i64::from(adult_age_days(c.species, &c.genome, &sim.params.creatures, &sim.params.genetics));
     if c.adult && adult_day >= 0 {
         events.push((glyphs::UP, theme::INFO, adult_day, "reached adulthood".to_string()));
     }
@@ -328,7 +360,7 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
         let mut litters: Vec<(i64, usize)> = Vec::new();
         for k in &node.children {
             if let Some(kn) = sim.lineage.get(*k) {
-                let d = kn.born_day as i64;
+                let d = i64::from(kn.born_day);
                 match litters.iter_mut().find(|l| l.0 == d) {
                     Some(l) => l.1 += 1,
                     None => litters.push((d, 1)),
@@ -340,25 +372,25 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
         }
     }
     if let Some(i) = c.infection {
-        events.push((glyphs::DISEASE, theme::SICK, i.since_day as i64, format!("fell ill with {}", sim.disease.name(i.pathogen))));
+        events.push((glyphs::DISEASE, theme::SICK, i64::from(i.since_day), format!("fell ill with {}", sim.disease.name(i.pathogen))));
     }
     if c.infections_survived > 0 {
         let n = c.infections_survived;
-        let when = c.death.map(|d| d.day as i64).unwrap_or(sim.time.day_index() as i64);
+        let when = c.death.map_or_else(|| crate::cast!(sim.time.day_index() => i64), |d| i64::from(d.day));
         events.push((glyphs::IMMUNE, theme::IMMUNE, when, format!("recovered {} time{}", n, if n == 1 { "" } else { "s" })));
     }
     if let Some(d) = c.death {
-        events.push((glyphs::DEATH, theme::BAD, d.day as i64, format!("died of {}", d.cause.label())));
+        events.push((glyphs::DEATH, theme::BAD, i64::from(d.day), format!("died of {}", d.cause.label())));
     }
     events.sort_by_key(|e| e.2);
-    let max_rows = inner.height.saturating_sub(row) as usize;
+    let max_rows = crate::cast!(inner.height.saturating_sub(row) => usize);
     let skip = events.len().saturating_sub(max_rows);
     for (g, color, d, text) in events.into_iter().skip(skip) {
         if row >= inner.height {
             break;
         }
         util::line(f, inner, row, Line::from(vec![
-            sp(format!(" {} ", g), Style::default().fg(color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!(" {g} "), Style::default().fg(color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
             sp(format!("{:<9} ", day_stamp(d, season_days)), theme::dim_text()),
             sp(text, theme::text()),
         ]));
@@ -369,7 +401,7 @@ fn identity(f: &mut Frame, area: Rect, app: &AppState, c: &Creature) {
 /// `Name tag` for a relative, from the store or the lineage.
 /// S03c (Identity & Death panel): the killer from
 /// `death.killer` and the two nearest living predators with the Scavenge goal.
-pub(crate) fn killer_and_scavengers(f: &mut Frame, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
+pub(crate) fn killer_and_scavengers(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
     // C7 (S03c): a disease death names its outbreak instead of a killer.
     let outbreak_index = if c.death.is_some_and(|d| d.cause == Cause::Disease) {
         sim.lineage.get(c.id).and_then(|n| n.outbreak).or_else(|| c.infection.map(|i| i.outbreak))
@@ -379,8 +411,8 @@ pub(crate) fn killer_and_scavengers(f: &mut Frame, inner: Rect, mut row: u16, si
     if let Some(o) = outbreak_index.and_then(|i| sim.disease.outbreak(i)) {
         panel::section(f, inner, row, "Outbreak");
         row += 1;
-        let year = o.started_day / (4 * sim.time.season_days).max(1) + 1;
-        let region = sim.world.regions.get(o.origin_region as usize).map(|r| r.0.as_str()).unwrap_or("?");
+        let year = o.started_day.div_euclid((4 * sim.time.season_days).max(1)) + 1;
+        let region = sim.world.regions.get(crate::cast!(o.origin_region => usize)).map_or("?", |r| r.0.as_str());
         util::line(f, inner, row, Line::from(vec![
             sp(format!(" {} ", glyphs::DISEASE), Style::default().fg(theme::SICK).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
             sp(format!("{} outbreak of Year {}, began {}", sim.disease.name(o.pathogen), year, region), theme::text()),
@@ -397,14 +429,14 @@ pub(crate) fn killer_and_scavengers(f: &mut Frame, inner: Rect, mut row: u16, si
             .map(|k| format!("{} {}", k.name_str(), k.tag()))
             .or_else(|| sim.lineage.get(killer_id).map(|n| format!("{} {}", n.name_str(), n.tag)))
             .unwrap_or_else(|| format!("#{}", killer_id.0));
-        let kglyph = sim.creatures.get(killer_id).map(|k| k.species.glyph().to_ascii_uppercase()).unwrap_or('?');
-        let kcolor = sim.creatures.get(killer_id).map(|k| k.species.color()).unwrap_or(theme::DIM);
-        let kills = sim.creatures.get(killer_id).map(|k| k.kills).unwrap_or(0);
-        let chase = c.death.map(|d| d.chase_ticks).unwrap_or(0);
+        let kglyph = sim.creatures.get(killer_id).map_or('?', |k| k.species.glyph().to_ascii_uppercase());
+        let kcolor = sim.creatures.get(killer_id).map_or(theme::DIM, |k| k.species.color());
+        let kills = sim.creatures.get(killer_id).map_or(0, |k| k.kills);
+        let chase = c.death.map_or(0, |d| d.chase_ticks);
         util::line(f, inner, row, Line::from(vec![
-            sp(format!(" {} ", kglyph), Style::default().fg(kcolor).bg(theme::PANEL_BG)),
+            sp(format!(" {kglyph} "), Style::default().fg(kcolor).bg(theme::PANEL_BG)),
             sp(kname, theme::title()),
-            sp(format!("  {} kills  chase {} ticks", kills, chase), theme::text()),
+            sp(format!("  {kills} kills  chase {chase} ticks"), theme::text()),
         ]));
         row += 2;
     }
@@ -441,7 +473,7 @@ pub(crate) fn kin_name(sim: &crate::sim::Sim, id: CreatureId) -> String {
     }
 }
 
-fn genome(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, c: &Creature) {
+fn genome(f: &mut Frame<'_>, area: Rect, sim: &crate::sim::Sim, c: &Creature) {
     let inner = panel::draw_with_hint(f, area, "Genome", &format!("vs {} mean", c.species.plural()), panel::Kind::Outer);
     let stats = &sim.species[c.species.index()];
     let mean = stats.mean;
@@ -486,6 +518,12 @@ fn genome(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, c: &Creature) {
     )));
     row += 2;
 
+    row = genome_derived(f, inner, row, sim, c);
+
+    genome_forecast(f, inner, row, sim, c, &mean);
+}
+/// The derived-trait table (sense, speed, food need, maturity, ...).
+fn genome_derived(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
     panel::section(f, inner, row, "Derived");
     row += 1;
     let g = &c.genome;
@@ -522,18 +560,22 @@ fn genome(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, c: &Creature) {
             ),
         ),
         ("mate cooldown".into(), format!("{} days", sim.params.genetics.cooldown(c.species))),
-        ("resistance cost".into(), format!("+{} % food", (100.0 * sim.params.disease.resist_hunger_cost * g.resistance()).round() as u32)),
+        ("resistance cost".into(), format!("+{} % food", crate::cast!((100.0 * sim.params.disease.resist_hunger_cost * g.resistance()).round() => u32))),
         ("kin nearby".into(), format!("{} ({})", c.kin_nearby, group_word)),
     ];
     for (k, v) in derived {
         util::line(f, inner, row, Line::from(vec![
-            sp(format!(" {:<18}", k), theme::dim_text()),
+            sp(format!(" {k:<18}"), theme::dim_text()),
             sp(v, theme::text()),
         ]));
         row += 1;
     }
     row += 1;
+    row
+}
 
+/// The offspring-trait forecast against an average mate.
+fn genome_forecast(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature, mean: &Genome) -> u16 {
     // Offspring forecast (C4 FR10): with an average mate, each trait is drawn
     // from either parent and mutates with sd `mutation_strength`.
     panel::section(f, inner, row, "Offspring forecast (with an average mate)");
@@ -555,19 +597,27 @@ fn genome(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, c: &Creature) {
         buf.set_stringn(inner.x + 36, y, format!("{:.2}..{:.2}", lo.max(0.0), hi.min(1.0)), 12, theme::dim_text());
         row += 1;
     }
+    row
 }
 
-fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Creature, id: CreatureId) {
+fn life(f: &mut Frame<'_>, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Creature, id: CreatureId) {
     let inner = panel::draw(f, area, "Life", panel::Kind::Outer);
+    let mut row = life_minimap(f, inner, sim, c, id);
+    row = life_stats(f, inner, row, sim, c);
+    row = life_legacy(f, inner, row, sim, c, id);
+    life_kin(f, inner, row, sim, c, id);
+    let _ = app;
+}
+/// The surroundings mini-map and the life-stat lines beside it.
+fn life_minimap(f: &mut Frame<'_>, inner: Rect, sim: &crate::sim::Sim, c: &Creature, id: CreatureId) -> u16 {
     let mut row = 0u16;
-
     // Mini-map top-right.
     let mm_w = 23u16;
     let mm_h = 9u16;
     let mm = Rect::new(inner.right() - mm_w, inner.y, mm_w, mm_h);
     let mm_inner = panel::draw(f, mm, "Surroundings", panel::Kind::Inner);
-    let ox = c.x.saturating_sub(10).min(sim.world.width() - mm_inner.width as usize);
-    let oy = c.y.saturating_sub(3).min(sim.world.height() - mm_inner.height as usize);
+    let ox = c.x.saturating_sub(10).min(sim.world.width() - crate::cast!(mm_inner.width => usize));
+    let oy = c.y.saturating_sub(3).min(sim.world.height() - crate::cast!(mm_inner.height => usize));
     let opts = MapOptions {
         overlay: Overlay::None,
         night: false,
@@ -578,7 +628,7 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
         creatures: true,
         fade_creatures: false,
         selected_region: None,
-        species_color: crate::theme::TEXT,
+        species_color: theme::TEXT,
         creature_tint: None,
     };
     map::render(f.buffer_mut(), mm_inner, sim, &opts);
@@ -592,103 +642,121 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
         Line::from(vec![sp(" distance    ", theme::dim_text()), sp(format!("{} cells", c.trail.len()), theme::text())]),
     ];
     for (i, l) in lines.into_iter().enumerate() {
-        util::line(f, stats, i as u16, l);
+        util::line(f, stats, crate::cast!(i => u16), l);
     }
     row += mm_h + 1;
+    row
+}
 
-    if c.alive {
-        if c.species.kind() == Kind::Predator {
-            // S03b Hunt stats.
-            panel::section(f, inner, row, "Hunt stats");
-            row += 1;
-            let success = if c.attempts > 0 { c.kills as f32 / c.attempts as f32 * 100.0 } else { 0.0 };
-            util::line(f, inner, row, Line::from(sp(format!(" kills {}  attempts {}  success {:.0}%", c.kills, c.attempts, success), theme::text())));
-            row += 1;
-            bars::labeled(f.buffer_mut(), inner, row, " success rate", success / 100.0, c.species.color(), 16, 16);
-            row += 1;
-            panel::section(f, inner, row, "Preferred prey");
-            row += 1;
-            for prey_id in SpeciesId::ALL.iter().filter(|s| s.kind() == Kind::Prey) {
-                let share = if c.kills >= 5 {
-                    c.kills_by_species[prey_id.index()] as f32 / c.kills.max(1) as f32
-                } else {
-                    sim.params.predation.preference(c.species, *prey_id)
-                };
-                bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", prey_id.plural()), share, prey_id.color(), 16, 16);
-                f.buffer_mut().set_stringn(
-                    inner.x + 40,
-                    inner.y + row,
-                    format!("{} kills", c.kills_by_species[prey_id.index()]),
-                    12,
-                    theme::dim_text(),
-                );
-                row += 1;
-            }
-            let last_kill = match c.last_kill {
-                Some((victim, day, region)) => {
-                    let vname = sim
-                        .creatures
-                        .get(victim)
-                        .map(|v| format!("{} {}", v.name_str(), v.tag()))
-                        .or_else(|| sim.lineage.get(victim).map(|n| format!("{} {}", n.name_str(), n.tag)))
-                        .unwrap_or_else(|| format!("#{}", victim.0));
-                    let region_name = sim.world.regions.get(region as usize).map(|r| r.0.as_str()).unwrap_or("?");
-                    format!("{}  {}, {}", vname, day_stamp(day as i64, sim.time.season_days), region_name)
-                }
-                None => "none".to_string(),
-            };
-            util::line(f, inner, row, Line::from(vec![sp(" last kill ", theme::dim_text()), sp(last_kill, theme::text())]));
-            row += 1;
-            if let Some(t) = c.hunt_target {
-                if let Some(o) = sim.creatures.get(t) {
-                    let d = crate::sim::dist(c.x, c.y, o.x, o.y);
-                    let mut spans = vec![sp(" current target ", theme::dim_text()), sp(format!("{} {}, {:.0} cells", o.name_str(), o.tag(), d), theme::label())];
-                    if let Some(i) = o.infection.filter(|i| i.stage == Stage::Infectious) {
-                        let bonus = sim.params.disease.kill_sick_bonus * i.severity;
-                        spans.push(sp(format!(" (+.{:02} sick prey)", (bonus * 100.0).round() as u32 % 100), Style::default().fg(theme::SICK).bg(theme::PANEL_BG)));
-                    }
-                    util::line(f, inner, row, Line::from(spans));
-                    row += 1;
-                }
-            }
-            let avg = if c.attempts > 0 { c.chase_stats.0 / c.attempts.max(1) } else { 0 };
-            util::line(f, inner, row, Line::from(vec![
-                sp(" avg chase ", theme::dim_text()),
-                sp(format!("{avg} ticks; longest {} (Year {})", c.chase_stats.1, c.chase_longest_year), theme::text()),
-            ]));
-            row += 2;
-        } else {
-            // S03a Survival.
-            panel::section(f, inner, row, "Survival");
-            row += 1;
-            let escape_rate = if c.chased > 0 { c.escaped as f32 / c.chased as f32 } else { 0.0 };
-            util::line(f, inner, row, Line::from(sp(format!(" chased {} times, escaped {} ({:.0}%)", c.chased, c.escaped, escape_rate * 100.0), theme::text())));
-            row += 1;
-            bars::labeled(f.buffer_mut(), inner, row, " escape rate", escape_rate, theme::GOOD, 16, 16);
-            row += 1;
-            panel::section(f, inner, row, "Threats seen");
-            row += 1;
-            let mut any = false;
-            let total_threats: u32 = c.threats_by_species.iter().sum();
-            for pred_id in SpeciesId::ALL.iter().filter(|s| s.kind() == Kind::Predator) {
-                let n = c.threats_by_species[pred_id.index()];
-                if n == 0 {
-                    continue;
-                }
-                any = true;
-                let share = n as f32 / total_threats.max(1) as f32;
-                bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", pred_id.plural()), share, pred_id.color(), 16, 16);
-                f.buffer_mut().set_stringn(inner.x + 40, inner.y + row, format!("{n} times"), 12, theme::dim_text());
-                row += 1;
-            }
-            if !any {
-                util::line(f, inner, row, Line::from(sp(" none seen yet", theme::dim_text())));
-                row += 1;
-            }
-            row += 1;
-        }
+/// Hunt stats (predator) or survival stats (prey).
+fn life_stats(f: &mut Frame<'_>, inner: Rect, row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
+    if !c.alive {
+        return row;
     }
+    if c.species.kind() == Kind::Predator {
+        hunt_stats(f, inner, row, sim, c)
+    } else {
+        survival_stats(f, inner, row, c)
+    }
+}
 
+/// S03b: hunt outcomes, prey preference and chase history.
+fn hunt_stats(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
+    // S03b Hunt stats.
+    panel::section(f, inner, row, "Hunt stats");
+    row += 1;
+    let success = if c.attempts > 0 { crate::cast!(c.kills => f32) / crate::cast!(c.attempts => f32) * 100.0 } else { 0.0 };
+    util::line(f, inner, row, Line::from(sp(format!(" kills {}  attempts {}  success {:.0}%", c.kills, c.attempts, success), theme::text())));
+    row += 1;
+    bars::labeled(f.buffer_mut(), inner, row, " success rate", success / 100.0, c.species.color(), 16, 16);
+    row += 1;
+    panel::section(f, inner, row, "Preferred prey");
+    row += 1;
+    for prey_id in SpeciesId::ALL.iter().filter(|s| s.kind() == Kind::Prey) {
+        let share = if c.kills >= 5 {
+            crate::cast!(c.kills_by_species[prey_id.index()] => f32) / crate::cast!(c.kills.max(1) => f32)
+        } else {
+            sim.params.predation.preference(c.species, *prey_id)
+        };
+        bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", prey_id.plural()), share, prey_id.color(), 16, 16);
+        f.buffer_mut().set_stringn(
+            inner.x + 40,
+            inner.y + row,
+            format!("{} kills", c.kills_by_species[prey_id.index()]),
+            12,
+            theme::dim_text(),
+        );
+        row += 1;
+    }
+    let last_kill = match c.last_kill {
+        Some((victim, day, region)) => {
+            let vname = sim
+                .creatures
+                .get(victim)
+                .map(|v| format!("{} {}", v.name_str(), v.tag()))
+                .or_else(|| sim.lineage.get(victim).map(|n| format!("{} {}", n.name_str(), n.tag)))
+                .unwrap_or_else(|| format!("#{}", victim.0));
+            let region_name = sim.world.regions.get(crate::cast!(region => usize)).map_or("?", |r| r.0.as_str());
+            format!("{}  {}, {}", vname, day_stamp(i64::from(day), sim.time.season_days), region_name)
+        }
+        None => "none".to_string(),
+    };
+    util::line(f, inner, row, Line::from(vec![sp(" last kill ", theme::dim_text()), sp(last_kill, theme::text())]));
+    row += 1;
+    if let Some(o) = c.hunt_target.and_then(|t| sim.creatures.get(t)) {
+        let d = crate::sim::dist(c.x, c.y, o.x, o.y);
+        let mut spans = vec![sp(" current target ", theme::dim_text()), sp(format!("{} {}, {:.0} cells", o.name_str(), o.tag(), d), theme::label())];
+        if let Some(i) = o.infection.filter(|i| i.stage == Stage::Infectious) {
+            let bonus = sim.params.disease.kill_sick_bonus * i.severity;
+            spans.push(sp(format!(" (+.{:02} sick prey)", crate::cast!((bonus * 100.0).round() => u32) % 100), Style::default().fg(theme::SICK).bg(theme::PANEL_BG)));
+        }
+        util::line(f, inner, row, Line::from(spans));
+        row += 1;
+    }
+    let avg = if c.attempts > 0 { c.chase_stats.0.div_euclid(c.attempts.max(1)) } else { 0 };
+    util::line(f, inner, row, Line::from(vec![
+        sp(" avg chase ", theme::dim_text()),
+        sp(format!("{avg} ticks; longest {} (Year {})", c.chase_stats.1, c.chase_longest_year), theme::text()),
+    ]));
+    row += 2;
+    row
+}
+
+/// S03a: escape record and the predators this prey has seen.
+fn survival_stats(f: &mut Frame<'_>, inner: Rect, mut row: u16, c: &Creature) -> u16 {
+    // S03a Survival.
+    panel::section(f, inner, row, "Survival");
+    row += 1;
+    let escape_rate = if c.chased > 0 { crate::cast!(c.escaped => f32) / crate::cast!(c.chased => f32) } else { 0.0 };
+    util::line(f, inner, row, Line::from(sp(format!(" chased {} times, escaped {} ({:.0}%)", c.chased, c.escaped, escape_rate * 100.0), theme::text())));
+    row += 1;
+    bars::labeled(f.buffer_mut(), inner, row, " escape rate", escape_rate, theme::GOOD, 16, 16);
+    row += 1;
+    panel::section(f, inner, row, "Threats seen");
+    row += 1;
+    let mut any = false;
+    let total_threats: u32 = c.threats_by_species.iter().sum();
+    for pred_id in SpeciesId::ALL.iter().filter(|s| s.kind() == Kind::Predator) {
+        let n = c.threats_by_species[pred_id.index()];
+        if n == 0 {
+            continue;
+        }
+        any = true;
+        let share = crate::cast!(n => f32) / crate::cast!(total_threats.max(1) => f32);
+        bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", pred_id.plural()), share, pred_id.color(), 16, 16);
+        f.buffer_mut().set_stringn(inner.x + 40, inner.y + row, format!("{n} times"), 12, theme::dim_text());
+        row += 1;
+    }
+    if !any {
+        util::line(f, inner, row, Line::from(sp(" none seen yet", theme::dim_text())));
+        row += 1;
+    }
+    row += 1;
+    row
+}
+
+/// The legacy block: descendants and a carried notable mutation.
+fn life_legacy(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature, id: CreatureId) -> u16 {
     // Legacy (C4 FR10).
     panel::section(f, inner, row, "Legacy");
     row += 1;
@@ -719,7 +787,11 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
         row += 1;
     }
     row += 1;
+    row
+}
 
+/// Nearby kin and the recent events for this creature.
+fn life_kin(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature, id: CreatureId) -> u16 {
     // Kin nearby (C4 FR10): parents, siblings and children within 15 cells.
     panel::section(f, inner, row, "Kin nearby");
     row += 1;
@@ -755,8 +827,8 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
         util::line(f, inner, row, Line::from(vec![
             sp(format!(" {} ", if o.adult { o.species.glyph().to_ascii_uppercase() } else { o.species.glyph() }), species_style(o.species)),
             sp(format!("{:<8}{:<7}", o.name_str(), o.tag()), theme::text()),
-            sp(format!("{:>3.0} cells {:<2} ", d, dir), theme::dim_text()),
-            sp(rel.to_string(), theme::label()),
+            sp(format!("{d:>3.0} cells {dir:<2} "), theme::dim_text()),
+            sp((*rel).to_string(), theme::label()),
         ]));
         row += 1;
     }
@@ -772,7 +844,7 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
     }
     for e in evs {
         let stamp = format!("Y{} D{:<3} {:02}h ", e.year, e.day, e.hour);
-        let avail = inner.width as usize - 2 - stamp.len() - 2;
+        let avail = crate::cast!(inner.width => usize) - 2 - stamp.len() - 2;
         let text = clip(&e.text, avail);
         util::line(f, inner, row, Line::from(vec![
             sp(format!(" {} ", e.kind.glyph()), Style::default().fg(e.kind.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
@@ -781,13 +853,13 @@ fn life(f: &mut Frame, area: Rect, app: &AppState, sim: &crate::sim::Sim, c: &Cr
         ]));
         row += 1;
     }
-    let _ = app;
+    row
 }
 
 /// Compass direction from `(x, y)` to `(tx, ty)` (map cells are 2:1).
 pub(crate) fn compass(x: usize, y: usize, tx: usize, ty: usize) -> &'static str {
-    let dx = tx as i64 - x as i64;
-    let dy = (ty as i64 - y as i64) * 2;
+    let dx = crate::cast!(tx => i64) - crate::cast!(x => i64);
+    let dy = (crate::cast!(ty => i64) - crate::cast!(y => i64)) * 2;
     let ns = if dy < -1 { "N" } else if dy > 1 { "S" } else { "" };
     let ew = if dx < -1 { "W" } else if dx > 1 { "E" } else { "" };
     match (ns, ew) {
@@ -806,31 +878,31 @@ pub(crate) fn compass(x: usize, y: usize, tx: usize, ty: usize) -> &'static str 
 /// C7 (S03 Condition): infectious conspecifics within `contact_cheb` Chebyshev
 /// cells, over 8, clamped to 0..1.
 pub(crate) fn contagion_risk(sim: &crate::sim::Sim, c: &Creature) -> f32 {
-    let r = sim.params.disease.contact_cheb as i64;
+    let r = crate::cast!(sim.params.disease.contact_cheb => i64);
     let n = sim
         .creatures
         .living()
         .filter(|o| o.id != c.id && o.species == c.species && crate::sim::disease::is_infectious(o))
-        .filter(|o| (o.x as i64 - c.x as i64).abs() <= r && (o.y as i64 - c.y as i64).abs() <= r)
+        .filter(|o| (crate::cast!(o.x => i64) - crate::cast!(c.x => i64)).abs() <= r && (crate::cast!(o.y => i64) - crate::cast!(c.y => i64)).abs() <= r)
         .count();
-    (n as f32 / 8.0).clamp(0.0, 1.0)
+    (crate::cast!(n => f32) / 8.0).clamp(0.0, 1.0)
 }
 
 pub(crate) fn local_forage(sim: &crate::sim::Sim, x: usize, y: usize) -> f32 {
     let (mut sum, mut n) = (0.0f32, 0usize);
     for dy in -3i32..=3 {
         for dx in -3i32..=3 {
-            let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+            let (nx, ny) = (crate::cast!(x => i32) + dx, crate::cast!(y => i32) + dy);
             if sim.world.in_bounds(nx, ny) {
-                sum += sim.world.cell(nx as usize, ny as usize).vegetation;
+                sum += sim.world.cell(crate::cast!(nx => usize), crate::cast!(ny => usize)).vegetation;
                 n += 1;
             }
         }
     }
-    if n > 0 { sum / n as f32 } else { 0.0 }
+    if n > 0 { sum / crate::cast!(n => f32) } else { 0.0 }
 }
 
-fn trait_color(t: usize) -> Color {
+const fn trait_color(t: usize) -> Color {
     match t {
         0 => theme::INFO,
         1 => theme::DEER,

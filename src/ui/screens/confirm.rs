@@ -12,13 +12,20 @@ use crate::ui::screens::{Action, Screen};
 use crate::widgets::{panel, util};
 use crate::theme;
 
+#[derive(Debug)]
 pub struct ConfirmModal {
     pub focus: usize,
 }
 
 impl ConfirmModal {
-    pub fn new() -> Self {
-        ConfirmModal { focus: 0 }
+    pub const fn new() -> Self {
+        Self { focus: 0 }
+    }
+}
+
+impl Default for ConfirmModal {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -34,11 +41,11 @@ impl Screen for ConfirmModal {
                 Action::None
             }
             KeyCode::Enter => self.activate(app),
-            KeyCode::Char('y') | KeyCode::Char('Y') => {
+            KeyCode::Char('y' | 'Y') => {
                 self.focus = 0;
                 self.activate(app)
             }
-            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+            KeyCode::Char('n' | 'N') | KeyCode::Esc => {
                 app.confirm = None;
                 Action::Pop
             }
@@ -46,13 +53,13 @@ impl Screen for ConfirmModal {
         }
     }
 
-    fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
+    fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let modal = util::centered(area, 50.min(area.width.saturating_sub(2)), 7.min(area.height.saturating_sub(2)));
         let inner = panel::draw(f, modal, "", panel::Kind::Focus);
         let question = app.confirm.as_ref().map(|r| r.question.clone()).unwrap_or_default();
 
         util::line(f, inner, 1, Line::from(Span::styled(
-            clip(&question, inner.width as usize),
+            clip(&question, crate::cast!(inner.width => usize)),
             Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG),
         )));
 
@@ -74,7 +81,7 @@ impl Screen for ConfirmModal {
 }
 
 impl ConfirmModal {
-    fn activate(&mut self, app: &mut AppState) -> Action {
+    fn activate(&self, app: &mut AppState) -> Action {
         let Some(req) = app.confirm.take() else {
             return Action::Pop;
         };

@@ -22,7 +22,7 @@ pub fn fill(buf: &mut Buffer, area: Rect, style: Style) {
 }
 
 /// Render a `Line` at a row inside `area`.
-pub fn line(f: &mut Frame, area: Rect, row: u16, l: Line) {
+pub fn line(f: &mut Frame<'_>, area: Rect, row: u16, l: Line<'_>) {
     if row >= area.height {
         return;
     }
@@ -48,10 +48,10 @@ pub fn dim_area(buf: &mut Buffer, area: Rect, amount: f32) {
 pub fn centered(area: Rect, w: u16, h: u16) -> Rect {
     let w = w.min(area.width);
     let h = h.min(area.height);
-    Rect::new(area.x + (area.width - w) / 2, area.y + (area.height - h) / 2, w, h)
+    Rect::new(area.x + (area.width - w).div_euclid(2), area.y + (area.height - h).div_euclid(2), w, h)
 }
 
 /// Format a 0..=1 value as a percentage string like " 82%".
 pub fn pct(v: f32) -> String {
-    format!("{:>3}%", (v.clamp(0.0, 1.0) * 100.0).round() as u32)
+    format!("{:>3}%", crate::cast!((v.clamp(0.0, 1.0) * 100.0).round() => u32))
 }

@@ -17,6 +17,7 @@ use crate::{glyphs, theme};
 const SPEEDS: [u32; 5] = [1, 2, 5, 10, 25];
 const STEPS: [(&str, u64); 3] = [("1 tick", 1), ("6 hours", 6), ("1 day", 24)];
 
+#[derive(Debug)]
 pub struct Controls {
     step_idx: usize,
 }
@@ -28,8 +29,8 @@ impl Default for Controls {
 }
 
 impl Controls {
-    pub fn new() -> Self {
-        Controls { step_idx: 0 }
+    pub const fn new() -> Self {
+        Self { step_idx: 0 }
     }
 }
 
@@ -60,24 +61,8 @@ impl Screen for Controls {
                 app.speed_down();
                 Action::None
             }
-            KeyCode::Char('1') => {
-                app.set_speed(0);
-                Action::None
-            }
-            KeyCode::Char('2') => {
-                app.set_speed(1);
-                Action::None
-            }
-            KeyCode::Char('3') => {
-                app.set_speed(2);
-                Action::None
-            }
-            KeyCode::Char('4') => {
-                app.set_speed(3);
-                Action::None
-            }
-            KeyCode::Char('5') => {
-                app.set_speed(4);
+            KeyCode::Char(c @ '1'..='5') => {
+                app.set_speed(crate::cast!(c.to_digit(10).unwrap_or(1) - 1 => usize));
                 Action::None
             }
             KeyCode::Char('.') => {
@@ -134,7 +119,7 @@ impl Screen for Controls {
         }
     }
 
-    fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
+    fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let modal = util::centered(area, 60.min(area.width.saturating_sub(2)), 21.min(area.height.saturating_sub(2)));
         let inner = panel::draw_with_hint(f, modal, "Simulation Controls", "Esc closes", panel::Kind::Focus);
         let mut row = 0u16;
@@ -147,7 +132,7 @@ impl Screen for Controls {
         };
         util::line(f, inner, row, Line::from(vec![
             Span::styled(" state   ", theme::label()),
-            Span::styled(format!("{} {}", state_glyph, state_txt), Style::default().fg(state_color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{state_glyph} {state_txt}"), Style::default().fg(state_color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
             Span::styled(format!("      {} x{}  ", glyphs::FAST_STR, app.speed()), theme::text()),
             Span::styled(format!("{} {}", glyphs::PAUSE_STR, "Space toggles"), theme::dim_text()),
         ]));
@@ -181,67 +166,8 @@ impl Screen for Controls {
         util::line(f, inner, row, Line::from(spans));
         row += 2;
 
-        panel::section(f, inner, row, "Clock");
-        row += 1;
-        if let Some(sim) = &app.sim {
-            let time = &sim.time;
-            let season = time.season();
-            util::line(f, inner, row, Line::from(vec![
-                Span::styled(" tick ", theme::dim_text()),
-                Span::styled(crate::ui::screens::s01_map::group(time.tick), theme::text()),
-                Span::styled("    day ", theme::dim_text()),
-                Span::styled(format!("{}", time.day_of_season()), theme::text()),
-                Span::styled(format!(" of {} ", season.name()), theme::dim_text()),
-                Span::styled(season.glyph().to_string(), Style::default().fg(season.color()).bg(theme::PANEL_BG)),
-                Span::styled("    year ", theme::dim_text()),
-                Span::styled(format!("{}", time.year()), theme::text()),
-                Span::styled(format!("    {} {}", time.hour_label(), glyphs::SUN), theme::text()),
-            ]));
-            row += 1;
-            util::line(f, inner, row, Line::from(Span::styled(
-                format!(" 1 tick = 1 hour   1 day = {} ticks   x{} = {} ticks/s", app.params.time.ticks_per_day, app.speed(), 2 * app.speed()),
-                theme::dim_text(),
-            )));
-        } else {
-            util::line(f, inner, row, Line::from(Span::styled(" no world loaded", theme::dim_text())));
-            row += 1;
-        }
-        row += 2;
-
-        panel::section(f, inner, row, "Options");
-        row += 1;
-        let toggles: [(&str, bool, &str); 5] = [
-            ("a", app.params.ui.auto_pause_on_extinction, "auto-pause on extinction"),
-            ("b", app.params.ui.log_births, "log births to the event log"),
-            ("c", app.params.ui.pause_on_follow_death, "pause when a followed creature dies"),
-            ("t", app.params.ui.day_night_tint, "day/night tint"),
-            ("d", app.params.ui.auto_pause_on_epidemic, "auto-pause on epidemic"),
-        ];
-        for (key, on, label) in toggles {
-            let mark = if on { "[x]" } else { "[ ]" };
-            let mark_style = if on {
-                Style::default().fg(theme::GOOD).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)
-            } else {
-                theme::dim_text()
-            };
-            util::line(f, inner, row, Line::from(vec![
-                Span::styled(" ", theme::text()),
-                Span::styled(mark, mark_style),
-                Span::styled(format!(" {:<36}", label), theme::text()),
-                Span::styled(format!("[{key}]"), theme::key()),
-            ]));
-            row += 1;
-        }
-        // Autosave row: `◄ N ►` days.
-        let n = app.params.ui.autosave_days;
-        let n_label = if n == 0 { "off".to_string() } else { format!("{n} days") };
-        util::line(f, inner, row, Line::from(vec![
-            Span::styled(" ", theme::text()),
-            Span::styled(format!(" {} ", glyphs::REWIND), theme::key()),
-            Span::styled(format!("autosave every {:<8}", n_label), theme::text()),
-            Span::styled(format!(" {} ", glyphs::PLAY), theme::key()),
-            Span::styled("[←→]", theme::key()),
-        ]));
+        row = clock_panel(f, inner, row, app);
+        options_panel(f, inner, row, app);
 
         let hint_row = inner.height - 1;
         util::line(f, inner, hint_row, Line::from(vec![
@@ -270,6 +196,75 @@ impl Screen for Controls {
         };
         status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, &right);
     }
+}
+
+/// Clock + tick-rate rows; returns the row after the section.
+fn clock_panel(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState) -> u16 {
+    panel::section(f, inner, row, "Clock");
+    row += 1;
+        if let Some(sim) = &app.sim {
+            let time = &sim.time;
+            let season = time.season();
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(" tick ", theme::dim_text()),
+                Span::styled(crate::ui::screens::s01_map::group(time.tick), theme::text()),
+                Span::styled("    day ", theme::dim_text()),
+                Span::styled(format!("{}", time.day_of_season()), theme::text()),
+                Span::styled(format!(" of {} ", season.name()), theme::dim_text()),
+                Span::styled(season.glyph().to_string(), Style::default().fg(season.color()).bg(theme::PANEL_BG)),
+                Span::styled("    year ", theme::dim_text()),
+                Span::styled(format!("{}", time.year()), theme::text()),
+                Span::styled(format!("    {} {}", time.hour_label(), glyphs::SUN), theme::text()),
+            ]));
+            row += 1;
+            util::line(f, inner, row, Line::from(Span::styled(
+                format!(" 1 tick = 1 hour   1 day = {} ticks   x{} = {} ticks/s", app.params.time.ticks_per_day, app.speed(), 2 * app.speed()),
+                theme::dim_text(),
+            )));
+        } else {
+            util::line(f, inner, row, Line::from(Span::styled(" no world loaded", theme::dim_text())));
+            row += 1;
+        }
+        row += 2;
+    row
+}
+
+/// The options toggles and the autosave row.
+fn options_panel(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState) {
+    panel::section(f, inner, row, "Options");
+    row += 1;
+        let toggles: [(&str, bool, &str); 5] = [
+            ("a", app.params.ui.auto_pause_on_extinction, "auto-pause on extinction"),
+            ("b", app.params.ui.log_births, "log births to the event log"),
+            ("c", app.params.ui.pause_on_follow_death, "pause when a followed creature dies"),
+            ("t", app.params.ui.day_night_tint, "day/night tint"),
+            ("d", app.params.ui.auto_pause_on_epidemic, "auto-pause on epidemic"),
+        ];
+        for (key, on, label) in toggles {
+            let mark = if on { "[x]" } else { "[ ]" };
+            let mark_style = if on {
+                Style::default().fg(theme::GOOD).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)
+            } else {
+                theme::dim_text()
+            };
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(" ", theme::text()),
+                Span::styled(mark, mark_style),
+                Span::styled(format!(" {label:<36}"), theme::text()),
+                Span::styled(format!("[{key}]"), theme::key()),
+            ]));
+            row += 1;
+        }
+        // Autosave row: `◄ N ►` days.
+        let n = app.params.ui.autosave_days;
+        let n_label = if n == 0 { "off".to_string() } else { format!("{n} days") };
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(" ", theme::text()),
+            Span::styled(format!(" {} ", glyphs::REWIND), theme::key()),
+            Span::styled(format!("autosave every {n_label:<8}"), theme::text()),
+            Span::styled(format!(" {} ", glyphs::PLAY), theme::key()),
+            Span::styled("[←→]", theme::key()),
+        ]));
 }
 
 #[cfg(test)]

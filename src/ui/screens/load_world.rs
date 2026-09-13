@@ -17,6 +17,7 @@ use crate::theme;
 
 const VISIBLE: usize = 14;
 
+#[derive(Debug)]
 pub struct LoadWorld {
     pub sel: usize,
     pub scroll: usize,
@@ -26,11 +27,11 @@ pub struct LoadWorld {
 }
 
 impl LoadWorld {
-    pub fn new() -> Self {
-        LoadWorld { sel: 0, scroll: 0, error: None }
+    pub const fn new() -> Self {
+        Self { sel: 0, scroll: 0, error: None }
     }
 
-    fn clamp_scroll(&mut self, len: usize) {
+    const fn clamp_scroll(&mut self, len: usize) {
         if self.sel < self.scroll {
             self.scroll = self.sel;
         }
@@ -39,6 +40,22 @@ impl LoadWorld {
         }
         if self.scroll + VISIBLE > len {
             self.scroll = len.saturating_sub(VISIBLE);
+        }
+    }
+}
+
+impl Default for LoadWorld {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Tint the whole modal row at `y` with the selection background.
+fn highlight_row(f: &mut Frame<'_>, inner: Rect, y: u16) {
+    let buf = f.buffer_mut();
+    for x in inner.x..inner.right() {
+        if let Some(c) = buf.cell_mut((x, y)) {
+            c.set_bg(theme::SELECT_BG);
         }
     }
 }
@@ -108,7 +125,7 @@ impl Screen for LoadWorld {
         }
     }
 
-    fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
+    fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let saves = save::list_saves(&app.saves_dir);
         let modal = util::centered(area, 70.min(area.width.saturating_sub(2)), 20.min(area.height.saturating_sub(2)));
         // The per-row wall-clock stamp does not fit the 66-column list, so it lives
@@ -128,7 +145,7 @@ impl Screen for LoadWorld {
             util::line(f, inner, 1, Line::from(Span::styled(" no saved worlds yet", theme::dim_text())));
         } else {
             for i in self.scroll..saves.len().min(self.scroll + VISIBLE) {
-                let row = (i - self.scroll) as u16 + 1;
+                let row = crate::cast!((i - self.scroll) => u16) + 1;
                 if row >= inner.height {
                     break;
                 }
@@ -152,12 +169,7 @@ impl Screen for LoadWorld {
                 let st = if i == self.sel { theme::selected() } else { theme::text() };
                 let y_pos = inner.y + row;
                 if i == self.sel {
-                    let buf = f.buffer_mut();
-                    for x in inner.x..inner.right() {
-                        if let Some(c) = buf.cell_mut((x, y_pos)) {
-                            c.set_bg(theme::SELECT_BG);
-                        }
-                    }
+                    highlight_row(f, inner, y_pos);
                 }
                 util::line(f, inner, row, Line::from(Span::styled(text, st)));
             }
@@ -167,14 +179,14 @@ impl Screen for LoadWorld {
         if let Some(err) = &self.error {
             // The message is longer than the 66-column modal, so wrap it rather
             // than clip: an older-version save must say why it will not load.
-            let lines = wrap(err, inner.width as usize - 2);
-            let shown = lines.len().min(2) as u16;
+            let lines = wrap(err, crate::cast!(inner.width => usize) - 2);
+            let shown = crate::cast!(lines.len().min(2) => u16);
             let first = inner.height.saturating_sub(shown);
             for (i, line) in lines.iter().take(2).enumerate() {
                 util::line(
                     f,
                     inner,
-                    first + i as u16,
+                    first + crate::cast!(i => u16),
                     Line::from(Span::styled(format!(" {line}"), Style::default().fg(theme::BAD).bg(theme::PANEL_BG))),
                 );
             }
@@ -211,34 +223,34 @@ fn wrap(text: &str, width: usize) -> Vec<String> {
 
 fn year_day(h: &SaveHeader) -> (u32, u32) {
     let tpd = 24u64;
-    let day_index = (h.tick + h.start_hour as u64) / tpd;
-    let year_len = 4 * h.season_days as u64;
-    let year = (day_index / year_len) as u32 + 1;
-    let day = (day_index % year_len) as u32 + 1;
+    let day_index = (h.tick + u64::from(h.start_hour)).div_euclid(tpd);
+    let year_len = 4 * u64::from(h.season_days);
+    let year = crate::cast!((day_index.div_euclid(year_len)) => u32) + 1;
+    let day = crate::cast!((day_index % year_len) => u32) + 1;
     (year, day)
 }
 
 /// `YYYY-MM-DD HH:MM` from a unix timestamp (no chrono dependency).
 fn saved_at(secs: u64) -> String {
-    let (y, m, d, hh, mm) = civil(secs as i64);
+    let (y, m, d, hh, mm) = civil(crate::cast!(secs => i64));
     format!("{y}-{m:02}-{d:02} {hh:02}:{mm:02}")
 }
 
 fn civil(secs: i64) -> (i64, u32, u32, u32, u32) {
     let days = secs.div_euclid(86_400);
     let rem = secs.rem_euclid(86_400);
-    let hour = (rem / 3600) as u32;
-    let minute = ((rem % 3600) / 60) as u32;
+    let hour = crate::cast!((rem.div_euclid(3600)) => u32);
+    let minute = crate::cast!(((rem % 3600).div_euclid(60)) => u32);
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let yoe = (doe - doe.div_euclid(1460) + doe.div_euclid(36_524) - doe.div_euclid(146_096)).div_euclid(365);
     let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = (mp + if mp < 10 { 3 } else { -9 }) as u32;
-    let y = y + if m <= 2 { 1 } else { 0 };
+    let doy = doe - (365 * yoe + yoe.div_euclid(4) - yoe.div_euclid(100));
+    let mp = (5 * doy + 2).div_euclid(153);
+    let d = crate::cast!((doy - (153 * mp + 2).div_euclid(5) + 1) => u32);
+    let m = crate::cast!((mp + if mp < 10 { 3 } else { -9 }) => u32);
+    let y = y + i64::from(m <= 2);
     (y, m, d, hour, minute)
 }
 

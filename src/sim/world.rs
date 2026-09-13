@@ -21,41 +21,41 @@ pub enum Terrain {
 }
 
 impl Terrain {
-    pub fn is_water(self) -> bool {
-        matches!(self, Terrain::DeepWater | Terrain::ShallowWater)
+    pub const fn is_water(self) -> bool {
+        matches!(self, Self::DeepWater | Self::ShallowWater)
     }
 
     /// Map a serialised terrain code (`terrain as u8`, 0..=8) back to `Terrain`
     /// (C6 FR1 title-screen strips). Codes outside the range fall back to Rock.
-    pub fn from_code(code: u8) -> Terrain {
+    pub const fn from_code(code: u8) -> Self {
         match code {
-            0 => Terrain::DeepWater,
-            1 => Terrain::ShallowWater,
-            2 => Terrain::Sand,
-            3 => Terrain::Dirt,
-            4 => Terrain::GrassSparse,
-            5 => Terrain::Grass,
-            6 => Terrain::GrassDense,
-            7 => Terrain::Forest,
-            _ => Terrain::Rock,
+            0 => Self::DeepWater,
+            1 => Self::ShallowWater,
+            2 => Self::Sand,
+            3 => Self::Dirt,
+            4 => Self::GrassSparse,
+            5 => Self::Grass,
+            6 => Self::GrassDense,
+            7 => Self::Forest,
+            _ => Self::Rock,
         }
     }
 
-    pub fn walkable(self) -> bool {
-        !matches!(self, Terrain::DeepWater | Terrain::Rock)
+    pub const fn walkable(self) -> bool {
+        !matches!(self, Self::DeepWater | Self::Rock)
     }
 
-    pub fn name(self) -> &'static str {
+    pub const fn name(self) -> &'static str {
         match self {
-            Terrain::DeepWater => "deep water",
-            Terrain::ShallowWater => "shallow water",
-            Terrain::Sand => "sand",
-            Terrain::Dirt => "bare dirt",
-            Terrain::GrassSparse => "sparse grass",
-            Terrain::Grass => "grassland",
-            Terrain::GrassDense => "meadow",
-            Terrain::Forest => "forest",
-            Terrain::Rock => "rock",
+            Self::DeepWater => "deep water",
+            Self::ShallowWater => "shallow water",
+            Self::Sand => "sand",
+            Self::Dirt => "bare dirt",
+            Self::GrassSparse => "sparse grass",
+            Self::Grass => "grassland",
+            Self::GrassDense => "meadow",
+            Self::Forest => "forest",
+            Self::Rock => "rock",
         }
     }
 }
@@ -111,8 +111,8 @@ impl World {
                 if dx == 0 && dy == 0 {
                     continue;
                 }
-                let (nx, ny) = (x as i32 + dx, y as i32 + dy);
-                if self.in_bounds(nx, ny) && self.cell(nx as usize, ny as usize).terrain.is_water() {
+                let (nx, ny) = (crate::cast!(x => i32) + dx, crate::cast!(y => i32) + dy);
+                if self.in_bounds(nx, ny) && self.cell(crate::cast!(nx => usize), crate::cast!(ny => usize)).terrain.is_water() {
                     return true;
                 }
             }
@@ -139,24 +139,23 @@ impl World {
         &mut self.cells[y * self.width + x]
     }
 
-    pub fn width(&self) -> usize {
+    pub const fn width(&self) -> usize {
         self.width
     }
 
-    pub fn height(&self) -> usize {
+    pub const fn height(&self) -> usize {
         self.height
     }
 
-    pub fn in_bounds(&self, x: i32, y: i32) -> bool {
-        x >= 0 && y >= 0 && (x as usize) < self.width && (y as usize) < self.height
+    pub const fn in_bounds(&self, x: i32, y: i32) -> bool {
+        x >= 0 && y >= 0 && (crate::cast!(x => usize)) < self.width && (crate::cast!(y => usize)) < self.height
     }
 
     pub fn region_name(&self, x: usize, y: usize) -> &str {
         self.regions
             .iter()
             .find(|(_, x0, y0, x1, y1)| x >= *x0 && x < *x1 && y >= *y0 && y < *y1)
-            .map(|r| r.0.as_str())
-            .unwrap_or("The Wilds")
+            .map_or("The Wilds", |r| r.0.as_str())
     }
 
     /// Index into `self.regions` covering `(x, y)`, or 0 as a fallback.
@@ -169,21 +168,42 @@ impl World {
 
     /// Pure, deterministic world generation. Terrain thresholds are quantiles so
     /// the `water_pct`/`forest_pct`/`rock_pct` targets are met on any seed.
-    pub fn generate(seed: u64, params: &WorldParams) -> World {
+    pub fn generate(seed: u64, params: &WorldParams) -> Self {
         let (w, h) = (params.width, params.height);
+        let total = w * h;
         let mut rng = Rng::new(seed);
-        // Noise is sampled in "natural" coordinates where a cell is twice as tall
-        // as it is wide (terminal cells), so the sample space is w x 2h. Feature
-        // size scales with the world so large maps get continents, not speckle.
-        let (sw, sh) = (w as f32, h as f32 * 2.0);
+        let (mut cells, v1) = elevation_cells(&mut rng, w, h);
+        classify_terrain(&mut cells, params, total);
+        seed_vegetation(&mut cells, w, &v1);
+
+        let water_cells_at_generation = cells.iter().filter(|c| c.terrain.is_water()).count();
+        let mut world = Self {
+            cells,
+            width: w,
+            height: h,
+            dens: Vec::new(),
+            carcasses: Vec::new(),
+            seeds: Vec::new(),
+            regions: build_regions(w, h),
+            water_cells_at_generation,
+            shore: Vec::new(),
+        };
+        world.refresh_shore();
+        world
+    }
+}
+
+/// Sample the noise fields and build the raw elevation/moisture cells.
+fn elevation_cells(rng: &mut Rng, w: usize, h: usize) -> (Vec<Cell>, Noise) {
+        let (sw, sh) = (crate::cast!(w => f32), crate::cast!(h => f32) * 2.0);
         let base = (sw.max(sh) / 5.0).max(22.0);
-        let elev = Fbm::new(&mut rng, base, 5, sw, sh);
-        let moist = Fbm::new(&mut rng, base * 0.8, 4, sw, sh);
+        let elev = Fbm::new(rng, base, 5, sw, sh);
+        let moist = Fbm::new(rng, base * 0.8, 4, sw, sh);
         // Low-frequency domain warp: bends coastlines and ridges into organic shapes.
-        let warp_x = Noise::new(&mut rng, base * 1.2, sw, sh);
-        let warp_y = Noise::new(&mut rng, base * 1.2, sw, sh);
+        let warp_x = Noise::new(rng, base * 1.2, sw, sh);
+        let warp_y = Noise::new(rng, base * 1.2, sw, sh);
         let warp_amp = base * 0.6;
-        let v1 = Noise::new(&mut rng, 5.0, sw, sh);
+        let v1 = Noise::new(rng, 5.0, sw, sh);
 
         let total = w * h;
         let mut cells = Vec::with_capacity(total);
@@ -191,8 +211,8 @@ impl World {
             for x in 0..w {
                 // River/lake features are expressed in reference (150×40)
                 // coordinates scaled to the world.
-                let (nx, ny) = (x as f32, y as f32 * 2.0);
-                let (rx, ry) = (x as f32 * 150.0 / w as f32, y as f32 * 2.0 * 40.0 / h as f32);
+                let (nx, ny) = (crate::cast!(x => f32), crate::cast!(y => f32) * 2.0);
+                let (rx, ry) = (crate::cast!(x => f32) * 150.0 / crate::cast!(w => f32), crate::cast!(y => f32) * 2.0 * 40.0 / crate::cast!(h => f32));
                 let wx = nx + (warp_x.at(nx, ny) - 0.5) * warp_amp;
                 let wy = ny + (warp_y.at(nx, ny) - 0.5) * warp_amp;
                 let mut elevation = elev.at(wx, wy);
@@ -219,8 +239,11 @@ impl World {
                 });
             }
         }
+    (cells, v1)
+}
 
-        // Quantile thresholds. Sort indices by elevation ascending.
+/// Quantile-cut the cells into water, rock, sand, forest and grass bands.
+fn classify_terrain(cells: &mut [Cell], params: &WorldParams, total: usize) {
         let mut order: Vec<usize> = (0..total).collect();
         order.sort_by(|&a, &b| {
             cells[a]
@@ -230,12 +253,12 @@ impl World {
                 .then(a.cmp(&b))
         });
 
-        let water_count = ((params.water_pct as usize * total) / 100).min(total);
-        let rock_count = ((params.rock_pct as usize * total) / 100).min(total);
+        let water_count = ((crate::cast!(params.water_pct => usize) * total).div_euclid(100)).min(total);
+        let rock_count = ((crate::cast!(params.rock_pct => usize) * total).div_euclid(100)).min(total);
         // Fixed 4 % sand band just above the water line.
-        let sand_count = ((4 * total) / 100).min(total.saturating_sub(water_count).saturating_sub(rock_count));
-        let deep_count = water_count * 2 / 3;
-        let forest_count = (params.forest_pct as usize * total) / 100;
+        let sand_count = ((4 * total).div_euclid(100)).min(total.saturating_sub(water_count).saturating_sub(rock_count));
+        let deep_count = (water_count * 2).div_euclid(3);
+        let forest_count = (crate::cast!(params.forest_pct => usize) * total).div_euclid(100);
 
         for &i in &order[0..water_count] {
             cells[i].terrain = Terrain::ShallowWater;
@@ -280,38 +303,23 @@ impl World {
                 };
             }
         }
+}
 
-        // Initial vegetation per terrain (static in C1).
-        for i in 0..total {
-            let (x, y) = (i % w, i / w);
-            let v = v1.at(x as f32, y as f32 * 2.0);
-            cells[i].vegetation = match cells[i].terrain {
-                Terrain::DeepWater | Terrain::ShallowWater | Terrain::Rock => 0.0,
-                Terrain::Sand => 0.05 * v,
-                Terrain::Dirt => 0.15 * v + 0.05,
-                Terrain::GrassSparse => 0.25 + 0.2 * v,
-                Terrain::Grass => 0.45 + 0.25 * v,
-                Terrain::GrassDense => 0.65 + 0.3 * v,
-                Terrain::Forest => 0.55 + 0.25 * v,
-            }
-            .clamp(0.0, 1.0);
+/// Give every cell its initial vegetation from the low-frequency noise.
+fn seed_vegetation(cells: &mut [Cell], w: usize, v1: &Noise) {
+    for i in 0..cells.len() {
+        let (x, y) = (i % w, i.div_euclid(w));
+        let v = v1.at(crate::cast!(x => f32), crate::cast!(y => f32) * 2.0);
+        cells[i].vegetation = match cells[i].terrain {
+            Terrain::DeepWater | Terrain::ShallowWater | Terrain::Rock => 0.0,
+            Terrain::Sand => 0.05 * v,
+            Terrain::Dirt => 0.15 * v + 0.05,
+            Terrain::GrassSparse => 0.25 + 0.2 * v,
+            Terrain::Grass => 0.45 + 0.25 * v,
+            Terrain::GrassDense => 0.65 + 0.3 * v,
+            Terrain::Forest => 0.55 + 0.25 * v,
         }
-
-        let water_cells_at_generation = cells.iter().filter(|c| c.terrain.is_water()).count();
-
-        let mut world = World {
-            cells,
-            width: w,
-            height: h,
-            dens: Vec::new(),
-            carcasses: Vec::new(),
-            seeds: Vec::new(),
-            regions: build_regions(w, h),
-            water_cells_at_generation,
-            shore: Vec::new(),
-        };
-        world.refresh_shore();
-        world
+        .clamp(0.0, 1.0);
     }
 }
 
@@ -328,7 +336,7 @@ fn build_regions(w: usize, h: usize) -> Vec<RegionRect> {
         ("Southern Thicket", 0, 28, 50, 40),
         ("Fenlands", 50, 28, 100, 40),
     ];
-    let scale = |v: usize, src: usize, dst: usize| ((v as f64 * dst as f64 / src as f64).round() as usize).min(dst);
+    let scale = |v: usize, src: usize, dst: usize| (crate::cast!((crate::cast!(v => f64) * crate::cast!(dst => f64) / crate::cast!(src => f64)).round() => usize)).min(dst);
     DEFS
         .iter()
         .map(|&(name, x0, y0, x1, y1)| {
@@ -353,20 +361,20 @@ struct Noise {
 
 impl Noise {
     fn new(rng: &mut Rng, scale: f32, w: f32, h: f32) -> Self {
-        let lw = (w / scale).ceil() as usize + 2;
-        let lh = (h / scale).ceil() as usize + 2;
+        let lw = crate::cast!((w / scale).ceil() => usize) + 2;
+        let lh = crate::cast!((h / scale).ceil() => usize) + 2;
         let lattice = (0..lw * lh).map(|_| rng.f32()).collect();
-        Noise { lattice, lw, lh, scale }
+        Self { lattice, lw, lh, scale }
     }
 
     /// Sample at (x, y); coordinates outside the sample space clamp to the edge.
     fn at(&self, x: f32, y: f32) -> f32 {
         let fx = (x / self.scale).max(0.0);
         let fy = (y / self.scale).max(0.0);
-        let x0 = fx.floor() as usize;
-        let y0 = fy.floor() as usize;
-        let tx = smooth(fx - x0 as f32);
-        let ty = smooth(fy - y0 as f32);
+        let x0 = crate::cast!(fx.floor() => usize);
+        let y0 = crate::cast!(fy.floor() => usize);
+        let tx = smooth(fx - crate::cast!(x0 => f32));
+        let ty = smooth(fy - crate::cast!(y0 => f32));
         let g = |x: usize, y: usize| self.lattice[(y.min(self.lh - 1)) * self.lw + x.min(self.lw - 1)];
         let a = g(x0, y0) + (g(x0 + 1, y0) - g(x0, y0)) * tx;
         let b = g(x0, y0 + 1) + (g(x0 + 1, y0 + 1) - g(x0, y0 + 1)) * tx;
@@ -393,7 +401,7 @@ impl Fbm {
             scale *= 0.5;
             amp *= 0.5;
         }
-        Fbm { octaves: layers, norm }
+        Self { octaves: layers, norm }
     }
 
     fn at(&self, x: f32, y: f32) -> f32 {
@@ -412,13 +420,14 @@ fn smooth(t: f32) -> f32 {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
     use super::*;
 
     fn counts(world: &World) -> [usize; 9] {
         let mut c = [0usize; 9];
         for cell in &world.cells {
-            c[cell.terrain as usize] += 1;
+            c[crate::cast!(cell.terrain => usize)] += 1;
         }
         c
     }
@@ -440,7 +449,7 @@ mod tests {
         for seed in 1..=20 {
             let world = World::generate(seed, &params);
             let c = counts(&world);
-            let pct = |n: usize| n as f32 / total as f32 * 100.0;
+            let pct = |n: usize| crate::cast!(n => f32) / crate::cast!(total => f32) * 100.0;
             let water = pct(c[0] + c[1]);
             let forest = pct(c[7]);
             let rock = pct(c[8]);
@@ -448,6 +457,23 @@ mod tests {
             assert!((forest - 15.0).abs() < 3.0, "seed {seed} forest {forest:.2}");
             assert!((rock - 5.0).abs() < 3.0, "seed {seed} rock {rock:.2}");
         }
+    }
+
+    /// Count each terrain type in the top and bottom halves of `world`.
+    fn split_halves(world: &World, w: usize, h: usize) -> ([usize; 9], [usize; 9]) {
+        let mut top = [0usize; 9];
+        let mut bottom = [0usize; 9];
+        for y in 0..h {
+            for x in 0..w {
+                let t = crate::cast!(world.cell(x, y).terrain => usize);
+                if y < h.div_euclid(2) {
+                    top[t] += 1;
+                } else {
+                    bottom[t] += 1;
+                }
+            }
+        }
+        (top, bottom)
     }
 
     #[test]
@@ -465,14 +491,7 @@ mod tests {
             }
             assert_eq!(identical_pairs, 0, "{w}x{h}: {identical_pairs} repeated rows");
             // Terrain in the top and bottom halves should differ in mix.
-            let mut top = [0usize; 9];
-            let mut bottom = [0usize; 9];
-            for y in 0..h {
-                for x in 0..w {
-                    let t = world.cell(x, y).terrain as usize;
-                    if y < h / 2 { top[t] += 1 } else { bottom[t] += 1 }
-                }
-            }
+            let (top, bottom) = split_halves(&world, w, h);
             assert_ne!(top, bottom, "{w}x{h}");
         }
     }

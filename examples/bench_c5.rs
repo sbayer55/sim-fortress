@@ -11,9 +11,19 @@
 //! at year 5 and at the end, local maxima on the smoothed prey/predator totals,
 //! `peak_lag`, and per-predator hunt success from the cumulative tallies.
 
+// Developer tools, not shipped code: they are separate compilation roots and
+// do not inherit the allow list in `src/lib.rs`. Indexing follows the same
+// checked-loop pattern as the library, and `unwrap`/`expect`/`panic` are how a
+// benchmark or diagnostic script is supposed to fail loudly.
+#![allow(clippy::indexing_slicing, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use sim_fortress::sim::stats::{local_maxima, peak_lag};
 use sim_fortress::sim::{Params, Rainfall, Sim, SpeciesId};
+use std::fmt::Write as _;
 
+// One linear benchmark/diagnostic driver: splitting it would only scatter the
+// reporting it exists to print.
+#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut seed = 42u64;
@@ -94,7 +104,7 @@ fn main() {
             other => panic!("unknown key {other}"),
         }
     }
-    params.stats.series_days = (years as usize + 1) * 360;
+    params.stats.series_days = (sim_fortress::cast!(years => usize) + 1) * 360;
 
     let mut sim = Sim::new(seed, params);
     if let Ok(days) = std::env::var("DEBUG_DAYS") {
@@ -121,12 +131,12 @@ fn main() {
                     edge += 1;
                 }
             }
-            println!("prey n={n} mean energy {:.2} mean thirst {:.2} at-edge {edge} goals {:?}", e / n.max(1) as f32, th / n.max(1) as f32, goals);
+            println!("prey n={n} mean energy {:.2} mean thirst {:.2} at-edge {edge} goals {:?}", e / sim_fortress::cast!(n.max(1) => f32), th / sim_fortress::cast!(n.max(1) => f32), goals);
             let mut pg: BTreeMap<String, u32> = BTreeMap::new();
             for c in sim.creatures.living().filter(|c| c.species.kind() == sim_fortress::sim::Kind::Predator) {
                 *pg.entry(format!("{:?}", c.goal)).or_insert(0) += 1;
             }
-            println!("predator goals {:?}", pg);
+            println!("predator goals {pg:?}");
         }
         let worst = sim.creatures.living().filter(|c| c.species.kind() == sim_fortress::sim::Kind::Prey).max_by(|a, b| a.thirst.partial_cmp(&b.thirst).unwrap()).map(|c| c.id);
         if let Some(id) = worst {
@@ -166,15 +176,15 @@ fn main() {
     }
 
     let samples = sim.series.samples();
-    let prey: Vec<f32> = samples.iter().map(|s| (s.population[0] + s.population[1] + s.population[2]) as f32).collect();
-    let pred: Vec<f32> = samples.iter().map(|s| (s.population[3] + s.population[4] + s.population[5]) as f32).collect();
+    let prey: Vec<f32> = samples.iter().map(|s| sim_fortress::cast!((s.population[0] + s.population[1] + s.population[2]) => f32)).collect();
+    let pred: Vec<f32> = samples.iter().map(|s| sim_fortress::cast!((s.population[3] + s.population[4] + s.population[5]) => f32)).collect();
     let smooth = |v: &[f32]| -> Vec<f32> {
         let n = v.len();
         (0..n)
             .map(|i| {
                 let lo = i.saturating_sub(15);
                 let hi = (i + 16).min(n);
-                v[lo..hi].iter().sum::<f32>() / (hi - lo) as f32
+                v[lo..hi].iter().sum::<f32>() / sim_fortress::cast!((hi - lo) => f32)
             })
             .collect()
     };
@@ -186,15 +196,15 @@ fn main() {
     let lag = peak_lag(&prey, &pred);
 
     let alive_at = |y: usize| year_end.get(y - 1).map_or(0, |c| c.iter().filter(|&&n| n > 0).count());
-    let alive5 = alive_at(5.min(years as usize));
+    let alive5 = alive_at(5.min(sim_fortress::cast!(years => usize)));
     let alive_end = year_end.last().map_or(0, |c| c.iter().filter(|&&n| n > 0).count());
 
     let mut hunt = String::new();
     for id in [SpeciesId::Fox, SpeciesId::Wolf, SpeciesId::Lynx] {
         let k = sim.deaths.hunt_kills[id.index()];
         let a = sim.deaths.hunt_attempts[id.index()];
-        let pct = if a > 0 { k as f32 / a as f32 * 100.0 } else { 0.0 };
-        hunt.push_str(&format!(" {}:{}/{}={:.0}%", id.name(), k, a, pct));
+        let pct = if a > 0 { sim_fortress::cast!(k => f32) / sim_fortress::cast!(a => f32) * 100.0 } else { 0.0 };
+        let _ = write!(hunt, " {}:{}/{}={:.0}%", id.name(), k, a, pct);
     }
 
     if !quiet {
@@ -235,7 +245,7 @@ fn main() {
         }
     }
     let ov: Vec<String> = overrides.iter().map(|(k, v)| format!("{k}={v}")).collect();
-    let last = year_end.last().cloned().unwrap_or([0; 6]);
+    let last = year_end.last().copied().unwrap_or([0; 6]);
     println!(
         "seed={seed} [{}] alive5={alive5} aliveEnd={alive_end} end={:?} maxima={prey_max}/{pred_max} lag={:?} hunt{hunt}",
         ov.join(" "),

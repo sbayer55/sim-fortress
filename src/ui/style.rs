@@ -17,19 +17,19 @@ pub trait SeasonStyle {
 impl SeasonStyle for Season {
     fn glyph(&self) -> char {
         match self {
-            Season::Spring => glyphs::SPRING,
-            Season::Summer => glyphs::SUMMER,
-            Season::Autumn => glyphs::AUTUMN,
-            Season::Winter => glyphs::WINTER,
+            Self::Spring => glyphs::SPRING,
+            Self::Summer => glyphs::SUMMER,
+            Self::Autumn => glyphs::AUTUMN,
+            Self::Winter => glyphs::WINTER,
         }
     }
 
     fn color(&self) -> Color {
         match self {
-            Season::Spring => Color::Rgb(120, 220, 120),
-            Season::Summer => Color::Rgb(250, 210, 70),
-            Season::Autumn => Color::Rgb(240, 140, 50),
-            Season::Winter => Color::Rgb(160, 210, 255),
+            Self::Spring => Color::Rgb(120, 220, 120),
+            Self::Summer => Color::Rgb(250, 210, 70),
+            Self::Autumn => Color::Rgb(240, 140, 50),
+            Self::Winter => Color::Rgb(160, 210, 255),
         }
     }
 }
@@ -42,38 +42,31 @@ pub trait EventKindStyle {
 impl EventKindStyle for EventKind {
     fn glyph(&self) -> char {
         match self {
-            EventKind::Birth => glyphs::BIRTH,
-            EventKind::DeathStarved | EventKind::DeathThirst | EventKind::DeathPredation | EventKind::DeathAge => glyphs::DEATH,
-            EventKind::DeathDisease | EventKind::Outbreak | EventKind::Spillover | EventKind::Epidemic | EventKind::EpidemicOver => glyphs::DISEASE,
-            EventKind::Recovery => glyphs::IMMUNE,
-            EventKind::Mutation => glyphs::MUTATION,
-            EventKind::Migration => glyphs::MIGRATION,
-            EventKind::Extinction => glyphs::EXTINCTION,
-            EventKind::Drought => glyphs::DROUGHT,
-            EventKind::DroughtEased => glyphs::DROUGHT,
-            EventKind::Season => glyphs::SUMMER,
-            EventKind::Note => glyphs::NOTE,
+            Self::Birth => glyphs::BIRTH,
+            Self::DeathStarved | Self::DeathThirst | Self::DeathPredation | Self::DeathAge => glyphs::DEATH,
+            Self::DeathDisease | Self::Outbreak | Self::Spillover | Self::Epidemic | Self::EpidemicOver => glyphs::DISEASE,
+            Self::Recovery => glyphs::IMMUNE,
+            Self::Mutation => glyphs::MUTATION,
+            Self::Migration => glyphs::MIGRATION,
+            Self::Extinction => glyphs::EXTINCTION,
+            Self::Drought | Self::DroughtEased => glyphs::DROUGHT,
+            Self::Season => glyphs::SUMMER,
+            Self::Note => glyphs::NOTE,
         }
     }
 
     fn color(&self) -> Color {
         match self {
-            EventKind::Birth => theme::GOOD,
-            EventKind::DeathStarved => theme::WARN,
-            EventKind::DeathThirst => theme::WARN,
-            EventKind::DeathPredation => theme::BAD,
-            EventKind::DeathAge => theme::DIM,
-            EventKind::Mutation => theme::INFO,
-            EventKind::Migration => theme::ACCENT,
-            EventKind::Extinction => theme::MAGENTA,
-            EventKind::Drought => theme::WARN,
-            EventKind::DroughtEased => theme::DIM,
-            EventKind::Season => theme::TITLE,
-            EventKind::Note => theme::TEXT,
-            EventKind::DeathDisease | EventKind::Outbreak | EventKind::Epidemic => theme::SICK,
-            EventKind::Spillover => theme::MAGENTA,
-            EventKind::EpidemicOver => theme::DIM,
-            EventKind::Recovery => theme::GOOD,
+            Self::Birth | Self::Recovery => theme::GOOD,
+            Self::DeathStarved | Self::DeathThirst | Self::Drought => theme::WARN,
+            Self::DeathPredation => theme::BAD,
+            Self::DeathAge | Self::DroughtEased | Self::EpidemicOver => theme::DIM,
+            Self::Mutation => theme::INFO,
+            Self::Migration => theme::ACCENT,
+            Self::Extinction | Self::Spillover => theme::MAGENTA,
+            Self::Season => theme::TITLE,
+            Self::Note => theme::TEXT,
+            Self::DeathDisease | Self::Outbreak | Self::Epidemic => theme::SICK,
         }
     }
 }
@@ -86,23 +79,23 @@ pub trait SpeciesStyle {
 impl SpeciesStyle for SpeciesId {
     fn glyph(&self) -> char {
         match self {
-            SpeciesId::Vole => glyphs::VOLE,
-            SpeciesId::Hare => glyphs::HARE,
-            SpeciesId::Deer => glyphs::DEER,
-            SpeciesId::Fox => glyphs::FOX,
-            SpeciesId::Wolf => glyphs::WOLF,
-            SpeciesId::Lynx => glyphs::LYNX,
+            Self::Vole => glyphs::VOLE,
+            Self::Hare => glyphs::HARE,
+            Self::Deer => glyphs::DEER,
+            Self::Fox => glyphs::FOX,
+            Self::Wolf => glyphs::WOLF,
+            Self::Lynx => glyphs::LYNX,
         }
     }
 
     fn color(&self) -> Color {
         match self {
-            SpeciesId::Vole => theme::VOLE,
-            SpeciesId::Hare => theme::HARE,
-            SpeciesId::Deer => theme::DEER,
-            SpeciesId::Fox => theme::FOX,
-            SpeciesId::Wolf => theme::WOLF,
-            SpeciesId::Lynx => theme::LYNX,
+            Self::Vole => theme::VOLE,
+            Self::Hare => theme::HARE,
+            Self::Deer => theme::DEER,
+            Self::Fox => theme::FOX,
+            Self::Wolf => theme::WOLF,
+            Self::Lynx => theme::LYNX,
         }
     }
 }
@@ -113,6 +106,7 @@ pub const VITALS: [&str; 4] = ["health", "hunger", "thirst", "energy"];
 
 /// A creature's condition: its weakest vital in 0..=1 and the index into
 /// `VITALS` of that vital (ties go to the earlier one). Hunger and thirst are
+///
 /// inverted so that, like health and energy, higher is better.
 pub fn condition(c: &Creature) -> (f32, usize) {
     let vitals = [c.hp, 1.0 - c.hunger, 1.0 - c.thirst, c.energy];

@@ -5,20 +5,22 @@
 
 /// Ellipse metric with a 2:1 cell aspect: `sqrt((dx/2)² + dy²)`.
 pub fn dist(x0: usize, y0: usize, x1: usize, y1: usize) -> f32 {
-    let dx = (x0 as f32 - x1 as f32) / 2.0;
-    let dy = y0 as f32 - y1 as f32;
+    let dx = (crate::cast!(x0 => f32) - crate::cast!(x1 => f32)) / 2.0;
+    let dy = crate::cast!(y0 => f32) - crate::cast!(y1 => f32);
     (dx * dx + dy * dy).sqrt()
 }
 
 /// Chebyshev distance `max(|dx|, |dy|)`, used for 8-neighbour adjacency.
 pub fn cheb(x0: usize, y0: usize, x1: usize, y1: usize) -> usize {
-    let dx = (x0 as i64 - x1 as i64).unsigned_abs() as usize;
-    let dy = (y0 as i64 - y1 as i64).unsigned_abs() as usize;
+    let dx = crate::cast!((crate::cast!(x0 => i64) - crate::cast!(x1 => i64)).unsigned_abs() => usize);
+    let dy = crate::cast!((crate::cast!(y0 => i64) - crate::cast!(y1 => i64)).unsigned_abs() => usize);
     dx.max(dy)
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
+
     use super::*;
 
     #[test]

@@ -6,6 +6,13 @@
 //! One shared batch of runs (seeds 1..=10, 3 years, disease off and on) feeds
 //! every criterion so the file costs one sweep, not one per test.
 
+// Test and developer-tool crates are separate compilation roots, so they do
+// not inherit the allow list in `src/lib.rs`. The same `indexing_slicing`
+// justification applies here (indices come from checked `0..len()` loops over
+// fixed-size arrays), and `unwrap`/`expect`/`panic` are how a test or bench
+// harness is supposed to fail loudly.
+#![allow(clippy::indexing_slicing, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::sync::OnceLock;
 
 use sim_fortress::sim::{EventKind, Params, Sim, SpeciesId};
@@ -41,14 +48,14 @@ fn prey_only(seed: u64, enabled: bool) -> Run {
     let mut extinct_within = false;
     let mut alive_before: [bool; 3] = [true; 3];
     let mut host_pop_at_start: Vec<(u16, u32)> = Vec::new();
-    for day in 0..(YEARS * 360) as u32 {
+    for day in 0..sim_fortress::cast!((YEARS * 360) => u32) {
         for _ in 0..24 {
             sim.step();
         }
         let census = sim_fortress::sim::stats::census(&sim.creatures);
         // Record the host population on each outbreak's start day.
         for (i, o) in sim.disease.outbreaks.iter().enumerate() {
-            let idx = sim.disease.first_index + i as u16;
+            let idx = sim.disease.first_index + sim_fortress::cast!(i => u16);
             if o.started_day == day && !host_pop_at_start.iter().any(|(k, _)| *k == idx) {
                 let hosts: u32 = (0..6).filter(|&s| sim.disease.pathogen(o.pathogen).is_some_and(|p| p.host(SpeciesId::ALL[s]) > 0.0)).map(|s| census.population[s]).sum();
                 host_pop_at_start.push((idx, hosts));
@@ -84,8 +91,8 @@ fn prey_only(seed: u64, enabled: bool) -> Run {
         .max_by_key(|(_, o)| o.deaths)
         .map(|(i, o)| {
             let host = (0..6).max_by_key(|&s| o.species_cases[s]).unwrap_or(0);
-            let idx = sim.disease.first_index + i as u16;
-            let pop = host_pop_at_start.iter().find(|(k, _)| *k == idx).map(|(_, p)| *p).unwrap_or(0);
+            let idx = sim.disease.first_index + sim_fortress::cast!(i => u16);
+            let pop = host_pop_at_start.iter().find(|(k, _)| *k == idx).map_or(0, |(_, p)| *p);
             (host, o.deaths, pop)
         });
     Run {
@@ -102,10 +109,10 @@ fn prey_only(seed: u64, enabled: bool) -> Run {
 fn batch() -> &'static Vec<(u64, Run, Run)> {
     static BATCH: OnceLock<Vec<(u64, Run, Run)>> = OnceLock::new();
     BATCH.get_or_init(|| {
-        let handles: Vec<_> = (1..=SEEDS)
+        (1..=SEEDS)
             .map(|seed| std::thread::spawn(move || (seed, prey_only(seed, false), prey_only(seed, true))))
-            .collect();
-        handles.into_iter().map(|h| h.join().unwrap()).collect()
+            .map(|h| h.join().unwrap())
+            .collect()
     })
 }
 
@@ -128,7 +135,7 @@ fn epidemic_mortality_band() {
     let mut report = Vec::new();
     for (seed, _, on) in batch() {
         if let Some((host, dead, pop)) = on.biggest {
-            let share = if pop > 0 { dead as f32 / pop as f32 } else { 0.0 };
+            let share = if pop > 0 { sim_fortress::cast!(dead => f32) / sim_fortress::cast!(pop => f32) } else { 0.0 };
             report.push(format!("seed {seed}: {} {dead}/{pop} = {:.0}%", SpeciesId::ALL[host].name(), share * 100.0));
             if (0.05..=0.60).contains(&share) {
                 ok += 1;
@@ -191,7 +198,7 @@ fn cost_reversal_off_world() {
         }
     }
     assert!(n >= 8, "expected voles to survive in most seeds: {report:?}");
-    let mean = sum / n as f32;
+    let mean = sum / sim_fortress::cast!(n => f32);
     assert!(clear_rise <= 1, "resistance rose clearly (>= +0.03) with disease off in {clear_rise} seeds: {report:?}");
     assert!(mean <= 0.01, "mean resistance change {mean:+.4} with disease off must not be positive: {report:?}");
 }
@@ -203,8 +210,8 @@ fn relative_population_effect() {
     let mut ok = 0;
     let mut report = Vec::new();
     for (seed, off, on) in batch() {
-        let a = off.prey_by_year.last().copied().unwrap_or(0) as f32;
-        let b = on.prey_by_year.last().copied().unwrap_or(0) as f32;
+        let a = sim_fortress::cast!(off.prey_by_year.last().copied().unwrap_or(0) => f32);
+        let b = sim_fortress::cast!(on.prey_by_year.last().copied().unwrap_or(0) => f32);
         report.push(format!("seed {seed}: off {a} on {b}"));
         if a == 0.0 || b >= 0.4 * a {
             ok += 1;
@@ -226,7 +233,7 @@ fn disabled_world_has_no_disease_state() {
 #[test]
 #[ignore = "slow: 20 default-world seeds × 2 years; run with --ignored"]
 fn spillover_is_rare_but_real() {
-    let handles: Vec<_> = (1..=20u64)
+    let results: Vec<_> = (1..=20u64)
         .map(|seed| {
             std::thread::spawn(move || {
                 let mut sim = Sim::new(seed, Params::default());
@@ -234,15 +241,15 @@ fn spillover_is_rare_but_real() {
                     sim.step();
                 }
                 let spill = sim.events.iter().filter(|e| e.kind == EventKind::Spillover).count() + sim.disease.pathogens.iter().filter(|p| p.is_strain()).count();
-                let strain_outbreaks = sim.disease.outbreaks.iter().filter(|o| sim.disease.pathogen(o.pathogen).is_some_and(|p| p.is_strain())).count();
+                let strain_outbreaks = sim.disease.outbreaks.iter().filter(|o| sim.disease.pathogen(o.pathogen).is_some_and(sim_fortress::sim::Pathogen::is_strain)).count();
                 (spill > 0, strain_outbreaks, sim.disease.outbreaks.len())
             })
         })
+        .map(|h| h.join().unwrap())
         .collect();
-    let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
     let seeds_with = results.iter().filter(|r| r.0).count();
     let strain: usize = results.iter().map(|r| r.1).sum();
     let all: usize = results.iter().map(|r| r.2).sum();
     assert!((3..=16).contains(&seeds_with), "spillover in {seeds_with} of 20 seeds");
-    assert!(all == 0 || (strain as f32) < 0.25 * all as f32, "strain outbreaks {strain} of {all}");
+    assert!(all == 0 || (sim_fortress::cast!(strain => f32)) < 0.25 * sim_fortress::cast!(all => f32), "strain outbreaks {strain} of {all}");
 }

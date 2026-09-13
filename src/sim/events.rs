@@ -30,39 +30,39 @@ pub enum EventKind {
 }
 
 impl EventKind {
-    pub fn is_death(self) -> bool {
+    pub const fn is_death(self) -> bool {
         matches!(
             self,
-            EventKind::DeathStarved | EventKind::DeathThirst | EventKind::DeathPredation | EventKind::DeathAge | EventKind::DeathDisease
+            Self::DeathStarved | Self::DeathThirst | Self::DeathPredation | Self::DeathAge | Self::DeathDisease
         )
     }
 
     /// Text label, kept in `sim` (no presentation deps) for headless output.
-    pub fn label(self) -> &'static str {
+    pub const fn label(self) -> &'static str {
         match self {
-            EventKind::Birth => "birth",
-            EventKind::DeathStarved => "starved",
-            EventKind::DeathThirst => "thirst",
-            EventKind::DeathPredation => "predation",
-            EventKind::DeathAge => "old age",
-            EventKind::DeathDisease => "disease",
-            EventKind::Mutation => "mutation",
-            EventKind::Migration => "migration",
-            EventKind::Extinction => "EXTINCTION",
-            EventKind::Drought => "drought",
-            EventKind::DroughtEased => "eases",
-            EventKind::Season => "season",
-            EventKind::Note => "note",
-            EventKind::Outbreak => "outbreak",
-            EventKind::Spillover => "spillover",
-            EventKind::Epidemic => "EPIDEMIC",
-            EventKind::EpidemicOver => "burnt out",
-            EventKind::Recovery => "recovery",
+            Self::Birth => "birth",
+            Self::DeathStarved => "starved",
+            Self::DeathThirst => "thirst",
+            Self::DeathPredation => "predation",
+            Self::DeathAge => "old age",
+            Self::DeathDisease => "disease",
+            Self::Mutation => "mutation",
+            Self::Migration => "migration",
+            Self::Extinction => "EXTINCTION",
+            Self::Drought => "drought",
+            Self::DroughtEased => "eases",
+            Self::Season => "season",
+            Self::Note => "note",
+            Self::Outbreak => "outbreak",
+            Self::Spillover => "spillover",
+            Self::Epidemic => "EPIDEMIC",
+            Self::EpidemicOver => "burnt out",
+            Self::Recovery => "recovery",
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Event {
     pub year: u32,
     pub day: u32,
@@ -77,7 +77,7 @@ pub struct Event {
 }
 
 /// Fixed-capacity ring buffer of events (Vec-backed, so iteration order is stable).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EventRing {
     cap: usize,
     buf: Vec<Event>,
@@ -87,8 +87,8 @@ pub struct EventRing {
 }
 
 impl EventRing {
-    pub fn new(cap: usize) -> Self {
-        EventRing { cap, buf: Vec::new(), total: 0 }
+    pub const fn new(cap: usize) -> Self {
+        Self { cap, buf: Vec::new(), total: 0 }
     }
 
     pub fn push(&mut self, e: Event) {
@@ -104,7 +104,7 @@ impl EventRing {
     }
 
     /// Absolute (1-based) index of the most recently pushed event.
-    pub fn total(&self) -> u64 {
+    pub const fn total(&self) -> u64 {
         self.total
     }
 

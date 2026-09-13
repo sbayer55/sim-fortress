@@ -17,7 +17,7 @@ use crate::{glyphs, theme};
 
 /// The S06 region status rule (FR7).
 pub fn region_status(veg: f32, prey: u32, prey_configured: bool, th: &ScarcityThresholds) -> &'static str {
-    let crowded = prey as f32 > th.crowded_prey_per_veg * veg.max(1e-6);
+    let crowded = crate::cast!(prey => f32) > th.crowded_prey_per_veg * veg.max(1e-6);
     if veg < th.scarce {
         "Scarce"
     } else if veg < th.strained || (crowded && veg < th.plenty) {
@@ -32,6 +32,7 @@ pub fn region_status(veg: f32, prey: u32, prey_configured: bool, th: &ScarcityTh
 /// Active cases in one region that flip its status word to `Outbreak` (C7 FR13).
 pub const OUTBREAK_CASES: u32 = 5;
 
+#[derive(Debug)]
 pub struct Ecology {
     sort: usize,
     selected: usize,
@@ -44,8 +45,8 @@ impl Default for Ecology {
 }
 
 impl Ecology {
-    pub fn new() -> Self {
-        Ecology { sort: 0, selected: 1 }
+    pub const fn new() -> Self {
+        Self { sort: 0, selected: 1 }
     }
 
     fn sorted_regions(&self, world: &World) -> Vec<usize> {
@@ -101,7 +102,7 @@ impl Screen for Ecology {
             KeyCode::Enter => {
                 if let Some(sim) = &app.sim {
                     let r = &sim.world.regions[self.selected];
-                    let (cx, cy) = ((r.1 + r.3) / 2, (r.2 + r.4) / 2);
+                    let (cx, cy) = ((r.1 + r.3).div_euclid(2), (r.2 + r.4).div_euclid(2));
                     app.centre_viewport_on(cx, cy);
                 }
                 Action::Pop
@@ -111,7 +112,7 @@ impl Screen for Ecology {
         }
     }
 
-    fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
+    fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let Some(sim) = &app.sim else {
             return;
         };
@@ -121,8 +122,8 @@ impl Screen for Ecology {
 
         let status_row = area.y + area.height - 1;
         let body_h = area.height - 1;
-        let totals_area = Rect::new(area.x, area.y, area.width * 2 / 3, body_h / 2);
-        let season_area = Rect::new(area.x + totals_area.width, area.y, area.width - totals_area.width, body_h / 2);
+        let totals_area = Rect::new(area.x, area.y, (area.width * 2).div_euclid(3), body_h.div_euclid(2));
+        let season_area = Rect::new(area.x + totals_area.width, area.y, area.width - totals_area.width, body_h.div_euclid(2));
         let regions_area = Rect::new(area.x, area.y + totals_area.height, area.width, body_h - totals_area.height);
 
         totals(f, totals_area, sim, world);
@@ -135,7 +136,7 @@ impl Screen for Ecology {
     }
 }
 
-fn totals(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, world: &World) {
+fn totals(f: &mut Frame<'_>, area: Rect, sim: &crate::sim::Sim, world: &World) {
     let inner = panel::draw_with_hint(f, area, "Totals", "sparklines = last 240 days", panel::Kind::Outer);
     let mut row = 0u16;
     let series = sim.series.samples();
@@ -143,8 +144,8 @@ fn totals(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, world: &World) {
 
     panel::section(f, inner, row, "Now");
     row += 1;
-    let veg = last.map(|s| s.veg_mean).unwrap_or(0.0);
-    let water = last.map(|s| s.water_level).unwrap_or(0.0);
+    let veg = last.map_or(0.0, |s| s.veg_mean);
+    let water = last.map_or(0.0, |s| s.water_level);
     bars::labeled(f.buffer_mut(), inner, row, " vegetation", veg, theme::VEGETATION, 13, 20);
     row += 1;
     bars::labeled(f.buffer_mut(), inner, row, " water", water, theme::SHALLOW_FG, 13, 20);
@@ -159,27 +160,27 @@ fn totals(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, world: &World) {
     row += 1;
     let mut counts = [0usize; 9];
     for c in &world.cells {
-        counts[c.terrain as usize] += 1;
+        counts[crate::cast!(c.terrain => usize)] += 1;
     }
-    let total = world.cells.len().max(1) as f32;
+    let total = crate::cast!(world.cells.len().max(1) => f32);
     let mut kinds: Vec<Terrain> = [Terrain::DeepWater, Terrain::ShallowWater, Terrain::Sand, Terrain::Dirt, Terrain::GrassSparse, Terrain::Grass, Terrain::GrassDense, Terrain::Forest, Terrain::Rock].to_vec();
-    kinds.sort_by_key(|t| std::cmp::Reverse(counts[*t as usize]));
-    let max = counts.iter().copied().max().unwrap_or(1).max(1) as f32;
+    kinds.sort_by_key(|t| std::cmp::Reverse(counts[crate::cast!(*t => usize)]));
+    let max = crate::cast!(counts.iter().copied().max().unwrap_or(1).max(1) => f32);
     for t in kinds {
-        let n = counts[t as usize];
+        let n = counts[crate::cast!(t => usize)];
         let (g, fg, _bg) = map::terrain_cell(&crate::sim::Cell { terrain: t, elevation: 0.0, moisture: 0.0, vegetation: 0.0, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 }, false);
         let buf = f.buffer_mut();
         let y = inner.y + row;
-        buf.set_stringn(inner.x + 1, y, format!("{} ", g), 2, Style::default().fg(fg).bg(theme::PANEL_BG));
+        buf.set_stringn(inner.x + 1, y, format!("{g} "), 2, Style::default().fg(fg).bg(theme::PANEL_BG));
         buf.set_stringn(inner.x + 3, y, format!("{:<14}", t.name()), 14, theme::text());
-        bars::bar(buf, inner.x + 17, y, 24, n as f32 / max, fg);
-        buf.set_stringn(inner.x + 43, y, format!("{:>5} {:>3}%", n, (n as f32 / total * 100.0).round() as u32), 9, theme::dim_text());
+        bars::bar(buf, inner.x + 17, y, 24, crate::cast!(n => f32) / max, fg);
+        buf.set_stringn(inner.x + 43, y, format!("{:>5} {:>3}%", n, crate::cast!((crate::cast!(n => f32) / total * 100.0).round() => u32)), 9, theme::dim_text());
         row += 1;
     }
     let _ = series;
 }
 
-fn season(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, time: &crate::sim::Time, ecology: &crate::sim::params::EcologyParams) {
+fn season(f: &mut Frame<'_>, area: Rect, sim: &crate::sim::Sim, time: &crate::sim::Time, ecology: &crate::sim::params::EcologyParams) {
     let inner = panel::draw(f, area, "Season", panel::Kind::Outer);
     let mut row = 0u16;
     let season = time.season();
@@ -189,10 +190,16 @@ fn season(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, time: &crate::sim::T
         Span::styled(format!("day {} of {}  year {}", time.day_of_season(), time.season_days, time.year()), theme::text()),
     ]));
     row += 1;
-    let progress = (time.day_of_season() - 1) as f32 / time.season_days as f32;
+    let progress = crate::cast!((time.day_of_season() - 1) => f32) / crate::cast!(time.season_days => f32);
     bars::labeled(f.buffer_mut(), inner, row, " progress", progress, season.color(), 9, 30);
     row += 2;
 
+    row = season_modifiers(f, inner, row, season, ecology);
+    row = season_forecast(f, inner, row, sim, time, season);
+    day_strip(f, inner, row, time);
+}
+
+fn season_modifiers(f: &mut Frame<'_>, inner: Rect, mut row: u16, season: Season, ecology: &crate::sim::params::EcologyParams) -> u16 {
     panel::section(f, inner, row, "Modifiers");
     row += 1;
     util::line(f, inner, row, Line::from(Span::styled(" season  regrowth  evap  metabolism  forage", theme::dim_text())));
@@ -207,19 +214,22 @@ fn season(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, time: &crate::sim::T
         let sty = if active { theme::selected() } else { theme::text() };
         util::line(f, inner, row, Line::from(vec![
             Span::styled(format!(" {} {}", if active { "►" } else { " " }, s.name()), sty),
-            Span::styled(format!("  {:.1}x", regrowth), sty),
-            Span::styled(format!("  {:.1}x", evap), sty),
-            Span::styled(format!("  {:.1}x", metab), sty),
+            Span::styled(format!("  {regrowth:.1}x"), sty),
+            Span::styled(format!("  {evap:.1}x"), sty),
+            Span::styled(format!("  {metab:.1}x"), sty),
             Span::styled(format!("  {forage}"), sty),
         ]));
         row += 1;
     }
     row += 1;
+    row
+}
 
+fn season_forecast(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &crate::sim::Sim, time: &crate::sim::Time, season: Season) -> u16 {
     panel::section(f, inner, row, "Forecast");
     row += 1;
-    let days_to_frost = (Season::Winter as i32 - season as i32).rem_euclid(4) * time.season_days as i32;
-    let frost = if season == Season::Winter { " frost now".to_string() } else { format!(" frost in {} days", days_to_frost) };
+    let days_to_frost = (crate::cast!(Season::Winter => i32) - crate::cast!(season => i32)).rem_euclid(4) * crate::cast!(time.season_days => i32);
+    let frost = if season == Season::Winter { " frost now".to_string() } else { format!(" frost in {days_to_frost} days") };
     util::line(f, inner, row, Line::from(Span::styled(frost, theme::text())));
     row += 1;
     let pp = &sim.params.predation;
@@ -247,7 +257,10 @@ fn season(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, time: &crate::sim::T
         ]));
         row += 1;
     }
+    row
+}
 
+fn day_strip(f: &mut Frame<'_>, inner: Rect, mut row: u16, time: &crate::sim::Time) -> u16 {
     panel::section(f, inner, row, "Day");
     row += 1;
     // 24-cell hour strip.
@@ -255,7 +268,7 @@ fn season(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, time: &crate::sim::T
         let night = h < time.sunrise_hour || h >= time.sunset_hour;
         let ch = if h == time.hour() { glyphs::FULL_BLOCK } else if night { glyphs::SHADE_1 } else { glyphs::SHADE_3 };
         let color = if night { theme::DEEP_WATER_FG } else { theme::ACCENT };
-        if let Some(c) = f.buffer_mut().cell_mut((inner.x + 1 + h as u16, inner.y + row)) {
+        if let Some(c) = f.buffer_mut().cell_mut((inner.x + 1 + crate::cast!(h => u16), inner.y + row)) {
             c.set_char(ch);
             c.set_style(Style::default().fg(if h == time.hour() { theme::TEXT_BRIGHT } else { color }).bg(theme::PANEL_BG));
         }
@@ -263,9 +276,117 @@ fn season(f: &mut Frame, area: Rect, sim: &crate::sim::Sim, time: &crate::sim::T
     row += 1;
     let sky = if time.is_night() { glyphs::MOON } else { glyphs::SUN };
     util::line(f, inner, row, Line::from(Span::styled(format!(" now {} {} {}", time.hour_label(), sky, if time.is_night() { "night" } else { "day" }), theme::dim_text())));
+    row
 }
 
-fn regions(f: &mut Frame, area: Rect, app: &AppState, world: &World, time: &crate::sim::Time, screen: &Ecology) {
+/// Living prey, predator and sick counts in region `ri`.
+fn region_counts(sim: &crate::sim::Sim, world: &World, ri: usize) -> (u32, u32, u32) {
+    let (mut prey_n, mut pred_n, mut sick_n) = (0u32, 0u32, 0u32);
+    for c in sim.creatures.living() {
+        if world.region_index(c.x, c.y) != ri {
+            continue;
+        }
+        if c.species.kind() == crate::sim::Kind::Prey {
+            prey_n += 1;
+        } else {
+            pred_n += 1;
+        }
+        if c.infection.is_some() {
+            sick_n += 1;
+        }
+    }
+    (prey_n, pred_n, sick_n)
+}
+
+/// One region row: counts, bars and status.
+#[allow(clippy::too_many_arguments)]
+fn region_row(buf: &mut ratatui::buffer::Buffer, inner: Rect, y: u16, ri: usize, r: &(String, usize, usize, usize, usize), world: &World, app: &AppState, selected: bool, th: &ScarcityThresholds, prey_configured: bool) {
+    let veg = crate::sim::ecology::region_land_veg_mean(world, r);
+    let moist = crate::sim::ecology::region_display_moisture_mean(world, r);
+    let cells = (r.3 - r.1) * (r.4 - r.2);
+    let water = region_water_cells(world, r);
+    if selected {
+        for x in inner.x..inner.right() {
+            if let Some(c) = buf.cell_mut((x, y)) {
+                c.set_bg(theme::SELECT_BG);
+            }
+        }
+    }
+    let text = if selected { theme::TEXT_BRIGHT } else { theme::TEXT };
+    buf.set_stringn(inner.x, y, format!("{}{:<16}", if selected { glyphs::PLAY } else { ' ' }, r.0), 18, region_cell_style(selected, text));
+    buf.set_stringn(inner.x + 18, y, format!("{cells:>6}"), 6, region_cell_style(selected, text));
+    buf.set_stringn(inner.x + 24, y, format!("{:>6.0}%", crate::cast!(water => f32) / crate::cast!(cells.max(1) => f32) * 100.0), 7, region_cell_style(selected, theme::SHALLOW_FG));
+    let mut x = inner.x + 32;
+    for (v, ramp) in [(veg, theme::veg(veg)), (moist, theme::water(moist))] {
+        bars::bar(buf, x, y, 20, v, ramp);
+        buf.set_stringn(x + 21, y, format!("{v:.2}"), 4, region_cell_style(selected, text));
+        x += 26;
+    }
+    let (prey_n, pred_n, sick_n) = match &app.sim {
+        Some(sim) => region_counts(sim, world, ri),
+        None => (0, 0, 0),
+    };
+    let (label, color) = region_status_label(veg, sick_n, prey_configured, th);
+    let pressure = region_pressure(world, r);
+    buf.set_stringn(inner.x + 86, y, format!("{prey_n:>5}"), 5, region_cell_style(selected, theme::HARE));
+    buf.set_stringn(inner.x + 91, y, format!("{pred_n:>5}"), 5, region_cell_style(selected, theme::WOLF));
+    let sick_color = if sick_n > 0 { theme::SICK } else { theme::DIM };
+    buf.set_stringn(inner.x + 96, y, format!("{sick_n:>5}"), 5, region_cell_style(selected, sick_color));
+    buf.set_stringn(inner.x + 103, y, format!("{pressure:>4.2} "), 5, region_cell_style(selected, text));
+    buf.set_stringn(inner.x + 109, y, format!("{label:<9}"), 9, region_cell_style(selected, color).add_modifier(Modifier::BOLD));
+}
+
+/// The panel background style for one cell of a region row.
+fn region_cell_style(selected: bool, fg: ratatui::style::Color) -> Style {
+    Style::default().fg(fg).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG })
+}
+
+/// Water cells inside a region rectangle.
+fn region_water_cells(world: &World, r: &(String, usize, usize, usize, usize)) -> usize {
+    world
+        .cells
+        .iter()
+        .enumerate()
+        .filter(|(idx, c)| {
+            let (x, y) = (idx % world.width, idx / world.width);
+            x >= r.1 && x < r.3 && y >= r.2 && y < r.4 && c.terrain.is_water()
+        })
+        .count()
+}
+
+/// Mean predator pressure over the region's land cells.
+fn region_pressure(world: &World, r: &(String, usize, usize, usize, usize)) -> f32 {
+    let mut psum = 0.0f32;
+    let mut pn = 0usize;
+    for yy in r.2..r.4 {
+        for xx in r.1..r.3 {
+            let cell = world.cell(xx, yy);
+            if !cell.terrain.is_water() {
+                psum += cell.pred_pressure;
+                pn += 1;
+            }
+        }
+    }
+    if pn > 0 {
+        psum / crate::cast!(pn => f32)
+    } else {
+        0.0
+    }
+}
+
+/// The scarcity label and colour, with an outbreak outranking all but Scarce.
+fn region_status_label(veg: f32, sick_n: u32, prey_configured: bool, th: &ScarcityThresholds) -> (&'static str, ratatui::style::Color) {
+    let status = region_status(veg, 0, prey_configured, th);
+    match status {
+        "Scarce" => ("Scarce", theme::BAD),
+        _ if sick_n >= OUTBREAK_CASES => ("Outbreak", theme::SICK),
+        "Strained" => ("Strained", theme::WARN),
+        "Plenty" => ("Plenty", theme::GOOD),
+        _ => ("Stable", theme::TEXT),
+    }
+}
+
+fn regions(f: &mut Frame<'_>, area: Rect, app: &AppState, world: &World, time: &crate::sim::Time, screen: &Ecology) {
     let inner = panel::draw_with_hint(f, area, "Regions", "sorted by name   [r] cycle sort", panel::Kind::Outer);
     let mut row = 0u16;
     let th = &app.params.ui.scarcity_thresholds;
@@ -280,75 +401,9 @@ fn regions(f: &mut Frame, area: Rect, app: &AppState, world: &World, time: &crat
     let order = screen.sorted_regions(world);
     for (i, &ri) in order.iter().enumerate() {
         let r = &world.regions[ri];
-        let veg = crate::sim::ecology::region_land_veg_mean(world, r);
-        let moist = crate::sim::ecology::region_display_moisture_mean(world, r);
-        let cells = (r.3 - r.1) * (r.4 - r.2);
-        let water = world.cells.iter().enumerate().filter(|(idx, c)| {
-            let (x, y) = (idx % world.width, idx / world.width);
-            x >= r.1 && x < r.3 && y >= r.2 && y < r.4 && c.terrain.is_water()
-        }).count();
         let selected = i == screen.selected;
         let y = inner.y + row;
-        let buf = f.buffer_mut();
-        if selected {
-            for x in inner.x..inner.right() {
-                if let Some(c) = buf.cell_mut((x, y)) {
-                    c.set_bg(theme::SELECT_BG);
-                }
-            }
-        }
-        let text = if selected { theme::TEXT_BRIGHT } else { theme::TEXT };
-        buf.set_stringn(inner.x, y, format!("{}{:<16}", if selected { glyphs::PLAY } else { ' ' }, r.0), 18, Style::default().fg(text).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
-        buf.set_stringn(inner.x + 18, y, format!("{:>6}", cells), 6, Style::default().fg(text).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
-        buf.set_stringn(inner.x + 24, y, format!("{:>6.0}%", water as f32 / cells.max(1) as f32 * 100.0), 7, Style::default().fg(theme::SHALLOW_FG).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
-        let mut x = inner.x + 32;
-        for (v, ramp) in [(veg, theme::veg(veg)), (moist, theme::water(moist))] {
-            bars::bar(buf, x, y, 20, v, ramp);
-            buf.set_stringn(x + 21, y, format!("{:.2}", v), 4, Style::default().fg(text).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
-            x += 26;
-        }
-        let (prey_n, pred_n, sick_n) = match &app.sim {
-            Some(sim) => {
-                let (mut prey_n, mut pred_n, mut sick_n) = (0u32, 0u32, 0u32);
-                for c in sim.creatures.living() {
-                    if world.region_index(c.x, c.y) == ri {
-                        if c.species.kind() == crate::sim::Kind::Prey { prey_n += 1 } else { pred_n += 1 }
-                        if c.infection.is_some() {
-                            sick_n += 1;
-                        }
-                    }
-                }
-                (prey_n, pred_n, sick_n)
-            }
-            None => (0, 0, 0),
-        };
-        // C7: an outbreak (≥ 5 active cases) outranks everything but Scarce.
-        let status = region_status(veg, 0, prey_configured, th);
-        let (label, color) = match status {
-            "Scarce" => ("Scarce", theme::BAD),
-            _ if sick_n >= OUTBREAK_CASES => ("Outbreak", theme::SICK),
-            "Strained" => ("Strained", theme::WARN),
-            "Plenty" => ("Plenty", theme::GOOD),
-            _ => ("Stable", theme::TEXT),
-        };
-        let mut psum = 0.0f32;
-        let mut pn = 0usize;
-        for yy in r.2..r.4 {
-            for xx in r.1..r.3 {
-                let cell = world.cell(xx, yy);
-                if !cell.terrain.is_water() {
-                    psum += cell.pred_pressure;
-                    pn += 1;
-                }
-            }
-        }
-        let pressure = if pn > 0 { psum / pn as f32 } else { 0.0 };
-        buf.set_stringn(inner.x + 86, y, format!("{:>5}", prey_n), 5, Style::default().fg(theme::HARE).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
-        buf.set_stringn(inner.x + 91, y, format!("{:>5}", pred_n), 5, Style::default().fg(theme::WOLF).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
-        let sick_color = if sick_n > 0 { theme::SICK } else { theme::DIM };
-        buf.set_stringn(inner.x + 96, y, format!("{:>5}", sick_n), 5, Style::default().fg(sick_color).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
-        buf.set_stringn(inner.x + 103, y, format!("{:>4.2} ", pressure), 5, Style::default().fg(text).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }));
-        buf.set_stringn(inner.x + 109, y, format!("{:<9}", label), 9, Style::default().fg(color).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG }).add_modifier(Modifier::BOLD));
+        region_row(f.buffer_mut(), inner, y, ri, r, world, app, selected, th, prey_configured);
         row += 1;
     }
     let _ = time;

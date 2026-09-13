@@ -2,8 +2,17 @@
 //!
 //! `cargo run --release --example diag -- [seed] [days] [params.toml]`
 
+// Developer tools, not shipped code: they are separate compilation roots and
+// do not inherit the allow list in `src/lib.rs`. Indexing follows the same
+// checked-loop pattern as the library, and `unwrap`/`expect`/`panic` are how a
+// benchmark or diagnostic script is supposed to fail loudly.
+#![allow(clippy::indexing_slicing, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use sim_fortress::sim::{EventKind, Params, Sim, SpeciesId};
 
+// One linear benchmark/diagnostic driver: splitting it would only scatter the
+// reporting it exists to print.
+#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let seed: u64 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(42);
@@ -32,7 +41,7 @@ fn main() {
             for e in sim.events.iter().rev().take(3000) {
                 let Some(sp) = e.species else { continue };
                 let i = sp.index();
-                if i >= 3 || (e.day as u64) < day.saturating_sub(30) % 360 {
+                if i >= 3 || u64::from(e.day) < day.saturating_sub(30) % 360 {
                     continue;
                 }
                 match e.kind {
@@ -47,14 +56,18 @@ fn main() {
             let mut ages: Vec<u32> = Vec::new();
             let mut veg_at: Vec<f32> = Vec::new();
             for c in sim.creatures.carcasses() {
-                if let Some(d) = c.death {
-                    if d.cause == sim_fortress::sim::Cause::Starved && c.species.index() < 3 {
-                        let age = (d.day as i64 - c.born_day as i64).max(0) as u32;
-                        ages.push(age);
-                        if c.adult { adult += 1 } else { juv += 1 }
-                        veg_at.push(sim.world.cell(c.x, c.y).vegetation);
-                    }
+                let Some(d) = c.death else { continue };
+                if d.cause != sim_fortress::sim::Cause::Starved || c.species.index() >= 3 {
+                    continue;
                 }
+                let age = sim_fortress::cast!((i64::from(d.day) - i64::from(c.born_day)).max(0) => u32);
+                ages.push(age);
+                if c.adult {
+                    adult += 1;
+                } else {
+                    juv += 1;
+                }
+                veg_at.push(sim.world.cell(c.x, c.y).vegetation);
             }
             // Thirst deaths: did they know a water spot, and how far was water?
             let mut known = 0;
@@ -66,38 +79,37 @@ fn main() {
                 .filter(|&(x, y)| sim.world.cell(x, y).terrain.is_water())
                 .collect();
             for c in sim.creatures.carcasses() {
-                if let Some(d) = c.death {
-                    if d.cause == sim_fortress::sim::Cause::Thirst && c.species.index() < 3 {
-                        match c.last_water {
-                            Some((wx, wy)) => {
-                                known += 1;
-                                d_known.push(sim_fortress::sim::dist(c.x, c.y, wx, wy));
-                            }
-                            None => unknown += 1,
-                        }
-                        let nd = water.iter().map(|&(wx, wy)| sim_fortress::sim::dist(c.x, c.y, wx, wy)).fold(f32::INFINITY, f32::min);
-                        d_nearest.push(nd);
-                    }
+                let Some(d) = c.death else { continue };
+                if d.cause != sim_fortress::sim::Cause::Thirst || c.species.index() >= 3 {
+                    continue;
                 }
+                if let Some((wx, wy)) = c.last_water {
+                    known += 1;
+                    d_known.push(sim_fortress::sim::dist(c.x, c.y, wx, wy));
+                } else {
+                    unknown += 1;
+                }
+                let nd = water.iter().map(|&(wx, wy)| sim_fortress::sim::dist(c.x, c.y, wx, wy)).fold(f32::INFINITY, f32::min);
+                d_nearest.push(nd);
             }
-            let avg = |v: &[f32]| if v.is_empty() { 0.0 } else { v.iter().sum::<f32>() / v.len() as f32 };
+            let avg = |v: &[f32]| if v.is_empty() { 0.0 } else { v.iter().sum::<f32>() / sim_fortress::cast!(v.len() => f32) };
             println!("     thirst carcasses: knew water {known} (mean dist {:.1}), unknown {unknown}; mean dist to nearest water {:.1}", avg(&d_known), avg(&d_nearest));
             ages.sort_unstable();
-            let med = ages.get(ages.len() / 2).copied().unwrap_or(0);
-            let vmean = if veg_at.is_empty() { 0.0 } else { veg_at.iter().sum::<f32>() / veg_at.len() as f32 };
+            let med = ages.get(ages.len().div_euclid(2)).copied().unwrap_or(0);
+            let vmean = if veg_at.is_empty() { 0.0 } else { veg_at.iter().sum::<f32>() / sim_fortress::cast!(veg_at.len() => f32) };
             println!("     starved carcasses: juv {juv} adult {adult}; median age {med}d; ages {:?}; veg at carcass {vmean:.2}", &ages[..ages.len().min(20)]);
             for (i, sp) in SpeciesId::ALL.iter().take(3).enumerate() {
                 let living: Vec<_> = sim.creatures.living().filter(|c| c.species == *sp).collect();
-                let n = living.len().max(1) as f32;
+                let n = sim_fortress::cast!(living.len().max(1) => f32);
                 let adults = living.iter().filter(|c| c.adult).count();
                 let hunger: f32 = living.iter().map(|c| c.hunger).sum::<f32>() / n;
                 let thirst: f32 = living.iter().map(|c| c.thirst).sum::<f32>() / n;
                 let energy: f32 = living.iter().map(|c| c.energy).sum::<f32>() / n;
                 let gp = &sim.params.genetics;
-                let elig = living
+                let elig = sim_fortress::cast!(living
                     .iter()
                     .filter(|c| c.adult && c.hunger < gp.mate_hunger_max && c.thirst < gp.mate_thirst_max && c.energy > gp.mate_energy_min)
-                    .count() as f32
+                    .count() => f32)
                     / n
                     * 100.0;
                 println!(
@@ -129,7 +141,7 @@ fn main() {
                     c.name_str(), c.tag(), c.x, c.y, sim.world.cell(c.x, c.y).terrain, c.goal, c.energy, c.hp, tgt, c.last_water, moved
                 );
             }
-            let veg = sim.series.last().map(|s| s.veg_mean).unwrap_or(0.0);
+            let veg = sim.series.last().map_or(0.0, |s| s.veg_mean);
             println!("     veg_mean {veg:.3}");
         }
     }

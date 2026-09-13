@@ -3,6 +3,13 @@
 //! The five-year runs are slow in debug builds; run them with
 //! `cargo test --release --test evolution`.
 
+// Test and developer-tool crates are separate compilation roots, so they do
+// not inherit the allow list in `src/lib.rs`. The same `indexing_slicing`
+// justification applies here (indices come from checked `0..len()` loops over
+// fixed-size arrays), and `unwrap`/`expect`/`panic` are how a test or bench
+// harness is supposed to fail loudly.
+#![allow(clippy::indexing_slicing, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 use std::time::Instant;
 
 use sim_fortress::sim::{EventKind, Params, Rainfall, Sim, SpeciesId};
@@ -28,7 +35,7 @@ fn five_year_run(seed: u64, params: Params) -> Sim {
     sim
 }
 
-fn prey_total(s: &sim_fortress::sim::Sample) -> u32 {
+const fn prey_total(s: &sim_fortress::sim::Sample) -> u32 {
     s.population[0] + s.population[1] + s.population[2]
 }
 
@@ -37,7 +44,7 @@ fn five_year_survival() {
     let sim = five_year_run(42, Params::default());
     for id in [SpeciesId::Vole, SpeciesId::Hare, SpeciesId::Deer] {
         let n = sim.species[id.index()].count;
-        assert!(n > 0, "{:?} extinct at year 5", id);
+        assert!(n > 0, "{id:?} extinct at year 5");
     }
     let vole = &sim.species[SpeciesId::Vole.index()];
     assert!(vole.generation >= 12, "vole generation high-water mark {} < 12", vole.generation);
@@ -56,14 +63,14 @@ fn no_soft_cap_hit() {
 fn floor_five_percent() {
     let sim = five_year_run(42, Params::default());
     let samples = sim.series.samples();
-    let all_max = samples.iter().map(prey_total).max().unwrap_or(0) as f32;
-    let after_year_one = samples.iter().filter(|s| s.day >= 360).map(prey_total).min().unwrap_or(0) as f32;
-    assert!(after_year_one >= all_max * 0.05, "prey floor {} is below 5% of the peak {}", after_year_one, all_max);
+    let all_max = sim_fortress::cast!(samples.iter().map(prey_total).max().unwrap_or(0) => f32);
+    let after_year_one = sim_fortress::cast!(samples.iter().filter(|s| s.day >= 360).map(prey_total).min().unwrap_or(0) => f32);
+    assert!(after_year_one >= all_max * 0.05, "prey floor {after_year_one} is below 5% of the peak {all_max}");
     // Target (recorded, not asserted strictly): yearly min ≥ 20 % of yearly max in years 2–5.
     for year in 1..5u32 {
         let seg: Vec<u32> = samples.iter().filter(|s| s.day >= 360 * year && s.day < 360 * (year + 1)).map(prey_total).collect();
         if let (Some(&lo), Some(&hi)) = (seg.iter().min(), seg.iter().max()) {
-            eprintln!("year {}: min {} max {} ({:.0} %)", year + 1, lo, hi, lo as f32 / hi.max(1) as f32 * 100.0);
+            eprintln!("year {}: min {} max {} ({:.0} %)", year + 1, lo, hi, sim_fortress::cast!(lo => f32) / sim_fortress::cast!(hi.max(1) => f32) * 100.0);
         }
     }
 }
@@ -79,8 +86,8 @@ fn dry_world_selection_7_of_10() {
         let mut p = Params::default();
         p.world.rainfall = Rainfall::Dry;
         let sim = five_year_run(seed, p);
-        let first = sim.series.samples().first().map(|s| s.genome_mean[0].metabolism()).unwrap_or(0.0);
-        let last = sim.series.last().map(|s| s.genome_mean[0].metabolism()).unwrap_or(0.0);
+        let first = sim.series.samples().first().map_or(0.0, |s| s.genome_mean[0].metabolism());
+        let last = sim.series.last().map_or(0.0, |s| s.genome_mean[0].metabolism());
         let alive = sim.species[0].count > 0;
         eprintln!("seed {seed}: vole metabolism {first:.3} -> {last:.3} (alive {alive})");
         if alive && first - last >= 0.03 {

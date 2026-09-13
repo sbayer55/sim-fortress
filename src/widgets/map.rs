@@ -12,7 +12,7 @@ use crate::sim::species::SpeciesId;
 use crate::sim::world::{Cell, Terrain, World};
 use crate::{glyphs, theme};
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Overlay {
     None,
     Vegetation,
@@ -84,7 +84,7 @@ pub struct MapOptions {
 
 impl Default for MapOptions {
     fn default() -> Self {
-        MapOptions {
+        Self {
             overlay: Overlay::None,
             night: false,
             winter: false,
@@ -130,8 +130,8 @@ pub trait MapSource {
 }
 
 /// Glyph and style for a bare terrain cell.
-pub fn terrain_cell(cell: &Cell, winter: bool) -> (char, Color, Color) {
-    use Terrain::*;
+pub const fn terrain_cell(cell: &Cell, winter: bool) -> (char, Color, Color) {
+    use Terrain::{DeepWater, ShallowWater, Sand, Dirt, GrassSparse, Grass, GrassDense, Forest, Rock};
     let (g, fg, bg) = match cell.terrain {
         DeepWater => (glyphs::DEEP_WATER, theme::DEEP_WATER_FG, theme::DEEP_WATER_BG),
         ShallowWater => (glyphs::SHALLOW_WATER, theme::SHALLOW_FG, theme::SHALLOW_BG),
@@ -150,7 +150,7 @@ pub fn terrain_cell(cell: &Cell, winter: bool) -> (char, Color, Color) {
             Grass | GrassDense => (glyphs::GRASS_SPARSE, Color::Rgb(170, 190, 170), theme::SNOW_BG),
             Forest => (glyphs::FOREST, Color::Rgb(70, 120, 80), Color::Rgb(48, 58, 62)),
             Rock => (glyphs::ROCK, theme::SNOW_FG, Color::Rgb(84, 84, 96)),
-            _ => (g, fg, bg),
+            DeepWater => (g, fg, bg),
         }
     } else {
         (g, fg, bg)
@@ -159,7 +159,7 @@ pub fn terrain_cell(cell: &Cell, winter: bool) -> (char, Color, Color) {
 
 /// Glyph and colors for a serialised terrain code (0..=8), summer/day palette
 /// (used by the S00 title-screen decorative strips, C6 FR1).
-pub fn terrain_code_cell(code: u8) -> (char, Color, Color) {
+pub const fn terrain_code_cell(code: u8) -> (char, Color, Color) {
     let cell = Cell {
         terrain: Terrain::from_code(code),
         elevation: 0.5,
@@ -200,25 +200,27 @@ pub fn overlay_cell(cell: &Cell, overlay: Overlay) -> Option<(char, Color, Color
 }
 
 /// Species-density field (S02f): one value in 0..=1 per world cell. Every
+///
 /// living creature of `species` adds a kernel of radius `DENSITY_RADIUS` in
 /// the 2:1 ellipse metric with linear falloff (`1 − d / (r + 1)`), and the sum
+///
 /// is clamped against the fixed `DENSITY_CAP` so the picture is comparable
 /// across species and over time: a lone animal reads faint, a herd reads bright.
 pub fn density_field(world: &World, creatures: &[MapCreature<'_>], species: SpeciesId) -> Vec<f32> {
     let (w, h) = (world.width(), world.height());
     let mut field = vec![0.0f32; w * h];
-    let r = DENSITY_RADIUS as i32;
+    let r = i32::from(DENSITY_RADIUS);
     for c in creatures.iter().filter(|c| c.alive && c.species == species) {
-        for wy in (c.y as i32 - r)..=(c.y as i32 + r) {
-            for wx in (c.x as i32 - 2 * r)..=(c.x as i32 + 2 * r) {
+        for wy in (crate::cast!(c.y => i32) - r)..=(crate::cast!(c.y => i32) + r) {
+            for wx in (crate::cast!(c.x => i32) - 2 * r)..=(crate::cast!(c.x => i32) + 2 * r) {
                 if !world.in_bounds(wx, wy) {
                     continue;
                 }
-                let dx = (wx - c.x as i32) as f32 / 2.0;
-                let dy = (wy - c.y as i32) as f32;
+                let dx = crate::cast!((wx - crate::cast!(c.x => i32)) => f32) / 2.0;
+                let dy = crate::cast!((wy - crate::cast!(c.y => i32)) => f32);
                 let d = (dx * dx + dy * dy).sqrt();
-                if d <= r as f32 {
-                    field[wy as usize * w + wx as usize] += 1.0 - d / (r as f32 + 1.0);
+                if d <= crate::cast!(r => f32) {
+                    field[crate::cast!(wy => usize) * w + crate::cast!(wx => usize)] += 1.0 - d / (crate::cast!(r => f32) + 1.0);
                 }
             }
         }
@@ -253,8 +255,10 @@ pub fn condition_color(condition: f32) -> Color {
 }
 
 /// Glyph and colours for a cell under the parasite heatmap (S02i): the
+///
 /// `theme::parasite` ramp at `cell.parasite_load`, deep water and rock keeping
 /// their dimmed glyphs, and any water cell carrying a load drawn as `~` in
+///
 /// `WARN` (shared drinking spots are the hot spots).
 pub fn parasite_cell(cell: &Cell) -> (char, Color, Color) {
     let t = cell.parasite_load.clamp(0.0, 1.0);
@@ -277,8 +281,10 @@ pub fn parasite_cell(cell: &Cell) -> (char, Color, Color) {
 }
 
 /// Colour (and forced bold) of a living creature under the disease overlay
+///
 /// (S02h). `infection` is the creature's current infection, `immune` whether
 /// it is immune to the shown pathogen (or to any, when all are shown), `load`
+///
 /// its parasite load. An infection with a pathogen other than the shown one
 /// counts as healthy for this picture.
 pub fn disease_tint(species: Color, shown: Option<PathogenId>, infection: Option<(PathogenId, Stage)>, immune: bool, load: f32) -> (Color, bool) {
@@ -307,8 +313,6 @@ pub fn parasite_tint(species: Color, load: f32) -> (Color, bool) {
 
 pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOptions) {
     let world = source.world();
-    let (ox, oy) = opts.origin;
-    let tint = |c: Color| if opts.night { theme::night(c) } else { c };
     let living = source.living_creatures();
 
     // Species-density field (S02f), computed once per frame from the living set.
@@ -317,10 +321,65 @@ pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
         _ => None,
     };
 
-    // Terrain / overlay layer.
+    draw_terrain(buf, area, world, opts, density.as_ref());
+
+    // Region tint (under everything else).
+    if opts.overlay == Overlay::Region {
+        region_tint(buf, area, world, opts);
+    }
+    draw_resources(buf, area, world, opts);
+
+    // Sense rings (drawn under creatures).
+    draw_sense_ring(buf, area, source, world, opts);
+
+    // Trail for the followed creature.
+    draw_trail(buf, area, source, opts);
+
+    // Region labels (under creatures so a passing creature stays visible).
+    if opts.overlay == Overlay::Region {
+        region_labels(buf, area, world, opts);
+    }
+    if opts.creatures {
+        draw_creatures(buf, area, &living, opts);
+    }
+    draw_cursor(buf, area, world, opts);
+}
+
+/// Night dimming for one colour.
+fn tint_color(c: Color, night: bool) -> Color {
+    if night {
+        theme::night(c)
+    } else {
+        c
+    }
+}
+
+/// Write one glyph at world position `(wx, wy)` when it is inside the viewport.
+#[allow(clippy::too_many_arguments)]
+fn put_cell(buf: &mut Buffer, area: Rect, ox: usize, oy: usize, wx: usize, wy: usize, g: char, fg: Color, bold: bool) {
+    if wx < ox || wy < oy {
+        return;
+    }
+    let (sx, sy) = (crate::cast!((wx - ox) => u16), crate::cast!((wy - oy) => u16));
+    if sx >= area.width || sy >= area.height {
+        return;
+    }
+    if let Some(c) = buf.cell_mut((area.x + sx, area.y + sy)) {
+        c.set_char(g);
+        let mut st = Style::default().fg(fg).bg(c.bg);
+        if bold {
+            st = st.add_modifier(Modifier::BOLD);
+        }
+        c.set_style(st);
+    }
+}
+
+/// The terrain / overlay layer under everything else.
+fn draw_terrain(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions, density: Option<&(SpeciesId, Color, Vec<f32>)>) {
+    let (ox, oy) = opts.origin;
     for sy in 0..area.height {
         for sx in 0..area.width {
-            let (wx, wy) = (ox + sx as usize, oy + sy as usize);
+            let (wx, wy) = (ox + crate::cast!(sx => usize), oy + crate::cast!(sy => usize));
             let Some(c) = buf.cell_mut((area.x + sx, area.y + sy)) else { continue };
             if wx >= world.width() || wy >= world.height() {
                 c.set_char(' ');
@@ -347,120 +406,96 @@ pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
                 None => overlay_cell(cell, opts.overlay).unwrap_or_else(|| terrain_cell(cell, opts.winter)),
             };
             c.set_char(g);
-            c.set_style(Style::default().fg(tint(fg)).bg(tint(bg)));
+            c.set_style(Style::default().fg(tint_color(fg, opts.night)).bg(tint_color(bg, opts.night)));
         }
     }
+}
 
-    let put = |buf: &mut Buffer, wx: usize, wy: usize, g: char, fg: Color, bold: bool| {
-        if wx < ox || wy < oy {
-            return;
-        }
-        let (sx, sy) = ((wx - ox) as u16, (wy - oy) as u16);
-        if sx >= area.width || sy >= area.height {
-            return;
-        }
-        if let Some(c) = buf.cell_mut((area.x + sx, area.y + sy)) {
-            c.set_char(g);
-            let mut st = Style::default().fg(fg).bg(c.bg);
-            if bold {
-                st = st.add_modifier(Modifier::BOLD);
-            }
-            c.set_style(st);
-        }
-    };
-
-    // Region tint (under everything else).
-    if opts.overlay == Overlay::Region {
-        region_tint(buf, area, world, opts);
-    }
-
-    // Resources.
+/// Seeds, dens and carcasses.
+fn draw_resources(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions) {
+    let (ox, oy) = opts.origin;
     let res_fade = if opts.overlay != Overlay::None && opts.fade_creatures { 0.5 } else { 0.0 };
     for &(x, y) in &world.seeds {
-        put(buf, x, y, glyphs::SEED, tint(theme::dim(theme::SEED, res_fade)), false);
+        put_cell(buf, area, ox, oy, x, y, glyphs::SEED, tint_color(theme::dim(theme::SEED, res_fade), opts.night), false);
     }
     for &(x, y) in &world.dens {
-        put(buf, x, y, glyphs::DEN, tint(theme::dim(theme::DEN, res_fade)), true);
+        put_cell(buf, area, ox, oy, x, y, glyphs::DEN, tint_color(theme::dim(theme::DEN, res_fade), opts.night), true);
     }
     // Carcasses render only from `world.carcasses` (FR Scope).
     for &(x, y) in &world.carcasses {
-        put(buf, x, y, glyphs::CARCASS, tint(theme::dim(theme::CARCASS, res_fade)), false);
+        put_cell(buf, area, ox, oy, x, y, glyphs::CARCASS, tint_color(theme::dim(theme::CARCASS, res_fade), opts.night), false);
     }
+}
 
-    // Sense rings (drawn under creatures).
-    if let Overlay::Sense(id) = opts.overlay {
-        if let Some(c) = source.creature(id) {
-            let r = c.sense_cells as i32;
-            for wy in (c.y as i32 - r)..=(c.y as i32 + r) {
-                for wx in (c.x as i32 - 2 * r)..=(c.x as i32 + 2 * r) {
-                    if !world.in_bounds(wx, wy) {
-                        continue;
-                    }
-                    let dx = (wx - c.x as i32) as f32 / 2.0;
-                    let dy = (wy - c.y as i32) as f32;
-                    let d = (dx * dx + dy * dy).sqrt();
-                    if (d - r as f32).abs() < 0.55 {
-                        put(buf, wx as usize, wy as usize, glyphs::RING, theme::ACCENT, false);
-                    } else if d < r as f32 {
-                        let (wx, wy) = (wx as usize, wy as usize);
-                        if wx < ox || wy < oy {
-                            continue;
-                        }
-                        let (sx, sy) = ((wx - ox) as u16, (wy - oy) as u16);
-                        if sx >= area.width || sy >= area.height {
-                            continue;
-                        }
-                        if let Some(cell) = buf.cell_mut((area.x + sx, area.y + sy)) {
-                            let bg = theme::lerp(cell.bg, theme::ACCENT, 0.18);
-                            cell.set_bg(bg);
-                        }
-                    }
+/// The detection ellipse of the creature under the sense overlay.
+fn draw_sense_ring(buf: &mut Buffer, area: Rect, source: &dyn MapSource, world: &World, opts: &MapOptions) {
+    let (ox, oy) = opts.origin;
+    let sense = match opts.overlay {
+        Overlay::Sense(id) => source.creature(id),
+        _ => None,
+    };
+    if let Some(c) = sense {
+        let r = i32::from(c.sense_cells);
+        for wy in (crate::cast!(c.y => i32) - r)..=(crate::cast!(c.y => i32) + r) {
+            for wx in (crate::cast!(c.x => i32) - 2 * r)..=(crate::cast!(c.x => i32) + 2 * r) {
+                if !world.in_bounds(wx, wy) {
+                    continue;
+                }
+                let dx = crate::cast!((wx - crate::cast!(c.x => i32)) => f32) / 2.0;
+                let dy = crate::cast!((wy - crate::cast!(c.y => i32)) => f32);
+                let d = (dx * dx + dy * dy).sqrt();
+                if (d - crate::cast!(r => f32)).abs() < 0.55 {
+                    put_cell(buf, area, ox, oy, crate::cast!(wx => usize), crate::cast!(wy => usize), glyphs::RING, theme::ACCENT, false);
+                } else if d < crate::cast!(r => f32) {
+                    tint_sense_cell(buf, crate::cast!(wx => usize), crate::cast!(wy => usize), ox, oy, area);
                 }
             }
         }
     }
+}
 
-    // Trail for the followed creature.
+/// The followed creature's trail and target marker.
+fn draw_trail(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOptions) {
+    let (ox, oy) = opts.origin;
     if let Some(id) = opts.follow {
         if let Some(c) = source.creature(id) {
-            let n = c.trail.len().max(1) as f32;
+            let n = crate::cast!(c.trail.len().max(1) => f32);
             for (i, &(x, y)) in c.trail.iter().enumerate() {
-                let t = (i as f32 + 1.0) / n;
-                put(buf, x, y, glyphs::TRAIL, theme::lerp(theme::dim(theme::TRAIL, 0.7), theme::TRAIL, t), false);
+                let t = (crate::cast!(i => f32) + 1.0) / n;
+                put_cell(buf, area, ox, oy, x, y, glyphs::TRAIL, theme::lerp(theme::dim(theme::TRAIL, 0.7), theme::TRAIL, t), false);
             }
             if let Some((tx, ty)) = c.target {
-                put(buf, tx, ty, glyphs::DIAMOND, theme::ACCENT, true);
+                put_cell(buf, area, ox, oy, tx, ty, glyphs::DIAMOND, theme::ACCENT, true);
             }
         }
     }
+}
 
-    // Region labels (under creatures so a passing creature stays visible).
-    if opts.overlay == Overlay::Region {
-        region_labels(buf, area, world, opts);
-    }
-
-    // Creatures.
+/// Every living creature, plus the follow highlight.
+fn draw_creatures(buf: &mut Buffer, area: Rect, living: &[MapCreature<'_>], opts: &MapOptions) {
+    let (ox, oy) = opts.origin;
     if opts.creatures {
         let fade = if opts.overlay != Overlay::None && opts.fade_creatures { 0.55 } else { 0.0 };
         let mut followed_pos: Option<(usize, usize)> = None;
         for c in living {
             if !c.alive {
-                put(buf, c.x, c.y, glyphs::CARCASS, tint(theme::CARCASS), false);
+                put_cell(buf, area, ox, oy, c.x, c.y, glyphs::CARCASS, tint_color(theme::CARCASS, opts.night), false);
                 continue;
             }
             // Under the species overlay the shown species draws at full strength
             // over its own density; every other species fades.
             let own = matches!(opts.overlay, Overlay::Species(sp) if sp == c.species);
-            let mut color = tint(theme::dim(c.color, if own { 0.0 } else { fade }));
             // Under the health overlay the species colour gives way to the
             // creature's condition: green, amber or red at full strength.
-            if opts.overlay == Overlay::Health {
-                color = tint(condition_color(c.condition));
-            }
+            let mut color = if opts.overlay == Overlay::Health {
+                tint_color(condition_color(c.condition), opts.night)
+            } else {
+                tint_color(theme::dim(c.color, if own { 0.0 } else { fade }), opts.night)
+            };
             // S02h / S02i: the caller's per-creature tint wins outright.
             let mut bold = c.adult;
             if let Some((tc, force_bold)) = opts.creature_tint.as_ref().and_then(|m| m.get(&c.id)) {
-                color = tint(*tc);
+                color = tint_color(*tc, opts.night);
                 bold |= *force_bold;
             }
             if let Overlay::Sense(sid) = opts.overlay {
@@ -468,7 +503,7 @@ pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
                     color = theme::TEXT_BRIGHT;
                 }
             }
-            put(buf, c.x, c.y, c.glyph, color, bold);
+            put_cell(buf, area, ox, oy, c.x, c.y, c.glyph, color, bold);
             if opts.follow == Some(c.id) {
                 followed_pos = Some((c.x, c.y));
             }
@@ -479,16 +514,18 @@ pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
             }
         }
     }
+}
 
-    // Cursor with corner marks.
+/// The look cursor and its corner marks.
+fn draw_cursor(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions) {
     if let Some((cx, cy)) = opts.cursor {
         if let Some(cell) = cell_at(buf, area, opts, cx, cy) {
             cell.set_style(Style::default().fg(theme::CURSOR_FG).bg(theme::CURSOR_BG).add_modifier(Modifier::BOLD));
         }
         for (dx, dy) in [(-1i32, -1i32), (1, -1), (-1, 1), (1, 1)] {
-            let (wx, wy) = (cx as i32 + dx, cy as i32 + dy);
+            let (wx, wy) = (crate::cast!(cx => i32) + dx, crate::cast!(cy => i32) + dy);
             if world.in_bounds(wx, wy) {
-                if let Some(cell) = cell_at(buf, area, opts, wx as usize, wy as usize) {
+                if let Some(cell) = cell_at(buf, area, opts, crate::cast!(wx => usize), crate::cast!(wy => usize)) {
                     cell.set_char(glyphs::CORNER);
                     cell.set_fg(theme::CURSOR_BG);
                 }
@@ -505,9 +542,24 @@ pub const REGION_TINT_SELECTED: f32 = 0.50;
 /// Tint the background of every visible cell of every region toward that
 /// region's colour. Iterates the region rectangles clipped to the viewport
 /// rather than looking up a region per cell.
+/// Dim one interior cell of a sense ellipse, when it is on screen.
+fn tint_sense_cell(buf: &mut Buffer, wx: usize, wy: usize, ox: usize, oy: usize, area: Rect) {
+    if wx < ox || wy < oy {
+        return;
+    }
+    let (sx, sy) = (crate::cast!((wx - ox) => u16), crate::cast!((wy - oy) => u16));
+    if sx >= area.width || sy >= area.height {
+        return;
+    }
+    if let Some(cell) = buf.cell_mut((area.x + sx, area.y + sy)) {
+        let bg = theme::lerp(cell.bg, theme::ACCENT, 0.18);
+        cell.set_bg(bg);
+    }
+}
+
 fn region_tint(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions) {
     let (ox, oy) = opts.origin;
-    let (vx1, vy1) = (ox + area.width as usize, oy + area.height as usize);
+    let (vx1, vy1) = (ox + crate::cast!(area.width => usize), oy + crate::cast!(area.height => usize));
     for (i, r) in world.regions.iter().enumerate() {
         let (x0, y0, x1, y1) = (r.1.max(ox), r.2.max(oy), r.3.min(vx1).min(world.width()), r.4.min(vy1).min(world.height()));
         if x0 >= x1 || y0 >= y1 {
@@ -530,9 +582,9 @@ fn region_tint(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions) {
 /// rectangle, clamped so the whole label stays inside it.
 pub fn region_label_origin(r: &crate::sim::RegionRect, world_w: usize) -> (usize, usize) {
     let w = r.0.chars().count();
-    let cx = (r.1 + r.3) / 2;
-    let cy = (r.2 + r.4) / 2;
-    let x = cx.saturating_sub(w / 2).max(r.1);
+    let cx = (r.1 + r.3).div_euclid(2);
+    let cy = (r.2 + r.4).div_euclid(2);
+    let x = cx.saturating_sub(w.div_euclid(2)).max(r.1);
     let x = x.min(r.3.saturating_sub(w)).min(world_w.saturating_sub(w));
     (x, cy)
 }
@@ -562,7 +614,7 @@ fn cell_at<'a>(buf: &'a mut Buffer, area: Rect, opts: &MapOptions, wx: usize, wy
     if wx < ox || wy < oy {
         return None;
     }
-    let (sx, sy) = ((wx - ox) as u16, (wy - oy) as u16);
+    let (sx, sy) = (crate::cast!((wx - ox) => u16), crate::cast!((wy - oy) => u16));
     if sx >= area.width || sy >= area.height {
         return None;
     }
@@ -588,7 +640,9 @@ pub fn legend() -> Vec<(char, Color, &'static str)> {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
+
     use super::*;
     use crate::sim::world::Cell;
     use ratatui::backend::TestBackend;
@@ -599,7 +653,7 @@ mod tests {
         creatures: Vec<MapCreature<'a>>,
     }
 
-    impl<'a> MapSource for TestSource<'a> {
+    impl MapSource for TestSource<'_> {
         fn world(&self) -> &World {
             self.world
         }
@@ -621,13 +675,13 @@ mod tests {
             dens: vec![],
             carcasses: vec![],
             seeds: vec![],
-            regions: vec![("Ab".to_string(), 0, 0, w / 2, h), ("Cd".to_string(), w / 2, 0, w, h)],
+            regions: vec![("Ab".to_string(), 0, 0, w.div_euclid(2), h), ("Cd".to_string(), w.div_euclid(2), 0, w, h)],
             water_cells_at_generation: 0,
             shore: vec![],
         }
     }
 
-    fn draw(world: &World, opts: &MapOptions, w: u16, h: u16) -> ratatui::buffer::Buffer {
+    fn draw(world: &World, opts: &MapOptions, w: u16, h: u16) -> Buffer {
         let backend = TestBackend::new(w, h);
         let mut terminal = Terminal::new(backend).unwrap();
         let source = TestSource { world, creatures: Vec::new() };
@@ -647,7 +701,7 @@ mod tests {
         let at = |x: usize, y: usize| f[y * 20 + x];
         assert!((at(10, 4) - 1.0 / DENSITY_CAP).abs() < 1e-6, "peak is one creature-equivalent");
         assert!(at(10, 4) > at(12, 4) && at(12, 4) > at(14, 4), "linear falloff along the row");
-        assert_eq!(at(10, 4 + DENSITY_RADIUS as usize + 1), 0.0, "outside the kernel");
+        assert_eq!(at(10, 4 + crate::cast!(DENSITY_RADIUS => usize) + 1), 0.0, "outside the kernel");
         assert_eq!(at(0, 0), 0.0);
         // Another species contributes nothing.
         assert!(density_field(&world, &one, SpeciesId::Hare).iter().all(|&v| v == 0.0));

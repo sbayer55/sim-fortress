@@ -1,5 +1,6 @@
 //! Reproduction, inheritance and maturity (C4): mate eligibility and selection,
 //! consummation, pregnancy, litters, inheritance with mutation and the
+//!
 //! per-tick peer snapshot that lets a creature see potential partners and its
 //! mother while the store is being iterated mutably.
 
@@ -62,8 +63,8 @@ pub struct TickView {
 }
 
 impl TickView {
-    pub fn empty() -> Self {
-        TickView { peers: Vec::new(), total: 0, cap_ok: true, carcasses: Vec::new() }
+    pub const fn empty() -> Self {
+        Self { peers: Vec::new(), total: 0, cap_ok: true, carcasses: Vec::new() }
     }
 
     pub fn build(store: &CreatureStore, time: &Time, world: &World, gp: &GeneticsParams, dp: &DiseaseParams) -> Self {
@@ -88,7 +89,7 @@ impl TickView {
             .carcasses()
             .map(|c| Carcass { id: c.id, species: c.species, x: c.x, y: c.y, decay: c.decay })
             .collect();
-        TickView { peers, total, cap_ok: (total as u32) < gp.max_population_soft_cap, carcasses }
+        Self { peers, total, cap_ok: (crate::cast!(total => u32)) < gp.max_population_soft_cap, carcasses }
     }
 
     pub fn get(&self, id: CreatureId) -> Option<&Peer> {
@@ -206,8 +207,8 @@ pub fn consummate(store: &mut CreatureStore, time: &Time, gp: &GeneticsParams, e
         }
         let (mother_id, father_id) = if a.sex == Sex::Female { (a_id, b_id) } else { (b_id, a_id) };
         let species = a.species;
-        let cooldown = time.tick + gp.cooldown(species) as u64 * time.ticks_per_day as u64;
-        let due = time.tick + gp.gestation(species) as u64 * time.ticks_per_day as u64;
+        let cooldown = time.tick + u64::from(gp.cooldown(species)) * u64::from(time.ticks_per_day);
+        let due = time.tick + u64::from(gp.gestation(species)) * u64::from(time.ticks_per_day);
 
         if let Some(m) = store.get_mut(mother_id) {
             m.cooldown_until = cooldown;
@@ -230,88 +231,44 @@ pub fn consummate(store: &mut CreatureStore, time: &Time, gp: &GeneticsParams, e
 /// Third pass of a tick: every pregnant female whose `pregnant_due` has passed
 /// delivers her litter (FR2/FR3). Returns the number of newborns.
 #[allow(clippy::too_many_arguments)]
-pub fn deliver(
-    store: &mut CreatureStore,
-    world: &World,
-    events: &mut EventRing,
-    time: &Time,
-    gp: &GeneticsParams,
-    cp: &CreaturesParams,
-    dp: &DiseaseParams,
-    rng: &mut Rng,
-    tallies: &mut DeathTallies,
-    lineage: &mut Lineage,
-    dstate: &DiseaseState,
-    drng: &mut Rng,
-) -> u32 {
-    let due: Vec<CreatureId> = store
-        .living()
-        .filter(|c| c.pregnant_due.is_some_and(|d| d <= time.tick))
-        .map(|c| c.id)
-        .collect();
-    let mut born_total = 0;
-    for mother_id in due {
-        let Some(m) = store.get(mother_id) else { continue };
-        let species = m.species;
-        let (mx, my) = (m.x, m.y);
-        let mother_genome = m.genome;
-        let mother_gen = m.generation;
-        let father_id = m.mate_id.unwrap_or(mother_id);
-        // C7 FR6: parasites lower the effective fertility; C8 maturity scales the
-        // litter (a slow life history has fewer, larger litters).
-        let litter = gp.litter_size(species, m.genome.fertility() * disease::effects(m, dp).fertility_factor, m.genome.maturity());
-        let mother_label = format!("{} {}", m.name_str(), m.tag());
-        let mother_water = m.last_water;
-        let mother_snapshot = m.clone();
-
-        let (father_genome, father_gen) = match store.get(father_id) {
-            Some(f) => (f.genome, f.generation),
-            None => match lineage.get(father_id) {
-                Some(n) => (n.genome, n.generation),
-                None => (mother_genome, mother_gen),
-            },
-        };
-        let generation = mother_gen.max(father_gen) + 1;
-
-        // Placement: the mother's cell, then 8-adjacent walkable cells.
-        let mut cells: Vec<(usize, usize)> = vec![(mx, my)];
-        for &(dx, dy) in &OFF8 {
-            let (nx, ny) = (mx as i32 + dx, my as i32 + dy);
-            if world.in_bounds(nx, ny) {
-                let t = world.cell(nx as usize, ny as usize).terrain;
-                if t.walkable() && !t.is_water() {
-                    cells.push((nx as usize, ny as usize));
-                }
-            }
-        }
-
-        let pool = names(species).len();
-        let mut born = 0u32;
-        let mut notable: Vec<Event> = Vec::new();
-        for i in 0..litter as usize {
-            let (x, y) = cells[i % cells.len()];
-            let (genome, mutations) = inherit(&mother_genome, &father_genome, generation, gp, rng);
-            let sex = if rng.chance(0.5) { Sex::Male } else { Sex::Female };
-            let name = rng.below(pool) as NameId;
-            let mut child = Creature {
+/// Build one newborn creature (all per-birth state at its defaults).
+#[allow(clippy::too_many_arguments)]
+const fn newborn(
+    species: SpeciesId,
+    name: NameId,
+    sex: Sex,
+    pos: (usize, usize),
+    born_day: i32,
+    generation: u32,
+    parents: (CreatureId, CreatureId),
+    mother_id: CreatureId,
+    genome: Genome,
+    mutations: Vec<Mutation>,
+    mother_water: Option<(usize, usize)>,
+    born_tick: u64,
+    hp: f32,
+    adult: bool,
+) -> Creature {
+    let (x, y) = pos;
+    Creature {
                 id: CreatureId(0),
                 species,
                 name,
                 sex,
                 x,
                 y,
-                born_day: time.day_index() as i32,
+                born_day,
                 generation,
-                parents: Some((mother_id, father_id)),
+                parents: Some(parents),
                 genome,
-                hp: gp.newborn_hp,
+                hp,
                 hunger: 0.3,
                 thirst: 0.3,
                 energy: 0.8,
-                adult: adult_age_days(species, &genome, cp, gp) == 0,
+                adult,
                 goal: Goal::Wander,
                 target: None,
-                replan_at: time.tick,
+                replan_at: born_tick,
                 trail: Vec::new(),
                 alive: true,
                 death: None,
@@ -336,7 +293,7 @@ pub fn deliver(
                 last_kill: None,
                 chase_stats: (0, 0),
                 chase_longest_year: 0,
-                hunt_phase: crate::sim::creatures::HuntPhase::Stalk,
+                hunt_phase: HuntPhase::Stalk,
                 hunt_target: None,
                 chase_start_tick: None,
                 hunt_cooldown_until: 0,
@@ -355,78 +312,254 @@ pub fn deliver(
                 died_infected: None,
                 migrate_target: None,
                 path_for: None,
-            };
-            disease::at_birth(&mut child, &mother_snapshot, time, dp, dstate, drng);
-            let id = store.insert(child);
-            let child = store.get(id).expect("just inserted");
-            lineage.record(child, gp.mutation_notable);
-            for mu in &child.mutations {
-                if mu.delta.abs() >= gp.mutation_notable {
-                    notable.push(Event {
-                        year: time.year(),
-                        day: time.day_of_year(),
-                        hour: time.hour(),
-                        kind: EventKind::Mutation,
-                        species: Some(species),
-                        subject: Some(id),
-                        text: format!(
-                            "{} {} was born with {} {:+.2} (gen {})",
-                            child.name_str(),
-                            child.tag(),
-                            TRAIT_NAMES[mu.trait_idx],
-                            mu.delta,
-                            mu.generation
-                        ),
-                        pos: Some((x, y)),
-                        detail: format!("mother {mother_label}"),
-                    });
-                }
             }
-            born += 1;
-        }
+}
 
-        if let Some(m) = store.get_mut(mother_id) {
-            m.pregnant_due = None;
-            m.mate_id = None;
-            m.offspring += born;
-        }
-        if father_id != mother_id {
-            if let Some(f) = store.get_mut(father_id) {
-                if f.alive {
-                    f.offspring += born;
-                }
-            }
-        }
-        tallies.births[species.index()] += born;
-        born_total += born;
-
-        let father_label = store
-            .get(father_id)
-            .map(|f| format!("{} {}", f.name_str(), f.tag()))
-            .or_else(|| lineage.get(father_id).map(|n| format!("{} {}", n.name_str(), n.tag)))
-            .unwrap_or_else(|| "unknown".to_string());
-        events.push(Event {
-            year: time.year(),
-            day: time.day_of_year(),
-            hour: time.hour(),
-            kind: EventKind::Birth,
-            species: Some(species),
-            subject: Some(mother_id),
-            text: format!(
-                "{} bore {} {} in {}",
-                mother_label,
-                born,
-                if born == 1 { "pup" } else { "pups" },
-                world.region_name(mx, my)
-            ),
-            pos: Some((mx, my)),
-            detail: format!("father {father_label}; generation {generation}"),
-        });
-        for e in notable {
-            events.push(e);
-        }
+pub fn deliver(
+    store: &mut CreatureStore,
+    world: &World,
+    events: &mut EventRing,
+    time: &Time,
+    gp: &GeneticsParams,
+    cp: &CreaturesParams,
+    dp: &DiseaseParams,
+    rng: &mut Rng,
+    tallies: &mut DeathTallies,
+    lineage: &mut Lineage,
+    dstate: &DiseaseState,
+    drng: &mut Rng,
+) -> u32 {
+    let due: Vec<CreatureId> = store
+        .living()
+        .filter(|c| c.pregnant_due.is_some_and(|d| d <= time.tick))
+        .map(|c| c.id)
+        .collect();
+    let mut born_total = 0;
+    for mother_id in due {
+        born_total += deliver_litter(store, world, events, time, gp, cp, dp, rng, tallies, lineage, dstate, drng, mother_id);
     }
     born_total
+}
+
+/// Everything a single pup needs from its parents.
+struct LitterCtx<'a> {
+    species: SpeciesId,
+    mother_id: CreatureId,
+    father_id: CreatureId,
+    mother_genome: Genome,
+    father_genome: Genome,
+    generation: u32,
+    mother_water: Option<(usize, usize)>,
+    mother_label: &'a str,
+}
+
+/// Deliver one mother's litter and return how many pups survived to birth.
+#[allow(clippy::too_many_arguments)]
+fn deliver_litter(
+    store: &mut CreatureStore,
+    world: &World,
+    events: &mut EventRing,
+    time: &Time,
+    gp: &GeneticsParams,
+    cp: &CreaturesParams,
+    dp: &DiseaseParams,
+    rng: &mut Rng,
+    tallies: &mut DeathTallies,
+    lineage: &mut Lineage,
+    dstate: &DiseaseState,
+    drng: &mut Rng,
+    mother_id: CreatureId,
+) -> u32 {
+    let Some(m) = store.get(mother_id) else { return 0 };
+    let species = m.species;
+    let (mx, my) = (m.x, m.y);
+    let mother_genome = m.genome;
+    let mother_gen = m.generation;
+    let father_id = m.mate_id.unwrap_or(mother_id);
+    // C7 FR6: parasites lower the effective fertility; C8 maturity scales the
+    // litter (a slow life history has fewer, larger litters).
+    let litter = gp.litter_size(species, m.genome.fertility() * disease::effects(m, dp).fertility_factor, m.genome.maturity());
+    let mother_label = format!("{} {}", m.name_str(), m.tag());
+    let mother_water = m.last_water;
+    let mother_snapshot = m.clone();
+
+    let (father_genome, father_gen) = parent_genome(store, lineage, father_id, mother_genome, mother_gen);
+    let generation = mother_gen.max(father_gen) + 1;
+    let ctx = LitterCtx {
+        species,
+        mother_id,
+        father_id,
+        mother_genome,
+        father_genome,
+        generation,
+        mother_water,
+        mother_label: &mother_label,
+    };
+
+    let cells = litter_cells(world, mx, my);
+    let mut born = 0u32;
+    let mut notable: Vec<Event> = Vec::new();
+    for i in 0..crate::cast!(litter => usize) {
+        let pos = cells[i % cells.len()];
+        if bear_pup(store, lineage, rng, time, gp, cp, dp, dstate, drng, &ctx, pos, &mother_snapshot, &mut notable) {
+            born += 1;
+        }
+    }
+
+    credit_parents(store, tallies, mother_id, father_id, born, species);
+    announce_litter(world, events, time, store, lineage, &ctx, born, (mx, my));
+    for e in notable {
+        events.push(e);
+    }
+    born
+}
+
+/// The father's genome and generation, from the store or the lineage.
+fn parent_genome(
+    store: &CreatureStore,
+    lineage: &Lineage,
+    father_id: CreatureId,
+    fallback_genome: Genome,
+    fallback_gen: u32,
+) -> (Genome, u32) {
+    match store.get(father_id) {
+        Some(f) => (f.genome, f.generation),
+        None => match lineage.get(father_id) {
+            Some(n) => (n.genome, n.generation),
+            None => (fallback_genome, fallback_gen),
+        },
+    }
+}
+
+/// The mother's cell plus the walkable 8-adjacent cells a pup may occupy.
+fn litter_cells(world: &World, mx: usize, my: usize) -> Vec<(usize, usize)> {
+    let mut cells: Vec<(usize, usize)> = vec![(mx, my)];
+    for &(dx, dy) in &OFF8 {
+        let (nx, ny) = (crate::cast!(mx => i32) + dx, crate::cast!(my => i32) + dy);
+        if world.in_bounds(nx, ny) {
+            let t = world.cell(crate::cast!(nx => usize), crate::cast!(ny => usize)).terrain;
+            if t.walkable() && !t.is_water() {
+                cells.push((crate::cast!(nx => usize), crate::cast!(ny => usize)));
+            }
+        }
+    }
+    cells
+}
+
+/// Create one pup; push any notable-mutation event and report whether it lived.
+#[allow(clippy::too_many_arguments)]
+fn bear_pup(
+    store: &mut CreatureStore,
+    lineage: &mut Lineage,
+    rng: &mut Rng,
+    time: &Time,
+    gp: &GeneticsParams,
+    cp: &CreaturesParams,
+    dp: &DiseaseParams,
+    dstate: &DiseaseState,
+    drng: &mut Rng,
+    ctx: &LitterCtx<'_>,
+    pos: (usize, usize),
+    mother_snapshot: &Creature,
+    notable: &mut Vec<Event>,
+) -> bool {
+    let (x, y) = pos;
+    let (genome, mutations) = inherit(&ctx.mother_genome, &ctx.father_genome, ctx.generation, gp, rng);
+    let sex = if rng.chance(0.5) { Sex::Male } else { Sex::Female };
+    let pool = names(ctx.species).len();
+    let name = crate::cast!(rng.below(pool) => NameId);
+    let adult = adult_age_days(ctx.species, &genome, cp, gp) == 0;
+    let mut child = newborn(
+        ctx.species, name, sex, (x, y), crate::cast!(time.day_index() => i32), ctx.generation,
+        (ctx.mother_id, ctx.father_id), ctx.mother_id, genome, mutations, ctx.mother_water, time.tick, gp.newborn_hp, adult,
+    );
+    disease::at_birth(&mut child, mother_snapshot, time, dp, dstate, drng);
+    let id = store.insert(child);
+    let Some(child) = store.get(id) else { return false };
+    lineage.record(child, gp.mutation_notable);
+    for mu in &child.mutations {
+        if mu.delta.abs() >= gp.mutation_notable {
+            notable.push(Event {
+                year: time.year(),
+                day: time.day_of_year(),
+                hour: time.hour(),
+                kind: EventKind::Mutation,
+                species: Some(ctx.species),
+                subject: Some(id),
+                text: format!(
+                    "{} {} was born with {} {:+.2} (gen {})",
+                    child.name_str(),
+                    child.tag(),
+                    TRAIT_NAMES[mu.trait_idx],
+                    mu.delta,
+                    mu.generation
+                ),
+                pos: Some((x, y)),
+                detail: format!("mother {}", ctx.mother_label),
+            });
+        }
+    }
+    true
+}
+
+/// Clear the pregnancy and credit both parents with the litter.
+fn credit_parents(
+    store: &mut CreatureStore,
+    tallies: &mut DeathTallies,
+    mother_id: CreatureId,
+    father_id: CreatureId,
+    born: u32,
+    species: SpeciesId,
+) {
+    if let Some(m) = store.get_mut(mother_id) {
+        m.pregnant_due = None;
+        m.mate_id = None;
+        m.offspring += born;
+    }
+    if father_id != mother_id {
+        if let Some(f) = store.get_mut(father_id) {
+            if f.alive {
+                f.offspring += born;
+            }
+        }
+    }
+    tallies.births[species.index()] += born;
+}
+
+/// Emit the birth event for the litter.
+#[allow(clippy::too_many_arguments)]
+fn announce_litter(
+    world: &World,
+    events: &mut EventRing,
+    time: &Time,
+    store: &CreatureStore,
+    lineage: &Lineage,
+    ctx: &LitterCtx<'_>,
+    born: u32,
+    (mx, my): (usize, usize),
+) {
+    let father_label = store
+        .get(ctx.father_id)
+        .map(|f| format!("{} {}", f.name_str(), f.tag()))
+        .or_else(|| lineage.get(ctx.father_id).map(|n| format!("{} {}", n.name_str(), n.tag)))
+        .unwrap_or_else(|| "unknown".to_string());
+    events.push(Event {
+        year: time.year(),
+        day: time.day_of_year(),
+        hour: time.hour(),
+        kind: EventKind::Birth,
+        species: Some(ctx.species),
+        subject: Some(ctx.mother_id),
+        text: format!(
+            "{} bore {} {} in {}",
+            ctx.mother_label,
+            born,
+            if born == 1 { "pup" } else { "pups" },
+            world.region_name(mx, my)
+        ),
+        pos: Some((mx, my)),
+        detail: format!("father {father_label}; generation {}", ctx.generation),
+    });
 }
 
 /// FR4: while younger than `follow_mother_days` and the mother is alive, a
@@ -436,18 +569,18 @@ pub fn follow_target(c: &Creature, view: &TickView, world: &World, time: &Time, 
         return None;
     }
     let mother = view.get(c.mother?)?;
-    let dx = rng.below(7) as i32 - 3;
-    let dy = rng.below(7) as i32 - 3;
-    let (nx, ny) = (mother.x as i32 + dx, mother.y as i32 + dy);
-    if world.in_bounds(nx, ny) && world.cell(nx as usize, ny as usize).terrain.walkable() {
-        return Some((nx as usize, ny as usize));
+    let dx = crate::cast!(rng.below(7) => i32) - 3;
+    let dy = crate::cast!(rng.below(7) => i32) - 3;
+    let (nx, ny) = (crate::cast!(mother.x => i32) + dx, crate::cast!(mother.y => i32) + dy);
+    if world.in_bounds(nx, ny) && world.cell(crate::cast!(nx => usize), crate::cast!(ny => usize)).terrain.walkable() {
+        return Some((crate::cast!(nx => usize), crate::cast!(ny => usize)));
     }
     // Fallback: any walkable cell within 3 of the mother, row-major.
     for ddy in -3i32..=3 {
         for ddx in -3i32..=3 {
-            let (px, py) = (mother.x as i32 + ddx, mother.y as i32 + ddy);
-            if world.in_bounds(px, py) && world.cell(px as usize, py as usize).terrain.walkable() {
-                return Some((px as usize, py as usize));
+            let (px, py) = (crate::cast!(mother.x => i32) + ddx, crate::cast!(mother.y => i32) + ddy);
+            if world.in_bounds(px, py) && world.cell(crate::cast!(px => usize), crate::cast!(py => usize)).terrain.walkable() {
+                return Some((crate::cast!(px => usize), crate::cast!(py => usize)));
             }
         }
     }
@@ -455,7 +588,9 @@ pub fn follow_target(c: &Creature, view: &TickView, world: &World, time: &Time, 
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
+
     use super::*;
     use crate::sim::creatures::max_age_days;
     use crate::sim::params::{Params, WorldParams};
@@ -533,7 +668,7 @@ mod tests {
             last_kill: None,
             chase_stats: (0, 0),
             chase_longest_year: 0,
-            hunt_phase: crate::sim::creatures::HuntPhase::Stalk,
+            hunt_phase: HuntPhase::Stalk,
             hunt_target: None,
             chase_start_tick: None,
             hunt_cooldown_until: 0,
@@ -600,10 +735,10 @@ mod tests {
         consummate(&mut store, &t, &gp, &mut events, &view, &mut noted);
         let female = store.get(f).unwrap();
         let male = store.get(m).unwrap();
-        let cd = 12 + gp.cooldown(SpeciesId::Vole) as u64 * 24;
+        let cd = 12 + u64::from(gp.cooldown(SpeciesId::Vole)) * 24;
         assert_eq!(female.cooldown_until, cd);
         assert_eq!(male.cooldown_until, cd);
-        assert_eq!(female.pregnant_due, Some(12 + gp.gestation(SpeciesId::Vole) as u64 * 24));
+        assert_eq!(female.pregnant_due, Some(12 + u64::from(gp.gestation(SpeciesId::Vole)) * 24));
         assert_eq!(female.mate_id, Some(m));
         assert!(male.pregnant_due.is_none());
         assert!(male.mate_id.is_none());
@@ -622,9 +757,9 @@ mod tests {
 
         // Maturity 0.5 reproduces the pre-maturity numbers exactly.
         assert_eq!(adult_age_days(id, &neutral, &cp, &gp), cp.adult_age(id));
-        let old_max = cp.max_age_base + (neutral.longevity() * cp.max_age_per_longevity as f32) as u32;
+        let old_max = cp.max_age_base + crate::cast!((neutral.longevity() * crate::cast!(cp.max_age_per_longevity => f32)) => u32);
         assert_eq!(max_age_days(&neutral, &cp, &gp), old_max);
-        assert_eq!(gp.litter_size(id, neutral.fertility(), 0.5), 1 + (neutral.fertility() * gp.litter_max(id)).round() as u32);
+        assert_eq!(gp.litter_size(id, neutral.fertility(), 0.5), 1 + crate::cast!((neutral.fertility() * gp.litter_max(id)).round() => u32));
 
         // Slow: later, larger, longer. Fast: the reverse.
         assert!(adult_age_days(id, &slow, &cp, &gp) > adult_age_days(id, &neutral, &cp, &gp));
@@ -658,6 +793,16 @@ mod tests {
         assert_eq!(gp.litter_size(SpeciesId::Hare, 0.75, 0.5), 3);
     }
 
+    /// Shared checks for each newborn in `birth_placement`.
+    fn assert_pup(c: &Creature, f: CreatureId, m: CreatureId, newborn_hp: f32) {
+        assert!(matches!((c.x, c.y), (5 | 6, 5)), "pup at {:?}", (c.x, c.y));
+        assert_eq!(c.parents, Some((f, m)));
+        assert_eq!(c.mother, Some(f));
+        assert_eq!(c.generation, 2);
+        assert_eq!(c.hp, newborn_hp);
+        assert!(!c.adult);
+    }
+
     #[test]
     fn birth_placement() {
         let mut w = world();
@@ -683,12 +828,7 @@ mod tests {
         assert_eq!(born, 4);
         assert_eq!(store.len_living(), 6);
         for c in store.living().filter(|c| c.parents.is_some()) {
-            assert!(matches!((c.x, c.y), (5, 5) | (6, 5)), "pup at {:?}", (c.x, c.y));
-            assert_eq!(c.parents, Some((f, m)));
-            assert_eq!(c.mother, Some(f));
-            assert_eq!(c.generation, 2);
-            assert_eq!(c.hp, gp.newborn_hp);
-            assert!(!c.adult);
+            assert_pup(c, f, m, gp.newborn_hp);
         }
         assert_eq!(store.get(f).unwrap().offspring, 4);
         assert_eq!(store.get(m).unwrap().offspring, 4);
@@ -710,17 +850,17 @@ mod tests {
         for _ in 0..n {
             let (g, _) = inherit(&mother, &father, 2, &gp, &mut rng);
             for t in 0..Genome::LEN {
-                sum[t] += g.0[t] as f64;
+                sum[t] += f64::from(g.0[t]);
             }
         }
         for t in 0..Genome::LEN {
-            let want = (mother.0[t] + father.0[t]) as f64 / 2.0;
-            let got = sum[t] / n as f64;
+            let want = f64::from(mother.0[t] + father.0[t]) / 2.0;
+            let got = sum[t] / f64::from(n);
             // Per-sample sd: the parent draw (|m − f| / 2) plus the mutation term.
             // A 4-sigma bound keeps the test honest about a systematic bias (an
             // always-mother bug is ~0.3 off) without tripping on sampling noise.
-            let sd = (((mother.0[t] - father.0[t]) as f64 / 2.0).powi(2) + gp.mutation_rate as f64 * (gp.mutation_strength as f64).powi(2)).sqrt();
-            let tol = 4.0 * sd / (n as f64).sqrt();
+            let sd = ((f64::from(mother.0[t] - father.0[t]) / 2.0).powi(2) + f64::from(gp.mutation_rate) * f64::from(gp.mutation_strength).powi(2)).sqrt();
+            let tol = 4.0 * sd / f64::from(n).sqrt();
             assert!((got - want).abs() < tol, "trait {t}: mean {got} vs parental mean {want} (tol {tol:.4})");
         }
     }
@@ -736,7 +876,7 @@ mod tests {
             let (_, m) = inherit(&g, &g, 2, &gp, &mut rng);
             count += m.len();
         }
-        let freq = count as f32 / (n as f32 * Genome::LEN as f32);
+        let freq = crate::cast!(count => f32) / (crate::cast!(n => f32) * crate::cast!(Genome::LEN => f32));
         assert!((freq - gp.mutation_rate).abs() <= gp.mutation_rate * 0.10, "mutation frequency {freq} vs rate {}", gp.mutation_rate);
     }
 
@@ -749,7 +889,7 @@ mod tests {
         c.adult = false;
         c.born_day = 0;
         let id = sim.creatures.insert(c);
-        for _ in 0..(adult_age as u64 + 1) * 24 {
+        for _ in 0..(u64::from(adult_age) + 1) * 24 {
             sim.step();
             if !sim.creatures.get(id).is_some_and(|c| c.alive) {
                 return; // died of natural causes on this map; nothing to assert
@@ -773,9 +913,9 @@ mod tests {
         let k = store.insert(kid);
         let view = TickView::build(&store, &t, &w, &gp, &DiseaseParams::default());
         let target = follow_target(store.get(k).unwrap(), &view, &w, &t, &gp, &mut Rng::new(1)).unwrap();
-        assert!(geom::cheb(target.0, target.1, 20, 5) <= 3, "target {:?} not within 3 of the mother", target);
+        assert!(geom::cheb(target.0, target.1, 20, 5) <= 3, "target {target:?} not within 3 of the mother");
         // Past follow_mother_days: no following.
-        let old = time_at(24 * (gp.follow_mother_days as u64 + 1));
+        let old = time_at(24 * (u64::from(gp.follow_mother_days) + 1));
         assert!(follow_target(store.get(k).unwrap(), &view, &w, &old, &gp, &mut Rng::new(1)).is_none());
     }
 

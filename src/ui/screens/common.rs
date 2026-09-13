@@ -15,8 +15,8 @@ pub fn trend_arrow(counts: &[u16]) -> char {
     if counts.len() < 2 {
         return glyphs::FLAT;
     }
-    let a = counts[counts.len().saturating_sub(30).min(counts.len() - 1)] as f32;
-    let b = *counts.last().unwrap() as f32;
+    let a = f32::from(counts[counts.len().saturating_sub(30).min(counts.len() - 1)]);
+    let b = f32::from(counts.last().copied().unwrap_or(0));
     let pct = if a > 0.0 { (b - a) / a * 100.0 } else if b > 0.0 { f32::INFINITY } else { 0.0 };
     if pct > 3.0 {
         glyphs::UP
@@ -27,7 +27,7 @@ pub fn trend_arrow(counts: &[u16]) -> char {
     }
 }
 
-pub fn arrow_color(a: char) -> Color {
+pub const fn arrow_color(a: char) -> Color {
     match a {
         glyphs::UP => theme::GOOD,
         glyphs::DOWN => theme::BAD,
@@ -37,7 +37,7 @@ pub fn arrow_color(a: char) -> Color {
 
 /// One colour per genome slot. Deliberately exhaustive (no catch-all): adding a
 /// trait must be a compile error here rather than a silently shared colour.
-pub fn trait_color(t: usize) -> Color {
+pub const fn trait_color(t: usize) -> Color {
     match t {
         0 => theme::INFO,
         1 => theme::DEER,
@@ -67,7 +67,7 @@ pub fn delta_style(d: f32) -> Style {
 
 /// Two-digit trait value: 0.74 -> "74".
 pub fn two(v: f32) -> String {
-    format!("{:>2}", ((v * 100.0).round() as u32).min(99))
+    format!("{:>2}", (crate::cast!((v * 100.0).round() => u32)).min(99))
 }
 
 /// Downsample a series to `cols` u16 buckets (mean of each bucket).
@@ -78,10 +78,10 @@ pub fn downsample(series: &[f32], cols: usize) -> Vec<u16> {
     }
     (0..cols)
         .map(|i| {
-            let a = i * n / cols;
-            let b = ((i + 1) * n / cols).max(a + 1).min(n);
-            let s: f32 = series[a..b].iter().sum::<f32>() / (b - a) as f32;
-            s.round() as u16
+            let a = (i * n).div_euclid(cols);
+            let b = (((i + 1) * n).div_euclid(cols)).max(a + 1).min(n);
+            let s: f32 = series[a..b].iter().sum::<f32>() / crate::cast!((b - a) => f32);
+            crate::cast!(s.round() => u16)
         })
         .collect()
 }
@@ -102,6 +102,6 @@ pub fn day_stamp(day: i64, season_days: u32) -> String {
     if day < 0 {
         return "founder".to_string();
     }
-    let year_len = (4 * season_days) as i64;
-    format!("Y{} D{:03}", day / year_len + 1, day % year_len + 1)
+    let year_len = i64::from(4 * season_days);
+    format!("Y{} D{:03}", day.div_euclid(year_len) + 1, day % year_len + 1)
 }

@@ -23,119 +23,40 @@ use crate::{glyphs, theme};
 
 const MENU: [&str; 4] = ["New World", "Load World", "Options", "Quit"];
 
+#[derive(Debug)]
 pub struct Title {
     pub selection: usize,
 }
 
-impl Title {
-    pub fn new() -> Self {
-        Title { selection: 0 }
-    }
-
-    fn move_sel(&mut self, dir: i32, saves: bool) {
-        let mut i = (self.selection as i32 + dir).rem_euclid(MENU.len() as i32) as usize;
-        let mut guard = 0;
-        while i == 1 && !saves && guard < MENU.len() {
-            i = (i as i32 + dir).rem_euclid(MENU.len() as i32) as usize;
-            guard += 1;
-        }
-        self.selection = i;
-    }
-}
-
-impl Screen for Title {
-    fn opaque(&self) -> bool {
-        true
-    }
-
-    fn handle_key(&mut self, key: KeyEvent, app: &mut AppState) -> Action {
-        let saves = !save::list_saves(&app.saves_dir).is_empty();
-        match key.code {
-            KeyCode::Up => {
-                self.move_sel(-1, saves);
-                Action::None
-            }
-            KeyCode::Down => {
-                self.move_sel(1, saves);
-                Action::None
-            }
-            KeyCode::Enter => match self.selection {
-                0 => Action::Push(Box::new(WorldGen::from_params(app.params.clone()))),
-                1 if saves => Action::Push(Box::new(LoadWorld::new())),
-                2 => Action::Push(Box::new(Controls::new())),
-                3 => self.quit(app),
-                _ => Action::None,
-            },
-            KeyCode::Char('q') | KeyCode::Char('w') => self.quit(app),
-            _ => Action::Unhandled,
-        }
-    }
-
-    fn render(&self, app: &AppState, f: &mut Frame, area: Rect) {
-        let status_row = area.y + area.height - 1;
-        util::fill(f.buffer_mut(), area, Style::default().bg(theme::BG));
-        let bg = |st: Style| st.bg(theme::BG);
-
-        let saves = save::list_saves(&app.saves_dir);
-        let newest = saves.first().map(|e| e.header.clone());
-
-        // ---- big title ------------------------------------------------------
-        let word = "SIM FORTRESS";
-        let title_w = (word.chars().count() * 7 - 2) as u16;
-        let tx = area.x + area.width.saturating_sub(title_w) / 2;
-        let ty = area.y + 3;
-        {
-            let buf = f.buffer_mut();
-            for row in 0..5 {
-                let color = theme::lerp(theme::TITLE, theme::ACCENT, row as f32 / 4.0);
-                let mut x = tx;
-                for ch in word.chars() {
-                    let s = letter(ch)[row];
-                    buf.set_stringn(x, ty + row as u16, s, 5, Style::default().fg(color).bg(theme::BG).add_modifier(Modifier::BOLD));
-                    x += 7;
-                }
-            }
-            let shadow: String = std::iter::repeat_n(glyphs::SHADE_1, title_w as usize).collect();
-            buf.set_stringn(tx, ty + 5, &shadow, title_w as usize, Style::default().fg(theme::dim(theme::ACCENT, 0.6)).bg(theme::BG));
-        }
-
-        // ---- tagline --------------------------------------------------------
-        let tagline = format!("predator {} prey {} evolution {} scarcity", glyphs::DOT, glyphs::DOT, glyphs::DOT);
-        center(f, area, 10, Line::from(Span::styled(tagline, bg(theme::dim_text()).add_modifier(Modifier::ITALIC))));
-
-        // ---- terrain strips (from the newest save header) --------------------
-        let strip_w = 120u16;
-        let sx = area.x + area.width.saturating_sub(strip_w) / 2;
-        if let Some(h) = &newest {
-            strip(f, sx, area.y + 12, strip_w, &h.strip_rows[0..2]);
-            strip(f, sx, area.y + 36, strip_w, &h.strip_rows[2..4]);
-        }
-
-        // ---- menu box -------------------------------------------------------
+/// The main-menu box with its selection highlight.
+fn menu_box(f: &mut Frame<'_>, area: Rect, newest: Option<&SaveHeader>, selection: usize) {
         let box_w = 34u16;
         let box_h = 8u16;
-        let bx = area.x + area.width.saturating_sub(box_w) / 2;
+        let bx = area.x + area.width.saturating_sub(box_w).div_euclid(2);
         let by = area.y + 16;
         let inner = panel::draw(f, Rect::new(bx, by, box_w, box_h), "Main Menu", panel::Kind::Focus);
         for (i, entry) in MENU.iter().enumerate() {
-            let row = 1 + i as u16;
+            let row = 1 + crate::cast!(i => u16);
             let disabled = i == 1 && newest.is_none();
-            let selected = i == self.selection && !disabled;
+            let selected = i == selection && !disabled;
             let text = if selected {
                 format!("   {} {:<24}", glyphs::PLAY, entry)
             } else if disabled {
-                format!("     {:<24} (empty)", entry)
+                format!("     {entry:<24} (empty)")
             } else {
-                format!("     {:<24}", entry)
+                format!("     {entry:<24}")
             };
             let style = if disabled { theme::dim_text() } else if selected { theme::selected() } else { theme::text() };
-            util::line(f, inner, row, Line::from(Span::styled(format!("{:<w$}", text, w = inner.width as usize), style)));
+            util::line(f, inner, row, Line::from(Span::styled(format!("{:<w$}", text, w = crate::cast!(inner.width => usize)), style)));
             if selected {
                 f.buffer_mut().set_stringn(inner.right() - 8, inner.y + row, "[Enter]", 7, Style::default().fg(theme::KEY).bg(theme::SELECT_BG).add_modifier(Modifier::BOLD));
             }
         }
+}
 
-        // ---- last world summary ---------------------------------------------
+/// The saved-world summary (or the empty-state line).
+fn last_world(f: &mut Frame<'_>, area: Rect, newest: Option<&SaveHeader>) {
+    let bg = |st: Style| st.bg(theme::BG);
         match &newest {
             Some(h) => {
                 let (y, season, doy, hour) = clock_parts(h);
@@ -176,6 +97,101 @@ impl Screen for Title {
                 center(f, area, 26, Line::from(Span::styled("no saved worlds yet", bg(theme::dim_text()))));
             }
         }
+}
+
+impl Title {
+    pub const fn new() -> Self {
+        Self { selection: 0 }
+    }
+
+    const fn move_sel(&mut self, dir: i32, saves: bool) {
+        let mut i = crate::cast!((crate::cast!(self.selection => i32) + dir).rem_euclid(crate::cast!(MENU.len() => i32)) => usize);
+        let mut guard = 0;
+        while i == 1 && !saves && guard < MENU.len() {
+            i = crate::cast!((crate::cast!(i => i32) + dir).rem_euclid(crate::cast!(MENU.len() => i32)) => usize);
+            guard += 1;
+        }
+        self.selection = i;
+    }
+}
+
+impl Default for Title {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Screen for Title {
+    fn opaque(&self) -> bool {
+        true
+    }
+
+    fn handle_key(&mut self, key: KeyEvent, app: &mut AppState) -> Action {
+        let saves = !save::list_saves(&app.saves_dir).is_empty();
+        match key.code {
+            KeyCode::Up => {
+                self.move_sel(-1, saves);
+                Action::None
+            }
+            KeyCode::Down => {
+                self.move_sel(1, saves);
+                Action::None
+            }
+            KeyCode::Enter => match self.selection {
+                0 => Action::Push(Box::new(WorldGen::from_params(&app.params))),
+                1 if saves => Action::Push(Box::new(LoadWorld::new())),
+                2 => Action::Push(Box::new(Controls::new())),
+                3 => Self::quit(app),
+                _ => Action::None,
+            },
+            KeyCode::Char('q' | 'w') => Self::quit(app),
+            _ => Action::Unhandled,
+        }
+    }
+
+    fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
+        let status_row = area.y + area.height - 1;
+        util::fill(f.buffer_mut(), area, Style::default().bg(theme::BG));
+        let bg = |st: Style| st.bg(theme::BG);
+
+        let saves = save::list_saves(&app.saves_dir);
+        let newest = saves.first().map(|e| e.header.clone());
+
+        // ---- big title ------------------------------------------------------
+        let word = "SIM FORTRESS";
+        let title_w = crate::cast!((word.chars().count() * 7 - 2) => u16);
+        let tx = area.x + area.width.saturating_sub(title_w).div_euclid(2);
+        let ty = area.y + 3;
+        {
+            let buf = f.buffer_mut();
+            for row in 0..5 {
+                let color = theme::lerp(theme::TITLE, theme::ACCENT, crate::cast!(row => f32) / 4.0);
+                let mut x = tx;
+                for ch in word.chars() {
+                    let s = letter(ch)[row];
+                    buf.set_stringn(x, ty + crate::cast!(row => u16), s, 5, Style::default().fg(color).bg(theme::BG).add_modifier(Modifier::BOLD));
+                    x += 7;
+                }
+            }
+            let shadow: String = std::iter::repeat_n(glyphs::SHADE_1, crate::cast!(title_w => usize)).collect();
+            buf.set_stringn(tx, ty + 5, &shadow, crate::cast!(title_w => usize), Style::default().fg(theme::dim(theme::ACCENT, 0.6)).bg(theme::BG));
+        }
+
+        // ---- tagline --------------------------------------------------------
+        let tagline = format!("predator {} prey {} evolution {} scarcity", glyphs::DOT, glyphs::DOT, glyphs::DOT);
+        center(f, area, 10, Line::from(Span::styled(tagline, bg(theme::dim_text()).add_modifier(Modifier::ITALIC))));
+
+        // ---- terrain strips (from the newest save header) --------------------
+        let strip_w = 120u16;
+        let sx = area.x + area.width.saturating_sub(strip_w).div_euclid(2);
+        if let Some(h) = &newest {
+            strip(f, sx, area.y + 12, strip_w, &h.strip_rows[0..2]);
+            strip(f, sx, area.y + 36, strip_w, &h.strip_rows[2..4]);
+        }
+
+        menu_box(f, area, newest.as_ref(), self.selection);
+
+        last_world(f, area, newest.as_ref());
 
         // ---- footer ---------------------------------------------------------
         center(
@@ -210,7 +226,7 @@ impl Screen for Title {
 }
 
 impl Title {
-    fn quit(&self, app: &mut AppState) -> Action {
+    fn quit(app: &mut AppState) -> Action {
         if app.sim.is_some() && app.dirty() {
             app.confirm = Some(ConfirmRequest { question: "World has unsaved changes. Quit anyway?".into(), yes: ConfirmYes::QuitApp });
             Action::Push(Box::new(ConfirmModal::new()))
@@ -222,21 +238,21 @@ impl Title {
 
 /// `(year, season, day_of_season, hour)` derived from a header (tick = hours).
 fn clock_parts(h: &SaveHeader) -> (u32, Season, u32, u32) {
-    let day_index = (h.tick + h.start_hour as u64) / 24;
-    let season_days = h.season_days.max(1) as u64;
-    let year = (day_index / (4 * season_days)) as u32 + 1;
-    let doy = (day_index % (4 * season_days)) as u32 + 1;
-    let season = match (day_index / season_days) % 4 {
+    let day_index = (h.tick + u64::from(h.start_hour)).div_euclid(24);
+    let season_days = u64::from(h.season_days.max(1));
+    let year = crate::cast!(day_index.div_euclid(4 * season_days) => u32) + 1;
+    let doy = crate::cast!((day_index % (4 * season_days)) => u32) + 1;
+    let season = match (day_index.div_euclid(season_days)) % 4 {
         0 => Season::Spring,
         1 => Season::Summer,
         2 => Season::Autumn,
         _ => Season::Winter,
     };
-    let hour = ((h.tick + h.start_hour as u64) % 24) as u32;
+    let hour = crate::cast!(((h.tick + u64::from(h.start_hour)) % 24) => u32);
     (year, season, doy, hour)
 }
 
-fn letter(c: char) -> [&'static str; 5] {
+const fn letter(c: char) -> [&'static str; 5] {
     match c {
         'S' => ["▄████", "█    ", "▀███▄", "    █", "████▀"],
         'I' => ["█████", "  █  ", "  █  ", "  █  ", "█████"],
@@ -250,23 +266,23 @@ fn letter(c: char) -> [&'static str; 5] {
     }
 }
 
-fn center(f: &mut Frame, area: Rect, row: u16, line: Line) {
-    let w = line.width() as u16;
-    let x = area.x + area.width.saturating_sub(w) / 2;
+fn center(f: &mut Frame<'_>, area: Rect, row: u16, line: Line<'_>) {
+    let w = crate::cast!(line.width() => u16);
+    let x = area.x + area.width.saturating_sub(w).div_euclid(2);
     util::line(f, Rect::new(x, area.y, w.min(area.width), area.height), row, line);
 }
 
 /// A band of terrain glyphs from serialised codes, dimmed and faded at the edges.
-fn strip(f: &mut Frame, x: u16, y: u16, w: u16, rows: &[Vec<u8>]) {
+fn strip(f: &mut Frame<'_>, x: u16, y: u16, w: u16, rows: &[Vec<u8>]) {
     let buf = f.buffer_mut();
     for (i, row) in rows.iter().enumerate() {
-        for sx in 0..w as usize {
+        for sx in 0..crate::cast!(w => usize) {
             let code = row[sx.min(row.len() - 1)];
             let (g, fg, bgc) = map::terrain_code_cell(code);
-            let edge = (sx.min(w as usize - 1 - sx) as f32 / 12.0).min(1.0);
+            let edge = (crate::cast!(sx.min(crate::cast!(w => usize) - 1 - sx) => f32) / 12.0).min(1.0);
             let fg = theme::lerp(theme::BG, fg, edge);
             let bgc = theme::lerp(theme::BG, theme::dim(bgc, 0.35), edge);
-            if let Some(c) = buf.cell_mut((x + sx as u16, y + i as u16)) {
+            if let Some(c) = buf.cell_mut((x + crate::cast!(sx => u16), y + crate::cast!(i => u16))) {
                 c.set_char(g);
                 c.set_style(Style::default().fg(fg).bg(bgc));
             }

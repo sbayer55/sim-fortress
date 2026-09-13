@@ -17,9 +17,10 @@ pub const MAX_SENSE_CELLS: u16 = 12;
 
 /// FR2 (predator rule): a predator detects a prey within its sense range unless
 /// `prey.camouflage × cover_by_terrain[prey cell] ≥ pred.sense × detect_threshold`,
+///
 /// or the prey is resting on a den cell and `den_protects`.
 pub fn can_detect(pred: &Creature, prey: &Creature, world: &World, p: &PredationParams) -> bool {
-    if geom::dist(pred.x, pred.y, prey.x, prey.y) > pred.genome.sense_cells() as f32 {
+    if geom::dist(pred.x, pred.y, prey.x, prey.y) > f32::from(pred.genome.sense_cells()) {
         return false;
     }
     if p.den_protects && prey.goal == Goal::Rest && in_den(world, prey.x, prey.y) {
@@ -33,7 +34,7 @@ pub fn can_detect(pred: &Creature, prey: &Creature, world: &World, p: &Predation
 /// FR2 (predator rule) over a peer snapshot: same detection rule as `can_detect`,
 /// used by hunt-target selection where the prey is only available as a `Peer`.
 pub fn can_detect_peer(pred: &Creature, px: usize, py: usize, cam: f32, resting: bool, world: &World, p: &PredationParams) -> bool {
-    if geom::dist(pred.x, pred.y, px, py) > pred.genome.sense_cells() as f32 {
+    if geom::dist(pred.x, pred.y, px, py) > f32::from(pred.genome.sense_cells()) {
         return false;
     }
     if p.den_protects && resting && in_den(world, px, py) {
@@ -53,9 +54,9 @@ pub fn prey_detects_pred(prey: &Creature, pred: &Creature, p: &PredationParams) 
 /// per-tick predator-first threat query, which avoids cloning predators.
 pub fn prey_detects_pred_at(prey: &Creature, px: usize, py: usize, pred_camouflage: f32, p: &PredationParams) -> bool {
     let range = if prey.goal == Goal::Rest {
-        prey.genome.sense_cells() as f32 * p.rest_detect_factor
+        f32::from(prey.genome.sense_cells()) * p.rest_detect_factor
     } else {
-        prey.genome.sense_cells() as f32
+        f32::from(prey.genome.sense_cells())
     };
     if geom::dist(prey.x, prey.y, px, py) > range {
         return false;
@@ -68,7 +69,9 @@ fn in_den(world: &World, x: usize, y: usize) -> bool {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)]
 mod tests {
+
     use super::*;
     use crate::sim::creatures::{CreatureId, Sex};
     use crate::sim::params::{CreaturesParams, GeneticsParams, PredationParams, WorldParams};
@@ -219,7 +222,7 @@ mod tests {
     }
 
     #[test]
-    fn hunt_phases_and_single_roll() {
+    fn hunt_contact_kills_and_eats() {
         // Guaranteed kill: Stalk → Chase (trigger at cheb ≤ 4) → contact → one roll.
         let mut sim = arena(|p| {
             p.kill_min = 1.0;
@@ -246,9 +249,11 @@ mod tests {
         let w = sim.creatures.get(wolf).unwrap();
         assert_eq!(w.attempts, 1, "no second roll while eating");
         assert_eq!(w.hunt_phase, HuntPhase::Eat, "eating lasts eat_hours");
+    }
 
-        // Guaranteed failure: the predator idles, the hunt fails once, and the
-        // prey flees for flee_ticks even though it cannot detect the wolf.
+    /// A forced-failure arena with a stealthy wolf and a hidden hare, after one
+    /// tick: the hunt has failed once and the prey is fleeing.
+    fn failed_hunt_fixture() -> (Sim, CreatureId, CreatureId, u64) {
         let mut sim = arena(|p| {
             p.kill_min = 0.0;
             p.kill_max = 0.0;
@@ -261,18 +266,29 @@ mod tests {
         still(&mut sim, hare);
         sim.step();
         let t = sim.time.tick;
+        (sim, wolf, hare, t)
+    }
+
+    #[test]
+    fn failed_hunt_forces_flee() {
+        let (sim, wolf, hare, t) = failed_hunt_fixture();
         let w = sim.creatures.get(wolf).unwrap();
         let h = sim.creatures.get(hare).unwrap();
         assert!(h.alive);
         assert_eq!((w.kills, w.attempts), (0, 1));
         assert_eq!(w.goal, Goal::Patrol, "failed hunt idles one tick");
         assert_eq!(w.hunt_target, None);
-        assert_eq!(w.hunt_cooldown_until, t + sim.params.predation.hunt_cooldown_hours as u64);
+        assert_eq!(w.hunt_cooldown_until, t + u64::from(sim.params.predation.hunt_cooldown_hours));
         assert_eq!(h.goal, Goal::Flee, "prey flees regardless of detection");
-        assert_eq!(h.flee_until, t + sim.params.predation.flee_ticks as u64);
+        assert_eq!(h.flee_until, t + u64::from(sim.params.predation.flee_ticks));
         assert!(h.threatened_by.is_some(), "the forced threat gives the away-vector");
         assert_eq!(h.chased, 1);
         assert_eq!(sim.deaths.hunt_attempts[SpeciesId::Wolf.index()], 1);
+    }
+
+    #[test]
+    fn forced_flee_lasts_and_escapes() {
+        let (mut sim, wolf, hare, _t) = failed_hunt_fixture();
         // The forced flee is retained for the whole timer, then ends as an escape.
         for _ in 0..(sim.params.predation.flee_ticks - 1) {
             sim.step();
@@ -320,7 +336,7 @@ mod tests {
             }
         }
         let killed_at = killed_at.expect("the wolf should reach and kill the pinned hare");
-        let chase_ticks = sim.creatures.get(hare).unwrap().death.unwrap().chase_ticks as u64;
+        let chase_ticks = u64::from(sim.creatures.get(hare).unwrap().death.unwrap().chase_ticks);
         assert!(killed_at - detected_at >= 2, "needs at least two ticks to close 7 cells");
         assert!(chase_ticks < killed_at - detected_at, "chase_ticks {chase_ticks} counts from the trigger, not from detection");
         assert!(chase_ticks <= 1);
@@ -343,10 +359,10 @@ mod tests {
         let w = sim.creatures.get(wolf).unwrap();
         let h = sim.creatures.get(hare).unwrap();
         assert!(w.hunger < 0.9 - pp.hunger_per_kill(size) + 0.05, "hunger −= hunger_per_kill: {}", w.hunger);
-        assert_eq!(w.eat_until, Some(sim.time.tick + pp.eat_hours(size) as u64));
+        assert_eq!(w.eat_until, Some(sim.time.tick + u64::from(pp.eat_hours(size))));
         assert!((h.decay - pp.kill_consumes_decay).abs() < 1e-6, "carcass decay advanced by kill_consumes_decay");
         // The wolf eats on the carcass cell, then patrols.
-        for _ in 0..pp.eat_hours(size) + 1 {
+        for _ in 0..=pp.eat_hours(size) {
             sim.step();
         }
         let w = sim.creatures.get(wolf).unwrap();

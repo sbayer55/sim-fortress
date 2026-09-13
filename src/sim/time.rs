@@ -12,26 +12,26 @@ pub enum Season {
 }
 
 impl Season {
-    pub fn name(self) -> &'static str {
+    pub const fn name(self) -> &'static str {
         match self {
-            Season::Spring => "Spring",
-            Season::Summer => "Summer",
-            Season::Autumn => "Autumn",
-            Season::Winter => "Winter",
+            Self::Spring => "Spring",
+            Self::Summer => "Summer",
+            Self::Autumn => "Autumn",
+            Self::Winter => "Winter",
         }
     }
 
     /// The ticker/event text announced when this season begins.
-    pub fn event_text(self) -> &'static str {
+    pub const fn event_text(self) -> &'static str {
         match self {
-            Season::Spring => "Spring returns to the valley; regrowth quickens",
-            Season::Summer => "Summer settles over the valley; evaporation peaks",
-            Season::Autumn => "Autumn colours the valley; regrowth slows",
-            Season::Winter => "Winter settles over the valley; vegetation regrowth halves",
+            Self::Spring => "Spring returns to the valley; regrowth quickens",
+            Self::Summer => "Summer settles over the valley; evaporation peaks",
+            Self::Autumn => "Autumn colours the valley; regrowth slows",
+            Self::Winter => "Winter settles over the valley; vegetation regrowth halves",
         }
     }
 
-    pub const ALL: [Season; 4] = [Season::Spring, Season::Summer, Season::Autumn, Season::Winter];
+    pub const ALL: [Self; 4] = [Self::Spring, Self::Summer, Self::Autumn, Self::Winter];
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,26 +45,26 @@ pub struct Time {
 }
 
 impl Time {
-    pub fn new(start_hour: u32, season_days: u32, ticks_per_day: u32, sunrise_hour: u32, sunset_hour: u32) -> Self {
-        Time { tick: 0, start_hour, season_days, ticks_per_day, sunrise_hour, sunset_hour }
+    pub const fn new(start_hour: u32, season_days: u32, ticks_per_day: u32, sunrise_hour: u32, sunset_hour: u32) -> Self {
+        Self { tick: 0, start_hour, season_days, ticks_per_day, sunrise_hour, sunset_hour }
     }
 
     pub fn hour(&self) -> u32 {
-        ((self.tick + self.start_hour as u64) % self.ticks_per_day as u64) as u32
+        crate::cast!(((self.tick + u64::from(self.start_hour)) % u64::from(self.ticks_per_day)) => u32)
     }
 
-    /// 0-based absolute day index (tick + start_hour) / ticks_per_day.
+    /// 0-based absolute day index (tick + `start_hour`) / `ticks_per_day`.
     pub fn day_index(&self) -> u64 {
-        (self.tick + self.start_hour as u64) / self.ticks_per_day as u64
+        (self.tick + u64::from(self.start_hour)).div_euclid(u64::from(self.ticks_per_day))
     }
 
     /// 1-based day within the current season.
     pub fn day_of_season(&self) -> u32 {
-        (self.day_index() % self.season_days as u64) as u32 + 1
+        crate::cast!((self.day_index() % u64::from(self.season_days)) => u32) + 1
     }
 
     pub fn season(&self) -> Season {
-        match (self.day_index() / self.season_days as u64) % 4 {
+        match (self.day_index().div_euclid(u64::from(self.season_days))) % 4 {
             0 => Season::Spring,
             1 => Season::Summer,
             2 => Season::Autumn,
@@ -72,14 +72,14 @@ impl Time {
         }
     }
 
-    /// 1-based day within the year (1..=4×season_days).
+    /// 1-based day within the year (`1..=4×season_days`).
     pub fn day_of_year(&self) -> u32 {
-        (self.day_index() % (4 * self.season_days as u64)) as u32 + 1
+        crate::cast!((self.day_index() % (4 * u64::from(self.season_days))) => u32) + 1
     }
 
     /// 1-based year.
     pub fn year(&self) -> u32 {
-        (self.day_index() / (4 * self.season_days as u64)) as u32 + 1
+        crate::cast!(self.day_index().div_euclid(4 * u64::from(self.season_days)) => u32) + 1
     }
 
     pub fn is_night(&self) -> bool {

@@ -40,7 +40,7 @@ use events::EventRing;
 use serde::{Deserialize, Serialize};
 
 /// A notification the UI should surface (e.g. an extinction modal). C5 FR8.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Alert {
     Extinction {
         /// Absolute (1-based) event sequence number of the `Extinction` event.
@@ -59,12 +59,14 @@ pub enum Alert {
 
 pub use creatures::ExtinctionRecord;
 
+#[derive(Debug)]
 pub struct StepReport {
     pub alerts: Vec<Alert>,
 }
 
 /// Per-system wall-clock timing (C6 FR8/FR9), accumulated over a run.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[allow(clippy::struct_field_names)]
 pub struct Profile {
     pub behavior_ns: u64,
     pub day_boundary_ns: u64,
@@ -139,7 +141,7 @@ pub struct Sim {
 }
 
 impl Sim {
-    pub fn new(seed: u64, params: Params) -> Sim {
+    pub fn new(seed: u64, params: Params) -> Self {
         let world = World::generate(seed, &params.world);
         let time = Time::new(
             params.time.start_hour,
@@ -171,7 +173,7 @@ impl Sim {
         }
         let species = SpeciesStats::all(&census(&creatures), 0, params.genetics.drift_every_generations);
 
-        Sim {
+        Self {
             seed,
             params,
             rng,
@@ -210,16 +212,16 @@ impl Sim {
     }
 
     /// Births so far today for species index `i` (the live counter).
-    pub fn births_today(&self, i: usize) -> u32 {
+    pub const fn births_today(&self, i: usize) -> u32 {
         self.deaths.births[i]
     }
 
     /// Deaths so far today for species index `i` (the live counter).
-    pub fn deaths_today(&self, i: usize) -> u32 {
+    pub const fn deaths_today(&self, i: usize) -> u32 {
         self.deaths.deaths[i]
     }
 
-    /// The oldest living creature (lowest born_day, ties by id), if any.
+    /// The oldest living creature (lowest `born_day`, ties by id), if any.
     pub fn oldest_living(&self) -> Option<CreatureId> {
         self.creatures.living().min_by_key(|c| (c.born_day, c.id)).map(|c| c.id)
     }
@@ -228,7 +230,6 @@ impl Sim {
     /// at midnight. Order is fixed for determinism (FR9). Returns the alerts
     /// raised this tick (extinction, C5 FR8).
     pub fn step(&mut self) -> StepReport {
-        let profiling = self.profile_enabled;
         let step_start = std::time::Instant::now();
         let mut alerts: Vec<Alert> = Vec::new();
         // The initial Spring is announced at tick 0 (Year 1, Day 1, 06:00).
@@ -238,8 +239,21 @@ impl Sim {
         if let Some(season) = self.time.advance() {
             self.push_season_event(season);
         }
+        self.run_behavior();
+        if self.time.hour() == 0 {
+            self.run_midnight(&mut alerts);
+        }
+        let t0 = std::time::Instant::now();
+        self.spatial.rebuild(&self.creatures, &self.world);
+        if self.profile_enabled {
+            self.profile.spatial_ns += crate::cast!(t0.elapsed().as_nanos() => u64);
+            self.profile.step_ns += crate::cast!(step_start.elapsed().as_nanos() => u64);
+        }
+        StepReport { alerts }
+    }
 
-        // Creature behaviour and movement (perception uses the previous tick's
+    /// Per-tick creature behaviour, plus soft-cap crossing bookkeeping.
+    fn run_behavior(&mut self) {
         // spatial snapshot; it is rebuilt below for the next tick and the UI).
         let t0 = std::time::Instant::now();
         behavior::tick_creatures(
@@ -261,109 +275,162 @@ impl Sim {
             &mut self.disease,
             &mut self.disease_rng,
         );
-        if profiling {
-            self.profile.behavior_ns += t0.elapsed().as_nanos() as u64;
+        if self.profile_enabled {
+            self.profile.behavior_ns += crate::cast!(t0.elapsed().as_nanos() => u64);
         }
         if self.soft_cap_noted {
             if !self.soft_cap_counted {
                 self.soft_cap_crossings += 1;
                 self.soft_cap_counted = true;
             }
-            if (self.creatures.len_living() as u32) < self.params.genetics.max_population_soft_cap {
+            if (crate::cast!(self.creatures.len_living() => u32)) < self.params.genetics.max_population_soft_cap {
                 self.soft_cap_noted = false; // re-arm for the next crossing
                 self.soft_cap_counted = false;
             }
         }
+    }
 
-        // Daily ecology + census at midnight (hour 0).
-        if self.time.hour() == 0 {
-            let t0 = std::time::Instant::now();
-            behavior::day_boundary(
-                &mut self.creatures,
-                &mut self.world,
-                &mut self.events,
-                &self.time,
-                &self.params.creatures,
-                &self.params.genetics,
-                &self.params.disease,
-                &mut self.deaths,
-                &mut self.lineage,
-                &mut self.disease,
-                &mut self.disease_rng,
-            );
-            let c = census(&self.creatures);
-            let day = self.time.day_index() as u32;
-            stats::update_species_daily(&mut self.species, &c, &self.deaths, day, self.params.genetics.drift_every_generations);
-            if profiling {
-                self.profile.day_boundary_ns += t0.elapsed().as_nanos() as u64;
-            }
-            // C7 FR8: outbreak tracking, epidemic alerts and emergence, after the census.
-            let t0 = std::time::Instant::now();
-            alerts.extend(disease::daily_update(
-                &mut self.creatures,
-                &self.world,
-                &mut self.events,
-                &self.time,
-                &self.params.disease,
-                &mut self.disease,
-                &c.population,
-                &mut self.disease_rng,
-            ));
-            if profiling {
-                self.profile.disease_ns += t0.elapsed().as_nanos() as u64;
-            }
-            let t0 = std::time::Instant::now();
-            ecology::daily_update(
-                &mut self.world,
-                &mut self.rng,
-                &self.time,
-                &mut self.events,
-                &mut self.series,
-                &mut self.drought,
-                &mut self.drought_days_below,
-                &self.params.ecology,
-                self.params.world.rainfall,
-                &c,
-                &self.deaths,
-                &self.disease,
-            );
-            if profiling {
-                self.profile.ecology_ns += t0.elapsed().as_nanos() as u64;
-            }
-            self.deaths = self.deaths.next_day();
-            if day.is_multiple_of(7) {
-                self.lineage.prune(&c.max_generation, self.params.genetics.lineage_keep_generations, &self.creatures);
-            }
+    /// Midnight: the day boundary, then the daily subsystems.
+    fn run_midnight(&mut self, alerts: &mut Vec<Alert>) {
+        let c = self.day_boundary_update();
+        self.midnight_systems(&c, alerts);
+    }
 
-            // C5 FR7: migration evaluation, then FR8 extinction detection.
-            let t0 = std::time::Instant::now();
-            behavior::migration_daily(
-                &mut self.creatures,
-                &self.world,
-                &mut self.events,
-                &self.time,
-                &self.params.ecology,
-                &self.params.predation,
-                &mut self.migration_cooldown_until,
-                &mut self.migration_days_below,
-            );
-            self.detect_extinctions(&mut alerts);
-            if profiling {
-                self.profile.migration_ns += t0.elapsed().as_nanos() as u64;
-            }
-        }
-
+    /// Midnight: age/behaviour day boundary, census and species statistics.
+    fn day_boundary_update(&mut self) -> Census {
         let t0 = std::time::Instant::now();
-        self.spatial.rebuild(&self.creatures, &self.world);
-        if profiling {
-            self.profile.spatial_ns += t0.elapsed().as_nanos() as u64;
+        behavior::day_boundary(
+            &mut self.creatures,
+            &mut self.world,
+            &mut self.events,
+            &self.time,
+            &self.params.creatures,
+            &self.params.genetics,
+            &self.params.disease,
+            &mut self.deaths,
+            &mut self.lineage,
+            &mut self.disease,
+            &mut self.disease_rng,
+        );
+        let c = census(&self.creatures);
+        let day = crate::cast!(self.time.day_index() => u32);
+        stats::update_species_daily(&mut self.species, &c, &self.deaths, day, self.params.genetics.drift_every_generations);
+        if self.profile_enabled {
+            self.profile.day_boundary_ns += crate::cast!(t0.elapsed().as_nanos() => u64);
         }
+        c
+    }
 
-        if profiling {
-            self.profile.step_ns += step_start.elapsed().as_nanos() as u64;
+    /// Midnight: disease, ecology, migration and extinction detection.
+    fn midnight_systems(&mut self, c: &Census, alerts: &mut Vec<Alert>) {
+        self.disease_step(c, alerts);
+        self.ecology_step(c);
+        self.deaths = self.deaths.next_day();
+        let day = crate::cast!(self.time.day_index() => u32);
+        if day % 7 == 0 {
+            self.lineage.prune(&c.max_generation, self.params.genetics.lineage_keep_generations, &self.creatures);
         }
+        // C5 FR7: migration evaluation, then FR8 extinction detection.
+        let t0 = std::time::Instant::now();
+        behavior::migration_daily(
+            &mut self.creatures,
+            &self.world,
+            &mut self.events,
+            &self.time,
+            &self.params.ecology,
+            &self.params.predation,
+            &mut self.migration_cooldown_until,
+            &mut self.migration_days_below,
+        );
+        self.detect_extinctions(alerts);
+        if self.profile_enabled {
+            self.profile.migration_ns += crate::cast!(t0.elapsed().as_nanos() => u64);
+        }
+    }
 
-        StepReport { alerts }
+    /// C7 FR8: outbreak tracking, epidemic alerts and emergence, after the census.
+    fn disease_step(&mut self, c: &Census, alerts: &mut Vec<Alert>) {
+        let t0 = std::time::Instant::now();
+        alerts.extend(disease::daily_update(
+            &mut self.creatures,
+            &self.world,
+            &mut self.events,
+            &self.time,
+            &self.params.disease,
+            &mut self.disease,
+            &c.population,
+            &mut self.disease_rng,
+        ));
+        if self.profile_enabled {
+            self.profile.disease_ns += crate::cast!(t0.elapsed().as_nanos() => u64);
+        }
+    }
+
+    /// The midnight ecology update and its series sample.
+    fn ecology_step(&mut self, c: &Census) {
+        let t0 = std::time::Instant::now();
+        ecology::daily_update(
+            &mut self.world,
+            &mut self.rng,
+            &self.time,
+            &mut self.events,
+            &mut self.series,
+            &mut self.drought,
+            &mut self.drought_days_below,
+            &self.params.ecology,
+            self.params.world.rainfall,
+            c,
+            &self.deaths,
+            &self.disease,
+        );
+        if self.profile_enabled {
+            self.profile.ecology_ns += crate::cast!(t0.elapsed().as_nanos() => u64);
+        }
+    }
+
+    /// C5 FR8: mark species `id` globally extinct and queue its alert. A no-op
+    /// unless the species was introduced and its population just reached zero.
+    fn record_global_extinction(&mut self, i: usize, id: SpeciesId, alerts: &mut Vec<Alert>) {
+        let initial = self.params.creatures.initial_counts.get(&id).copied().unwrap_or(0);
+        let peak = self.species[i].peak;
+        if initial == 0 || peak == 0 || self.species[i].count != 0 {
+            return;
+        }
+        self.extinct[i] = true;
+        // The last individual is the species' most recent death, recorded by
+        // `behavior::kill` (survives carcass freeing).
+        let record = self.deaths.last_death[i].clone();
+        let last_id = record.as_ref().map(|r| r.last);
+        let text = match &record {
+            Some(r) => format!(
+                "The {} are extinct; the last individual was {} {} ({} in {})",
+                id.plural(),
+                r.name,
+                r.tag,
+                r.cause.label(),
+                r.region
+            ),
+            None => format!("The {} are extinct", id.plural()),
+        };
+        let pos = record.as_ref().map(|r| r.pos);
+        self.events.push(Event {
+            year: self.time.year(),
+            day: self.time.day_of_year(),
+            hour: self.time.hour(),
+            kind: EventKind::Extinction,
+            species: Some(id),
+            subject: last_id,
+            text,
+            pos,
+            detail: String::new(),
+        });
+        let event_index = self.events.total();
+        if let Some(r) = record {
+            self.last_extinct[i] = Some(r);
+        }
+        if let Some(last) = last_id {
+            alerts.push(Alert::Extinction { event_index, species: id, last });
+        }
     }
 
     /// C5 FR8: mark globally extinct species and queue one `Extinction` alert each.
@@ -377,51 +444,13 @@ impl Sim {
         for (i, id) in SpeciesId::ALL.iter().enumerate() {
             // Global extinction (once per species).
             if !self.extinct[i] {
-                let initial = self.params.creatures.initial_counts.get(id).copied().unwrap_or(0);
-                let peak = self.species[i].peak;
-                if initial > 0 && peak > 0 && self.species[i].count == 0 {
-                    self.extinct[i] = true;
-                    // The last individual is the species' most recent death,
-                    // recorded by `behavior::kill` (survives carcass freeing).
-                    let record = self.deaths.last_death[i].clone();
-                    let last_id = record.as_ref().map(|r| r.last);
-                    let text = match &record {
-                        Some(r) => format!(
-                            "The {} are extinct; the last individual was {} {} ({} in {})",
-                            id.plural(),
-                            r.name,
-                            r.tag,
-                            r.cause.label(),
-                            r.region
-                        ),
-                        None => format!("The {} are extinct", id.plural()),
-                    };
-                    let pos = record.as_ref().map(|r| r.pos);
-                    self.events.push(Event {
-                        year: self.time.year(),
-                        day: self.time.day_of_year(),
-                        hour: self.time.hour(),
-                        kind: EventKind::Extinction,
-                        species: Some(*id),
-                        subject: last_id,
-                        text,
-                        pos,
-                        detail: String::new(),
-                    });
-                    let event_index = self.events.total();
-                    if let Some(r) = record {
-                        self.last_extinct[i] = Some(r);
-                        if let Some(last) = last_id {
-                            alerts.push(Alert::Extinction { event_index, species: *id, last });
-                        }
-                    }
-                }
+                self.record_global_extinction(i, *id, alerts);
             }
 
             // Local extinction (FR8): a region whose count drops to 0 after being
             // ≥ `local_extinction_min` within the last season (90 days) emits a
             // Note once per (species, region) until repopulated.
-            let today = self.time.day_index() as u32;
+            let today = crate::cast!(self.time.day_index() => u32);
             for ri in 0..8 {
                 let key = i * 8 + ri;
                 let count = region_counts[i][ri];
@@ -442,7 +471,7 @@ impl Sim {
                         species: Some(*id),
                         subject: None,
                         text: format!("The {} line of {} is extinct", id.plural(), r.0),
-                        pos: Some(((r.1 + r.3) / 2, (r.2 + r.4) / 2)),
+                        pos: Some(((r.1 + r.3).div_euclid(2), (r.2 + r.4).div_euclid(2))),
                         detail: String::new(),
                     });
                 }
@@ -471,50 +500,50 @@ impl Sim {
     }
 
     /// FNV-1a 64 over, per cell in row-major order: terrain as u8, elevation,
-    /// moisture, vegetation and `dried_from`; then tick, rng state, events.len()
+    /// moisture, vegetation and `dried_from`; then tick, rng state, `events.len()`
     /// and the per-region drought flags.
     pub fn checksum(&self) -> u64 {
         let mut h: u64 = 0xcbf2_9ce4_8422_2325;
         let prime: u64 = 0x100_0000_01b3;
         let feed = |h: &mut u64, bytes: &[u8]| {
             for &b in bytes {
-                *h ^= b as u64;
+                *h ^= u64::from(b);
                 *h = h.wrapping_mul(prime);
             }
         };
         for cell in &self.world.cells {
-            feed(&mut h, &[cell.terrain as u8]);
+            feed(&mut h, &[crate::cast!(cell.terrain => u8)]);
             feed(&mut h, &cell.elevation.to_bits().to_le_bytes());
             feed(&mut h, &cell.moisture.to_bits().to_le_bytes());
             feed(&mut h, &cell.vegetation.to_bits().to_le_bytes());
-            let dried = cell.dried_from.map(|t| t as u8 + 1).unwrap_or(0);
+            let dried = cell.dried_from.map_or(0, |t| crate::cast!(t => u8) + 1);
             feed(&mut h, &[dried]);
         }
         // Every living creature's id, x, y, hp, hunger, goal and C5 hunt/flee state (FR9).
         for c in self.creatures.living() {
             feed(&mut h, &c.id.0.to_le_bytes());
-            feed(&mut h, &(c.x as u64).to_le_bytes());
-            feed(&mut h, &(c.y as u64).to_le_bytes());
+            feed(&mut h, &(crate::cast!(c.x => u64)).to_le_bytes());
+            feed(&mut h, &(crate::cast!(c.y => u64)).to_le_bytes());
             feed(&mut h, &c.hp.to_bits().to_le_bytes());
             feed(&mut h, &c.hunger.to_bits().to_le_bytes());
-            feed(&mut h, &[c.goal as u8]);
-            feed(&mut h, &[c.hunt_phase as u8]);
-            feed(&mut h, &c.hunt_target.map(|t| t.0 as u64).unwrap_or(u64::MAX).to_le_bytes());
-            feed(&mut h, &c.chase_start_tick.map(|t| t.to_le_bytes()).unwrap_or([0xff; 8]));
+            feed(&mut h, &[crate::cast!(c.goal => u8)]);
+            feed(&mut h, &[crate::cast!(c.hunt_phase => u8)]);
+            feed(&mut h, &c.hunt_target.map_or(u64::MAX, |t| u64::from(t.0)).to_le_bytes());
+            feed(&mut h, &c.chase_start_tick.map_or([0xff; 8], u64::to_le_bytes));
             feed(&mut h, &c.hunt_cooldown_until.to_le_bytes());
-            feed(&mut h, &c.eat_until.map(|t| t.to_le_bytes()).unwrap_or([0xff; 8]));
-            feed(&mut h, &c.scavenge_target.map(|t| t.0 as u64).unwrap_or(u64::MAX).to_le_bytes());
+            feed(&mut h, &c.eat_until.map_or([0xff; 8], u64::to_le_bytes));
+            feed(&mut h, &c.scavenge_target.map_or(u64::MAX, |t| u64::from(t.0)).to_le_bytes());
             feed(&mut h, &c.flee_until.to_le_bytes());
-            feed(&mut h, &c.threatened_by.map(|(x, y, s)| (x as u64, y as u64, s.index() as u64)).unwrap_or((u64::MAX, u64::MAX, u64::MAX)).0.to_le_bytes());
-            feed(&mut h, &c.threatened_by.map(|(x, y, s)| (x as u64, y as u64, s.index() as u64)).unwrap_or((u64::MAX, u64::MAX, u64::MAX)).1.to_le_bytes());
-            feed(&mut h, &c.threatened_by.map(|(x, y, s)| (x as u64, y as u64, s.index() as u64)).unwrap_or((u64::MAX, u64::MAX, u64::MAX)).2.to_le_bytes());
+            feed(&mut h, &c.threatened_by.map_or((u64::MAX, u64::MAX, u64::MAX), |(x, y, s)| (crate::cast!(x => u64), crate::cast!(y => u64), crate::cast!(s.index() => u64))).0.to_le_bytes());
+            feed(&mut h, &c.threatened_by.map_or((u64::MAX, u64::MAX, u64::MAX), |(x, y, s)| (crate::cast!(x => u64), crate::cast!(y => u64), crate::cast!(s.index() => u64))).1.to_le_bytes());
+            feed(&mut h, &c.threatened_by.map_or((u64::MAX, u64::MAX, u64::MAX), |(x, y, s)| (crate::cast!(x => u64), crate::cast!(y => u64), crate::cast!(s.index() => u64))).2.to_le_bytes());
             feed(&mut h, &c.migrate_until.to_le_bytes());
-            feed(&mut h, &c.migrate_target.map(|(x, y)| (x as u64, y as u64)).unwrap_or((u64::MAX, u64::MAX)).0.to_le_bytes());
-            feed(&mut h, &c.migrate_target.map(|(x, y)| (x as u64, y as u64)).unwrap_or((u64::MAX, u64::MAX)).1.to_le_bytes());
+            feed(&mut h, &c.migrate_target.map_or((u64::MAX, u64::MAX), |(x, y)| (crate::cast!(x => u64), crate::cast!(y => u64))).0.to_le_bytes());
+            feed(&mut h, &c.migrate_target.map_or((u64::MAX, u64::MAX), |(x, y)| (crate::cast!(x => u64), crate::cast!(y => u64))).1.to_le_bytes());
             // C7: infection state and parasite load.
             match c.infection {
                 Some(i) => {
-                    feed(&mut h, &[i.pathogen.0, i.stage as u8]);
+                    feed(&mut h, &[i.pathogen.0, crate::cast!(i.stage => u8)]);
                     feed(&mut h, &i.ends_day.to_le_bytes());
                 }
                 None => feed(&mut h, &[0xff, 0xff]),
@@ -524,17 +553,17 @@ impl Sim {
         for &d in &self.disease.last_case_day {
             feed(&mut h, &d.to_le_bytes());
         }
-        feed(&mut h, &(self.disease.outbreaks.len() as u64).to_le_bytes());
+        feed(&mut h, &(crate::cast!(self.disease.outbreaks.len() => u64)).to_le_bytes());
         feed(&mut h, &self.disease_rng.state().to_le_bytes());
         feed(&mut h, &self.time.tick.to_le_bytes());
         feed(&mut h, &self.rng.state().to_le_bytes());
         feed(&mut h, &self.creature_rng.state().to_le_bytes());
         feed(&mut h, &self.events.total().to_le_bytes());
         for &flagged in &self.drought {
-            feed(&mut h, &[flagged as u8]);
+            feed(&mut h, &[u8::from(flagged)]);
         }
         for &e in &self.extinct {
-            feed(&mut h, &[e as u8]);
+            feed(&mut h, &[u8::from(e)]);
         }
         h
     }
@@ -545,7 +574,7 @@ impl Sim {
 fn fnv1a64(bytes: &[u8]) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for &b in bytes {
-        h ^= b as u64;
+        h ^= u64::from(b);
         h = h.wrapping_mul(0x100_0000_01b3);
     }
     h
@@ -587,7 +616,7 @@ mod tests {
         // Lock the exact value so accidental algorithm changes fail loudly.
         // Re-baselined for C8: the genome grew to eleven traits (Sociality and
         // Maturity), which shifts the founder jitter and every downstream draw.
-        assert_eq!(a.checksum(), 0x348e3c6eeec2e6d6);
+        assert_eq!(a.checksum(), 0x348e_3c6e_eec2_e6d6);
     }
 
     #[test]
@@ -639,8 +668,8 @@ mod tests {
         for _ in 0..200 {
             more.extend(sim.step().alerts);
         }
-        let hare: Vec<_> = alerts.into_iter().chain(more).filter(|a| matches!(a, Alert::Extinction { species: SpeciesId::Hare, .. })).collect();
-        assert_eq!(hare.len(), 1, "a species must emit at most once");
+        let hare = alerts.into_iter().chain(more).filter(|a| matches!(a, Alert::Extinction { species: SpeciesId::Hare, .. })).count();
+        assert_eq!(hare, 1, "a species must emit at most once");
     }
 
     #[test]
@@ -694,11 +723,13 @@ mod tests {
                 let path = entry.path();
                 if path.is_dir() {
                     stack.push(path);
-                } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-                    // Skip this file: the test harness itself names "ratatui"/"HashMap".
-                    if path.file_name().and_then(|f| f.to_str()) != Some("mod.rs") {
-                        out.push(path);
-                    }
+                    continue;
+                }
+                // Skip this file: the test harness itself names "ratatui"/"HashMap".
+                if path.extension().and_then(|e| e.to_str()) == Some("rs")
+                    && path.file_name().and_then(|f| f.to_str()) != Some("mod.rs")
+                {
+                    out.push(path);
                 }
             }
         }

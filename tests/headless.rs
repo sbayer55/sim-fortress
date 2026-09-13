@@ -1,6 +1,11 @@
 //! Integration tests exercising the library target (the same surface the
 //! `--headless` binary uses).
 
+// Test crates are separate compilation roots, so they do not inherit the allow
+// list in `src/lib.rs`. The same `indexing_slicing` justification applies here
+// (indices come from checked `0..len()` loops over fixed-size arrays).
+#![allow(clippy::indexing_slicing)]
+
 use sim_fortress::sim::{Params, Sim};
 
 #[test]

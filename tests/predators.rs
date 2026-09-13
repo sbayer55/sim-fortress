@@ -3,6 +3,11 @@
 //! The multi-year runs are slow in debug builds; run them with
 //! `cargo test --release --test predators`.
 
+// Test crates are separate compilation roots, so they do not inherit the allow
+// list in `src/lib.rs`. The same `indexing_slicing` justification applies here
+// (indices come from checked `0..len()` loops over fixed-size arrays).
+#![allow(clippy::indexing_slicing)]
+
 use std::time::Instant;
 
 use sim_fortress::sim::{EventKind, Params, Rainfall, Sim, SpeciesId};
@@ -44,8 +49,8 @@ fn oscillation_lag() {
     let sim = run(42, Params::default(), TEN_YEARS);
     let alive = SpeciesId::ALL.iter().filter(|id| sim.species[id.index()].count > 0).count();
     assert!(alive >= 5, "only {alive} species alive at year 10");
-    let prey: Vec<f32> = sim.series.samples().iter().map(|s| (s.population[0] + s.population[1] + s.population[2]) as f32).collect();
-    let pred: Vec<f32> = sim.series.samples().iter().map(|s| (s.population[3] + s.population[4] + s.population[5]) as f32).collect();
+    let prey: Vec<f32> = sim.series.samples().iter().map(|s| sim_fortress::cast!((s.population[0] + s.population[1] + s.population[2]) => f32)).collect();
+    let pred: Vec<f32> = sim.series.samples().iter().map(|s| sim_fortress::cast!((s.population[3] + s.population[4] + s.population[5]) => f32)).collect();
     let lag = sim_fortress::sim::stats::peak_lag(&prey, &pred);
     eprintln!("peak_lag: {lag:?}");
     // ≥ 3 local maxima on both smoothed totals (30-day centred moving average, after year 1).
@@ -53,7 +58,7 @@ fn oscillation_lag() {
         (0..v.len()).map(|i| {
             let lo = i.saturating_sub(15);
             let hi = (i + 16).min(v.len());
-            v[lo..hi].iter().sum::<f32>() / (hi - lo) as f32
+            v[lo..hi].iter().sum::<f32>() / sim_fortress::cast!((hi - lo) => f32)
         }).collect()
     };
     let prey_max = sim_fortress::sim::stats::local_maxima(&smooth(&prey[360..])).len();
@@ -98,7 +103,7 @@ fn hunt_success_band() {
     for id in [SpeciesId::Fox, SpeciesId::Wolf, SpeciesId::Lynx] {
         let kills = sim.deaths.hunt_kills[id.index()];
         let attempts = sim.deaths.hunt_attempts[id.index()];
-        let pct = if attempts > 0 { kills as f32 / attempts as f32 * 100.0 } else { 0.0 };
+        let pct = if attempts > 0 { sim_fortress::cast!(kills => f32) / sim_fortress::cast!(attempts => f32) * 100.0 } else { 0.0 };
         eprintln!("{id:?}: kills {kills} attempts {attempts} success {pct:.0}%");
         assert!((15.0..=60.0).contains(&pct), "{id:?} success {pct:.0}% outside 15–60%");
     }
@@ -112,17 +117,17 @@ fn migration_scenario() {
     let mut p = Params::default();
     p.world.rainfall = Rainfall::Dry;
     p.stats.series_days = 4000;
-    let cooldown_ticks = p.predation.migrate_cooldown_days as u64 * 24;
+    let cooldown_ticks = u64::from(p.predation.migrate_cooldown_days) * 24;
     let mut sim = Sim::new(42, p);
     // Step day by day so the destination count can be sampled after each migration.
     let mut pending: Vec<(u64, SpeciesId, usize, u32)> = Vec::new(); // (tick, species, dest, count at event)
     let mut seen = 0usize;
     let mut last_by_pair: std::collections::BTreeMap<(SpeciesId, usize), u64> = std::collections::BTreeMap::new();
     let mut rises = 0u32;
-    let region_count = |sim: &Sim, id: SpeciesId, ri: usize| sim.creatures.living().filter(|c| c.species == id && sim.world.region_index(c.x, c.y) == ri).count() as u32;
+    let region_count = |sim: &Sim, id: SpeciesId, ri: usize| sim_fortress::cast!(sim.creatures.living().filter(|c| c.species == id && sim.world.region_index(c.x, c.y) == ri).count() => u32);
     for _ in 0..(2 * 360 * 24) {
         sim.step();
-        let total = sim.events.total() as usize;
+        let total = sim_fortress::cast!(sim.events.total() => usize);
         if total > seen {
             let new_events: Vec<_> = sim.events.iter().rev().take(total - seen).cloned().collect();
             for e in new_events.into_iter().rev() {
