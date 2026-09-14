@@ -19,7 +19,27 @@ use crate::widgets::map;
 use crate::widgets::{bars, panel, status, util};
 use crate::{glyphs, theme};
 
-const FIELD_COUNT: usize = 26;
+// Focus indices in Tab order. The world-shape fields are plain adjustable
+// fields (Left/Right), so Map width and Map height each get their own row.
+const F_NAME: usize = 0;
+const F_SEED: usize = 1;
+const F_WIDTH: usize = 2;
+const F_HEIGHT: usize = 3;
+const F_WATER: usize = 4;
+const F_FOREST: usize = 5;
+const F_ROCK: usize = 6;
+const F_RAINFALL: usize = 7;
+const F_SEASON: usize = 8;
+const F_SPECIES: usize = 9; // 9..=14, one row per species
+const F_MUTATION_RATE: usize = 15;
+const F_MUTATION_STRENGTH: usize = 16;
+const F_DIFFICULTY: usize = 17;
+const F_REGROWTH: usize = 18;
+const F_PRESETS: usize = 19; // 19..=23, five presets
+const F_GENERATE: usize = 24;
+const F_RANDOMIZE: usize = 25;
+const F_BACK: usize = 26;
+const FIELD_COUNT: usize = 27;
 const FORM_W: u16 = 66;
 
 #[derive(Debug)]
@@ -72,9 +92,9 @@ impl WorldGenForm {
             genetics: params.genetics.clone(),
             predation: params.predation.clone(),
             regrowth_rate: params.ecology.regrowth_rate,
-            // Start on Size (Width), matching the documented default highlight and
+            // Start on Map width, matching the documented default highlight and
             // so a fresh S09 quits on `q` (FR8: `q` quits when no text field is focused).
-            focus: 2,
+            focus: F_WIDTH,
             preview,
             dirty: false,
             text_edited: false,
@@ -178,28 +198,28 @@ impl Screen for WorldGen {
 
         let focus = form.focus;
 
-        if focus == 0 || focus == 1 {
+        if focus == F_NAME || focus == F_SEED {
             return handle_text_field(&mut form, focus, code);
         }
 
-        if focus == 23 || focus == 24 || focus == 25 {
+        if (F_GENERATE..=F_BACK).contains(&focus) {
             return match (focus, code) {
-                (23, KeyCode::Enter) => generate(&form, app),
-                (24, KeyCode::Enter) => {
+                (F_GENERATE, KeyCode::Enter) => generate(&form, app),
+                (F_RANDOMIZE, KeyCode::Enter) => {
                     let s = rand_seed();
                     form.seed_text = format!("{s}");
                     form.text_edited = true;
                     form.dirty = true;
                     Action::None
                 }
-                (25, KeyCode::Enter) => Action::Pop,
+                (F_BACK, KeyCode::Enter) => Action::Pop,
                 _ => Action::None,
             };
         }
 
-        if (18..23).contains(&focus) {
+        if (F_PRESETS..F_GENERATE).contains(&focus) {
             if code == KeyCode::Enter {
-                apply_preset(&mut form, focus - 18);
+                apply_preset(&mut form, focus - F_PRESETS);
             }
             return Action::None;
         }
@@ -230,7 +250,11 @@ impl Screen for WorldGen {
 
         let seed_hint = if form.seed().is_some() { format!("seed {}  preview is live", form.seed_text) } else { "invalid seed".to_string() };
         if form.edit.is_some() {
-            let hint = if form.focus == 2 { "type WIDTHxHEIGHT or WIDTH" } else { "type a number" };
+            let hint = match form.focus {
+                F_WIDTH => "type a width in cells",
+                F_HEIGHT => "type a height in cells",
+                _ => "type a number",
+            };
             status::render(
                 f,
                 Rect::new(area.x, status_row, area.width, 1),
@@ -241,7 +265,7 @@ impl Screen for WorldGen {
             status::render(
                 f,
                 Rect::new(area.x, status_row, area.width, 1),
-                &[("Tab", "next field"), ("←→", "adjust"), ("↑↓", "height"), ("Space", "type value"), ("Enter", "generate"), ("Esc", "back")],
+                &[("Tab", "next field"), ("←→", "adjust"), ("Space", "type value"), ("Enter", "generate"), ("Esc", "back")],
                 &seed_hint,
             );
         }
@@ -279,28 +303,29 @@ fn adjust(form: &mut WorldGenForm, focus: usize, dir: i32) {
     let d = i64::from(dir);
     let w = &mut form.world;
     match focus {
-        // Size: Left/Right adjusts width; Up/Down (handled by the caller) adjusts height.
-        2 => w.width = crate::cast!(clamp_i64(crate::cast!(w.width => i64) + d * 10, 100, 1000) => usize),
-        3 => w.water_pct = crate::cast!(clamp_i64(i64::from(w.water_pct) + d, 0, 60) => u8),
-        4 => w.forest_pct = crate::cast!(clamp_i64(i64::from(w.forest_pct) + d, 0, 50) => u8),
-        5 => w.rock_pct = crate::cast!(clamp_i64(i64::from(w.rock_pct) + d, 0, 30) => u8),
-        6 => cycle_rainfall(&mut w.rainfall, dir),
-        7 => form.season_days = crate::cast!(clamp_i64(i64::from(form.season_days) + d * 10, 30, 180) => u32),
-        8..=13 => {
-            let i = focus - 8;
+        // Left/Right adjust the width and height fields, like every other field.
+        F_WIDTH => w.width = crate::cast!(clamp_i64(crate::cast!(w.width => i64) + d * 10, 100, 1000) => usize),
+        F_HEIGHT => w.height = crate::cast!(clamp_i64(crate::cast!(w.height => i64) + d * 5, 30, 1000) => usize),
+        F_WATER => w.water_pct = crate::cast!(clamp_i64(i64::from(w.water_pct) + d, 0, 60) => u8),
+        F_FOREST => w.forest_pct = crate::cast!(clamp_i64(i64::from(w.forest_pct) + d, 0, 50) => u8),
+        F_ROCK => w.rock_pct = crate::cast!(clamp_i64(i64::from(w.rock_pct) + d, 0, 30) => u8),
+        F_RAINFALL => cycle_rainfall(&mut w.rainfall, dir),
+        F_SEASON => form.season_days = crate::cast!(clamp_i64(i64::from(form.season_days) + d * 10, 30, 180) => u32),
+        F_SPECIES..F_MUTATION_RATE => {
+            let i = focus - F_SPECIES;
             form.counts[i] = crate::cast!(clamp_i64(i64::from(form.counts[i]) + d * 10, 0, 999) => u32);
         }
-        14 => form.genetics.mutation_rate = clamp_f32(form.genetics.mutation_rate + crate::cast!(dir => f32) * 0.01, 0.0, 0.2),
-        15 => form.genetics.mutation_strength = clamp_f32(form.genetics.mutation_strength + crate::cast!(dir => f32) * 0.01, 0.0, 0.2),
-        16 => cycle_difficulty(&mut form.predation.difficulty, dir),
-        17 => form.regrowth_rate = clamp_f32(form.regrowth_rate + crate::cast!(dir => f32) * 0.1, 0.2, 2.0),
+        F_MUTATION_RATE => form.genetics.mutation_rate = clamp_f32(form.genetics.mutation_rate + crate::cast!(dir => f32) * 0.01, 0.0, 0.2),
+        F_MUTATION_STRENGTH => form.genetics.mutation_strength = clamp_f32(form.genetics.mutation_strength + crate::cast!(dir => f32) * 0.01, 0.0, 0.2),
+        F_DIFFICULTY => cycle_difficulty(&mut form.predation.difficulty, dir),
+        F_REGROWTH => form.regrowth_rate = clamp_f32(form.regrowth_rate + crate::cast!(dir => f32) * 0.1, 0.2, 2.0),
         _ => {}
     }
 }
 
 /// Fields whose value can be typed in directly (Space opens the entry).
 const fn is_numeric_field(focus: usize) -> bool {
-    matches!(focus, 2..=5 | 7..=15 | 17)
+    matches!(focus, F_WIDTH..=F_ROCK | F_SEASON..=F_MUTATION_STRENGTH | F_REGROWTH)
 }
 
 /// Apply a typed value to a numeric field, clamped to the same range the
@@ -314,33 +339,16 @@ fn commit_edit(form: &mut WorldGenForm, focus: usize, text: &str) {
     let flt = |t: &str| t.parse::<f32>().ok().filter(|v| v.is_finite());
     let w = &mut form.world;
     let changed = match focus {
-        2 => {
-            let (wt, ht) = match text.split_once('x') {
-                Some((a, b)) => (a, Some(b)),
-                None => (text, None),
-            };
-            let width_ok = if let Some(v) = int(wt) {
-                w.width = crate::cast!(clamp_i64(v, 100, 1000) => usize);
-                true
-            } else {
-                false
-            };
-            let height_ok = if let Some(v) = ht.and_then(int) {
-                w.height = crate::cast!(clamp_i64(v, 30, 1000) => usize);
-                true
-            } else {
-                false
-            };
-            width_ok || height_ok
-        }
-        3 => int(text).map(|v| w.water_pct = crate::cast!(clamp_i64(v, 0, 60) => u8)).is_some(),
-        4 => int(text).map(|v| w.forest_pct = crate::cast!(clamp_i64(v, 0, 50) => u8)).is_some(),
-        5 => int(text).map(|v| w.rock_pct = crate::cast!(clamp_i64(v, 0, 30) => u8)).is_some(),
-        7 => int(text).map(|v| form.season_days = crate::cast!(clamp_i64(v, 30, 180) => u32)).is_some(),
-        8..=13 => int(text).map(|v| form.counts[focus - 8] = crate::cast!(clamp_i64(v, 0, 999) => u32)).is_some(),
-        14 => flt(text).map(|v| form.genetics.mutation_rate = clamp_f32(v, 0.0, 0.2)).is_some(),
-        15 => flt(text).map(|v| form.genetics.mutation_strength = clamp_f32(v, 0.0, 0.2)).is_some(),
-        17 => flt(text).map(|v| form.regrowth_rate = clamp_f32(v, 0.2, 2.0)).is_some(),
+        F_WIDTH => int(text).map(|v| w.width = crate::cast!(clamp_i64(v, 100, 1000) => usize)).is_some(),
+        F_HEIGHT => int(text).map(|v| w.height = crate::cast!(clamp_i64(v, 30, 1000) => usize)).is_some(),
+        F_WATER => int(text).map(|v| w.water_pct = crate::cast!(clamp_i64(v, 0, 60) => u8)).is_some(),
+        F_FOREST => int(text).map(|v| w.forest_pct = crate::cast!(clamp_i64(v, 0, 50) => u8)).is_some(),
+        F_ROCK => int(text).map(|v| w.rock_pct = crate::cast!(clamp_i64(v, 0, 30) => u8)).is_some(),
+        F_SEASON => int(text).map(|v| form.season_days = crate::cast!(clamp_i64(v, 30, 180) => u32)).is_some(),
+        F_SPECIES..F_MUTATION_RATE => int(text).map(|v| form.counts[focus - F_SPECIES] = crate::cast!(clamp_i64(v, 0, 999) => u32)).is_some(),
+        F_MUTATION_RATE => flt(text).map(|v| form.genetics.mutation_rate = clamp_f32(v, 0.0, 0.2)).is_some(),
+        F_MUTATION_STRENGTH => flt(text).map(|v| form.genetics.mutation_strength = clamp_f32(v, 0.0, 0.2)).is_some(),
+        F_REGROWTH => flt(text).map(|v| form.regrowth_rate = clamp_f32(v, 0.2, 2.0)).is_some(),
         _ => false,
     };
     if changed {
@@ -439,13 +447,16 @@ fn draw_world_section(f: &mut Frame<'_>, inner: Rect, form: &WorldGenForm, row: 
     let wf = [
         field("World name", form.name.clone(), false, "text"),
         field("Seed", form.seed_text.clone(), false, "hex/decimal"),
-        field("Size", shown(form, 2, format!("{} x {}", form.world.width, form.world.height)), true, "←→ width  ↑↓ height"),
-        field("Water %", shown(form, 3, form.world.water_pct.to_string()), true, "lakes + rivers"),
-        field("Forest %", shown(form, 4, form.world.forest_pct.to_string()), true, "predator cover"),
-        field("Rock %", shown(form, 5, form.world.rock_pct.to_string()), true, "impassable"),
+        field("Map width", shown(form, F_WIDTH, form.world.width.to_string()), true, "100 - 1000 cells"),
+        field("Map height", shown(form, F_HEIGHT, form.world.height.to_string()), true, "30 - 1000 cells"),
+        field("Water %", shown(form, F_WATER, form.world.water_pct.to_string()), true, "lakes + rivers"),
+        field("Forest %", shown(form, F_FOREST, form.world.forest_pct.to_string()), true, "predator cover"),
+        field("Rock %", shown(form, F_ROCK, form.world.rock_pct.to_string()), true, "impassable"),
         field("Rainfall", rainfall_name(form.world.rainfall).to_string(), true, "dry/normal/wet"),
-        field("Season length", shown(form, 7, format!("{} days", form.season_days)), true, "30 - 180 days"),
+        field("Season length", shown(form, F_SEASON, format!("{} days", form.season_days)), true, "30 - 180 days"),
     ];
+    // The world rows are drawn in Tab order starting at focus 0, so the array
+    // index is the focus index.
     for (i, (label, value, adjustable, hint)) in wf.iter().enumerate() {
         draw_field(f, inner, row, label.as_str(), value.as_str(), *adjustable, hint, i == form.focus);
         row += 1;
@@ -466,7 +477,7 @@ fn draw_species_section(f: &mut Frame<'_>, inner: Rect, form: &WorldGenForm, row
     row += 1;
     let total: u32 = form.counts.iter().sum();
     for (i, id) in SpeciesId::ALL.iter().enumerate() {
-        let focused = form.focus == 8 + i;
+        let focused = form.focus == F_SPECIES + i;
         let y = inner.y + row;
         let buf = f.buffer_mut();
         let bg = if focused { theme::SELECT_BG } else { theme::PANEL_BG };
@@ -484,7 +495,7 @@ fn draw_species_section(f: &mut Frame<'_>, inner: Rect, form: &WorldGenForm, row
         buf.set_stringn(inner.x + 13, y, format!("{kind:<9}"), 9, Style::default().fg(theme::DIM).bg(bg));
         let arrows = if focused { Style::default().fg(theme::KEY).bg(bg).add_modifier(Modifier::BOLD) } else { Style::default().fg(theme::DIM).bg(bg) };
         buf.set_stringn(inner.x + 22, y, glyphs::REWIND.to_string(), 1, arrows);
-        buf.set_stringn(inner.x + 23, y, format!("{:>5} ", shown(form, 8 + i, form.counts[i].to_string())), 6, base);
+        buf.set_stringn(inner.x + 23, y, format!("{:>5} ", shown(form, F_SPECIES + i, form.counts[i].to_string())), 6, base);
         buf.set_stringn(inner.x + 29, y, glyphs::PLAY.to_string(), 1, arrows);
         let share = crate::cast!(form.counts[i] => f32) / crate::cast!(total.max(1) => f32);
         bars::bar(buf, inner.x + 33, y, 22, share, id.color());
@@ -504,13 +515,13 @@ fn draw_evolution_section(f: &mut Frame<'_>, inner: Rect, form: &WorldGenForm, r
     panel::section(f, inner, row, "Evolution");
     row += 1;
     let evo = [
-        field("Mutation rate", shown(form, 14, format!("{:.2}", form.genetics.mutation_rate)), true, "per trait/birth"),
-        field("Mutation strength", shown(form, 15, format!("{:.2}", form.genetics.mutation_strength)), true, "mutation sd"),
+        field("Mutation rate", shown(form, F_MUTATION_RATE, format!("{:.2}", form.genetics.mutation_rate)), true, "per trait/birth"),
+        field("Mutation strength", shown(form, F_MUTATION_STRENGTH, format!("{:.2}", form.genetics.mutation_strength)), true, "mutation sd"),
         field("Predation difficulty", difficulty_name(form.predation.difficulty).to_string(), true, "easy/norm/hard"),
-        field("Regrowth rate", shown(form, 17, format!("{:.1}", form.regrowth_rate)), true, "veg multiplier"),
+        field("Regrowth rate", shown(form, F_REGROWTH, format!("{:.1}", form.regrowth_rate)), true, "veg multiplier"),
     ];
     for (i, (label, value, adjustable, hint)) in evo.iter().enumerate() {
-        draw_field(f, inner, row, label.as_str(), value.as_str(), *adjustable, hint, form.focus == 14 + i);
+        draw_field(f, inner, row, label.as_str(), value.as_str(), *adjustable, hint, form.focus == F_MUTATION_RATE + i);
         row += 1;
     }
     util::line(f, inner, row, Line::from(vec![
@@ -535,7 +546,7 @@ fn draw_presets_section(f: &mut Frame<'_>, inner: Rect, form: &WorldGenForm, row
         ("Fast evolution", "mutation rate 0.10, strength 0.12"),
     ];
     for (i, (name, desc)) in presets.iter().enumerate() {
-        let focused = form.focus == 18 + i;
+        let focused = form.focus == F_PRESETS + i;
         util::line(f, inner, row, Line::from(vec![
             Span::styled(format!(" {} ", glyphs::DOT), if focused { theme::label() } else { theme::dim_text() }),
             Span::styled(format!("{name:<16}"), if focused { theme::title() } else { theme::text() }),
@@ -551,7 +562,7 @@ fn draw_form_buttons(f: &mut Frame<'_>, inner: Rect, form: &WorldGenForm) {
     let brow = inner.height - 1;
     let y = inner.y + brow;
     let buf = f.buffer_mut();
-    let buttons: [(&str, bool, usize); 3] = [("[ Generate ]", true, 23), ("[ Randomize seed ]", false, 24), ("[ Back ]", false, 25)];
+    let buttons: [(&str, bool, usize); 3] = [("[ Generate ]", true, F_GENERATE), ("[ Randomize seed ]", false, F_RANDOMIZE), ("[ Back ]", false, F_BACK)];
     let mut x = inner.x + 4;
     for (label, primary, fi) in buttons {
         let focused = form.focus == fi;
@@ -580,9 +591,9 @@ fn field_step(code: KeyCode) -> usize {
 /// Consume a key while a numeric field is in typed-entry mode.
 fn handle_typed_entry(form: &mut WorldGenForm, code: KeyCode) {
     match code {
-        KeyCode::Char(c) if c.is_ascii_digit() || c == '.' || c == 'x' || c == 'X' => {
+        KeyCode::Char(c) if c.is_ascii_digit() || c == '.' => {
             if let Some(buf) = form.edit.as_mut().filter(|b| b.len() < 9) {
-                buf.push(c.to_ascii_lowercase());
+                buf.push(c);
             }
         }
         KeyCode::Backspace => {
@@ -643,19 +654,12 @@ fn handle_text_field(form: &mut WorldGenForm, focus: usize, code: KeyCode) -> Ac
     }
 }
 
-/// Left/Right (and Up/Down on Size) adjust the focused field; Enter generates.
+/// Left/Right adjust the focused field; Enter generates.
 fn handle_adjust(form: &mut WorldGenForm, focus: usize, code: KeyCode, app: &mut AppState) -> Action {
     match code {
         KeyCode::Left | KeyCode::Right => {
             let dir: i32 = if code == KeyCode::Right { 1 } else { -1 };
             adjust(form, focus, dir);
-            form.dirty = true;
-            Action::None
-        }
-        KeyCode::Up | KeyCode::Down if focus == 2 => {
-            let dir: i64 = if code == KeyCode::Up { 1 } else { -1 };
-            let w = &mut form.world;
-            w.height = crate::cast!(clamp_i64(crate::cast!(w.height => i64) + dir * 5, 30, 1000) => usize);
             form.dirty = true;
             Action::None
         }

@@ -272,37 +272,57 @@ mod tests {
     fn s09_text_field_consumes_printable_keys() {
         let mut app = state();
         let mut s = WorldGen::new();
-        // Shift+Tab from the default Size focus to Seed (a text field).
+        // Shift+Tab from the default Map width focus to Seed (a text field).
         s.handle_key(KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE), &mut app);
         let a = s.handle_key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE), &mut app);
         assert!(matches!(a, Action::None));
     }
 
     #[test]
-    fn s09_size_field_arrows_adjust_width_and_height() {
+    fn s09_width_and_height_fields_adjust_with_arrows() {
         let mut app = state();
         let mut s = WorldGen::new();
         let (w0, h0) = (app.params.world.width, app.params.world.height);
-        // Default focus is Size: Left/Right change width, Up/Down change height.
-        s.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE), &mut app);
+        // Default focus is Map width: Left/Right change the width.
         s.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
-        let p = s.form_params();
-        assert_eq!(p.world.height, (h0 + 5).min(1000));
-        assert_eq!(p.world.width, (w0 + 10).min(1000));
-        s.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE), &mut app);
-        s.handle_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE), &mut app);
-        assert_eq!(s.form_params().world.height, (h0 + 5).min(1000).saturating_sub(10).max(30));
+        assert_eq!(s.form_params().world.width, (w0 + 10).min(1000));
+        // Up/Down are no longer a second axis for the size.
+        s.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE), &mut app);
+        assert_eq!(s.form_params().world.height, h0);
+        // Tab to Map height: Left/Right change the height.
+        s.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE), &mut app);
+        s.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
+        s.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
+        assert_eq!(s.form_params().world.height, (h0 + 10).min(1000));
+        s.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE), &mut app);
+        assert_eq!(s.form_params().world.height, (h0 + 5).min(1000));
+    }
+
+    #[test]
+    fn s09_renders_width_and_height_as_separate_fields() {
+        let app = state();
+        let s = WorldGen::new();
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| s.render(&app, f, Rect::new(0, 0, 155, 45))).unwrap();
+        let form: String = (0..45).map(|y| (0..66).map(|x| terminal.backend().buffer()[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect();
+        assert!(form.contains("Map width"), "width is its own field:\n{form}");
+        assert!(form.contains("Map height"), "height is its own field:\n{form}");
+        assert!(!form.contains("150 x 40"), "the combined size field is gone:\n{form}");
     }
 
     #[test]
     fn s09_max_size_preview_renders() {
         let mut app = state();
         let mut s = WorldGen::new();
+        // Map width is focused first; max it out.
         for _ in 0..100 {
             s.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
         }
+        s.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE), &mut app);
+        // Map height.
         for _ in 0..200 {
-            s.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE), &mut app);
+            s.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
         }
         let p = s.form_params();
         assert_eq!((p.world.width, p.world.height), (1000, 1000));
@@ -316,22 +336,30 @@ mod tests {
         let mut app = state();
         let mut s = WorldGen::new();
         let k = |c| KeyEvent::new(c, KeyModifiers::NONE);
-        // Size field: Space, type "250x120", Esc cancels rather than leaving.
+        // Map width: Space, type "250", Esc cancels rather than leaving.
         s.handle_key(k(KeyCode::Char(' ')), &mut app);
-        for c in "250x120".chars() {
+        for c in "250".chars() {
             s.handle_key(k(KeyCode::Char(c)), &mut app);
         }
         let a = s.handle_key(k(KeyCode::Esc), &mut app);
         assert!(matches!(a, Action::None));
-        let p = s.form_params();
-        assert_eq!((p.world.width, p.world.height), (Params::default().world.width, Params::default().world.height));
+        assert_eq!(s.form_params().world.width, Params::default().world.width);
         // Try again and apply with Enter.
         s.handle_key(k(KeyCode::Char(' ')), &mut app);
-        for c in "250x120".chars() {
+        for c in "250".chars() {
             s.handle_key(k(KeyCode::Char(c)), &mut app);
         }
         let a = s.handle_key(k(KeyCode::Enter), &mut app);
         assert!(matches!(a, Action::None), "Enter applies the typed value instead of generating");
+        assert_eq!(s.form_params().world.width, 250);
+        // Map height is its own numeric field with the same typed entry.
+        s.handle_key(k(KeyCode::Tab), &mut app);
+        s.handle_key(k(KeyCode::Char(' ')), &mut app);
+        for c in "120".chars() {
+            s.handle_key(k(KeyCode::Char(c)), &mut app);
+        }
+        let a = s.handle_key(k(KeyCode::Enter), &mut app);
+        assert!(matches!(a, Action::None));
         let p = s.form_params();
         assert_eq!((p.world.width, p.world.height), (250, 120));
     }
@@ -342,7 +370,8 @@ mod tests {
         let mut s = WorldGen::new();
         let k = |c| KeyEvent::new(c, KeyModifiers::NONE);
         // Water %: typed values are clamped to the field range.
-        s.handle_key(k(KeyCode::Tab), &mut app);
+        s.handle_key(k(KeyCode::Tab), &mut app); // -> Map height
+        s.handle_key(k(KeyCode::Tab), &mut app); // -> Water %
         s.handle_key(k(KeyCode::Char(' ')), &mut app);
         for c in "99".chars() {
             s.handle_key(k(KeyCode::Char(c)), &mut app);
@@ -361,7 +390,7 @@ mod tests {
         assert_eq!(p.world.water_pct, 12);
         // Now on Forest %: a float field further down accepts decimals.
         for _ in 0..10 {
-            s.handle_key(k(KeyCode::Tab), &mut app); // -> field 14, Mutation rate
+            s.handle_key(k(KeyCode::Tab), &mut app); // -> field 15, Mutation rate
         }
         s.handle_key(k(KeyCode::Char(' ')), &mut app);
         for c in "0.15".chars() {
@@ -389,7 +418,7 @@ mod tests {
     fn s09_q_returns_to_title_when_no_text_focus() {
         let mut app = state();
         let mut s = WorldGen::new();
-        // Default focus is Size (not a text field), so 'q' returns to the title.
+        // Default focus is Map width (not a text field), so 'q' returns to the title.
         let a = s.handle_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::NONE), &mut app);
         assert!(matches!(a, Action::Pop));
     }

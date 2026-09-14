@@ -35,7 +35,7 @@ flowchart LR
         direction LR
         subgraph F["New World form — 66 cols"]
             direction TB
-            F1["World: 8 fields"]
+            F1["World: 9 fields"]
             F2["Initial species: 6 rows + total"]
             F3["Evolution: 4 fields + note"]
             F4["Presets: 5 rows"]
@@ -65,18 +65,23 @@ unfocused values are bright text on the plain background.
 ### New World form
 1. **Panel hint** `field <current> of <total>` tracks keyboard focus through every
    focusable field (world fields, species count rows, evolution fields, presets, buttons).
-2. **World section** — eight fields in this order:
+2. **World section** — nine fields in this order:
 
    | Label          | Example value          | Adjustable | Hint            |
    |----------------|------------------------|------------|-----------------|
    | World name     | The Valley of Sunfall  | text       | `text`          |
    | Seed           | 0xC0FFEE               | text       | `hex/decimal`   |
-   | Size           | 150 x 40               | `◄ ►`      | `w x h cells`   |
+   | Map width      | 150                    | `◄ ►`      | `100 - 1000 cells` |
+   | Map height     | 40                     | `◄ ►`      | `30 - 1000 cells`  |
    | Water %        | derived from preview   | `◄ ►`      | `lakes + rivers`|
    | Forest %       | derived from preview   | `◄ ►`      | `predator cover`|
    | Rock %         | derived from preview   | `◄ ►`      | `impassable`    |
    | Rainfall       | normal                 | `◄ ►`      | `dry/normal/wet`|
    | Season length  | 90 days                | `◄ ►`      | `30 - 180 days` |
+
+   Map width and Map height are two separate fields, each adjusted with `←`/`→` like every
+   other adjustable field; there is no combined `W x H` field and the arrow keys never
+   change a second dimension.
 
    Water / Forest / Rock percentages are the rounded share of world cells of that terrain
    in the current preview (water = deep + shallow; forest; rock), so the form and preview
@@ -166,7 +171,7 @@ fields as characters, not as screen shortcuts.
   placeholder.
 - **Invalid seed text.** Non-hex/decimal input should be flagged in the field hint and
   block Generate rather than silently falling back.
-- **Size changes.** A world larger than 150×40 cannot be shown at 1:2 in 75×20; the preview
+- **Map size changes.** A world larger than 150×40 cannot be shown at 1:2 in 75×20; the preview
   scale must adapt (1:3, 1:4) and the panel hint must report the scale in use.
 - **Over capacity.** When starting populations exceed the estimate the `within capacity`
   text becomes a warning and Generate should still be allowed (the player may want a
@@ -186,8 +191,8 @@ fields as characters, not as screen shortcuts.
   demonstrate both styles; only one focus exists in the real screen.
 - Are Water / Forest / Rock percentages inputs the generator honours, or outputs of the
   seed? The form treats them as adjustable, the preview derives them from the world.
-- Does `Size` change the on-screen map dimensions (112-column map panel) or only the
-  world? What are the allowed sizes?
+- Do `Map width` / `Map height` change the on-screen map dimensions (112-column map panel)
+  or only the world? They clamp to 100–1000 cells wide and 30–1000 cells tall.
 - The carrying-capacity formula (0.35 prey per forage cell, 8 prey per predator) is
   invented; it should come from the simulation's actual consumption model.
 - The placement warning (`Sunfall Coast … lynx … starve early`) implies species are
