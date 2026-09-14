@@ -12,10 +12,8 @@ immediately, so the refactor can land one file at a time.
 **Baseline** (measured before Wave 0): 9 files / **13,231 lines** = 51% of the
 25,853 lines under `src/`.
 
-**Current state** (after Wave 1): **7** files remain over the ceiling —
-`sim/behavior.rs`, `sim/disease.rs`, `sim/params.rs`, `ui/screens/s01_map.rs`,
-`ui/screens/s03_inspector.rs`, `ui/screens/s04_species.rs`,
-`ui/screens/s05_charts.rs`.
+**Current state** (after Wave 2): **4** files remain over the ceiling —
+`sim/behavior.rs`, `sim/disease.rs`, `sim/params.rs`, `ui/screens/s01_map.rs`.
 
 ```
    2721 ./src/sim/behavior.rs         1005 ./src/ui/screens/s04_species.rs
@@ -86,7 +84,7 @@ find ./src -type f -exec wc -l {} + | awk '$1 > 800'  # must be strictly shrinki
 | ---- | ----- | ----- | ------ |
 | 0 | Ratchet guard | `tests/file_size.rs` | ✅ done |
 | 1 | Tests-only extraction | `sim/genetics.rs`, `sim/stats.rs` | ✅ done |
-| 2 | UI screens (no sim risk) | `s05_charts`, `s04_species`, `s03_inspector` | ⬜ not started |
+| 2 | UI screens (no sim risk) | `s05_charts`, `s04_species`, `s03_inspector` | ✅ done |
 | 3 | sim data / serde risk | `sim/disease.rs`, `sim/params.rs` | ⬜ not started |
 | 4 | Largest UI file | `s01_map.rs` | ⬜ not started |
 | 5 | Highest risk (determinism) | `sim/behavior.rs` | ⬜ not started |
@@ -128,20 +126,47 @@ Optional, lower value (production is already 591 / 551 lines): `genetics/deliver
 `litter_cells`, `bear_pup`, `credit_parents`, `announce_litter`) and
 `stats/{census,species,series,lag}.rs` behind a façade. Not required for the ceiling.
 
-## Wave 2 — UI screens ⬜
+## Wave 2 — UI screens ✅
 
-No simulation-determinism risk; do these before the sim files.
+No simulation-determinism risk, so these went before the sim files. Actual result
+(every child is under 350 lines):
 
-**`s05_charts.rs` (1347)** → root ~185 + `time.rs` ~200 (S05a) · `phase.rs` ~215
-(S05b) · `stacked.rs` ~290 (S05c) · `infections.rs` ~275 (S05d) · `tests.rs` ~86.
-`round_up` → `pub(super)` (all four sections); `stats_of` shared by S05a/S05c.
+| Screen | Before | Root | Children |
+| ------ | ------ | ---- | -------- |
+| `s05_charts.rs` | 1347 | **241** | `time.rs` 259 (S05a) · `phase.rs` 224 (S05b) · `stacked.rs` 303 (S05c) · `infections.rs` 285 (S05d) · `tests.rs` 93 |
+| `s04_species.rs` | 1005 | **200** | `table.rs` 157 (S04a) · `summary.rs` 343 (S04a) · `histograms.rs` 102 (S04b) · `drift.rs` 202 (S04b) · `tests.rs` 61 |
+| `s03_inspector.rs` | 974 | **228** | `identity.rs` 322 · `genome.rs` 138 · `life.rs` 274 · `style.rs` 40 · `tests.rs` 39 |
 
-**`s04_species.rs` (1005)** → root ~130 + `sort.rs` ~60 · `table.rs` ~150 (S04a) ·
-`summary.rs` ~330 · `histograms.rs` ~95 (S04b) · `drift.rs` ~200 · `tests.rs` ~55.
+- [x] Every original top-level item verified **verbatim** in exactly one new file
+      (47 / 37 / 32 items); test bodies moved with only their imports re-homed.
+- [x] `cargo clippy --all-targets` → 0 warnings; `cargo test` → **green, exit 0**
+      (182 lib tests passed / 1 ignored, including the S01–S13 render snapshot
+      tests in `src/ui/tests.rs`; all integration binaries green);
+      `cargo test --test file_size` → 3 passed.
+- [x] Three `OVER_BUDGET` entries deleted.
 
-**`s03_inspector.rs` (974)** → root ~115 + `identity.rs` ~370 · `genome.rs` ~130 ·
-`life.rs` ~270 · `geo.rs` ~85 (`compass`, `contagion_risk`, `local_forage`,
-`kin_name`) · `style.rs` ~45 · `tests.rs` ~34.
+**Deviations from the plan, and why:**
+
+- **`s03_inspector`: no `geo.rs`.** Its items are all `pub(crate)`, and
+  `clippy::redundant_pub_crate` (nursery, warn) rejects a `pub(crate)` item inside
+  a *private* submodule. Those six helpers (`killer_and_scavengers`, `kin_name`,
+  `compass`, `contagion_risk`, `local_forage`, `clip`) therefore stayed in the root
+  module, which also keeps their `s03_inspector::*` paths for `s01_map.rs` intact.
+  `style.rs` holds only the private `sp` / `species_style` / `trait_color` /
+  `delta_style`.
+- **`s04_species`: no `sort.rs`.** `SortCol`, `impl SortCol` and the `pub fn
+  sorted_indices` stayed in the root, so the paths used by `screens/mod.rs` tests
+  and `app.rs` are unchanged. `selection_pressure` moved to `drift.rs` and is
+  re-exported with `pub use`.
+- **Shared helpers went to the root**, not to a section module: `round_up` and
+  `stats_of` for s05. A child module can reach a parent's private items, so no
+  visibility bump was needed for those.
+
+**Tooling notes for later waves:**
+
+- `cargo fix` silently skips *partial* import-group removals (rustc emits a span but
+  no replacement). A span-precise pruner is needed; see the Wave 3/4 procedure.
+- A `{self}` import must not be collapsed out of its braces.
 
 ## Wave 3 — sim data / serde risk ⬜
 
@@ -222,3 +247,4 @@ The 841-line test module must itself split into ~4–5 `#[cfg(test)]` child file
 | 2026-09-13 | Baseline | clippy 0 warnings; 182 lib tests + integration green; checksum `0x348e3c6eeec2e6d6` |
 | 2026-09-13 | Wave 0 | `tests/file_size.rs` added, 3 tests pass; guard proven to fail on a 900-line file |
 | 2026-09-13 | Wave 1 | `genetics.rs` 961 → 592, `stats.rs` 859 → 552; tests extracted verbatim; production bytes unchanged; clippy 0 warnings; full `cargo test` green (exit 0); 2 `OVER_BUDGET` entries removed |
+| 2026-09-13 | Wave 2 | `s05_charts` 1347 → root 241 + 5, `s04_species` 1005 → root 200 + 5, `s03_inspector` 974 → root 228 + 5; 116 items verified verbatim; clippy 0 warnings; full `cargo test` green (exit 0); 3 `OVER_BUDGET` entries removed; 4 files left |

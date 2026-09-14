@@ -30,9 +30,6 @@ const OVER_BUDGET: &[(&str, usize)] = &[
     ("src/sim/disease.rs", 1561),
     ("src/sim/params.rs", 1308),
     ("src/ui/screens/s01_map.rs", 2495),
-    ("src/ui/screens/s03_inspector.rs", 974),
-    ("src/ui/screens/s04_species.rs", 1005),
-    ("src/ui/screens/s05_charts.rs", 1347),
 ];
 
 #[test]
