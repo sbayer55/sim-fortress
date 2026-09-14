@@ -1,0 +1,78 @@
+//! Vital needs and the actions that satisfy them (graze, drink, den, rest).
+
+use crate::sim::creatures::{
+    Creature, Goal,
+};
+use crate::sim::events::{Event, EventKind, EventRing};
+use crate::sim::params::CreaturesParams;
+use crate::sim::rng::Rng;
+use crate::sim::disease::{self};
+use crate::sim::params::DiseaseParams;
+use crate::sim::time::Time;
+use crate::sim::world::{Terrain, World};
+
+pub(super) fn act(c: &mut Creature, world: &mut World, events: &mut EventRing, time: &Time, cp: &CreaturesParams, dp: &DiseaseParams, rng: &mut Rng) {
+    match c.goal {
+        Goal::Graze => {
+            graze(c, world, cp);
+            disease::parasite_uptake(c, world, dp);
+        }
+        Goal::Drink => {
+            drink(c, world, cp);
+            disease::parasite_uptake(c, world, dp);
+        }
+        Goal::Rest => maybe_make_den(c, world, events, time, cp, rng),
+        _ => {}
+    }
+}
+
+pub(super) fn graze(c: &mut Creature, world: &mut World, cp: &CreaturesParams) {
+    let cell = world.cell_mut(c.x, c.y);
+    let g = cell.vegetation.min(cp.graze_per_hour);
+    cell.vegetation -= g;
+    c.hunger = (c.hunger - cp.graze_nutrition * g).max(0.0);
+}
+
+pub(super) fn drink(c: &mut Creature, world: &World, cp: &CreaturesParams) {
+    if world.is_shore(c.x, c.y) {
+        c.thirst = (c.thirst - cp.drink_per_hour).max(0.0);
+        c.last_water = Some((c.x, c.y));
+    }
+}
+
+pub(super) fn maybe_make_den(c: &Creature, world: &mut World, events: &mut EventRing, time: &Time, cp: &CreaturesParams, rng: &mut Rng) {
+    if !is_resting(c) || in_den(c, world) {
+        return;
+    }
+    let cell = world.cell(c.x, c.y);
+    if cell.vegetation >= 0.2 || !matches!(cell.terrain, Terrain::Dirt | Terrain::GrassDense | Terrain::Forest) {
+        return;
+    }
+    let ri = world.region_index(c.x, c.y);
+    let region_dens = world.dens.iter().filter(|&&(dx, dy)| world.region_index(dx, dy) == ri).count();
+    if region_dens >= cp.max_dens_per_region {
+        return;
+    }
+    if rng.chance(cp.den_create_chance_per_rest_hour) {
+        world.dens.push((c.x, c.y));
+        events.push(Event {
+            year: time.year(),
+            day: time.day_of_year(),
+            hour: time.hour(),
+            kind: EventKind::Note,
+            species: Some(c.species),
+            subject: Some(c.id),
+            text: format!("{} {} discovered a new den site in {}", c.name_str(), c.tag(), world.region_name(c.x, c.y)),
+            pos: Some((c.x, c.y)),
+            detail: String::new(),
+        });
+    }
+}
+
+pub(super) fn is_resting(c: &Creature) -> bool {
+    c.goal == Goal::Rest && (c.target.is_none() || c.target == Some((c.x, c.y)))
+}
+
+pub(super) fn in_den(c: &Creature, world: &World) -> bool {
+    world.dens.iter().any(|&(x, y)| x == c.x && y == c.y)
+}

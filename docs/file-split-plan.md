@@ -3,17 +3,18 @@
 **Goal.** No file under `src/` exceeds **800 lines**, and every module has a single
 clear purpose.
 
-**Enforcement.** `tests/file_size.rs` — a *ratchet* test. `OVER_BUDGET` lists the
-files still above the ceiling together with the size they had when the guard
-landed. The list may only shrink: splitting a file **requires** deleting its entry,
-or `budget_list_is_not_stale` fails the suite. New files are capped at 800
-immediately, so the refactor can land one file at a time.
+**Enforcement.** `tests/file_size.rs` caps every file under `src/` at **800 lines**.
+During the refactor it was a *ratchet*: an `OVER_BUDGET` allowlist grandfathered the
+still-large files at their then-current size and could only shrink, so the work
+could land one file at a time. That list has now been deleted, so the ceiling is
+absolute — the only way to satisfy it is to split a file.
 
 **Baseline** (measured before Wave 0): 9 files / **13,231 lines** = 51% of the
 25,853 lines under `src/`.
 
-**Current state** (after Wave 2): **4** files remain over the ceiling —
-`sim/behavior.rs`, `sim/disease.rs`, `sim/params.rs`, `ui/screens/s01_map.rs`.
+**Current state** (after Wave 5): **no file under `src/` exceeds 800 lines** — the
+original nine offenders are all split, and the `OVER_BUDGET` allowlist has been
+deleted so the ceiling is absolute.
 
 ```
    2721 ./src/sim/behavior.rs         1005 ./src/ui/screens/s04_species.rs
@@ -85,10 +86,10 @@ find ./src -type f -exec wc -l {} + | awk '$1 > 800'  # must be strictly shrinki
 | 0 | Ratchet guard | `tests/file_size.rs` | ✅ done |
 | 1 | Tests-only extraction | `sim/genetics.rs`, `sim/stats.rs` | ✅ done |
 | 2 | UI screens (no sim risk) | `s05_charts`, `s04_species`, `s03_inspector` | ✅ done |
-| 3 | sim data / serde risk | `sim/disease.rs`, `sim/params.rs` | ⬜ not started |
-| 4 | Largest UI file | `s01_map.rs` | ⬜ not started |
-| 5 | Highest risk (determinism) | `sim/behavior.rs` | ⬜ not started |
-| 6 | Finalize | delete `OVER_BUDGET`, optional 600 ceiling | ⬜ not started |
+| 3 | sim data / serde risk | `sim/disease.rs`, `sim/params.rs` | ✅ done |
+| 4 | Largest UI file | `s01_map.rs` | ✅ done |
+| 5 | Highest risk (determinism) | `sim/behavior.rs` | ✅ done |
+| 6 | Finalize | ceiling absolute, stale guide rewritten, cleanups done; optional tightening measured | 🔶 stretch left |
 
 ---
 
@@ -168,54 +169,151 @@ No simulation-determinism risk, so these went before the sim files. Actual resul
   no replacement). A span-precise pruner is needed; see the Wave 3/4 procedure.
 - A `{self}` import must not be collapsed out of its braces.
 
-## Wave 3 — sim data / serde risk ⬜
+## Wave 3 — sim data / serde risk ✅
 
-**`disease.rs` (1561)** → façade ~70 + `types.rs` ~195 · `effects.rs` ~85 ·
-`contagion.rs` ~140 · `spillover.rs` ~155 · `lifecycle.rs` ~110 · `daily.rs` ~120 ·
-`outbreaks.rs` ~155 · `emergence.rs` ~125 · `tests.rs` ~461.
+| File | Before | Root | Children |
+| ---- | ------ | ---- | -------- |
+| `disease.rs` | 1561 | **31** (pure façade) | `types.rs` 196 · `effects.rs` 92 · `contagion.rs` 147 · `spillover.rs` 169 · `lifecycle.rs` 116 · `daily.rs` 135 · `outbreaks.rs` 163 · `emergence.rs` 131 · `tests.rs` 475 |
+| `params.rs` | 1308 | **88** | `world.rs` 130 · `creatures.rs` 94 · `predation.rs` 178 · `genetics.rs` 100 · `social.rs` 54 · `ecology.rs` 89 · `pathogen.rs` 213 · `docs.rs` 195 · `presets.rs` 36 · `toml_util.rs` 51 · `tests.rs` 144 |
 
-**`params.rs` (1308)** → façade ~120 + `world.rs` ~140 · `creatures.rs` ~90 ·
-`predation.rs` ~170 · `genetics.rs` ~95 · `social.rs` ~50 · `ecology.rs` ~85 ·
-`disease.rs` ~205 · `docs.rs` ~195 (`FIELD_DOCS`) · `presets.rs` ~35 ·
-`toml_util.rs` ~50 · `tests.rs` ~138.
+- [x] 46 + 42 items verified **verbatim**; all serde attributes, field order and
+      `#[repr(u8)]` moved untouched (save compatibility preserved).
+- [x] `pub use` façades keep every `crate::sim::disease::*` and
+      `crate::sim::params::*` path working for `sim/mod.rs`, `main.rs`, the UI and
+      the integration tests.
+- [x] `cargo clippy --all-targets` → 0 warnings; `cargo test --lib` → 182 passed /
+      1 ignored (the `no_ratatui_in_sim` / `no_hashmap_in_sim` guards now scan the
+      new files too); `cargo test --test file_size` → 3 passed.
+- [x] Two `OVER_BUDGET` entries deleted.
 
-Top risks: serde `deny_unknown_fields` + field order (save compatibility),
-`FIELD_DOCS` ↔ struct adjacency (`field_docs_complete`), `PRESETS` positional
-ordering (`s09_worldgen.rs:255`).
+**Deviations from the plan, and why:**
 
-## Wave 4 — `s01_map.rs` (2495) ⬜
+- **`params/pathogen.rs`, not `params/disease.rs`.** A child module named `disease`
+  would shadow `crate::sim::disease` for unqualified paths in that module.
+- **`params/toml_util.rs`, not `params/toml.rs`.** A module named `toml` would
+  collide with the external `toml` crate used by `deep_merge`.
+- **`field_docs` is not a top-level item.** It is an associated fn of `impl Params`
+  (see the tooling note below), so it moved with that impl block rather than into
+  a module of its own.
 
-Root ~330 (struct, state/selection `impl`, `impl Screen` orchestrator,
-`map_options`, `map_origin_title`, `map_hint`, `status_keys`, `draw_ticker`) +
-`input.rs` ~280 · `base.rs` ~220 · `overlays.rs` ~110 · `sense.rs` ~190 ·
-`follow.rs` ~250 · `look.rs` ~60 · `species.rs` ~120 · `health.rs` ~110 ·
-`disease.rs` ~280 · `parasites.rs` ~140 · `regions.rs` ~110 · `tests.rs` ~209.
+**Important tooling fix — the splitter is now brace-aware.** The original
+`params.rs` has a pre-existing indentation defect: `pub const fn field_docs` sits at
+**column 0** even though it is inside `impl Params { … }`. A column-only splitter
+treats it as a top-level item and silently re-parents it. The parser now tracks brace
+depth across comments, strings, raw strings and char literals, and only column-0
+declarations at depth 0 start an item. This is also why the same bug could not have
+been caught by the verbatim check alone — it was caught by the compiler rejecting a
+bogus `use super::field_docs;`.
 
-Note: there are **three** `impl WorldMap` blocks in total (state/selection,
-input + dispatch, per-overlay sidebars) — that is the natural seam. Shared helpers
-across siblings (`overlays_selector`, `region_count`, `region_load_mean`,
-`worst_region`, `fmt2`, `immune_to_shown`, `trend_arrow`) need `pub(super)`.
+Also handled: `pub(super)` is now applied to *impl methods* a sibling module calls
+(e.g. `DiseaseState::push_outbreak`), while **trait impls are skipped**, since
+visibility qualifiers are not permitted on their methods.
 
-## Wave 5 — `sim/behavior.rs` (2721) ⬜
+## Wave 4 — `s01_map.rs` (2495) ✅
 
-**Highest risk — do last.** Root ~130 (doc, `mod`s, re-exports, `tick_creatures`,
-`day_boundary`) + `perception.rs` ~165 · `movement.rs` ~305 · `goals.rs` ~390 ·
-`vitals.rs` ~100 · `death.rs` ~135 · `migration.rs` ~175 ·
-`predation/threat.rs` ~180 + `predation/hunt.rs` ~420.
+| Before | Root | Children |
+| ------ | ---- | -------- |
+| 2495 | **415** | `follow.rs` 347 · `input.rs` 299 · `disease_overlay.rs` 280 · `base.rs` 173 · `sense.rs` 210 · `parasites.rs` 186 · `health.rs` 134 · `species.rs` 131 · `regions.rs` 127 · `overlays.rs` 110 · `look.rs` 50 · `tests.rs` 220 |
 
-Required re-exports: `kill` and `find_walkable_near` (`disease.rs`), `needs`
-(`genetics.rs`), `migration_daily` (`sim/mod.rs`), plus `Perception` / `Kin`.
+- [x] 40 whole items + **31 impl methods** verified verbatim in exactly one file.
+- [x] `cargo clippy --all-targets` → 0 warnings; `cargo test --lib` → 182 passed /
+      1 ignored; `cargo test --test file_size` → 3 passed.
+- [x] `OVER_BUDGET` entry deleted — one file left.
 
-The 841-line test module must itself split into ~4–5 `#[cfg(test)]` child files
-(841 still exceeds the ceiling), which requires bumping ~15 helpers to `pub(super)`.
+**Deviations from the plan, and why:**
 
-## Wave 6 — finalize ⬜
+- **`disease_overlay.rs`, not `disease.rs`.** `s01_map.rs` imports the sim module as
+  `use crate::sim::disease::{self, PathogenId};`, so a child module named `disease`
+  would collide with that binding (9 unqualified `disease::` uses).
+- **The `impl WorldMap` blocks had to be split by method.** Three separate
+  `impl WorldMap` blocks exist, but the 2nd (502 lines) and 3rd (407 lines) mix
+  concerns — `region_sidebar` and `select_overlay` are input/dispatch, while
+  `sense_sidebar`, `disease_sidebar`, `parasite_sidebar` … are per-overlay rendering.
+  Rust allows the same type to be implemented in several modules, so the splitter now
+  regroups methods into one `impl WorldMap { … }` block per target module.
+  `impl Screen for WorldMap` is a trait impl and stayed whole in the root.
+- **`sidebar` (the dispatcher) stayed in the root** with `impl Screen`, so the root
+  remains the orchestrator rather than a pure façade — hence 415 lines rather than ~330.
 
-- [ ] Delete `OVER_BUDGET` entirely; the 800 ceiling becomes absolute.
+**Tooling notes:**
+
+- Item names are no longer unique (three `impl WorldMap` blocks), so the generator
+  disambiguates them (`impl WorldMap`, `impl WorldMap#2`, `#3`).
+- Methods are a second namespace: they need `pub(super)` but must never be emitted as
+  `use` imports, and `add_vis` must not be applied to indented method text.
+- The verifier now checks impl **methods** individually, since a regrouped impl block
+  is not verbatim as a whole.
+
+## Wave 5 — `sim/behavior.rs` (2721) ✅
+
+| Before | Root | Children |
+| ------ | ---- | -------- |
+| 2721 | **143** | `hunt.rs` 407 · `goals.rs` 391 · `movement.rs` 308 · `threat.rs` 205 · `migration.rs` 174 · `perception.rs` 155 · `death.rs` 137 · `vitals.rs` 104 |
+
+Tests (841) split across `tests.rs` 230 (shared fixtures) + `tests_vitals.rs` 270 ·
+`tests_social.rs` 176 · `tests_migration.rs` 93 · `tests_flee.rs` 92 ·
+`tests_death.rs` 75.
+
+- [x] 61 whole items + 1 impl method verified verbatim in exactly one file;
+      714 test lines relocated verbatim across the five test modules.
+- [x] **Determinism preserved**: `checksum_is_fnv_stable` and
+      `round_trip_checksum_3_seeds` both pass — RNG call order unchanged.
+- [x] `cargo clippy --all-targets` → 0 warnings; `cargo test --lib` → 182 passed /
+      1 ignored.
+- [x] `OVER_BUDGET` emptied and then removed outright — **no file exceeds 800**.
+
+**Deviations from the plan, and why:**
+
+- **`threat.rs` + `hunt.rs`, not a `predation/` subdirectory.** `behavior.rs`
+  imports the sim module as `use crate::sim::predation::{self, MAX_SENSE_CELLS};`,
+  so a child module named `predation` would collide with that binding.
+- **Two re-exports are `#[cfg(test)]`.** `find_walkable_near` and `needs` are used
+  *only* from other modules' tests, so a plain `pub(crate) use` is dead code in a
+  non-test build and `cargo fix` correctly deletes it — which then breaks the test
+  build. Gating them with `#[cfg(test)]` keeps both builds honest.
+- **The test module needed splitting to fit**, not just extracting: fixtures stayed
+  in `tests.rs` (marked `pub(super)`), and the 28 `#[test]` fns moved into five
+  themed modules that import the fixtures via `use super::tests::{…}`.
+- **Test lint attributes had to propagate.** `#[allow(clippy::float_cmp)]` sat on
+  the single `mod tests`; every new test module needs it too, or the denied
+  `float_cmp` lint fires.
+
+**Tooling notes:**
+
+- Private helpers used only by tests (`move_toward`, `maybe_die`, `pressure`,
+  `replan`, `migrate_group`, `maybe_make_den`, …) needed `pub(super)` and explicit
+  `use super::<module>::{…}` imports in the test modules.
+- The pruner needed a wider span pattern: rustc's span for a whole-line unused
+  import is the *bare path* (`crate::sim::geom`), and for a glob it is `super::*`.
+
+## Wave 6 — finalize 🔶
+
+- [x] Delete `OVER_BUDGET` entirely; the 800 ceiling becomes absolute.
+      (`tests/file_size.rs` is now a single unconditional ceiling check — no
+      exemption mechanism remains to be reintroduced.)
 - [ ] Optionally lower `MAX_LINES` to 600 as a second ratchet.
 - [ ] Optionally tighten `too-many-lines-threshold` (measured: **30 violations** at 60).
-- [ ] Optionally fix the stale `s01_map::render_base` / `ORIGIN` reference in
-      `docs/PROTOTYPE_GUIDE.md:41`.
+- [x] Fix the stale `PROTOTYPE_GUIDE.md` reference — and then the rest of it.
+      The one-line fix was not enough: the whole doc described a `src/prototypes/`
+      + `fixtures` + `Prototype` architecture that no longer exists, and it was
+      what misled an earlier pass into citing a nonexistent `s01_map::render_base`.
+      It is now an accurate guide to the current tree (filename kept, because
+      `docs/screens/README.md` and `docs/screens/s01-world-map.md` link to it).
+- [x] Re-indent `Params::field_docs` in `src/sim/params.rs` (it sat at column 0
+      inside `impl Params` — a pre-existing defect the splitter now tolerates).
+- [x] **Regression found while finishing:** Wave 5 left three
+      `clippy::redundant_pub_crate` warnings that a cached clippy run had masked.
+      `kill`, `needs` and `find_walkable_near` are `pub(crate)`, and a `pub(crate)`
+      item defined inside a *non-public* submodule always trips the lint — marking
+      the submodule `pub(crate)` does **not** help. The fix is the Wave 2 pattern:
+      define crate-facing items in the root module. Regenerated with those three in
+      `behavior.rs`; `behavior.rs` is 275 lines. **Always `touch src/lib.rs` (or
+      clean) before trusting a clippy run to be warning-free.**
+- [ ] **Optional stretch — lower `MAX_LINES` to 600.** Would require splitting six
+      more files: `widgets/map.rs` 793, `s09_worldgen.rs` 761, `sim/mod.rs` 739,
+      `s08_lineage.rs` 690, `screens/mod.rs` 655, `sim/ecology.rs` 601.
+- [ ] **Optional stretch — tighten `too-many-lines-threshold`.** Measured against
+      the current tree: **70 → 11 functions** over, **60 → 30** over.
 
 ---
 
@@ -248,3 +346,7 @@ The 841-line test module must itself split into ~4–5 `#[cfg(test)]` child file
 | 2026-09-13 | Wave 0 | `tests/file_size.rs` added, 3 tests pass; guard proven to fail on a 900-line file |
 | 2026-09-13 | Wave 1 | `genetics.rs` 961 → 592, `stats.rs` 859 → 552; tests extracted verbatim; production bytes unchanged; clippy 0 warnings; full `cargo test` green (exit 0); 2 `OVER_BUDGET` entries removed |
 | 2026-09-13 | Wave 2 | `s05_charts` 1347 → root 241 + 5, `s04_species` 1005 → root 200 + 5, `s03_inspector` 974 → root 228 + 5; 116 items verified verbatim; clippy 0 warnings; full `cargo test` green (exit 0); 3 `OVER_BUDGET` entries removed; 4 files left |
+| 2026-09-13 | Wave 3 | `disease` 1561 → root 31 + 9, `params` 1308 → root 88 + 10; 88 items verified verbatim; serde layout untouched; clippy 0 warnings; full `cargo test` green (exit 0); 2 `OVER_BUDGET` entries removed; 2 files left |
+| 2026-09-13 | Wave 4 | `s01_map` 2495 → root 415 + 12; 40 items + 31 impl methods verified verbatim; clippy 0 warnings; full `cargo test` green (exit 0); 1 `OVER_BUDGET` entry removed; 1 file left |
+| 2026-09-13 | Wave 5 | `behavior` 2721 → root 143 + 8 production + 5 test modules; 61 items + 1 impl method + 714 test lines verbatim; determinism checksum unchanged; clippy 0 warnings; full `cargo test` green (exit 0); `OVER_BUDGET` deleted — **0 files over 800** |
+| 2026-09-13 | Wave 6 | `PROTOTYPE_GUIDE.md` rewritten as a current guide; `Params::field_docs` re-indented; three `redundant_pub_crate` warnings from Wave 5 fixed by moving `kill`/`needs`/`find_walkable_near` into the `behavior` root; fresh clippy 0 warnings; full `cargo test` green (exit 0); determinism checksum unchanged |

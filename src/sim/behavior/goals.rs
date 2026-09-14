@@ -1,0 +1,392 @@
+//! Goal selection with hysteresis: replanning for prey and predators.
+
+use crate::sim::creatures::{
+    Creature, DeathTallies, Goal, HuntPhase, RestReason,
+};
+use crate::sim::events::EventRing;
+use crate::sim::genetics::{self, TickView};
+use crate::sim::geom;
+use crate::sim::lineage::Lineage;
+use crate::sim::params::{CreaturesParams, EcologyParams, GeneticsParams, PredationParams, SocialParams};
+use crate::sim::rng::Rng;
+use crate::sim::spatial::SpatialIndex;
+use crate::sim::species::Kind;
+use crate::sim::disease::{self};
+use crate::sim::params::DiseaseParams;
+use crate::sim::time::Time;
+use crate::sim::world::World;
+use super::needs;
+use super::perception::{Kin, Perception, perceive};
+use super::movement::{move_toward, wander};
+use super::vitals::act;
+use super::death::{maybe_die, pressure};
+use super::threat::flee_target;
+use super::hunt::{pick_hunt_target, pick_scavenge_target, update_hunt_stalk};
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn update_one(
+    c: &mut Creature,
+    spatial: &SpatialIndex,
+    world: &mut World,
+    events: &mut EventRing,
+    time: &Time,
+    cp: &CreaturesParams,
+    ep: &EcologyParams,
+    gp: &GeneticsParams,
+    pp: &PredationParams,
+    dp: &DiseaseParams,
+    sp: &SocialParams,
+    view: &TickView,
+    rng: &mut Rng,
+    tallies: &mut DeathTallies,
+    lineage: &mut Lineage,
+) {
+    let fx = disease::effects(c, dp);
+    // FR5: Flee pre-empts every goal for prey.
+    if c.species.kind() == Kind::Prey {
+        let threatened = c.threatened_by.is_some();
+        let flee_continues = threatened
+            && time.tick < c.flee_until
+            && c.threatened_by.is_some_and(|(px, py, _)| geom::dist(c.x, c.y, px, py) < pp.flee_distance);
+        if c.goal == Goal::Flee && !flee_continues {
+            // The threat is gone, the prey fled far enough, or the timer ran out.
+            c.escaped += 1;
+            c.goal = Goal::Wander;
+            c.flee_until = 0;
+            c.target = None;
+            c.replan_at = time.tick;
+        } else if threatened {
+            if c.goal != Goal::Flee {
+                c.goal = Goal::Flee;
+                c.flee_until = time.tick + u64::from(pp.flee_ticks);
+                c.chased += 1;
+                if let Some((_, _, sp)) = c.threatened_by {
+                    c.threats_by_species[sp.index()] += 1;
+                }
+            }
+            c.target = flee_target(c, world, pp);
+            c.replan_at = time.tick + 1;
+        }
+    }
+
+    // Eat phase: the predator walks onto the carcass cell (`target`, set at the
+    // kill) and consumes it there until done.
+    if c.goal == Goal::Hunt && c.hunt_phase == HuntPhase::Eat {
+        if c.eat_until.is_none_or(|t| time.tick >= t) {
+            c.hunt_phase = HuntPhase::Stalk;
+            c.hunt_target = None;
+            c.eat_until = None;
+            c.target = None;
+            c.goal = Goal::Patrol;
+            c.replan_at = time.tick;
+        } else {
+            c.replan_at = c.eat_until.unwrap_or(time.tick) + 1;
+        }
+    }
+
+    // Goal satisfied → replan now.
+    if goal_satisfied(c, time, pp) {
+        c.replan_at = time.tick;
+    }
+    // Replan when due.
+    if time.tick >= c.replan_at {
+        replan(c, spatial, world, time, cp, gp, pp, view, rng, dp, fx.rest_energy, sp);
+    }
+    // Track the current prey target while hunting (Stalk → Chase).
+    if c.goal == Goal::Hunt && c.hunt_phase != HuntPhase::Eat {
+        update_hunt_stalk(c, view, time, pp, tallies);
+    }
+    // Move toward the target.
+    move_toward(c, world, time, cp, pp, fx.speed_factor);
+    // Act on the goal at the current location.
+    act(c, world, events, time, cp, dp, rng);
+    // Needs and hp.
+    needs(c, world, time, cp, ep, gp, dp, fx.hunger_factor);
+    // Death.
+    maybe_die(c, world, events, time, tallies, lineage, dp);
+    // Pressure and parasite shedding.
+    pressure(c, world, cp);
+    disease::parasite_shed(c, world, dp);
+}
+
+fn goal_satisfied(c: &Creature, time: &Time, pp: &PredationParams) -> bool {
+    match c.goal {
+        Goal::Drink => c.thirst <= 0.1,
+        Goal::Graze => c.hunger <= 0.2,
+        Goal::Rest => match c.rest_reason {
+            Some(RestReason::Forced) => c.energy >= 0.3,
+            Some(RestReason::Energy) => c.energy >= 0.9,
+            // Diurnal wake at sunrise; nocturnal wake at nightfall.
+            Some(RestReason::Night) => {
+                if pp.is_nocturnal(c.species) { time.is_night() } else { !time.is_night() }
+            }
+            None => true,
+        },
+        Goal::Wander => c.target.is_none(),
+        // Mated (cooldown just set) or the partner is gone.
+        Goal::Mate => c.mate_id.is_none() || c.cooldown_until > time.tick,
+        Goal::Flee => c.threatened_by.is_none()
+            || time.tick >= c.flee_until
+            || c.threatened_by.is_none_or(|(px, py, _)| geom::dist(c.x, c.y, px, py) >= pp.flee_distance),
+        Goal::Migrate => time.tick >= c.migrate_until || c.migrate_target.is_none(),
+        // Hunt / Scavenge / Patrol are ended by their dedicated passes.
+        Goal::Hunt | Goal::Scavenge | Goal::Patrol => false,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn replan(
+    c: &mut Creature,
+    spatial: &SpatialIndex,
+    world: &World,
+    time: &Time,
+    cp: &CreaturesParams,
+    gp: &GeneticsParams,
+    pp: &PredationParams,
+    view: &TickView,
+    rng: &mut Rng,
+    dp: &DiseaseParams,
+    rest_energy: f32,
+    sp: &SocialParams,
+) {
+    let tick = time.tick;
+    let next = tick + cp.replan_ticks;
+    // A mate target only survives while the goal is Mate; a pregnant female
+    // keeps the father's id until delivery.
+    if c.pregnant_due.is_none() {
+        c.mate_id = None;
+    }
+
+    // Forced rest overrides every other need (FR5).
+    if c.energy <= 0.0 {
+        c.goal = Goal::Rest;
+        c.rest_reason = Some(RestReason::Forced);
+        c.target = None;
+        c.replan_at = next;
+        return;
+    }
+
+    // An active migration overrides Wander/Graze/Patrol (FR7).
+    if c.goal == Goal::Migrate && time.tick < c.migrate_until && c.migrate_target.is_some() {
+        c.target = c.migrate_target;
+        c.replan_at = next;
+        return;
+    }
+
+    if c.species.kind() == Kind::Predator {
+        replan_predator(c, spatial, world, time, cp, gp, pp, view, rng, dp, rest_energy, sp);
+    } else {
+        replan_prey(c, spatial, world, time, cp, gp, pp, view, rng, dp, rest_energy, sp);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn replan_prey(
+    c: &mut Creature,
+    spatial: &SpatialIndex,
+    world: &World,
+    time: &Time,
+    cp: &CreaturesParams,
+    gp: &GeneticsParams,
+    pp: &PredationParams,
+    view: &TickView,
+    rng: &mut Rng,
+    dp: &DiseaseParams,
+    rest_energy: f32,
+    sp: &SocialParams,
+) {
+    let next = time.tick + cp.replan_ticks;
+    let (p, kin) = perceive(c, spatial, world, cp, view, sp);
+    c.kin_nearby = kin.count;
+
+    // 1. Drink (enter thirst > 0.6, stay while thirst > 0.1).
+    if c.thirst > 0.6 || (c.goal == Goal::Drink && c.thirst > 0.1) {
+        if let Some(water) = p.nearest_water.or(c.last_water) {
+            c.goal = Goal::Drink;
+            c.rest_reason = None;
+            c.target = Some(water);
+        } else {
+            wander(c, world, time, view, gp, sp, rng, Some(kin));
+        }
+        c.replan_at = next;
+        return;
+    }
+
+    // 2. Graze (enter hunger > 0.5, stay while hunger > 0.2 — hysteresis).
+    if c.hunger > 0.5 || (c.goal == Goal::Graze && c.hunger > 0.2) {
+        c.goal = Goal::Graze;
+        c.rest_reason = None;
+        match p.best_graze {
+            Some((cell, score)) => {
+                let cur = world.cell(c.x, c.y);
+                let cur_score = if cur.vegetation >= cp.graze_min_vegetation {
+                    cur.vegetation
+                } else {
+                    0.0
+                };
+                c.target = if cur_score >= score * 0.9 && cur.vegetation >= cp.graze_min_vegetation {
+                    None // graze in place
+                } else {
+                    Some(cell)
+                };
+            }
+            None => {
+                if world.cell(c.x, c.y).vegetation >= cp.graze_min_vegetation {
+                    c.target = None;
+                } else {
+                    wander(c, world, time, view, gp, sp, rng, Some(kin));
+                    c.goal = Goal::Graze;
+                }
+            }
+        }
+        c.replan_at = next;
+        return;
+    }
+
+    // 3. Rest (enter energy < rest threshold or night; stay until satisfied).
+    // The threshold is 0.25, raised for the sick (C7 FR6).
+    let rest_enter = c.energy < rest_energy || time.is_night();
+    let rest_stay = c.goal == Goal::Rest && !goal_satisfied(c, time, pp);
+    if rest_enter || rest_stay {
+        if c.goal != Goal::Rest {
+            c.rest_reason = Some(if c.energy < rest_energy { RestReason::Energy } else { RestReason::Night });
+        }
+        c.goal = Goal::Rest;
+        c.target = p.nearest_den;
+        c.replan_at = next;
+        return;
+    }
+
+    // 4. Mate (C4 FR2): eligible adults seek the nearest eligible partner.
+    if view.cap_ok && genetics::eligible(c, time, world, gp, dp) {
+        if let Some((mate, pos)) = genetics::pick_mate(c, &p.creatures, view) {
+            c.goal = Goal::Mate;
+            c.rest_reason = None;
+            c.mate_id = Some(mate);
+            c.target = Some(pos);
+            c.replan_at = next;
+            return;
+        }
+    }
+
+    // 5. Wander.
+    wander(c, world, time, view, gp, sp, rng, Some(kin));
+    c.replan_at = next;
+}
+
+#[allow(clippy::too_many_arguments)]
+fn replan_predator(
+    c: &mut Creature,
+    spatial: &SpatialIndex,
+    world: &World,
+    time: &Time,
+    cp: &CreaturesParams,
+    gp: &GeneticsParams,
+    pp: &PredationParams,
+    view: &TickView,
+    rng: &mut Rng,
+    dp: &DiseaseParams,
+    rest_energy: f32,
+    sp: &SocialParams,
+) {
+    let next = time.tick + cp.replan_ticks;
+    let (p, kin) = perceive(c, spatial, world, cp, view, sp);
+    c.kin_nearby = kin.count;
+
+    // 1. Drink (thirst > 0.6).
+    if c.thirst > 0.6 {
+        if let Some(water) = p.nearest_water.or(c.last_water) {
+            c.goal = Goal::Drink;
+            c.rest_reason = None;
+            c.target = Some(water);
+        } else {
+            patrol(c, world, time, view, gp, sp, rng, &p, Some(kin));
+        }
+        c.replan_at = next;
+        return;
+    }
+
+    // 2. Hunt (hunger > hunt_hunger_min and a detectable prey in range).
+    if c.hunger > pp.hunt_hunger_min && time.tick >= c.hunt_cooldown_until {
+        if let Some((prey, pos)) = pick_hunt_target(c, &p.creatures, view, world, pp, sp) {
+            c.goal = Goal::Hunt;
+            c.rest_reason = None;
+            c.hunt_phase = HuntPhase::Stalk;
+            c.hunt_target = Some(prey);
+            c.chase_start_tick = None;
+            c.target = Some(pos);
+            c.replan_at = next;
+            return;
+        }
+    }
+
+    // 3. Scavenge (hunger > scavenge_hunger_min and a prey carcass in range).
+    if c.hunger > pp.scavenge_hunger_min {
+        if let Some((carcass, pos)) = pick_scavenge_target(c, view) {
+            c.goal = Goal::Scavenge;
+            c.rest_reason = None;
+            c.scavenge_target = Some(carcass);
+            c.target = Some(pos);
+            c.replan_at = next;
+            return;
+        }
+    }
+
+    // 4. Mate (C4 rules; the vegetation gate does not apply to predators).
+    if view.cap_ok && genetics::eligible(c, time, world, gp, dp) {
+        if let Some((mate, pos)) = genetics::pick_mate(c, &p.creatures, view) {
+            c.goal = Goal::Mate;
+            c.rest_reason = None;
+            c.mate_id = Some(mate);
+            c.target = Some(pos);
+            c.replan_at = next;
+            return;
+        }
+    }
+
+    // 5. Rest (energy < rest threshold, or night for diurnal / day for nocturnal).
+    let rest_enter = c.energy < rest_energy
+        || if pp.is_nocturnal(c.species) { !time.is_night() } else { time.is_night() };
+    let rest_stay = c.goal == Goal::Rest && !goal_satisfied(c, time, pp);
+    if rest_enter || rest_stay {
+        if c.goal != Goal::Rest {
+            c.rest_reason = Some(if c.energy < rest_energy { RestReason::Energy } else { RestReason::Night });
+        }
+        c.goal = Goal::Rest;
+        c.target = None; // predators rest in place
+        c.replan_at = next;
+        return;
+    }
+
+    // 6. Patrol (wander biased toward the highest prey_pressure cell seen).
+    patrol(c, world, time, view, gp, sp, rng, &p, Some(kin));
+    c.replan_at = next;
+}
+
+/// Patrol (FR3): a wander *biased* toward the highest `prey_pressure` cell seen —
+/// half of the replans head there when it is more than two cells away; the rest
+/// wander, so a satiated predator never camps on a hotspot (a water hole or den)
+/// and denies the prey their drink.
+#[allow(clippy::too_many_arguments)]
+fn patrol(
+    c: &mut Creature,
+    world: &World,
+    time: &Time,
+    view: &TickView,
+    gp: &GeneticsParams,
+    sp: &SocialParams,
+    rng: &mut Rng,
+    p: &Perception,
+    kin: Option<Kin>,
+) {
+    c.goal = Goal::Patrol;
+    c.rest_reason = None;
+    if let Some((px, py)) = p.best_patrol {
+        if geom::cheb(c.x, c.y, px, py) > 2 && rng.chance(0.5) {
+            c.target = Some((px, py));
+            return;
+        }
+    }
+    wander(c, world, time, view, gp, sp, rng, kin);
+    c.goal = Goal::Patrol;
+}

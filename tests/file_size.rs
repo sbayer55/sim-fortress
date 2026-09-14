@@ -2,86 +2,30 @@
 //!
 //! `clippy::too_many_lines` (denied at an 80-line threshold in `clippy.toml`)
 //! measures *functions*, not files — a 2,700-line file made of small functions
-//! passes it today. Clippy has no file-length lint
-//! (rust-lang/rust-clippy#16674; PR #15922 is unmerged), so this test walks
-//! `src/` itself.
+//! passes it. Clippy has no file-length lint (rust-lang/rust-clippy#16674;
+//! PR #15922 is unmerged), so this test walks `src/` itself.
 //!
-//! It is a *ratchet*. `OVER_BUDGET` records every file still above `MAX_LINES`
-//! together with the size it had when the guard landed. The list may only
-//! shrink:
-//!
-//! * a file at or below `MAX_LINES` must be removed from `OVER_BUDGET`
-//!   (enforced by `budget_list_is_not_stale`), and
-//! * no file may exceed the budget it is given.
-//!
-//! See `docs/file-split-plan.md` for the wave-by-wave breakdown.
+//! This began as a *ratchet*: an `OVER_BUDGET` allowlist grandfathered the nine
+//! original offenders at their then-current size while the file-split refactor
+//! (`docs/file-split-plan.md`) landed one file at a time. Every entry has since
+//! been removed, so the allowlist is gone and the ceiling is absolute — a file
+//! can no longer be granted an exemption, only split.
 
 use std::path::{Path, PathBuf};
 
 /// Hard ceiling for any file under `src/`.
 const MAX_LINES: usize = 800;
 
-/// Grandfathered files: `(path relative to the crate root, line budget)`.
-///
-/// Kept sorted by path. Delete an entry as soon as the file is at or below
-/// [`MAX_LINES`] — leaving it behind fails `budget_list_is_not_stale`.
-const OVER_BUDGET: &[(&str, usize)] = &[
-    ("src/sim/behavior.rs", 2721),
-    ("src/sim/disease.rs", 1561),
-    ("src/sim/params.rs", 1308),
-    ("src/ui/screens/s01_map.rs", 2495),
-];
-
 #[test]
-fn no_source_file_exceeds_its_budget() {
+fn no_source_file_exceeds_the_ceiling() {
     for path in rust_sources() {
-        let rel = relative(&path);
-        let budget = budget_for(&rel);
         let lines = line_count(&path);
         assert!(
-            lines <= budget,
-            "{rel} is {lines} lines (budget {budget}); split it into modules with a single purpose"
+            lines <= MAX_LINES,
+            "{} is {lines} lines (limit {MAX_LINES}); split it into modules with a single purpose",
+            relative(&path)
         );
     }
-}
-
-#[test]
-fn budget_list_is_not_stale() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    for (rel, budget) in OVER_BUDGET {
-        let path = root.join(rel);
-        assert!(
-            path.is_file(),
-            "{rel} is listed in OVER_BUDGET but no longer exists; remove the entry"
-        );
-        let lines = line_count(&path);
-        assert!(
-            lines <= *budget,
-            "{rel} grew from {budget} to {lines} lines; split it instead of raising the budget"
-        );
-        assert!(
-            lines > MAX_LINES,
-            "{rel} is now {lines} lines (<= {MAX_LINES}); remove its OVER_BUDGET entry"
-        );
-    }
-}
-
-#[test]
-fn budget_list_is_sorted() {
-    let mut sorted = OVER_BUDGET.to_vec();
-    sorted.sort_unstable_by(|(a, _), (b, _)| a.cmp(b));
-    assert_eq!(
-        OVER_BUDGET, sorted,
-        "OVER_BUDGET must stay sorted by path"
-    );
-}
-
-/// Budget for `rel`: its `OVER_BUDGET` entry, else the hard ceiling.
-fn budget_for(rel: &str) -> usize {
-    OVER_BUDGET
-        .iter()
-        .find(|(path, _)| *path == rel)
-        .map_or(MAX_LINES, |(_, budget)| *budget)
 }
 
 fn line_count(path: &Path) -> usize {
