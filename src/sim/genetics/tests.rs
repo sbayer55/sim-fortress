@@ -86,6 +86,9 @@ fn adult(x: usize, y: usize, sex: Sex) -> Creature {
         flee_until: 0,
         threatened_by: None,
         predation_risk: 0.0,
+        wary_until: 0,
+        wary_by: None,
+        wary_count: 0,
         kin_nearby: 0,
         migrate_until: 0,
             // ---- C7 disease / parasites

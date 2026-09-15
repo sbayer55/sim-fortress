@@ -20,7 +20,7 @@ use super::perception::{Kin, Perception, perceive};
 use super::movement::{move_toward, wander};
 use super::vitals::act;
 use super::death::{maybe_die, pressure};
-use super::threat::flee_target;
+use super::threat::{flee_target, wary_target};
 use super::hunt::{pick_hunt_target, pick_scavenge_target, update_hunt_stalk};
 
 #[allow(clippy::too_many_arguments)]
@@ -42,31 +42,9 @@ pub(super) fn update_one(
     lineage: &mut Lineage,
 ) {
     let fx = disease::effects(c, dp);
-    // FR5: Flee pre-empts every goal for prey.
+    // FR5: Flee pre-empts every goal for prey; FR5b adds the wary tier below it.
     if c.species.kind() == Kind::Prey {
-        let threatened = c.threatened_by.is_some();
-        let flee_continues = threatened
-            && time.tick < c.flee_until
-            && c.threatened_by.is_some_and(|(px, py, _)| geom::dist(c.x, c.y, px, py) < pp.flee_distance);
-        if c.goal == Goal::Flee && !flee_continues {
-            // The threat is gone, the prey fled far enough, or the timer ran out.
-            c.escaped += 1;
-            c.goal = Goal::Wander;
-            c.flee_until = 0;
-            c.target = None;
-            c.replan_at = time.tick;
-        } else if threatened {
-            if c.goal != Goal::Flee {
-                c.goal = Goal::Flee;
-                c.flee_until = time.tick + u64::from(pp.flee_ticks);
-                c.chased += 1;
-                if let Some((_, _, sp)) = c.threatened_by {
-                    c.threats_by_species[sp.index()] += 1;
-                }
-            }
-            c.target = flee_target(c, world, pp);
-            c.replan_at = time.tick + 1;
-        }
+        preempt_prey(c, world, time, pp, tallies);
     }
 
     // Eat phase: the predator walks onto the carcass cell (`target`, set at the
@@ -109,6 +87,70 @@ pub(super) fn update_one(
     disease::parasite_shed(c, world, dp);
 }
 
+/// C5 FR4/FR5/FR5b: the prey's two avoidance tiers, both running before
+/// `replan` so they pre-empt the ordinary goal. Flee wins outright; Wary, the
+/// low-exertion tier, yields only to a forced rest. Each keeps its away-vector
+/// alive for the length of its own timer.
+fn preempt_prey(c: &mut Creature, world: &World, time: &Time, pp: &PredationParams, tallies: &mut DeathTallies) {
+    let threatened = c.threatened_by.is_some();
+    let flee_continues = threatened
+        && time.tick < c.flee_until
+        && c.threatened_by.is_some_and(|(px, py, _)| geom::dist(c.x, c.y, px, py) < pp.flee_distance);
+    if c.goal == Goal::Flee && !flee_continues {
+        // The threat is gone, the prey fled far enough, or the timer ran out.
+        c.escaped += 1;
+        c.goal = Goal::Wander;
+        c.flee_until = 0;
+        c.target = None;
+        c.replan_at = time.tick;
+    } else if threatened {
+        if c.goal != Goal::Flee {
+            c.goal = Goal::Flee;
+            c.flee_until = time.tick + u64::from(pp.flee_ticks);
+            c.chased += 1;
+            if let Some((_, _, sp)) = c.threatened_by {
+                c.threats_by_species[sp.index()] += 1;
+            }
+        }
+        c.target = flee_target(c, world, pp);
+        c.replan_at = time.tick + 1;
+    }
+    if c.goal == Goal::Flee {
+        return;
+    }
+    // C5 FR5b: Wary is the second tier — the prey gives a predator that is not
+    // hunting it some room, at a fraction of the flee exertion. It pre-empts
+    // every goal except a forced rest (energy ≤ 0).
+    let forced_rest = c.goal == Goal::Rest && c.rest_reason == Some(RestReason::Forced);
+    let wary_continues = c.goal == Goal::Wary
+        && time.tick < c.wary_until
+        && c.wary_by.is_some_and(|(px, py, _)| geom::dist(c.x, c.y, px, py) <= pp.wary_distance * pp.wary_release_factor);
+    if c.goal == Goal::Wary && !wary_continues {
+        c.goal = Goal::Wander;
+        c.wary_until = 0;
+        c.target = None;
+        c.replan_at = time.tick;
+    } else if c.wary_by.is_some() && !forced_rest {
+        if c.goal != Goal::Wary {
+            enter_wary(c, world, time.tick, pp, tallies);
+        }
+        c.target = wary_target(c, world, pp);
+        c.replan_at = time.tick + 1;
+    }
+}
+
+/// Enter the wary tier: set the goal, arm the timer and count the encounter.
+/// The per-region-per-day tally is flushed into one Wary event by `flush_wary`.
+fn enter_wary(c: &mut Creature, world: &World, tick: u64, pp: &PredationParams, tallies: &mut DeathTallies) {
+    c.goal = Goal::Wary;
+    c.wary_until = tick + u64::from(pp.wary_ticks);
+    c.wary_count += 1;
+    if let Some((_, _, pred)) = c.wary_by {
+        let ri = crate::cast!(world.region_index(c.x, c.y) => u8);
+        *tallies.wary_today.entry((ri, c.species, pred)).or_default() += 1;
+    }
+}
+
 fn goal_satisfied(c: &Creature, time: &Time, pp: &PredationParams) -> bool {
     match c.goal {
         Goal::Drink => c.thirst <= 0.1,
@@ -128,6 +170,9 @@ fn goal_satisfied(c: &Creature, time: &Time, pp: &PredationParams) -> bool {
         Goal::Flee => c.threatened_by.is_none()
             || time.tick >= c.flee_until
             || c.threatened_by.is_none_or(|(px, py, _)| geom::dist(c.x, c.y, px, py) >= pp.flee_distance),
+        Goal::Wary => c.wary_by.is_none()
+            || time.tick >= c.wary_until
+            || c.wary_by.is_none_or(|(px, py, _)| geom::dist(c.x, c.y, px, py) > pp.wary_distance * pp.wary_release_factor),
         Goal::Migrate => time.tick >= c.migrate_until || c.migrate_target.is_none(),
         // Hunt / Scavenge / Patrol are ended by their dedicated passes.
         Goal::Hunt | Goal::Scavenge | Goal::Patrol => false,

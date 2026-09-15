@@ -62,6 +62,7 @@ difficulty = "normal"          # easy | normal | hard — stored here, given mea
 prey_preference = { fox = { vole = 0.6, hare = 0.4 }, wolf = { deer = 0.5, hare = 0.4, vole = 0.1 }, lynx = { hare = 0.6, vole = 0.4 } }
 nocturnal = ["fox", "lynx"]
 flee_distance = 8  flee_ticks = 10  flee_energy_factor = 2.0  rest_detect_factor = 0.5
+wary_distance = 3  wary_step = 3  wary_ticks = 2  wary_speed_factor = 0.5  wary_release_factor = 1.5
 migrate_veg = 0.25  migrate_days = 6  migrate_pressure = 0.35  migrate_prey_min = 10  migrate_cooldown_days = 30
 local_extinction_min = 5
 ```
@@ -108,6 +109,25 @@ Every tick, **predator-first**: iterate living predators (ids ascending) and, wi
 predator→prey vector for `flee_ticks` or until `geom::dist ≥ flee_distance`; steps cost
 `flee_energy_factor × move_cost_energy`. `predation_risk = min(1, 0.5 × cell.pred_pressure
 + 0.5 × predators_in_range / 3)` feeds S03 Condition.
+
+### FR5b Wary (the low-exertion second tier)
+A prey that detects a predator which is **not** a danger (FR5's danger rule fails: it is not
+hunting this prey and is not hungry within `chase_trigger_cheb`) within `wary_distance` enters
+`Wary` instead of `Flee`. Wary pre-empts every prey goal except a forced rest
+(`RestReason::Forced`, energy ≤ 0) — including Drink, Graze, night/energy Rest, Mate, Wander
+and Migrate — and never overrides Flee. It is deliberately cheaper than Flee: the waypoint is
+`wary_step` cells away along the predator→prey vector, speed is `wary_speed_factor ×` normal,
+and each step costs the *normal* `move_cost_energy` rather than `flee_energy_factor`. The
+state is retained while `wary_ticks` runs and the predator stays within
+`wary_distance × wary_release_factor` (hysteresis; the away-vector survives undetected ticks
+exactly as a forced flee does). `wary_distance = 0.0` disables the tier. Wary never feeds
+`threatened_by`, `predation_risk`, the S02d danger line or the C8 alarm pass, and never
+touches `chased`/`escaped`/`threats_by_species` — those keep their FR5 meaning; per creature
+it records `wary_count` (S03a Survival). **Event**: encounters are tallied per
+`(region, prey species, predator species)` and flushed at the day boundary into **at most one
+`EventKind::Wary` per region per day**, the most common pair naming the line and `detail`
+carrying `region:prey:predator:total`, so the log gains the signal without one event per
+animal per tick.
 
 ### FR6 Pressure
 `pred_pressure` is maintained exactly like `prey_pressure` (C3 FR8) for living predators.
@@ -178,6 +198,11 @@ prey has detected it (prey rule).
 - `can_detect`: hare camouflage 0.9 vs wolf sense 0.7 is hidden in Forest (0.90 ≥ 0.56)
   and visible on Sand (0.36 < 0.56); a resting prey on a den is never targeted.
 - Hunt success per predator species over a 1-year run is between 15 % and 60 %.
+- Wary (FR5b): a satiated predator within `wary_distance` turns a detecting prey Wary, not
+  Flee; a hungry predator inside `chase_trigger_cheb`, or one hunting that prey, still flees;
+  a forced rest is never interrupted; a wary step costs less energy than a flee step and
+  covers fewer cells; seed 42 over one year emits at least one `Wary` event and at most one
+  per region per day.
 - Dry world: a `Migration` event occurs and the destination region's count for that
   species rises within 5 days; no (species, region) pair migrates twice within the cooldown.
 - Determinism green; UI ≥ 30 FPS at x25 at the balance-table population; 10 years
@@ -201,6 +226,22 @@ prey has detected it (prey rule).
     is a biased wander again;
   - a path searched for one target was followed toward the next (flee vector → water);
   - hunt stats died with the carcass (`DeathTallies::hunt_*` now accumulate).
+
+  **Wary tier (`FR5b`, second pass).** The second avoidance level is implemented with its
+  measured volume: seed 42 over one year records **1 824 `Wary` events**, ~5 per day across
+  the eight regions against the 8/day hard bound, since most region-days have at least one
+  wary encounter. The first-pass defaults (`wary_distance = 6`, `wary_ticks = 3`) were too
+  costly: over seeds 1-8 at 3 years they drove seeds 1 and 2 from deer-plus-wolves to **zero
+  living creatures**, the mechanism being that wary now pre-empts Drink and Graze, so prey
+  near resident predators cannot feed. The recorded defaults are `wary_distance = 3`,
+  `wary_ticks = 2`: in the same sweep every radius ≥ 4 pushed seed 1 to zero, while 3 and 2
+  kept it alive. Ranking 3 against 2 and the timers is not meaningful, because the collapse
+  is chaotic — seed 4 is fully extinct at every setting including `wary_distance = 0`, and
+  seed 6 reaches zero at most wary settings but not at 0 — so the radius is the largest that
+  did not show the systematic seed-1 collapse, and `wary_distance = 0.0` stays the kill
+  switch. The population bands below are unchanged in status; wary is not one of the
+  allowed balance levers and does not need to be, since the structural refuge/mate defects
+  are still the binding constraint.
 
   With those fixed, the population bands still fail for a structural reason the levers do
   not reach: **foxes have no refuge from voles and voles are the marginal C4 species.**

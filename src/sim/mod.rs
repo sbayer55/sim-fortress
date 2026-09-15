@@ -30,7 +30,7 @@ pub use spatial::SpatialIndex;
 pub use species::{Genome, Kind, SpeciesId, TRAIT_NAMES};
 pub use lineage::{Lineage, LineageNode, Tree, TreeItem};
 pub use params::GeneticsParams;
-pub use stats::{census, Census, Sample, Series, SpeciesStats};
+pub use stats::{census, group_census, Census, GroupCensus, Sample, Series, SpeciesStats};
 pub use time::{Season, Time};
 pub use world::{Cell, RegionRect, Terrain, World};
 
@@ -103,6 +103,12 @@ pub struct Sim {
     pub drought_days_below: [u32; 8],
     /// Per-species live statistics (C4 FR5), `SpeciesId::ALL` order.
     pub species: [SpeciesStats; 6],
+    /// Per-species group-size census (C8 follow-up): the herds and packs the
+    /// cohesion rule currently holds together. Recomputed from positions at the
+    /// day boundary and after a load, never serialised, so the file format and
+    /// the checksum are untouched.
+    #[serde(skip)]
+    pub group_stats: GroupCensus,
     /// Ancestry of every creature born (C4 FR6), pruned weekly.
     pub lineage: Lineage,
     /// The soft-cap Note has been logged for the current crossing.
@@ -172,6 +178,7 @@ impl Sim {
             lineage.record(c, params.genetics.mutation_notable);
         }
         let species = SpeciesStats::all(&census(&creatures), 0, params.genetics.drift_every_generations);
+        let group_stats = group_census(&creatures, &params.social);
 
         Self {
             seed,
@@ -188,6 +195,7 @@ impl Sim {
             drought: [false; 8],
             drought_days_below: [0; 8],
             species,
+            group_stats,
             lineage,
             soft_cap_noted: false,
             soft_cap_crossings: 0,
@@ -209,6 +217,12 @@ impl Sim {
     /// index is never serialised and must be rebuilt after a load).
     pub fn rebuild_spatial(&mut self) {
         self.spatial.rebuild(&self.creatures, &self.world);
+    }
+
+    /// Recompute the group-size census from the living set's current positions
+    /// (C8 follow-up). Draws no RNG, so it never perturbs a run.
+    pub fn refresh_group_stats(&mut self) {
+        self.group_stats = group_census(&self.creatures, &self.params.social);
     }
 
     /// Births so far today for species index `i` (the live counter).
@@ -294,6 +308,9 @@ impl Sim {
     fn run_midnight(&mut self, alerts: &mut Vec<Alert>) {
         let c = self.day_boundary_update();
         self.midnight_systems(&c, alerts);
+        // Refresh last: the midnight disease pass can still kill after the day
+        // boundary, and the census must describe the set the tick ends with.
+        self.refresh_group_stats();
     }
 
     /// Midnight: age/behaviour day boundary, census and species statistics.
@@ -519,7 +536,8 @@ impl Sim {
             let dried = cell.dried_from.map_or(0, |t| crate::cast!(t => u8) + 1);
             feed(&mut h, &[dried]);
         }
-        // Every living creature's id, x, y, hp, hunger, goal and C5 hunt/flee state (FR9).
+        // Every living creature's id, x, y, hp, hunger, goal and C5 hunt/flee/wary
+        // state (FR9).
         for c in self.creatures.living() {
             feed(&mut h, &c.id.0.to_le_bytes());
             feed(&mut h, &(crate::cast!(c.x => u64)).to_le_bytes());
@@ -537,6 +555,12 @@ impl Sim {
             feed(&mut h, &c.threatened_by.map_or((u64::MAX, u64::MAX, u64::MAX), |(x, y, s)| (crate::cast!(x => u64), crate::cast!(y => u64), crate::cast!(s.index() => u64))).0.to_le_bytes());
             feed(&mut h, &c.threatened_by.map_or((u64::MAX, u64::MAX, u64::MAX), |(x, y, s)| (crate::cast!(x => u64), crate::cast!(y => u64), crate::cast!(s.index() => u64))).1.to_le_bytes());
             feed(&mut h, &c.threatened_by.map_or((u64::MAX, u64::MAX, u64::MAX), |(x, y, s)| (crate::cast!(x => u64), crate::cast!(y => u64), crate::cast!(s.index() => u64))).2.to_le_bytes());
+            // C5 FR5b: the wary tier's own timer and away-vector.
+            feed(&mut h, &c.wary_until.to_le_bytes());
+            let wary = c.wary_by.map_or((u64::MAX, u64::MAX, u64::MAX), |(x, y, s)| (crate::cast!(x => u64), crate::cast!(y => u64), crate::cast!(s.index() => u64)));
+            feed(&mut h, &wary.0.to_le_bytes());
+            feed(&mut h, &wary.1.to_le_bytes());
+            feed(&mut h, &wary.2.to_le_bytes());
             feed(&mut h, &c.migrate_until.to_le_bytes());
             feed(&mut h, &c.migrate_target.map_or((u64::MAX, u64::MAX), |(x, y)| (crate::cast!(x => u64), crate::cast!(y => u64))).0.to_le_bytes());
             feed(&mut h, &c.migrate_target.map_or((u64::MAX, u64::MAX), |(x, y)| (crate::cast!(x => u64), crate::cast!(y => u64))).1.to_le_bytes());
@@ -616,7 +640,10 @@ mod tests {
         // Lock the exact value so accidental algorithm changes fail loudly.
         // Re-baselined for C8: the genome grew to eleven traits (Sociality and
         // Maturity), which shifts the founder jitter and every downstream draw.
-        assert_eq!(a.checksum(), 0x348e_3c6e_eec2_e6d6);
+        // Re-baselined for C5 FR5b: prey now spend wary ticks steering away from
+        // predators that are not hunting them, so every trajectory downstream of
+        // the first such encounter moves. Deliberate, not an accident.
+        assert_eq!(a.checksum(), 0x8c2b_5ee8_5b5a_263d);
     }
 
     #[test]

@@ -13,7 +13,8 @@ offered: prey and predators over time, a predator-against-prey phase plot that s
 orbit around the equilibrium, and a stacked area that shows how the total population is
 divided between the six species and how it tracks vegetation. A fourth view (C7) shows
 the disease side of the same window: active cases per pathogen and the mean Resistance
-of the host species.
+of the host species. A fifth view (the C8 group-size follow-up) shows how large the herds
+and packs the cohesion rule holds together actually get, as a distribution per species.
 
 ## Variants
 | Id   | Variant                            | When it is shown                                           |
@@ -22,10 +23,11 @@ of the host species.
 | S05b | predator-prey phase plot           | second view: `g` from S05a, or `2` on any chart            |
 | S05c | stacked species + vegetation       | third view: `g` from S05b, or `3` on any chart             |
 | S05d | infections — cases and resistance  | fourth view: `g` from S05c, or `4` on any chart            |
+| S05e | group sizes — herds and packs      | fifth view: `g` from S05d, or `5` on any chart             |
 
-`g` cycles a → b → c → d → a. The status bar's right-hand text names the current view
-(`chart 1/4  populations`, `chart 2/4  phase plot`, `chart 3/4  stacked species`,
-`chart 4/4  infections`).
+`g` cycles a → b → c → d → e → a. The status bar's right-hand text names the current view
+(`chart 1/5  populations`, `chart 2/5  phase plot`, `chart 3/5  stacked species`,
+`chart 4/5  infections`, `chart 5/5  group sizes`).
 
 ## Layout
 Full-screen data screen (replaces the map). The body is 43 rows (rows 1–43) split into a
@@ -37,10 +39,10 @@ family's map/sidebar split so the eye does not have to re-adjust.
 flowchart TB
     subgraph body["155 × 43 body"]
         direction LR
-        chart["Chart panel 112 cols<br/>S05a: prey chart 20 rows / divider / predator chart 20 rows<br/>S05b: phase plot 38 rows + 3 note rows<br/>S05c: legend row, stacked plot 34 rows, axes, 2 note rows<br/>S05d: cases chart 20 rows / divider / resistance chart 20 rows"]
-        side["Sidebar 43 cols<br/>S05a Statistics<br/>S05b Phase<br/>S05c Composition<br/>S05d Outbreaks"]
+        chart["Chart panel 112 cols<br/>S05a: prey chart 20 rows / divider / predator chart 20 rows<br/>S05b: phase plot 38 rows + 3 note rows<br/>S05c: legend row, stacked plot 34 rows, axes, 2 note rows<br/>S05d: cases chart 20 rows / divider / resistance chart 20 rows<br/>S05e: one 6-row block per living species — a numbers line, a 4-row size histogram and the 1..16+ axis"]
+        side["Sidebar 43 cols<br/>S05a Statistics<br/>S05b Phase<br/>S05c Composition<br/>S05d Outbreaks<br/>S05e Group sizes"]
     end
-    status["Status bar 155 × 1 — g next chart · 1-4 pick · +/- zoom · Esc back · chart n/4"]
+    status["Status bar 155 × 1 — g next chart · 1-5 pick · +/- zoom · Esc back · chart n/5"]
     body --> status
 ```
 
@@ -67,6 +69,17 @@ S05a: an upper chart (20 rows, first row ` Active cases` followed by a `▀▄` 
 name per drawn pathogen), one section-divider row titled `Mean Resistance (host
 species)`, and a lower chart (20 rows, first row `0..1` plus a species legend and
 `· base`).
+
+### S05e chart panel
+Title `Group sizes — herds and packs`, right hint `living groups by size, each row scaled
+to its own tallest bar`. One 6-row block per species with a nonzero population, in
+species table order: row 0 is the numbers line (swatch, plural name, `mean x.x`, `max n`,
+`N herds|packs`, `A of B grouped (P%)`, `S alone`), rows 1–4 are a histogram of the
+`GroupCensus` size distribution (16 buckets of 4 columns, sizes `1..16+`, each row scaled
+to its own largest bucket, count axis in the 6-column left gutter), and row 5 is a `─`
+axis with a `┼` tick and label at sizes 1, 4, 8, 12 and `16+`. A species with no
+multi-member group draws `no herds|packs forming — all N alone`. There is no time series
+here: the distribution is the midnight snapshot the rest of the census uses.
 
 ## Content requirements
 
@@ -203,6 +216,25 @@ species)`, and a lower chart (20 rows, first row `0..1` plus a species legend an
     - **Legend**: the two `▀▄` swatches, the `·` base row and the `░` epidemic band.
     - **Keys**: `[+/-] zoom 60/240/720d`.
 
+### S05e — group sizes
+28. **Size distribution per species** (C8 follow-up), from `Sim.group_stats`
+    (`sim::stats::groups`, a midnight snapshot; see the C8 chunk doc FR13). A group is the
+    greedy same-species cluster the cohesion rule holds together: within each member's
+    sense range, with the joiner's visible neighbours (the group's existing members) kept
+    inside the `1.5 × preferred_group` band of `herding`, and a creature below
+    `social.cohesion_min` is always alone. One block per living species: the numbers line,
+    a 16-bucket histogram (`hist[species][k]` = groups of `k + 1` members, index 0 = alone,
+    16+ folded into the last bucket) in the species colour, and the size axis. `mean` and
+    `max` are over the multi-member groups only. Sidebar `Group sizes`:
+    - **Per species** (all six, absent ones dimmed): glyph, name and either
+      `mean x.x  max n  N herds|packs` with a second line `M of P grouped (P%)`, or
+      `all N alone`. Absent species read `—`.
+    - **How to read**: the rule in prose (sense range, the 1.5 × preferred band,
+      `cohesion_min` makes an animal solitary, prey herd / predators pack, mean and max
+      count groups of two or more, as of midnight).
+    - **Legend**: `░▒▓█` = groups per size (1..16+).
+    - **Keys**: `[g] next  [1-5] pick  [+/-] zoom`.
+
 ## Glyphs and colors
 This screen must render entirely in CP437. **Chart markers are limited to half-block
 (`▀` `▄`), full block (`█`) and dot (`·` `•`) markers; braille and eighth-block markers
@@ -210,7 +242,7 @@ are not permitted.** The stacked area is drawn by hand from the same three block
 
 | Glyph      | Meaning                                                  |
 |------------|----------------------------------------------------------|
-| `▀` `▄`    | line series (S05a, S05b recent path); half-row stack edges (S05c) |
+| `▀` `▄`    | line series (S05a, S05b recent path); half-row stack edges (S05c); group-size histogram stacks (S05e) |
 | `█`        | today's point (S05b); solid stack cells and legend swatches (S05c) |
 | `·`        | vegetation dot (S05c)                                     |
 | `•`        | older-days scatter and equilibrium crosshair (S05b)       |
@@ -231,8 +263,8 @@ selection background nowhere (there is no cursor on this screen).
 ## Interaction
 | Key      | Action                                             | Goes to |
 |----------|----------------------------------------------------|---------|
-| `g`      | next chart (a → b → c → d → a)                     | stays on S05 |
-| `1` `2` `3` `4` | pick S05a / S05b / S05c / S05d directly     | stays on S05 |
+| `g`      | next chart (a → b → c → d → e → a)                 | stays on S05 |
+| `1` `2` `3` `4` `5` | pick S05a / S05b / S05c / S05d / S05e directly | stays on S05 |
 | `+` `-`  | zoom the time window 60 / 240 / 720 days           | stays on S05 |
 | `l`      | toggle log scale (advertised in the S05a sidebar)   | stays on S05 |
 | `Esc`    | back                                                | [S01 World Map](s01-world-map.md) |
@@ -251,6 +283,11 @@ global meaning and switch to [S04](s04-species-browser.md), [S06](s06-ecology.md
 - **No disease in the window** (S05d): the cases chart draws only its axes with the
   legend `no infections in the window`; the Resistance chart still draws every living
   species; the sidebar says `no outbreaks yet` until the first outbreak record exists.
+- **No living creatures** (S05e): the chart panel says `no living creatures`; the sidebar
+  still lists all six species dimmed.
+- **No groups forming** (S05e): a social species below `cohesion_min` or one whose members
+  are out of sense range has no multi-member group, so its block reads
+  `no herds|packs forming — all N alone` and its histogram is a single bar at size 1.
 - **Open outbreak** (S05d): its epidemic band runs to the right edge and the sidebar's
   `δresist` reads `open`.
 - **Extinct species** (S05c): a species at zero contributes no stack cells; its row in the

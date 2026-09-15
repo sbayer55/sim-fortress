@@ -51,6 +51,7 @@ impl EventKindStyle for EventKind {
             Self::Extinction => glyphs::EXTINCTION,
             Self::Drought | Self::DroughtEased => glyphs::DROUGHT,
             Self::Season => glyphs::SUMMER,
+            Self::Wary => glyphs::ALERT,
             Self::Note => glyphs::NOTE,
         }
     }
@@ -58,7 +59,7 @@ impl EventKindStyle for EventKind {
     fn color(&self) -> Color {
         match self {
             Self::Birth | Self::Recovery => theme::GOOD,
-            Self::DeathStarved | Self::DeathThirst | Self::Drought => theme::WARN,
+            Self::DeathStarved | Self::DeathThirst | Self::Drought | Self::Wary => theme::WARN,
             Self::DeathPredation => theme::BAD,
             Self::DeathAge | Self::DroughtEased | Self::EpidemicOver => theme::DIM,
             Self::Mutation => theme::INFO,

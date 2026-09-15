@@ -27,6 +27,9 @@ pub enum EventKind {
     Epidemic,
     EpidemicOver,
     Recovery,
+    /// C5 `FR5b`: prey avoidance of predators that are not currently hunting.
+    /// Aggregated to at most one event per region per day.
+    Wary,
 }
 
 impl EventKind {
@@ -58,6 +61,7 @@ impl EventKind {
             Self::Epidemic => "EPIDEMIC",
             Self::EpidemicOver => "burnt out",
             Self::Recovery => "recovery",
+            Self::Wary => "wary",
         }
     }
 }

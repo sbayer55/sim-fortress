@@ -160,6 +160,31 @@ fn migration_scenario() {
     assert!(rises > 0, "expected the destination region's count to rise within 5 days of a migration");
 }
 
+/// C5 `FR5b`: prey give predators that are not hunting them room, and a day's
+/// encounters collapse into at most one event per region.
+#[test]
+fn wary_avoidance_is_recorded_once_per_region_per_day() {
+    let sim = run(42, Params::default(), 360 * 24); // one year
+    let mut seen: Vec<(u32, u32, u32)> = Vec::new(); // (year, day, region)
+    let mut total = 0;
+    for e in sim.events.iter().filter(|e| e.kind == EventKind::Wary) {
+        total += 1;
+        let mut parts = e.detail.split(':');
+        let region: u32 = parts.next().expect("region index").parse().expect("region index");
+        let _prey: u32 = parts.next().expect("prey species").parse().expect("prey species");
+        let _pred: u32 = parts.next().expect("predator species").parse().expect("predator species");
+        let count: u32 = parts.next().expect("count").parse().expect("count");
+        assert!(count > 0, "a Wary event carries a positive count: {}", e.detail);
+        assert!(parts.next().is_none(), "detail is region:prey:predator:total: {}", e.detail);
+        assert!(e.text.contains("wary encounters"), "{}", e.text);
+        let key = (e.year, e.day, region);
+        assert!(!seen.contains(&key), "one Wary event per region per day, saw {key:?} twice");
+        seen.push(key);
+    }
+    eprintln!("wary events in one year (seed 42): {total}");
+    assert!(total > 0, "a year with predators should record wary encounters");
+}
+
 /// 10 years headless < 5 min (release build).
 #[test]
 fn performance_budget() {

@@ -18,7 +18,7 @@ letter is the variant. The prototype binary shows the id on row 0.
 | S02 | Map Overlay               | [s02-map-overlay.md](s02-map-overlay.md)       | a: vegetation · b: pressure · c: moisture · d: sense range · e: regions · f: species density · g: health · h: disease · i: parasites |
 | S03 | Creature Inspector        | [s03-creature-inspector.md](s03-creature-inspector.md) | a: prey · b: predator · c: corpse                        |
 | S04 | Species Browser           | [s04-species-browser.md](s04-species-browser.md) | a: table · b: species detail                                  |
-| S05 | Population Charts         | [s05-population-charts.md](s05-population-charts.md) | a: over time · b: phase plot · c: stacked area · d: infections |
+| S05 | Population Charts         | [s05-population-charts.md](s05-population-charts.md) | a: over time · b: phase plot · c: stacked area · d: infections · e: group sizes |
 | S06 | Resources / Ecology       | [s06-ecology.md](s06-ecology.md)               | a: default                                                      |
 | S07 | Event Log                 | [s07-event-log.md](s07-event-log.md)           | a: full log · b: deaths & extinctions with detail               |
 | S08 | Lineage / Family Tree     | [s08-lineage.md](s08-lineage.md)               | a: focused creature                                             |
@@ -54,7 +54,7 @@ flowchart TD
     S12["S12 Alert Modal"]
     S03["S03 Creature Inspector<br/>a prey · b predator · c corpse"]
     S04["S04 Species Browser<br/>a table · b detail"]
-    S05["S05 Population Charts<br/>a time · b phase · c stacked"]
+    S05["S05 Population Charts<br/>a time · b phase · c stacked · d infections · e group sizes"]
     S06["S06 Resources / Ecology"]
     S07["S07 Event Log<br/>a full · b deaths"]
     S08["S08 Lineage"]

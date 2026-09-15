@@ -11,6 +11,7 @@ use crate::sim::lineage::Lineage;
 use crate::sim::params::{CreaturesParams, EcologyParams, GeneticsParams, PredationParams, SocialParams};
 use crate::sim::rng::Rng;
 use crate::sim::spatial::SpatialIndex;
+use crate::sim::species::SpeciesId;
 use crate::sim::disease::{self, DiseaseState};
 use crate::sim::params::DiseaseParams;
 use crate::sim::time::Time;
@@ -76,6 +77,9 @@ pub fn day_boundary(
 ) {
     let day_index = time.day_index();
 
+    // C5 `FR5b`: flush the day's wary encounters as one event per region.
+    flush_wary(world, events, time, tallies);
+
     // 0. C7 FR5: infection progression, lethality, recovery, parasite clearance.
     disease::progress_daily(store, world, events, time, dp, dstate, tallies, lineage, drng);
 
@@ -109,6 +113,64 @@ pub fn day_boundary(
         cell.pred_pressure *= cp.pressure_decay_per_day;
     }
     disease::decay_cells(world, dp);
+}
+
+/// One region's wary summary, accumulated while flushing the day's tally.
+struct WaryDay {
+    region: usize,
+    prey: SpeciesId,
+    pred: SpeciesId,
+    dominant: u32,
+    total: u32,
+}
+
+/// C5 `FR5b`: flush the day's wary encounters into one event per region — the most
+/// common prey/predator pair names the line and the total is the day's count.
+/// `detail` carries `region:prey:predator:total` for tests, like Migration's
+/// `origin>dest`. The tally is a `BTreeMap`, so regions are visited in ascending
+/// order and the first of any tied pair wins: deterministic event order.
+fn flush_wary(world: &World, events: &mut EventRing, time: &Time, tallies: &mut DeathTallies) {
+    if tallies.wary_today.is_empty() {
+        return;
+    }
+    let mut summaries: Vec<WaryDay> = Vec::new();
+    for (&(ri, prey, pred), &n) in &tallies.wary_today {
+        let region = usize::from(ri);
+        match summaries.last_mut() {
+            Some(last) if last.region == region => {
+                last.total += n;
+                if n > last.dominant {
+                    last.prey = prey;
+                    last.pred = pred;
+                    last.dominant = n;
+                }
+            }
+            _ => summaries.push(WaryDay { region, prey, pred, dominant: n, total: n }),
+        }
+    }
+    let (year, day, hour) = (time.year(), time.day_of_year(), time.hour());
+    for s in summaries {
+        let r = &world.regions[s.region];
+        let pos = ((r.1 + r.3).div_euclid(2), (r.2 + r.4).div_euclid(2));
+        events.push(Event {
+            year,
+            day,
+            hour,
+            kind: EventKind::Wary,
+            species: Some(s.prey),
+            subject: None,
+            text: format!(
+                "{} give {} room in {} ({} wary encounters)",
+                s.prey.plural(),
+                s.pred.plural().to_lowercase(),
+                r.0,
+                s.total
+            ),
+            pos: Some(pos),
+            detail: format!("{}:{}:{}:{}", s.region, s.prey.index(), s.pred.index(), s.total),
+        });
+    }
+    tallies.wary_today.clear();
 }
 
 /// Mark a creature dead, add a carcass, record the tally and emit the event.
@@ -267,6 +329,9 @@ mod tests_death;
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests_flee;
+#[cfg(test)]
+#[allow(clippy::float_cmp)]
+mod tests_wary;
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests_migration;

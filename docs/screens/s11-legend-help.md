@@ -37,7 +37,7 @@ flowchart TB
     subgraph body["155 × 44 body — S01a dimmed 55 %"]
         subgraph modal["Legend & Help  120 × 38 (centred)"]
             direction LR
-            c1["Terrain 38 cols<br/>── Terrain ── 12 rows<br/>── Events ── 10 rows<br/>── Map marks ── 7 rows<br/>heatmap shades"]
+            c1["Terrain 38 cols<br/>── Terrain ── 12 rows<br/>── Events ── 11 rows<br/>── Map marks ── 7 rows<br/>heatmap shades"]
             c2["Creatures 38 cols<br/>── Creatures ── 6 species<br/>── Tags ──<br/>── Seasons & time ──<br/>── Vitals & trends ──"]
             c3["Keys 40 cols<br/>── Navigation ──<br/>── Look mode ──<br/>── Overlays ──<br/>── Speed ──<br/>── Screens ──"]
             c1 --- c2 --- c3
@@ -56,10 +56,11 @@ flowchart TB
    gameplay note: *impassable, drinkable · drinkable, slow · no forage · regrows here first ·
    thin forage · hare & deer grazing · rich grazing, cover · cover for small prey ·
    impassable heights · shelter, litters · scavenger food · regrowing this season.*
-2. **Events** (10 rows): event-kind glyphs in their log colours — birth / litter, death by
+2. **Events** (11 rows): event-kind glyphs in their log colours — birth / litter, death by
    predation, death by starvation / thirst, death of old age, mutation in a newborn,
    migration between regions, species extinct, drought / scarcity warning, `☻` outbreak /
-   epidemic / death by disease (infection colour), `☺` recovery (now immune). The three
+   epidemic / death by disease (infection colour), `☺` recovery (now immune), `!` prey
+   giving predators room (C5 `FR5b`). The three
    death kinds share the `x` glyph and differ only by colour.
 3. **Map marks** (7 rows): look cursor (inverted cell), cursor corner marks `╬`, trail of the
    followed creature `∙`, its current target `♦`, sense-range ring edge `°`, danger marker
@@ -106,7 +107,7 @@ flowchart TB
 ## Glyphs and colors
 This screen is the canonical list; every glyph it shows must be the same constant the
 corresponding screen draws. In particular: terrain `≈ ~ · . , " ♣ ♠ ▲`, resources `Ω % *`,
-events `♥ x § → ‼ ¡ ☻ ☺`, marks `X ╬ ∙ ♦ ° ! ∩`, seasons `♪ ☼ ♫ *`, sky `☼ ○`, controls
+events `♥ x § → ‼ ¡ ☻ ☺ !`, marks `X ╬ ∙ ♦ ° ! ∩`, seasons `♪ ☼ ♫ *`, sky `☼ ○`, controls
 `► ││ ►►`, trend `↑ ↔ ↓`, sex `♂ ♀`, shades `░ ▒ ▓ █`, bars `███`. Colours: each species'
 palette entry, the terrain foreground colours, event-kind colours, good / warning / bad for
 vitals, accent for marks, and the focus border for the modal. Note that `*` is used for both

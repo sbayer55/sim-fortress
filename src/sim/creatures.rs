@@ -42,6 +42,9 @@ pub enum Goal {
     Scavenge,
     Migrate,
     Patrol,
+    /// C5 `FR5b`: the low-exertion avoidance tier — a predator that is not
+    /// currently a danger is nearby and the prey is giving it room.
+    Wary,
 }
 
 /// The phase of a predator's current hunt (C5 FR4).
@@ -101,6 +104,10 @@ pub struct DeathTallies {
     pub hunt_kills: [u32; 6],
     /// The most recent death per species (C5 FR8).
     pub last_death: [Option<ExtinctionRecord>; 6],
+    /// C5 `FR5b`: wary encounters today, keyed `(region index, prey species,
+    /// predator species)`. Flushed into one Wary event per region at the day
+    /// boundary and cleared by `next_day`.
+    pub wary_today: BTreeMap<(u8, SpeciesId, SpeciesId), u32>,
 }
 
 impl DeathTallies {
@@ -137,6 +144,7 @@ impl Goal {
             Self::Scavenge => "scavenging",
             Self::Migrate => "migrating",
             Self::Patrol => "patrolling",
+            Self::Wary => "wary",
         }
     }
 }
@@ -263,6 +271,13 @@ pub struct Creature {
     pub threatened_by: Option<(usize, usize, SpeciesId)>,
     /// `min(1, 0.5 × pred_pressure + 0.5 × predators_in_range / 3)` (S03 Condition).
     pub predation_risk: f32,
+    // ---- C5 `FR5b` wary (the second, low-exertion avoidance tier) ----
+    /// Tick at which the wary state ends.
+    pub wary_until: u64,
+    /// The non-danger predator `(x, y, species)` driving the wary away-vector.
+    pub wary_by: Option<(usize, usize, SpeciesId)>,
+    /// Times this creature has turned wary (S03).
+    pub wary_count: u32,
     /// C8: same-species neighbours seen at the last replan (S03 "kin nearby").
     pub kin_nearby: u8,
     pub migrate_until: u64,
@@ -458,6 +473,9 @@ fn founder(species: SpeciesId, name: NameId, sex: Sex, pos: (usize, usize), age_
                 flee_until: 0,
                 threatened_by: None,
                 predation_risk: 0.0,
+                wary_until: 0,
+                wary_by: None,
+                wary_count: 0,
                 kin_nearby: 0,
                 migrate_until: 0,
                 // ---- C7 disease / parasites

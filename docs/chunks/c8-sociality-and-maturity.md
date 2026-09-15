@@ -4,8 +4,9 @@ Back to the [roadmap](README.md). Previous: [C7](c7-disease-and-parasites.md).
 
 > **Status: implemented (2026-09-13), not independently validated.** This document was written
 > *from* the implementation rather than before it, so every requirement below describes what is
-> in the tree, not a plan the tree was built to. The mechanics are unit-tested; there is **no
-> `tests/social.rs`, no balance table and no acceptance run**, and the *Measured today* table
+> in the tree, not a plan the tree was built to. The mechanics are unit-tested and the full
+> `cargo test` suite (lib + the C1–C7 acceptance files) is green, but there is **no
+> `tests/social.rs`, no balance table and no C8 acceptance run**, and the *Measured today* table
 > under Acceptance records that honestly. Known gaps are listed at the end.
 
 ## Goal
@@ -54,9 +55,11 @@ earlier, smaller litters (r).
 - **Any group or pack entity.** There is no pack id, name, membership, leader or lifecycle.
   A pack is a per-tick spatial fact — shared `hunt_target` plus visible `kin_nearby` — never an
   object. (Follow-up: *pack identity tracking*, [feature ideas](../feature-ideas.md).)
-- **Group-size / mean-pack-size statistics.** Nothing counts how large herds get or how often
-  packs form; `--summary` still reports only speed and resistance means. (Follow-up: *group-size
-  and mean-pack-size statistics*.)
+- **Group-size / mean-pack-size statistics.** Out of the original chunk, then shipped as the
+  [FR13](#fr13-group-size-statistics-shipped-after-the-chunk) follow-up: `sim::stats::groups`
+  counts the herds and packs the cohesion rule holds together, S04a and S05e show them, and
+  `--summary` carries `group_mean_<species>` / `group_max_<species>`. Before FR13 nothing
+  counted how large herds got or how often packs formed.
 - **A sociality or pack map overlay**, and any drawing of pack bonds or kin links on the map.
   The only map signal remains the S02f species-density cluster.
 - Coordinated hunting behaviour: no encircling, driving or alternating chases. Packmates
@@ -118,8 +121,8 @@ flowchart TB
 | Base genomes | vole 0.35, hare 0.25, deer 0.70, fox 0.15, wolf 0.70, lynx 0.10 | 0.5 for all six |
 
 With the default `cohesion_min = 0.30`, the base genomes make deer and wolves the herd/pack
-species; voles are loosely social (preferred group 4.2, dispersal above 6); and hares, foxes and
-lynxes sit below the gate and never herd unless selection raises them.
+species; voles are loosely social (preferred group 4.2, dispersal above 6.3); and hares, foxes
+and lynxes sit below the gate and never herd unless selection raises them.
 
 ## Functional requirements
 
@@ -236,7 +239,7 @@ senders in the same pass), emit no event and cost nothing.
   pack exists only while its members share a target.
 
 ### FR8 Maturity
-One factor, three applications, all `materialised per individual`:
+One factor, three applications, all evaluated per individual:
 - `adult_age_days(species, genome, cp, gp) = round(base × factor(maturity, age_span))`.
 - `max_age_days(genome, cp, gp) = round(base × factor(maturity, lifespan_span))`.
 - `litter_size(species, fertility × disease fertility factor, maturity) =
@@ -251,8 +254,9 @@ the direction: `Maturity rising (+0.04 over 6 generations): later, larger litter
   and the drift rows iterate `Genome::LEN`.
 - `Series::to_csv` gains `<species>_sociality_mean` and `<species>_maturity_mean` automatically
   from `TRAIT_NAMES` (prey species only, as for every trait).
-- **Not added:** `--summary` columns. `summary_row` still reports only `speed_<species>` and
-  `resistance_<species>`, so a sweep cannot currently read sociality or maturity (gap).
+- **`--summary` columns:** FR13 added `group_mean_<species>` and `group_max_<species>`. The
+  sociality and maturity means themselves are still absent, so a sweep cannot read the traits
+  directly (gap).
 - `checksum()` does not feed the genome directly; the value was re-baselined to
   `0x348e_3c6e_eec2_e6d6` because founder placement draws two more gaussians per founder and
   every downstream draw shifts.
@@ -275,13 +279,44 @@ planned.
   is at the 153-column edge and the sparkline slot was trimmed to fit). S04b draws eleven
   histograms on a 3 × 4 grid of 25-column blocks (23-wide histograms, 7 rows per block), eleven
   drift sparkline rows and eleven per-generation mean rows, and the Selection-pressure section
-  names the r/K direction for Maturity.
+  names the r/K direction for Maturity. FR13 added one group-summary line under S04a's counts
+  line and a fifth charts view, S05e, with the full size distribution.
 - **No new overlay, key, glyph or event kind.** S11 is unchanged because C8 adds no map mark and
-  no event; S02's overlay list still ends at `9 parasites`.
+  no event; S02's overlay list still ends at `9 parasites`. (FR13's S05e adds the `5` key on S05,
+  which is a chart picker, not a simulation key.)
 
 ### FR12 Tooling
-None added. There is no `examples/bench_social.rs`, no `--profile` row and no `--summary`
-column, so C8 currently has no headless experiment path of its own.
+`--summary` / `--header` gained the FR13 `group_mean_<species>` and `group_max_<species>`
+columns. There is still no `examples/bench_social.rs` and no `--profile` row, so C8's own
+mechanics have no headless experiment path beyond those columns.
+
+### FR13 Group-size statistics (shipped after the chunk)
+`sim::stats::groups` answers "how large do the herds and packs actually get", a fact C8's
+mechanics produced but nothing counted. A **group is a spatial fact, not an entity** (the same
+decision as FR7): one deterministic greedy pass per species over `CreatureStore::living` (slot)
+order, mirroring the FR4 cohesion rule —
+- a creature below `social.cohesion_min` never herds, so it is a group of one;
+- otherwise it joins the nearest same-species group whose centroid is inside its own sense
+  ellipse (its own `sense_cells`, the same range `perceive` uses) while that group stays inside
+  the `1.5 × preferred_group` band of `herding` (the joiner's visible neighbours are the
+  group's existing members), and starts a new group when none qualifies.
+
+`GroupCensus` holds, per species: `groups` (two or more members), `members` (creatures in those
+groups), `mean` and `max` over those groups, and `hist[species][k]` = groups of `k + 1` members
+(index 0 = alone, sizes 16 and above folded into `GROUP_HIST - 1`). `mean` and `max` ignore the
+loners, which is what "how large do herds get" means; `solo` and `grouped_share` are derived.
+The pass draws no RNG, so no draw moves and the checksum is unchanged.
+
+- `Sim.group_stats` is `#[serde(skip)]`, recomputed in `Sim::new`, at each midnight day boundary
+  (`day_boundary_update`) and after a load (`save::decode`): the save format stays v3, there is no
+  `VERSION` bump, and the census reads as of the last midnight like the species census beside it.
+- S04a draws one line under the counts: `groups: 26 herds, mean 2.5, max 5, 48% grouped, 72 alone`
+  (or `none forming — all N alone` / `none living`).
+- S05e draws the distribution: one histogram block per living species with sizes `1..16+` on the
+  x axis and each row scaled to its own tallest bucket, plus a sidebar with the per-species
+  mean/max/group count/grouped share and the rule in prose.
+- `--summary` / `--header` append `group_mean_<species>` and `group_max_<species>` (two decimals
+  and an integer) for all six species, which is the number the C5 band claims can assert on.
 
 ## Acceptance criteria (proposed — not yet run)
 Because C8 shipped ahead of a plan, these are the criteria a validation pass should adopt; the
@@ -308,6 +343,7 @@ Because C8 shipped ahead of a plan, these are the criteria a validation pass sho
 ### Measured today
 | Criterion | Result |
 |-----------|--------|
+| Full `cargo test` suite (lib + C1–C7 integration) | **pass** (2026-09-13; the disease sweep dominates at ~22 min in debug) |
 | Determinism, checksum lock | **pass** — lock re-baselined to `0x348e_3c6e_eec2_e6d6` |
 | Save round trip and v3 version guards | **pass** (`older_version_rejected`, `version_mismatch_rejected`) |
 | Genome wiring (eleven slots, every slot inherited, abbreviations) | **pass** (unit) |
@@ -317,8 +353,8 @@ Because C8 shipped ahead of a plan, these are the criteria a validation pass sho
 | Maturity scaling and neutral 0.5 | **pass** (unit) |
 | Population-level herding / alarm / pack effects | **not measured** — no integration test |
 | Sociality and Maturity selection over years | **not measured** |
-| Group-size / mean-pack-size statistics | **not implemented** |
-| C8 UI render tests | **not implemented**; S03a/S04a/S04b renders are current by eye |
+| Group-size / mean-pack-size statistics | **pass** — FR13: `sim::stats::groups` unit tests, the S04a line, a S05e render test and the `--summary` columns |
+| C8 UI layout | **S04a current** (FR13 refreshed it); S03a/S04b are **stale** — the ignored `regenerate_screen_renders` rewrites them differently from the checked-in files since the cleanup waves (`4de1f29`, `855c703`), and S03a's regenerated Timeline overlaps its Vitals block |
 | Performance share of the C8 passes | **not measured** separately |
 
 ## Checkpoint demo script
@@ -338,8 +374,13 @@ Because C8 shipped ahead of a plan, these are the criteria a validation pass sho
    e.g. `Maturity rising …: later, larger litters (K)`.
 6. `e` → S07: a group migration still reads `A pack of 4 wolves migrated …` (the C5 group word,
    which is a size word, not evidence of a pack).
-7. `cargo run --release -- --headless --seeds 1-10 --years 3 --summary` writes `summary.csv`;
-   note that it carries **no** sociality or maturity column — the tooling gap below.
+7. `s` → S04a: under the counts line, `groups: 26 herds, mean 2.5, max 5, 48% grouped, 72 alone`
+   (a fox or lynx shows `none forming — all N alone`). Press `g`/`5` on the charts screen →
+   S05e: one size histogram per living species (deer spread wide, foxes one tall bar at
+   `1` = alone).
+8. `cargo run --release -- --headless --seeds 1-10 --years 3 --summary` writes `summary.csv`
+   with `group_mean_<species>` and `group_max_<species>` columns; it still carries **no**
+   sociality or maturity column — the remaining tooling gap below.
 
 ## Tests
 - `sim::behavior::tests_social::{alarm_spreads_to_social_kin_only,
@@ -352,8 +393,13 @@ Because C8 shipped ahead of a plan, these are the criteria a validation pass sho
 - `sim::species` test asserting the accessors and `maturity() == 0.5` on every base genome.
 - `sim::tests::checksum_is_fnv_stable` (re-baselined) and `sim::save::tests::{older_version_rejected,
   version_mismatch_rejected, round_trip_checksum_3_seeds}`.
-- **Missing:** any `sim::stats` test for the new CSV columns, any UI render test, and any
-  `tests/social.rs` acceptance suite.
+- **FR13:** `sim::stats::groups::tests::{social_neighbours_form_one_group,
+  asocial_creatures_are_always_alone, groups_break_beyond_sense, groups_respect_the_dispersal_cap,
+  histogram_counts_every_creature_exactly_once, sim_refreshes_group_stats_and_survives_a_save}`
+  and `ui::screens::s05_charts::tests::s05e_group_sizes_render`. `s05d_variant_cycling` covers the
+  five-view `g` cycle.
+- **Still missing:** an asserting UI test for S03a/S04b layout, and any `tests/social.rs`
+  acceptance suite with a `group_size_max = 0` control.
 
 ## Implementation order (as built)
 1. **Genome widening** — `species.rs` (`N_TRAITS = 11`, names, abbreviations, indices,
@@ -372,6 +418,9 @@ Because C8 shipped ahead of a plan, these are the criteria a validation pass sho
 9. **Save** — `VERSION = 3`, `SaveError::OlderVersion`, load/list paths.
 10. **Screens** — S03 Derived and genome rows, S04a columns, S04b grid and drift, the r/K
     sentence; S03/S04 screen docs updated.
+11. **FR13 group statistics (follow-up)** — `sim/stats/groups.rs` (`group_census`, `GroupCensus`),
+    `Sim.group_stats` refreshed in `new`/`day_boundary_update`/`save::decode`, the `--summary`
+    columns, the S04a line, the S05e view and its tests.
 
 ## Decisions made here
 - **One preference trait, not separate herd and pack traits.** `preferred_group` and `herding`
@@ -397,6 +446,12 @@ Because C8 shipped ahead of a plan, these are the criteria a validation pass sho
   density overlay already makes a herd visible as a bright cluster.
 - **Compatibility is never preserved**: the genome widened, so v3 refuses v2 with a named
   `OlderVersion` error rather than a decode failure.
+- **FR13 measures groups by the cohesion rule, not by neighbour count.** A group is a greedy
+  nearest-centroid cluster within sense range, capped at the same `1.5 × preferred_group` band
+  that makes a creature disperse, so a rising Sociality mean raises the cap and the reported
+  groups grow with it; `mean`/`max` ignore loners, which is the difference between "larger
+  groups" and "more neighbours". The census is a `#[serde(skip)]` day-boundary snapshot, so no
+  `VERSION` bump and no checksum change.
 
 ## Risks
 - **Sociality ratchets to the 0.98 clamp.** Its only cost is grazing the group's cells down, and
@@ -421,11 +476,18 @@ Because C8 shipped ahead of a plan, these are the criteria a validation pass sho
 - **The event log's "pack" is a size word.** `Migration` says `pack` for any predator group above
   three members (C5), whether or not its members ever hunted together, so the log cannot be used
   as evidence that packs formed.
+- **The group census is a midnight snapshot and a greedy approximation.** FR13 recomputes it
+  once per day (and on load/`new`), so mid-day movement is not reflected until the next midnight,
+  and the nearest-centroid pass is order-dependent — deterministic, but a group can be split
+  differently from the true mutual-neighbour cluster. The cost is O(living × groups) once per
+  day, with no `--profile` row.
 
 ## Known gaps and follow-ups
 Recorded in [feature ideas](../feature-ideas.md) unless noted:
-- **Group-size and mean-pack-size statistics** — per-species mean/max group size and a pack-size
-  distribution; the numbers that would let the C5 bands be asserted in the headless runner.
+- **Group-size and mean-pack-size statistics — shipped as FR13.** `sim::stats::groups`
+  (`group_census`, `GroupCensus`), the S04a summary line, the S05e distribution and the
+  `group_mean_<species>` / `group_max_<species>` `--summary` columns; unit tests plus a S05e
+  render test. It is the number the C5 bands can assert on in the headless runner.
 - **Pack identity tracking** — a persistent pack record (members, leader, tag, formed/dissolved
   events) for the inspector, lineage screen and map. The stable group that the top
   [dens](../feature-ideas.md) idea and territory marking both need.

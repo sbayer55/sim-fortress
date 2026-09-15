@@ -39,6 +39,10 @@ struct PreySnap {
     /// The prey's own species and sociality, for the alarm pass (C8 FR3).
     own: SpeciesId,
     sociality: f32,
+    /// C5 `FR5b`: nearest detected predator that is *not* a danger (wary tier).
+    wary_dist: f32,
+    wary_pos: (usize, usize),
+    wary_species: SpeciesId,
 }
 
 /// The predator facts the prey rule needs (no `Creature` clones per tick).
@@ -61,7 +65,7 @@ pub(super) fn mark_threats(store: &mut CreatureStore, spatial: &SpatialIndex, wo
 
     scan_prey(&preds, &mut prey, spatial, pp);
     propagate_alarms(&mut prey, spatial, sp);
-    apply_threats(store, &prey, world, tick);
+    apply_threats(store, &prey, world, tick, pp);
 }
 
 /// Snapshot every predator's threat-relevant facts.
@@ -97,6 +101,9 @@ fn build_prey(store: &CreatureStore) -> Vec<PreySnap> {
             species: SpeciesId::Vole,
             own: c.species,
             sociality: c.genome.sociality(),
+            wary_dist: f32::INFINITY,
+            wary_pos: (0, 0),
+            wary_species: SpeciesId::Vole,
         })
         .collect()
 }
@@ -122,6 +129,13 @@ fn scan_prey(preds: &[Pred], prey: &mut [PreySnap], spatial: &SpatialIndex, pp: 
                 p.dist = d;
                 p.pos = (pred.x, pred.y);
                 p.species = pred.species;
+            }
+            // C5 `FR5b`: a predator the prey sees but that is not a danger (not
+            // hunting it, not hungry and close) is the wary tier's trigger.
+            if detects && !danger && d < pp.wary_distance && d < p.wary_dist {
+                p.wary_dist = d;
+                p.wary_pos = (pred.x, pred.y);
+                p.wary_species = pred.species;
             }
         });
     }
@@ -165,13 +179,19 @@ fn propagate_alarms(prey: &mut [PreySnap], spatial: &SpatialIndex, sp: &SocialPa
 }
 
 /// Write the scan results (and predation risk) back onto the prey.
-fn apply_threats(store: &mut CreatureStore, prey: &[PreySnap], world: &World, tick: u64) {
+fn apply_threats(store: &mut CreatureStore, prey: &[PreySnap], world: &World, tick: u64, pp: &PredationParams) {
     for c in store.living_mut() {
         if c.species.kind() != Kind::Prey {
             continue;
         }
         // A forced flee (FR4) keeps its last known threat until the timer ends.
         let keep_forced = c.goal == Goal::Flee && tick < c.flee_until && c.threatened_by.is_some();
+        // C5 `FR5b`: the wary away-vector survives the timer while the predator is
+        // still within the release radius, so a prey on the boundary cannot
+        // stutter in and out of the tier (hysteresis).
+        let keep_wary = c.goal == Goal::Wary
+            && tick < c.wary_until
+            && c.wary_by.is_some_and(|(px, py, _)| geom::dist(c.x, c.y, px, py) <= pp.wary_distance * pp.wary_release_factor);
         if let Ok(i) = prey.binary_search_by_key(&c.id, |p| p.id) {
             let p = &prey[i];
             if p.dist < f32::INFINITY {
@@ -179,27 +199,48 @@ fn apply_threats(store: &mut CreatureStore, prey: &[PreySnap], world: &World, ti
             } else if !keep_forced {
                 c.threatened_by = None;
             }
+            if p.wary_dist < f32::INFINITY {
+                c.wary_by = Some((p.wary_pos.0, p.wary_pos.1, p.wary_species));
+            } else if !keep_wary {
+                c.wary_by = None;
+            }
             let pressure = world.cell(c.x, c.y).pred_pressure;
             c.predation_risk = (0.5 * pressure + 0.5 * (crate::cast!(p.count => f32)) / 3.0).min(1.0);
         } else {
             if !keep_forced {
                 c.threatened_by = None;
             }
+            if !keep_wary {
+                c.wary_by = None;
+            }
             c.predation_risk = (0.5 * world.cell(c.x, c.y).pred_pressure).min(1.0);
         }
     }
 }
 
+/// The cell `k` away from `(px, py)` along the predator→prey vector (FR5,
+/// `FR5b`), clamped into the world. The prey's own cell when it shares the
+/// predator's.
+fn away_cell(cx: usize, cy: usize, px: usize, py: usize, k: i32, world: &World) -> (usize, usize) {
+    let dx = crate::cast!(cx => i32) - crate::cast!(px => i32);
+    let dy = crate::cast!(cy => i32) - crate::cast!(py => i32);
+    if dx == 0 && dy == 0 {
+        return (cx, cy);
+    }
+    let nx = crate::cast!((crate::cast!(cx => i32) + dx.signum() * k).clamp(0, crate::cast!(world.width => i32) - 1) => usize);
+    let ny = crate::cast!((crate::cast!(cy => i32) + dy.signum() * k).clamp(0, crate::cast!(world.height => i32) - 1) => usize);
+    (nx, ny)
+}
+
 /// The cell `flee_distance` away from the threatening predator (FR5).
 pub(super) fn flee_target(c: &Creature, world: &World, pp: &PredationParams) -> Option<(usize, usize)> {
     let (px, py, _) = c.threatened_by?;
-    let dx = crate::cast!(c.x => i32) - crate::cast!(px => i32);
-    let dy = crate::cast!(c.y => i32) - crate::cast!(py => i32);
-    if dx == 0 && dy == 0 {
-        return Some((c.x, c.y));
-    }
-    let k = crate::cast!(pp.flee_distance.ceil() => i32);
-    let nx = crate::cast!((crate::cast!(c.x => i32) + dx.signum() * k).clamp(0, crate::cast!(world.width => i32) - 1) => usize);
-    let ny = crate::cast!((crate::cast!(c.y => i32) + dy.signum() * k).clamp(0, crate::cast!(world.height => i32) - 1) => usize);
-    Some((nx, ny))
+    Some(away_cell(c.x, c.y, px, py, crate::cast!(pp.flee_distance.ceil() => i32), world))
+}
+
+/// The cell `wary_step` away from the non-danger predator driving the wary
+/// away-vector (C5 `FR5b`).
+pub(super) fn wary_target(c: &Creature, world: &World, pp: &PredationParams) -> Option<(usize, usize)> {
+    let (px, py, _) = c.wary_by?;
+    Some(away_cell(c.x, c.y, px, py, crate::cast!(pp.wary_step.ceil() => i32), world))
 }

@@ -59,6 +59,17 @@ pub struct PredationParams {
     pub flee_energy_factor: f32,
     /// A resting prey detects predators at half its sense range.
     pub rest_detect_factor: f32,
+    /// C5 `FR5b`: a prey turns Wary of a detected predator that is *not* a danger
+    /// within this distance. `0.0` disables the whole wary tier.
+    pub wary_distance: f32,
+    /// C5 `FR5b`: cells away from the predator for the wary waypoint.
+    pub wary_step: f32,
+    /// C5 `FR5b`: ticks the wary state is retained after the last detection.
+    pub wary_ticks: u32,
+    /// C5 `FR5b`: speed multiplier while wary (the low-exertion tier).
+    pub wary_speed_factor: f32,
+    /// C5 `FR5b`: wary ends only past `wary_distance × this` (hysteresis).
+    pub wary_release_factor: f32,
     pub migrate_veg: f32,
     pub migrate_days: u32,
     pub migrate_pressure: f32,
@@ -115,6 +126,11 @@ impl Default for PredationParams {
             flee_ticks: 10,
             flee_energy_factor: 2.0,
             rest_detect_factor: 0.5,
+            wary_distance: 3.0,
+            wary_step: 3.0,
+            wary_ticks: 2,
+            wary_speed_factor: 0.5,
+            wary_release_factor: 1.5,
             migrate_veg: 0.25,
             migrate_days: 6,
             migrate_pressure: 0.35,

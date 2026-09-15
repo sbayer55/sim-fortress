@@ -104,7 +104,7 @@ fn terrain_column(f: &mut Frame<'_>, col: Rect) {
 
     panel::section(f, col, row, "Events");
     row += 1;
-    let events: [(EventKind, &str); 10] = [
+    let events: [(EventKind, &str); 11] = [
         (EventKind::Birth, "birth / litter"),
         (EventKind::DeathPredation, "death by predation"),
         (EventKind::DeathStarved, "death by starvation / thirst"),
@@ -115,6 +115,7 @@ fn terrain_column(f: &mut Frame<'_>, col: Rect) {
         (EventKind::Drought, "drought / scarcity warning"),
         (EventKind::Outbreak, "outbreak / epidemic / death by disease"),
         (EventKind::Recovery, "recovery (now immune)"),
+        (EventKind::Wary, "prey giving predators room"),
     ];
     for (kind, label) in events {
         util::line(f, col, row, Line::from(vec![

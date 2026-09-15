@@ -159,6 +159,12 @@ fn summary_header() -> String {
     for id in SpeciesId::ALL {
         cols.push(format!("resistance_{}", id.name().to_lowercase()));
     }
+    // C8 follow-up: the group sizes the cohesion rule actually produces.
+    for id in SpeciesId::ALL {
+        let n = id.name().to_lowercase();
+        cols.push(format!("group_mean_{n}"));
+        cols.push(format!("group_max_{n}"));
+    }
     cols.join(",")
 }
 
@@ -194,6 +200,10 @@ fn summary_row(sim: &Sim, seed: u64, years: f64) -> String {
     cols.push(d.stats.iter().map(|s| s.total_deaths).sum::<u32>().to_string());
     for i in 0..6 {
         cols.push(format!("{:.3}", census.genome_mean[i].resistance()));
+    }
+    for i in 0..6 {
+        cols.push(format!("{:.2}", sim.group_stats.mean[i]));
+        cols.push(sim.group_stats.max[i].to_string());
     }
     cols.join(",")
 }

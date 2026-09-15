@@ -6,7 +6,8 @@ Live since: C2
 
 ## Purpose
 The event log is the valley's history, newest first: births, deaths, mutations,
-migrations, extinctions, droughts, season changes and narrative notes. The player uses it
+migrations, extinctions, droughts, season changes, prey growing wary of predators and
+narrative notes. The player uses it
 to find out *what just happened* (the ticker row on the map only shows the latest line),
 to filter down to the events that matter (deaths and extinctions), and to jump from an
 event to the place or creature it concerns. It is the bridge between the map and the
@@ -79,14 +80,15 @@ In S07a the list panel spans all 155 columns and the detail panel is absent.
 ### List panel
 6. Panel hint (right of the title): `N events, M today`, where *today* means the event's
    year and day equal the clock's.
-7. **Filter chip row**: ` filter: ` followed by eight chips in this order:
+7. **Filter chip row**: ` filter: ` followed by nine chips in this order:
    `* all`, `♥ births`, `x deaths`, `§ mutations`, `→ migrations`, `‼ extinctions`,
-   `¡ droughts`, `☻ disease`. An active chip is drawn in the selected style (name only,
-   selection background); an inactive chip shows its glyph in the kind colour and its
+   `¡ droughts`, `☻ disease`, `! wary`. An active chip is drawn in the selected style (name
+   only, selection background); an inactive chip shows its glyph in the kind colour and its
    name in text colour. When the row has room (S07a) it ends with the right-aligned hint
-   `[f] cycles, [1-8] toggles`. The `disease` chip (C7) shows `Outbreak`, `Spillover`,
+   `[f] cycles, [1-9] toggles`. The `disease` chip (C7) shows `Outbreak`, `Spillover`,
    `Epidemic`, `EpidemicOver` and `Recovery`; a death by disease is a death and stays
-   under `deaths`.
+   under `deaths`. The `wary` chip (C5 `FR5b`) shows the daily per-region prey-avoidance
+   summary lines.
 8. **Column header** (dim): `when` (16 cols), `kind` (14), `sp` (4), `event`.
 9. **Event rows**, one per event:
    - selection marker `►` or space, then `Y12 D004 13:00` — bright when selected, normal
@@ -156,6 +158,7 @@ Every event kind, its glyph, colour role, list label and the chip that shows it:
 | Epidemic        | `☻`   | sick        | `epidemic`   | `disease`      |
 | EpidemicOver    | `☻`   | dim         | `burnt out`  | `disease`      |
 | Recovery        | `☻`   | good        | `recovery`   | `disease`      |
+| Wary            | `!`   | warn        | `wary`       | `wary`         |
 | Season          | `☼`   | title       | `season`     | *(none — `all` only)* |
 | Note            | `¶`   | text        | `note`       | *(none — `all` only)* |
 

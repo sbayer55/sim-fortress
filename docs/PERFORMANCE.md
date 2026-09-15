@@ -51,6 +51,14 @@ deeper pass (caching nearest-water/graze per cell, or reducing perception
 frequency) is the next step; it was not completed in this chunk and the
 3 000 ticks/s budget is **not yet met**.
 
+C5 `FR5b` added the wary tier to the same hot loop: each (predator, prey) visit in
+`mark_threats` now also keeps the nearest detected *non-danger* predator, which is two
+extra comparisons and three `PreySnap` writes with no allocation, no new query and no
+reordering; `move_speed` was factored out of `move_toward` and `preempt_prey` out of
+`update_one` (pure code motion). The table above predates that change and was **not**
+re-measured; the added work is O(1) per pair the threat scan already visits, so the
+measured budget and its open status are unchanged.
+
 ## UI budget
 
 Target: ≥ 30 FPS at x25 with 3 000 creatures on 200×60.

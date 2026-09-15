@@ -237,6 +237,10 @@ fn follow_location(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, c: &
                 None => "seeking a mate".to_string(),
             },
             Goal::Wander if follows_mother => "near its mother".to_string(),
+            Goal::Wary => match c.wary_by {
+                Some((px, py, _)) => format!("giving a predator room ({:.0} cells)", crate::sim::dist(c.x, c.y, px, py)),
+                None => "giving a predator room".to_string(),
+            },
             _ => String::new(),
         };
         util::line(f, inner, row, Line::from(vec![

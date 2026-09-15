@@ -30,7 +30,12 @@ pub(super) fn summary(f: &mut Frame<'_>, area: Rect, sim: &Sim, id: SpeciesId) {
     util::line(f, left, row, Line::from(vec![
         sp(format!(" {} alive  {} adults  {} juveniles  generation {}  peak {}", s.count, s.adults, s.juveniles, s.generation, s.peak), theme::dim_text()),
     ]));
-    row += 2;
+    row += 1;
+    // C8 follow-up: the group sizes the cohesion rule holds together, on the
+    // blank row the counts line used to leave (the left column has no spare
+    // rows; the full size distribution is S05e).
+    summary_group_line(f, left, row, sim, id);
+    row += 1;
     panel::section(f, left, row, "Base genome vs current mean");
     row += 1;
     util::line(f, left, row, Line::from(sp(" trait        base   current            delta   spread", theme::dim_text())));
@@ -123,6 +128,7 @@ fn prey_interactions(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: Spe
             sp(others.join(" and "), theme::text()),
             sp(" for grass", theme::dim_text()),
         ]));
+        row += 1;
     susceptibility_lines(f, left, row, sim, id)
 }
 
@@ -163,6 +169,7 @@ fn predator_interactions(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id:
             sp(if rivals.is_empty() { "no one".to_string() } else { rivals.join(" and ") }, theme::text()),
             sp(" for prey", theme::dim_text()),
         ]));
+        row += 1;
     susceptibility_lines(f, left, row, sim, id)
 }
 
@@ -188,6 +195,39 @@ fn susceptibility_lines(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: 
     ]));
     row += 2;
     row
+}
+
+/// C8 follow-up: one line on the group sizes the cohesion rule holds together —
+/// how many herds/packs, their mean and max size, and how much of the species
+/// is grouped. The full size distribution is S05e. Fits the blank row under the
+/// counts line, so the left column below it does not move.
+fn summary_group_line(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: SpeciesId) {
+    let g = &sim.group_stats;
+    let i = id.index();
+    if sim.species[i].count == 0 {
+        util::line(f, left, row, Line::from(sp(" groups: none living", theme::dim_text())));
+        return;
+    }
+    let word = if id.kind() == Kind::Prey { "herd" } else { "pack" };
+    if g.groups[i] == 0 {
+        util::line(f, left, row, Line::from(sp(format!(" groups: none forming — all {} alone", sim.species[i].count), theme::dim_text())));
+        return;
+    }
+    let noun = if g.groups[i] == 1 { word.to_string() } else { format!("{word}s") };
+    util::line(f, left, row, Line::from(vec![
+        sp(" groups: ", theme::dim_text()),
+        sp(format!("{} {noun}", g.groups[i]), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+        sp(
+            format!(
+                ", mean {:.1}, max {}, {:.0}% grouped, {} alone",
+                g.mean[i],
+                g.max[i],
+                g.grouped_share(i, sim.species[i].count) * 100.0,
+                g.solo(i),
+            ),
+            theme::dim_text(),
+        ),
+    ]));
 }
 
 /// Notable living individuals of the selected species.
@@ -316,6 +356,8 @@ fn history_plot(f: &mut Frame<'_>, right: Rect, row: u16, id: SpeciesId, data: &
 
 /// Living individuals per region, two columns at a time.
 fn habitat_section(f: &mut Frame<'_>, right: Rect, mut row: u16, sim: &Sim, id: SpeciesId) {
+    // The section header the cleanup wave dropped (S04 content requirement 14).
+    panel::section(f, right, row, "Habitat (living individuals by region)");
     row += 1;
     let mut per_region: Vec<(&str, usize)> = sim.world.regions.iter().map(|r| (r.0.as_str(), 0usize)).collect();
     for c in sim.creatures.living().filter(|c| c.species == id) {

@@ -167,7 +167,8 @@ classDiagram
    positions newest first as `(x,y)` pairs, or `no recent movement`. For a corpse show
    `carcass marked % on the map` instead.
    Distance uses map cells with the 2:1 aspect corrected (x difference halved); compass
-   is one of `N S E W NE NW SE SW` or `here`.
+   is one of `N S E W NE NW SE SW` or `here`. A creature in the C5 `FR5b` wary tier reads
+   `wary — a predator <d> cells away`.
 6. **Vitals section (alive only).** Four labelled 24-cell bars: `health`, `hunger`,
    `thirst`, `energy`, each with a one-word note to the right (`healthy/injured/critical`,
    `sated/peckish/starving`, `fine/thirsty/parched`, `rested/tiring/exhausted`). Bar and
@@ -251,7 +252,8 @@ classDiagram
     ` (+.NN sick prey)` in the sick colour when the target is infectious
     (`kill_sick_bonus × severity`).
 22. **Survival (S03a only).** `chased <n> times, escaped <n> (<pct>%)`, an `escape rate`
-    bar (good colour), a `threats seen` list with one bar per predator species and its
+    bar (good colour), `grew wary of predators <n> times` (C5 `FR5b`), a `threats seen`
+    list with one bar per predator species and its
     share, and `litters <n>  last: Y<y> D<d> (<n> young, <n> survived)`.
 23. **Legacy (S03c only).** `<n> offspring alive, <n> descendants`, a line naming a
     mutation carried by descendants, and `carcass feeds: wolves <n>  foxes <n>  soil

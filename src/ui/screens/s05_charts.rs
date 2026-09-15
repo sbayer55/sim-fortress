@@ -14,6 +14,7 @@ use time::{time_chart, time_sidebar};
 use phase::{phase_chart, phase_sidebar};
 use stacked::{stacked_chart, stacked_sidebar};
 use infections::{infection_chart, infection_sidebar};
+use groups::{group_chart, group_sidebar};
 
 const CHART_W: u16 = 112;
 
@@ -24,6 +25,7 @@ pub enum Variant {
     Phase,
     Stacked,
     Infections,
+    Groups,
 }
 
 #[derive(Debug)]
@@ -56,7 +58,8 @@ impl Screen for Charts {
                     Variant::Time => Variant::Phase,
                     Variant::Phase => Variant::Stacked,
                     Variant::Stacked => Variant::Infections,
-                    Variant::Infections => Variant::Time,
+                    Variant::Infections => Variant::Groups,
+                    Variant::Groups => Variant::Time,
                 };
                 Action::None
             }
@@ -74,6 +77,10 @@ impl Screen for Charts {
             }
             KeyCode::Char('4') => {
                 self.variant = Variant::Infections;
+                Action::None
+            }
+            KeyCode::Char('5') => {
+                self.variant = Variant::Groups;
                 Action::None
             }
             KeyCode::Char('+') => {
@@ -123,15 +130,20 @@ impl Screen for Charts {
                 infection_chart(f, chart_area, sim, &window);
                 infection_sidebar(f, side_area, sim, &window);
             }
+            Variant::Groups => {
+                group_chart(f, chart_area, sim);
+                group_sidebar(f, side_area, sim);
+            }
         }
 
         let view = match self.variant {
-            Variant::Time => "chart 1/4  populations",
-            Variant::Phase => "chart 2/4  phase plot",
-            Variant::Stacked => "chart 3/4  stacked species",
-            Variant::Infections => "chart 4/4  infections",
+            Variant::Time => "chart 1/5  populations",
+            Variant::Phase => "chart 2/5  phase plot",
+            Variant::Stacked => "chart 3/5  stacked species",
+            Variant::Infections => "chart 4/5  infections",
+            Variant::Groups => "chart 5/5  group sizes",
         };
-        status::render(f, Rect::new(area.x, status_row, area.width, 1), &[("g", "next chart"), ("1-4", "pick"), ("+/-", "zoom"), ("Esc", "back")], view);
+        status::render(f, Rect::new(area.x, status_row, area.width, 1), &[("g", "next chart"), ("1-5", "pick"), ("+/-", "zoom"), ("Esc", "back")], view);
     }
 }
 
@@ -237,5 +249,6 @@ mod time;
 mod phase;
 mod stacked;
 mod infections;
+mod groups;
 #[cfg(test)]
 mod tests;

@@ -75,8 +75,9 @@ flowchart LR
 
 ## Data model
 The screen reads the per-species statistics for all species, the base genome of each
-species, the 240-day population series, living creatures (for notable individuals and
-habitat), the world regions and the clock.
+species, the 240-day population series, the group-size census (`Sim.group_stats`, a
+midnight snapshot), living creatures (for notable individuals and habitat), the world
+regions and the clock.
 
 ```mermaid
 classDiagram
@@ -125,12 +126,22 @@ classDiagram
         regions : Vec~Region~
         region_name()
     }
+    class GroupCensus {
+        groups : u32 x6
+        members : u32 x6
+        mean : f32 x6
+        max : u16 x6
+        hist : u32 x6x16
+        solo(i)
+        grouped_share(i, pop)
+    }
     Species --> SpeciesId
     Species --> Genome : mean / min / max / drift[]
     SpeciesId --> Genome : base_genome
     Series ..> SpeciesId
     Creature --> SpeciesId
     Creature ..> World : region
+    GroupCensus ..> SpeciesId
 ```
 
 ## Content requirements
@@ -157,6 +168,13 @@ classDiagram
 5. **Identity line.** Glyph, plural name (title style), kind word and `diet: <diet>`.
 6. **Counts line** (dim). `<count> alive  <adults> adults  <juveniles> juveniles
    generation <g>  peak <peak>`.
+6a. **Group summary** (*live since: the C8 group-size follow-up*), on the row the counts
+   line used to leave blank: `groups: <n> herds|packs, mean <mean>, max <max>, <pct>%
+   grouped, <solo> alone`, or `groups: none forming — all <count> alone` when no
+   multi-member group exists, or `groups: none living`. The herd/pack word follows the
+   species kind, and `mean`/`max` count the multi-member groups only. Source:
+   `Sim.group_stats` (`sim::stats::groups`); the full size distribution is on
+   [S05e](s05-population-charts.md).
 7. **Base genome vs current mean.** Header `trait  base  current  delta  spread`, then
    one row per trait: name, base value (dim), current mean, a 14-cell bar of the mean in
    the trait colour with a bright `│` marker at the base value, `±delta` coloured

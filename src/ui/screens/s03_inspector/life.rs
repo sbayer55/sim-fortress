@@ -147,6 +147,8 @@ fn survival_stats(f: &mut Frame<'_>, inner: Rect, mut row: u16, c: &Creature) ->
     let escape_rate = if c.chased > 0 { crate::cast!(c.escaped => f32) / crate::cast!(c.chased => f32) } else { 0.0 };
     util::line(f, inner, row, Line::from(sp(format!(" chased {} times, escaped {} ({:.0}%)", c.chased, c.escaped, escape_rate * 100.0), theme::text())));
     row += 1;
+    util::line(f, inner, row, Line::from(sp(format!(" grew wary of predators {} times", c.wary_count), theme::text())));
+    row += 1;
     bars::labeled(f.buffer_mut(), inner, row, " escape rate", escape_rate, theme::GOOD, 16, 16);
     row += 1;
     panel::section(f, inner, row, "Threats seen");

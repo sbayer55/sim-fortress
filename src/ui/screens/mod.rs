@@ -444,6 +444,11 @@ mod tests {
         f.toggle(2);
         f.toggle(3);
         assert!(f.all);
+        // Key 9 selects the wary chip (C5 FR5b).
+        f.toggle(9);
+        assert!(!f.all);
+        assert!(f.matches(EventKind::Wary));
+        assert!(!f.matches(EventKind::Birth));
     }
 
     #[test]
@@ -477,7 +482,7 @@ mod tests {
         let mut f = ChipFilter::new();
         // Key 8 is the disease chip; disease deaths live under deaths (key 3).
         f.toggle(8);
-        assert_eq!(f.kinds, [false, false, false, false, false, false, true]);
+        assert_eq!(f.kinds, [false, false, false, false, false, false, true, false]);
         assert!(f.matches(EventKind::Epidemic));
         assert!(!f.matches(EventKind::DeathDisease));
         f.toggle(3);

@@ -13,8 +13,9 @@ use crate::sim::Sim;
 /// File magic: `b"SIMF"`.
 pub const MAGIC: [u8; 4] = *b"SIMF";
 /// Current on-disk format version. A newer version is rejected (FR1), and so is
-/// an older one: C8 widened the genome, so pre-C8 files cannot be read.
-pub const VERSION: u16 = 3;
+/// an older one: C8 widened the genome and C5 `FR5b` added the wary state, so
+/// pre-wary files cannot be read.
+pub const VERSION: u16 = 4;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 
@@ -211,6 +212,8 @@ fn decode(bytes: &[u8]) -> Result<(SaveHeader, Sim), SaveError> {
     let header: SaveHeader = postcard::from_bytes(&bytes[10..10 + header_len])?;
     let mut sim: Sim = postcard::from_bytes(&bytes[10 + header_len..])?;
     sim.rebuild_spatial();
+    // Group statistics are not serialised: rebuild them from the loaded positions.
+    sim.refresh_group_stats();
     Ok((header, sim))
 }
 

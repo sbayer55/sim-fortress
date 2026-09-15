@@ -22,16 +22,16 @@ const DETAIL_W: u16 = 55;
 const MINI_W: u16 = 25;
 const MINI_H: u16 = 9;
 
-/// The S07 filter-chip state. `all` is active, or a subset of the seven kinds.
+/// The S07 filter-chip state. `all` is active, or a subset of the eight kinds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ChipFilter {
     pub all: bool,
-    /// births, deaths, mutations, migrations, extinctions, droughts, disease.
-    pub kinds: [bool; 7],
+    /// births, deaths, mutations, migrations, extinctions, droughts, disease, wary.
+    pub kinds: [bool; KIND_CHIPS],
 }
 
 /// Number of kind chips (everything but `all`).
-pub const KIND_CHIPS: usize = 7;
+pub const KIND_CHIPS: usize = 8;
 
 impl Default for ChipFilter {
     fn default() -> Self {
@@ -44,7 +44,7 @@ impl ChipFilter {
         Self { all: true, kinds: [false; KIND_CHIPS] }
     }
 
-    /// Toggle chip `key` (1 = all, 2..=8 = births..disease).
+    /// Toggle chip `key` (1 = all, 2..=9 = births..wary).
     pub fn toggle(&mut self, key: usize) {
         if key == 1 {
             self.all = true;
@@ -99,6 +99,7 @@ impl ChipFilter {
             EventKind::Extinction => self.kinds[4],
             EventKind::Drought | EventKind::DroughtEased => self.kinds[5],
             EventKind::Outbreak | EventKind::Spillover | EventKind::Epidemic | EventKind::EpidemicOver | EventKind::Recovery => self.kinds[6],
+            EventKind::Wary => self.kinds[7],
             EventKind::Season | EventKind::Note => false,
         }
     }
@@ -210,7 +211,7 @@ impl Screen for EventLog {
         let keys: &[(&str, &str)] = if detail {
             &[("↑↓", "select"), ("f", "filter"), ("Enter", "jump"), ("i", "inspect"), ("Esc", "back")]
         } else {
-            &[("↑↓", "select"), ("1-8", "chips"), ("f", "cycle"), ("Enter", "jump"), ("Esc", "back")]
+            &[("↑↓", "select"), ("1-9", "chips"), ("f", "cycle"), ("Enter", "jump"), ("Esc", "back")]
         };
         status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, &right);
     }
@@ -227,6 +228,7 @@ impl EventLog {
             ('‼', " extinctions", EventKind::Extinction),
             ('¡', " droughts", EventKind::Drought),
             (glyphs::DISEASE, " disease", EventKind::Outbreak),
+            (glyphs::ALERT, " wary", EventKind::Wary),
         ];
         let mut x = inner.x + 1;
         for (i, (glyph, name, kind)) in chips.iter().enumerate() {
@@ -239,7 +241,7 @@ impl EventLog {
             buf.set_stringn(x + 1, inner.y, name, name.chars().count(), if active { theme::selected() } else { theme::text() });
             x += 1 + crate::cast!(name.chars().count() => u16) + 1;
         }
-        let hint = "[f] cycles, [1-8] toggles";
+        let hint = "[f] cycles, [1-9] toggles";
         let hint_w = crate::cast!(hint.len() => u16);
         if x + 2 + hint_w <= inner.right() {
             f.buffer_mut().set_stringn(inner.right() - hint_w - 1, inner.y, hint, hint.len(), theme::dim_text());
@@ -492,11 +494,12 @@ mod tests {
         let mut s = EventLog::new();
         let all = screen_text(&app, &s);
         assert!(all.contains(&format!("{} disease", glyphs::DISEASE)), "eighth chip missing: {all}");
-        assert!(all.contains("[f] cycles, [1-8] toggles"), "{all}");
+        assert!(all.contains(&format!("{} wary", glyphs::ALERT)), "ninth chip missing: {all}");
+        assert!(all.contains("[f] cycles, [1-9] toggles"), "{all}");
 
         // Key 8 keeps only the disease kinds; disease deaths stay under deaths.
         s.handle_key(KeyEvent::new(KeyCode::Char('8'), KeyModifiers::NONE), &mut app);
-        assert_eq!(s.filter.kinds, [false, false, false, false, false, false, true]);
+        assert_eq!(s.filter.kinds, [false, false, false, false, false, false, true, false]);
         let text = screen_text(&app, &s);
         assert!(text.contains("breaks out"), "{text}");
         assert!(!text.contains("died of disease"), "{text}");

@@ -143,20 +143,31 @@ fn next_move(c: &mut Creature, world: &World, target: (usize, usize)) -> Option<
     })
 }
 
+/// The per-tick move speed: base plus the speed trait, scaled by adulthood and
+/// the caller's `speed_factor` (C7 sickness), then by the wary tier and the
+/// hunting chase bonus (FR4).
+fn move_speed(c: &Creature, cp: &CreaturesParams, pp: &PredationParams, speed_factor: f32) -> f32 {
+    let mut speed = cp.move_speed_base + cp.move_speed_per_trait * c.genome.speed();
+    speed = if c.adult { speed } else { speed * 0.75 };
+    // C7 FR6: sickness slows the animal; the chase bonus below is added after.
+    speed *= speed_factor;
+    // C5 FR5b: the wary tier is a slow backing-off, not a sprint.
+    if c.goal == Goal::Wary {
+        speed *= pp.wary_speed_factor;
+    }
+    // FR4: a hunting predator moves with the chase speed bonus.
+    if c.goal == Goal::Hunt && c.hunt_phase != HuntPhase::Eat {
+        speed += pp.chase_speed_bonus;
+    }
+    speed
+}
+
 pub(super) fn move_toward(c: &mut Creature, world: &World, time: &Time, cp: &CreaturesParams, pp: &PredationParams, speed_factor: f32) {
     if c.target.is_none() {
         c.path.clear();
         return;
     }
-    let mut speed = cp.move_speed_base + cp.move_speed_per_trait * c.genome.speed();
-    speed = if c.adult { speed } else { speed * 0.75 };
-    // C7 FR6: sickness slows the animal; the chase bonus below is added after.
-    speed *= speed_factor;
-    // FR4: a hunting predator moves with the chase speed bonus.
-    if c.goal == Goal::Hunt && c.hunt_phase != HuntPhase::Eat {
-        speed += pp.chase_speed_bonus;
-    }
-    c.move_budget = (c.move_budget + speed).min(2.0);
+    c.move_budget = (c.move_budget + move_speed(c, cp, pp, speed_factor)).min(2.0);
     // A path searched for an earlier target (a flee vector, a fled prey) must
     // not be followed toward the new one.
     if !c.path.is_empty() && c.path_for != c.target {

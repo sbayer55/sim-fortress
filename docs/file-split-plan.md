@@ -25,7 +25,8 @@ deleted so the ceiling is absolute.
 ```
 
 `cargo clippy --all-targets` → **0 warnings** · `cargo test` → **green** ·
-determinism checksum pinned at `0x348e3c6eeec2e6d6`.
+determinism pinned by `sim::tests::checksum_is_fnv_stable` (that value is
+re-baselined deliberately whenever behaviour changes).
 
 ---
 

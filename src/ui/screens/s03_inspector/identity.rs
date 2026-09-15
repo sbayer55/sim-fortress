@@ -213,12 +213,21 @@ fn identity_vitals(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &crate::si
         ]));
         row += 1;
     }
-    let line = match c.goal {
+    util::line(f, inner, row, Line::from(sp(goal_line(sim, c), theme::text())));
+}
+
+/// The Behaviour line: why the creature is doing what it is doing.
+fn goal_line(sim: &crate::sim::Sim, c: &Creature) -> String {
+    match c.goal {
         Goal::Drink => format!(" {} because thirst = {:.2}", c.goal.label(false), c.thirst),
         Goal::Graze => format!(" {} because hunger = {:.2}", c.goal.label(false), c.hunger),
         Goal::Rest => format!(" {} because energy = {:.2}", c.goal.label(false), c.energy),
         Goal::Mate => match c.mate_id {
             Some(m) => format!(" {} — heading for {}", c.goal.label(false), kin_name(sim, m)),
+            None => format!(" {}", c.goal.label(false)),
+        },
+        Goal::Wary => match c.wary_by {
+            Some((px, py, _)) => format!(" {} — a predator {:.0} cells away", c.goal.label(false), crate::sim::dist(c.x, c.y, px, py)),
             None => format!(" {}", c.goal.label(false)),
         },
         _ => {
@@ -228,8 +237,7 @@ fn identity_vitals(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &crate::si
                 format!(" {}", c.goal.label(false))
             }
         }
-    };
-    util::line(f, inner, row, Line::from(sp(line, theme::text())));
+    }
 }
 
 /// The death summary for a dead creature.
