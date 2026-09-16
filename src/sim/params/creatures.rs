@@ -25,6 +25,8 @@ pub struct CreaturesParams {
     pub move_speed_base: f32,
     pub move_speed_per_trait: f32,
     pub move_cost_energy: f32,
+    /// Extra move budget spent on every step into marsh (1.0 = a second step).
+    pub marsh_step_cost: f32,
     pub replan_ticks: u64,
     pub pressure_per_creature_tick: f32,
     pub pressure_decay_per_day: f32,
@@ -55,6 +57,7 @@ impl Default for CreaturesParams {
             move_speed_base: 0.5,
             move_speed_per_trait: 2.0,
             move_cost_energy: 0.002,
+            marsh_step_cost: 0.5,
             replan_ticks: 6,
             pressure_per_creature_tick: 0.02,
             pressure_decay_per_day: 0.85,

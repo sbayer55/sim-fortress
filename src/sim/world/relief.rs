@@ -1,13 +1,15 @@
 //! Relief: a seeded tectonic height field aged by a landscape-evolution
 //! model. Each epoch of `age` routes drainage over the current surface,
 //! incises channels with the stream-power law (implicit in elevation, so any
-//! epoch length is stable) and relaxes hillslopes by diffusion. A fresh
-//! seeded storm field modulates rainfall every epoch, so where the valleys
-//! cut is a mix of the seed's noise and its accumulated history.
+//! epoch length is stable) and relaxes hillslopes by diffusion. Long-run rain
+//! comes from the orographic sweep in `climate`, and a fresh seeded storm
+//! field modulates it every epoch, so where the valleys cut is a mix of the
+//! wind, the seed's noise and its accumulated history.
 
 use crate::sim::params::WorldParams;
 use crate::sim::rng::Rng;
 
+use super::climate::{self, Wind};
 use super::flow::{self, lowest, Flow, Grid};
 use super::noise::{Fbm, Noise};
 
@@ -28,6 +30,11 @@ const ROUGHNESS_SCALE: f32 = 2.5;
 const FILL_EPS: f32 = 1.0e-5;
 /// Share of the water target that is ocean base level during erosion.
 const BASE_LEVEL_SHARE: f32 = 0.6;
+/// Depressions at least this deep feed moisture to the wind (matches the
+/// lake threshold in `classify`).
+const LAKE_SOURCE_DEPTH: f32 = 0.004;
+/// Odds that the cold edge of the world is the north.
+const POLE_NORTH_CHANCE: f32 = 0.7;
 
 /// The finished relief, normalised to 0..=1.
 #[derive(Debug)]
@@ -38,16 +45,26 @@ pub(super) struct Relief {
     /// Drainage area in cells on the filled surface.
     pub(super) acc: Vec<f32>,
     pub(super) slope: Vec<f32>,
-    /// Long-run rainfall weight, 0.5..=1.5, from the seeded rain field.
+    /// Long-run rainfall weight, 0.5..=1.5, from the orographic sweep over
+    /// the finished surface.
     pub(super) rain: Vec<f32>,
+    /// Temperature 0 (cold) ..= 1 (hot).
+    pub(super) temperature: Vec<f32>,
+    pub(super) wind: Wind,
 }
 
 /// Build the relief for `params` from the generation `rng`.
 pub(super) fn build(rng: &mut Rng, grid: Grid, params: &WorldParams) -> Relief {
-    let (mut height, rain) = tectonics(rng, grid);
+    let wind = Wind::pick(rng);
+    let pole_north = rng.chance(POLE_NORTH_CHANCE);
+    let budget = climate::budget(params.rainfall);
+    let (mut height, rain_noise) = tectonics(rng, grid);
     normalise(&mut height);
     let mut fixed = vec![false; grid.len()];
     mark_base_level(&height, params.water_pct, &mut fixed);
+    // The wind sweeps the raw uplands, so erosion cuts hardest on the
+    // windward flanks and the lee stays dry and gentle.
+    let rain = climate::rain_field(grid, &height, &fixed, wind, budget, &rain_noise);
     for _ in 0..params.age {
         roughen(rng, grid, &mut height, &fixed);
         epoch(rng, grid, &mut height, &fixed, &rain);
@@ -61,13 +78,23 @@ pub(super) fn build(rng: &mut Rng, grid: Grid, params: &WorldParams) -> Relief {
     let filled = flow::fill_depressions(grid, &height, &outlet, FILL_EPS);
     let routed = flow::route(grid, &filled, &outlet);
     let acc = flow::accumulate(&routed, &vec![1.0f32; grid.len()]);
-    let depth = filled.iter().zip(&height).map(|(f, h)| f - h).collect();
+    let depth: Vec<f32> = filled.iter().zip(&height).map(|(f, h)| f - h).collect();
     let slope = flow::slopes(grid, &height);
-    Relief { height, depth, acc, slope, rain }
+    // Re-sweep the finished surface: the ocean and the lakes it now holds
+    // are the moisture sources the living world sees.
+    let mut source = vec![false; grid.len()];
+    mark_base_level(&height, params.water_pct, &mut source);
+    for (s, &d) in source.iter_mut().zip(&depth) {
+        *s |= d >= LAKE_SOURCE_DEPTH;
+    }
+    let rain = climate::rain_field(grid, &height, &source, wind, budget, &rain_noise);
+    let temperature = climate::temperature(rng, grid, &height, pole_north);
+    Relief { height, depth, acc, slope, rain, temperature, wind }
 }
 
 /// The unaged surface: warped continental noise with ridged mountain chains
-/// where the continent is high, plus the long-run rain field.
+/// where the continent is high, plus the seeded rain noise (0..=1) that the
+/// orographic sweep is blended with.
 fn tectonics(rng: &mut Rng, grid: Grid) -> (Vec<f32>, Vec<f32>) {
     let (sw, sh) = (crate::cast!(grid.w => f32), crate::cast!(grid.h => f32) * 2.0);
     let base = (sw.max(sh) / 5.0).max(22.0);
@@ -91,7 +118,7 @@ fn tectonics(rng: &mut Rng, grid: Grid) -> (Vec<f32>, Vec<f32>) {
         // Ridges only bite into the uplands; lowlands stay gently rolling.
         let upland = ((c - 0.4) / 0.35).clamp(0.0, 1.0);
         height.push(c * 0.7 + r * upland * 0.5);
-        rain.push(0.5 + rain_field.at(nx, ny));
+        rain.push(rain_field.at(nx, ny));
     }
     (height, rain)
 }

@@ -157,17 +157,17 @@ fn totals(f: &mut Frame<'_>, area: Rect, sim: &crate::sim::Sim, world: &World) {
 
     panel::section(f, inner, row, "Terrain");
     row += 1;
-    let mut counts = [0usize; 9];
+    let mut counts = [0usize; 10];
     for c in &world.cells {
         counts[crate::cast!(c.terrain => usize)] += 1;
     }
     let total = crate::cast!(world.cells.len().max(1) => f32);
-    let mut kinds: Vec<Terrain> = [Terrain::DeepWater, Terrain::ShallowWater, Terrain::Sand, Terrain::Dirt, Terrain::GrassSparse, Terrain::Grass, Terrain::GrassDense, Terrain::Forest, Terrain::Rock].to_vec();
+    let mut kinds: Vec<Terrain> = [Terrain::DeepWater, Terrain::ShallowWater, Terrain::Sand, Terrain::Dirt, Terrain::GrassSparse, Terrain::Grass, Terrain::GrassDense, Terrain::Forest, Terrain::Rock, Terrain::Marsh].to_vec();
     kinds.sort_by_key(|t| std::cmp::Reverse(counts[crate::cast!(*t => usize)]));
     let max = crate::cast!(counts.iter().copied().max().unwrap_or(1).max(1) => f32);
     for t in kinds {
         let n = counts[crate::cast!(t => usize)];
-        let (g, fg, _bg) = map::terrain_cell(&crate::sim::Cell { terrain: t, elevation: 0.0, moisture: 0.0, vegetation: 0.0, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 }, false);
+        let (g, fg, _bg) = map::terrain_cell(&crate::sim::Cell { terrain: t, elevation: 0.0, moisture: 0.0, temperature: 0.5, vegetation: 0.0, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 }, false);
         let buf = f.buffer_mut();
         let y = inner.y + row;
         buf.set_stringn(inner.x + 1, y, format!("{g} "), 2, Style::default().fg(fg).bg(theme::PANEL_BG));

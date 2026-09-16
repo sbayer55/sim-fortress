@@ -32,7 +32,7 @@ pub struct EcologyParams {
 
 impl Default for EcologyParams {
     fn default() -> Self {
-        use Terrain::{Sand, Dirt, GrassSparse, Grass, GrassDense, Forest};
+        use Terrain::{Sand, Dirt, GrassSparse, Grass, GrassDense, Forest, Marsh};
         Self {
             regrowth_rate: 1.0,
             // C4 balance lever (C2 shipped 0.08); see docs/chunks/c4-evolution.md FR1.
@@ -54,6 +54,7 @@ impl Default for EcologyParams {
                 (Grass, 0.80),
                 (GrassDense, 1.00),
                 (Forest, 0.85),
+                (Marsh, 0.90),
             ]),
             season_cap: BTreeMap::from([
                 (Season::Spring, 1.0),

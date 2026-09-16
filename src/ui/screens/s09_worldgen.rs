@@ -714,7 +714,7 @@ fn preview_panel(f: &mut Frame<'_>, area: Rect, form: &WorldGenForm) {
     let world = &form.preview;
     // Smallest zoom-out (at least 1:2) at which the whole world fits 75x20.
     let scale = world.width().div_ceil(75).max(world.height().div_ceil(20)).max(2);
-    let hint = format!("seed {}, {}x{} at 1:{}", form.seed_text, world.width(), world.height(), scale);
+    let hint = format!("seed {}, {}x{} at 1:{}, {} wind", form.seed_text, world.width(), world.height(), scale, world.wind.name());
     let inner = panel::draw_with_hint(f, area, "Preview", &hint, panel::Kind::Outer);
 
     let iw = crate::cast!(world.width().div_ceil(scale) => u16);
@@ -749,6 +749,7 @@ fn preview_panel(f: &mut Frame<'_>, area: Rect, form: &WorldGenForm) {
         ("meadow", glyphs::GRASS_DENSE, theme::GRASS_DENSE_FG, c[6]),
         ("forest", glyphs::FOREST, theme::FOREST_FG, c[7]),
         ("rock", glyphs::ROCK, theme::ROCK_FG, c[8]),
+        ("marsh", glyphs::MARSH, theme::MARSH_FG, c[9]),
     ];
     let half = inner.width.div_euclid(2);
     for (i, (name, g, color, n)) in groups.iter().enumerate() {
@@ -763,9 +764,9 @@ fn preview_panel(f: &mut Frame<'_>, area: Rect, form: &WorldGenForm) {
         bars::bar(buf, x + 14, y, 14, frac, *color);
         buf.set_stringn(x + 29, y, format!("{:>3}% {:>4}", crate::cast!((frac * 100.0).round() => u32), n), 9, theme::dim_text());
     }
-    row += 4;
+    row += 5;
 
-    let forage = c[4] + c[5] + c[6] + c[7];
+    let forage = c[4] + c[5] + c[6] + c[7] + c[9];
     let prey_cap = crate::cast!((crate::cast!(forage => f32) * 0.35) => u32);
     let pred_cap = prey_cap.div_euclid(8);
     util::line(f, inner, row, Line::from(vec![
@@ -774,8 +775,8 @@ fn preview_panel(f: &mut Frame<'_>, area: Rect, form: &WorldGenForm) {
     ]));
 }
 
-fn terrain_counts(world: &World) -> [usize; 9] {
-    let mut c = [0usize; 9];
+fn terrain_counts(world: &World) -> [usize; 10] {
+    let mut c = [0usize; 10];
     for cell in &world.cells {
         c[crate::cast!(cell.terrain => usize)] += 1;
     }

@@ -42,7 +42,7 @@ core=0
 
 for f in $changed; do
     case "$f" in
-        Cargo.toml|Cargo.lock|src/lib.rs|src/sim/mod.rs|src/sim/rng.rs|src/sim/time.rs|src/sim/spatial.rs|src/sim/geom.rs|src/sim/species.rs|src/sim/events.rs|src/sim/creatures.rs|src/sim/world.rs)
+        Cargo.toml|Cargo.lock|src/lib.rs|src/sim/mod.rs|src/sim/rng.rs|src/sim/time.rs|src/sim/spatial.rs|src/sim/geom.rs|src/sim/species.rs|src/sim/events.rs|src/sim/creatures.rs|src/sim/world.rs|src/sim/world/*)
             core=1 ;;
         src/main.rs)                              chunks[headless]=1 ;;
         src/sim/save.rs)                          units[sim::save]=1; chunks[headless]=1 ;;

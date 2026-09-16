@@ -42,6 +42,8 @@ pub const FOREST_FG: Color = Color::Rgb(36, 118, 52);
 pub const FOREST_BG: Color = Color::Rgb(12, 34, 18);
 pub const ROCK_FG: Color = Color::Rgb(156, 156, 160);
 pub const ROCK_BG: Color = Color::Rgb(54, 54, 58);
+pub const MARSH_FG: Color = Color::Rgb(78, 160, 128);
+pub const MARSH_BG: Color = Color::Rgb(16, 46, 44);
 pub const SNOW_FG: Color = Color::Rgb(240, 244, 250);
 pub const SNOW_BG: Color = Color::Rgb(118, 124, 140);
 

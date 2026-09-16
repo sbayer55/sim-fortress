@@ -21,7 +21,10 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// (erosion-based world generation) and made the species roster configurable:
 /// every per-species table became a `Vec` and the header carries the roster
 /// labels (a version-4 header still decodes so old files stay listable).
-pub const VERSION: u16 = 5;
+/// Version 6 added the per-cell temperature and the world's prevailing wind
+/// (climate physics); version 7 added the `Marsh` terrain and the marsh step
+/// cost parameter (wetlands and riparian corridors).
+pub const VERSION: u16 = 7;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 
@@ -446,7 +449,10 @@ mod tests {
         };
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&MAGIC);
-        bytes.extend_from_slice(&(VERSION - 1).to_le_bytes());
+        // Tagged as version 4, the last format with the fixed-six header
+        // (`read_header` only takes the legacy path below version 5).
+        let v4_version: u16 = 4;
+        bytes.extend_from_slice(&v4_version.to_le_bytes());
         let header_bytes = postcard::to_allocvec(&v4).unwrap();
         bytes.extend_from_slice(&(crate::cast!(header_bytes.len() => u32)).to_le_bytes());
         bytes.extend_from_slice(&header_bytes);
@@ -455,7 +461,7 @@ mod tests {
         std::fs::write(&path, &bytes).unwrap();
         match load(&path) {
             Err(SaveError::OlderVersion { found, supported }) => {
-                assert_eq!(found, VERSION - 1);
+                assert_eq!(found, v4_version);
                 assert_eq!(supported, VERSION);
             }
             other => panic!("expected OlderVersion, got {other:?}"),
@@ -467,7 +473,7 @@ mod tests {
         // player try it.
         let entries = list_saves(&dir);
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].version, VERSION - 1);
+        assert_eq!(entries[0].version, v4_version);
         let old = read_header(&path).unwrap();
         assert_eq!(old.counts, vec![1, 2, 3, 4, 5, 6]);
         assert_eq!(old.species.len(), 6, "the v4 header is labelled with the fixed six species");
@@ -514,7 +520,7 @@ mod tests {
         assert_eq!(rows.len(), 4);
         for r in &rows {
             assert_eq!(r.len(), 120);
-            assert!(r.iter().all(|&c| c <= 8 || c == BLANK_TERRAIN));
+            assert!(r.iter().all(|&c| c <= 9 || c == BLANK_TERRAIN));
         }
         // Default world is 150 wide: no blank padding (centre 120 of 150).
         assert!(rows[0].iter().all(|&c| c != BLANK_TERRAIN));

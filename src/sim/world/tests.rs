@@ -1,9 +1,10 @@
 #![allow(clippy::float_cmp)]
 
 use super::*;
+use crate::sim::params::Rainfall;
 
-fn counts(world: &World) -> [usize; 9] {
-    let mut c = [0usize; 9];
+fn counts(world: &World) -> [usize; 10] {
+    let mut c = [0usize; 10];
     for cell in &world.cells {
         c[crate::cast!(cell.terrain => usize)] += 1;
     }
@@ -38,9 +39,9 @@ fn target_percentages_20_seeds() {
 }
 
 /// Count each terrain type in the top and bottom halves of `world`.
-fn split_halves(world: &World, w: usize, h: usize) -> ([usize; 9], [usize; 9]) {
-    let mut top = [0usize; 9];
-    let mut bottom = [0usize; 9];
+fn split_halves(world: &World, w: usize, h: usize) -> ([usize; 10], [usize; 10]) {
+    let mut top = [0usize; 10];
+    let mut bottom = [0usize; 10];
     for y in 0..h {
         for x in 0..w {
             let t = crate::cast!(world.cell(x, y).terrain => usize);
@@ -143,4 +144,209 @@ fn water_forms_bodies_not_speckle() {
     }
     let water = world.water_cells_at_generation;
     assert!(lonely * 50 < water, "{lonely} isolated water cells of {water}");
+}
+
+/// Downwind offset for `wind`, in cells.
+const fn downwind(wind: Wind) -> (i64, i64) {
+    match wind {
+        Wind::Westerly => (1, 0),
+        Wind::Easterly => (-1, 0),
+        Wind::Northerly => (0, 1),
+        Wind::Southerly => (0, -1),
+    }
+}
+
+#[test]
+fn rain_shadows_lie_downwind() {
+    // On the steepest land, the cell a few steps upwind is wetter than the
+    // cell a few steps downwind: ridges rain out the windward flank and
+    // shade the lee.
+    let params = WorldParams::default();
+    let grid = flow::Grid { w: params.width, h: params.height };
+    let mut seeds_with_shadow = 0;
+    for seed in 1..=20u64 {
+        let mut rng = Rng::new(seed);
+        let relief = relief::build(&mut rng, grid, &params);
+        let (dx, dy) = downwind(relief.wind);
+        let mut order: Vec<usize> = (0..grid.len()).collect();
+        order.sort_by(|&a, &b| relief.slope[b].total_cmp(&relief.slope[a]));
+        let (mut windward, mut lee, mut n) = (0.0f32, 0.0f32, 0);
+        for &i in order.iter().take(grid.len().div_euclid(20)) {
+            let (x, y) = (crate::cast!(i % grid.w => i64), crate::cast!(i.div_euclid(grid.w) => i64));
+            let (ux, uy) = (x - 3 * dx, y - 3 * dy);
+            let (lx, ly) = (x + 3 * dx, y + 3 * dy);
+            let inside = |x: i64, y: i64| x >= 0 && y >= 0 && x < crate::cast!(grid.w => i64) && y < crate::cast!(grid.h => i64);
+            if inside(ux, uy) && inside(lx, ly) {
+                let at = |x: i64, y: i64| relief.rain[crate::cast!(y => usize) * grid.w + crate::cast!(x => usize)];
+                windward += at(ux, uy);
+                lee += at(lx, ly);
+                n += 1;
+            }
+        }
+        assert!(n > 0, "seed {seed}");
+        if windward > lee {
+            seeds_with_shadow += 1;
+        }
+    }
+    assert!(seeds_with_shadow >= 18, "{seeds_with_shadow} of 20 seeds have rain shadows downwind");
+}
+
+#[test]
+fn temperature_falls_with_height_and_latitude() {
+    for seed in 1..=10u64 {
+        let world = World::generate(seed, &WorldParams::default());
+        let (w, h) = (world.width, world.height);
+        // Within a row latitude is constant, so the correlation of temperature
+        // against elevation there is the lapse rate: clearly negative.
+        let mut rows_r = 0.0f32;
+        for y in 0..h {
+            let n = crate::cast!(w => f32);
+            let mean_t = (0..w).map(|x| world.cell(x, y).temperature).sum::<f32>() / n;
+            let mean_e = (0..w).map(|x| world.cell(x, y).elevation).sum::<f32>() / n;
+            let (mut cov, mut var_t, mut var_e) = (0.0f32, 0.0f32, 0.0f32);
+            for x in 0..w {
+                let (dt, de) = (world.cell(x, y).temperature - mean_t, world.cell(x, y).elevation - mean_e);
+                cov += dt * de;
+                var_t += dt * dt;
+                var_e += de * de;
+            }
+            rows_r += cov / (var_t * var_e).sqrt().max(1.0e-6);
+        }
+        let r = rows_r / crate::cast!(h => f32);
+        assert!(r < -0.5, "seed {seed}: mean per-row temperature/elevation correlation {r:.2}");
+        // One edge of the world is the cold one; the other is much warmer.
+        let row_mean = |y: usize| (0..w).map(|x| world.cell(x, y).temperature).sum::<f32>() / crate::cast!(w => f32);
+        let (top, bottom) = (row_mean(0), row_mean(h - 1));
+        assert!((top - bottom).abs() > 0.3, "seed {seed}: rows {top:.2} / {bottom:.2}");
+    }
+}
+
+#[test]
+fn rainfall_setting_scales_moisture() {
+    let land_moisture = |rainfall: Rainfall, seed: u64| {
+        let world = World::generate(seed, &WorldParams { rainfall, ..WorldParams::default() });
+        let land: Vec<f32> = world.cells.iter().filter(|c| !c.terrain.is_water()).map(|c| c.moisture).collect();
+        land.iter().sum::<f32>() / crate::cast!(land.len() => f32)
+    };
+    for seed in 1..=5u64 {
+        let (dry, normal, wet) = (land_moisture(Rainfall::Dry, seed), land_moisture(Rainfall::Normal, seed), land_moisture(Rainfall::Wet, seed));
+        assert!(dry < normal && normal < wet, "seed {seed}: dry {dry:.3} normal {normal:.3} wet {wet:.3}");
+        assert!((normal - 0.5).abs() < 0.12, "seed {seed}: normal land moisture {normal:.3}");
+    }
+}
+
+#[test]
+#[ignore = "diagnostic: prints moisture and terrain bands per climate"]
+fn print_climate_bands() {
+    for rainfall in [Rainfall::Dry, Rainfall::Normal, Rainfall::Wet] {
+        let mut acc = [0usize; 10];
+        let mut moist = 0.0f32;
+        let mut land = 0usize;
+        let mut winds = std::collections::BTreeMap::new();
+        for seed in 1..=10u64 {
+            let world = World::generate(seed, &WorldParams { rainfall, ..WorldParams::default() });
+            *winds.entry(world.wind.name()).or_insert(0) += 1;
+            for (i, c) in counts(&world).iter().enumerate() {
+                acc[i] += c;
+            }
+            for c in world.cells.iter().filter(|c| !c.terrain.is_water()) {
+                moist += c.moisture;
+                land += 1;
+            }
+        }
+        let total = crate::cast!(acc.iter().sum::<usize>() => f32);
+        let pct: Vec<String> = acc.iter().map(|&n| format!("{:.1}", crate::cast!(n => f32) / total * 100.0)).collect();
+        println!("{rainfall:?}: land moisture {:.3}; water/shallow/sand/dirt/sparse/grass/dense/forest/rock/marsh = {} winds {winds:?}", moist / crate::cast!(land => f32), pct.join("/"));
+    }
+}
+
+#[test]
+fn marsh_lies_on_flat_wet_land() {
+    // Marsh is the bottom slope quintile of the land and never bone dry; it
+    // appears on every default seed and touches water or a catchment.
+    let params = WorldParams::default();
+    let grid = flow::Grid { w: params.width, h: params.height };
+    for seed in 1..=10u64 {
+        let world = World::generate(seed, &params);
+        // `generate` draws the relief first from a fresh rng, so rebuilding it
+        // from the seed reproduces the slope field the cells were cut from.
+        let relief = relief::build(&mut Rng::new(seed), grid, &params);
+        let mut land_slopes: Vec<f32> = world.cells.iter().enumerate().filter(|(_, c)| !c.terrain.is_water()).map(|(i, _)| relief.slope[i]).collect();
+        land_slopes.sort_by(f32::total_cmp);
+        let quintile = land_slopes[land_slopes.len().div_euclid(5)];
+        let marsh: Vec<usize> = world.cells.iter().enumerate().filter(|(_, c)| c.terrain == Terrain::Marsh).map(|(i, _)| i).collect();
+        assert!(!marsh.is_empty(), "seed {seed}: no marsh");
+        assert!(marsh.len() * 100 <= world.cells.len() * 6, "seed {seed}: {} marsh cells", marsh.len());
+        for &i in &marsh {
+            assert!(relief.slope[i] <= quintile, "seed {seed}: marsh at {i} on slope {}", relief.slope[i]);
+            assert!(world.cells[i].moisture >= 0.55, "seed {seed}: marsh at {i} with moisture {}", world.cells[i].moisture);
+        }
+        // Marsh is a drinking spot in itself.
+        let (x, y) = (marsh[0] % world.width, marsh[0].div_euclid(world.width));
+        assert!(world.is_shore(x, y));
+    }
+}
+
+/// In-bounds cell index for `(x + dx, y + dy)`, if any.
+fn offset(world: &World, x: usize, y: usize, dx: i64, dy: i64) -> Option<usize> {
+    let (nx, ny) = (crate::cast!(x => i64) + dx, crate::cast!(y => i64) + dy);
+    (nx >= 0 && ny >= 0 && nx < crate::cast!(world.width => i64) && ny < crate::cast!(world.height => i64))
+        .then(|| crate::cast!(ny => usize) * world.width + crate::cast!(nx => usize))
+}
+
+/// A river cell: shallow water with no deep water within two cells.
+fn is_river(world: &World, x: usize, y: usize) -> bool {
+    if world.cell(x, y).terrain != Terrain::ShallowWater {
+        return false;
+    }
+    let mut deep = false;
+    for dy in -2i64..=2 {
+        for dx in -2i64..=2 {
+            deep |= offset(world, x, y, dx, dy).is_some_and(|j| world.cells[j].terrain == Terrain::DeepWater);
+        }
+    }
+    !deep
+}
+
+/// Chebyshev distance from every cell to the nearest river cell.
+fn river_distance(world: &World) -> Vec<usize> {
+    let w = world.width;
+    let mut dist = vec![usize::MAX; world.cells.len()];
+    let mut queue = std::collections::VecDeque::new();
+    for i in 0..world.cells.len() {
+        if is_river(world, i % w, i.div_euclid(w)) {
+            dist[i] = 0;
+            queue.push_back(i);
+        }
+    }
+    while let Some(i) = queue.pop_front() {
+        let (x, y) = (i % w, i.div_euclid(w));
+        for dy in -1i64..=1 {
+            for dx in -1i64..=1 {
+                let Some(j) = offset(world, x, y, dx, dy) else { continue };
+                if dist[j] == usize::MAX {
+                    dist[j] = dist[i] + 1;
+                    queue.push_back(j);
+                }
+            }
+        }
+    }
+    dist
+}
+
+#[test]
+fn rivers_carry_riparian_bands() {
+    // Land beside a river is wetter and greener than land a few cells away,
+    // even on a dry world: the corridor is where the forest and meadow go.
+    let params = WorldParams { rainfall: Rainfall::Dry, ..WorldParams::default() };
+    for seed in 1..=10u64 {
+        let world = World::generate(seed, &params);
+        let dist = river_distance(&world);
+        let mean_veg = |lo: usize, hi: usize| {
+            let cells: Vec<f32> = world.cells.iter().enumerate().filter(|(i, c)| !c.terrain.is_water() && c.terrain != Terrain::Rock && (lo..=hi).contains(&dist[*i])).map(|(_, c)| c.vegetation).collect();
+            cells.iter().sum::<f32>() / crate::cast!(cells.len().max(1) => f32)
+        };
+        let (bank, away) = (mean_veg(1, 1), mean_veg(5, 7));
+        assert!(bank > away * 1.1, "seed {seed}: bank vegetation {bank:.3} vs {away:.3} five cells out");
+    }
 }

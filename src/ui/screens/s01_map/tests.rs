@@ -98,9 +98,12 @@ fn s02h_disease_overlay_navigation() {
     screen.overlay = Overlay::Disease(None);
     let buf = draw(&screen, &app);
     s02h_assert_sidebar(&buf);
-    // The infectious creature draws in SICK when it is inside the viewport.
-    let ca = app.sim.as_ref().unwrap().creatures.get(a).unwrap();
-    if ca.x < 110 && ca.y < 40 {
+    // The infectious creature draws in SICK when it is inside the viewport
+    // and nothing else stands on its cell (a stacked creature draws on top).
+    let sim = app.sim.as_ref().unwrap();
+    let ca = sim.creatures.get(a).unwrap();
+    let alone = sim.creatures.living().filter(|c| c.x == ca.x && c.y == ca.y).count() == 1;
+    if alone && ca.x < 110 && ca.y < 40 {
         assert_eq!(buf[(crate::cast!(ca.x => u16) + 1, crate::cast!(ca.y => u16) + 1)].fg, theme::SICK);
     }
     s02h_assert_tab_cycle(&mut screen, &mut app);
@@ -167,7 +170,7 @@ fn s02i_parasite_ramp_and_cells() {
     // The ramp and the cell shading.
     assert_eq!(theme::parasite(0.5), theme::WARN);
     assert_eq!(theme::parasite(1.0), theme::BAD);
-    let cell = |terrain: Terrain, load: f32| Cell { terrain, elevation: 0.5, moisture: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: load };
+    let cell = |terrain: Terrain, load: f32| Cell { terrain, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: load };
     let (g, fg, _) = map::parasite_cell(&cell(Terrain::Dirt, 0.9));
     assert_eq!((g, fg), (glyphs::shade(0.9), theme::parasite(0.9)));
     assert_eq!(map::parasite_cell(&cell(Terrain::Dirt, 0.0)).0, glyphs::DIRT, "an empty shade shows the dirt glyph");

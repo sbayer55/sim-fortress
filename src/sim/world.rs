@@ -3,9 +3,10 @@
 //! Generation is a pipeline of sibling modules: `noise` supplies seeded
 //! fields, `relief` builds a tectonic surface and ages it with a
 //! landscape-evolution model (stream-power incision plus hillslope diffusion
-//! for `age` epochs), `flow` routes drainage over the result, and `classify`
-//! cuts water, rock, sand, forest and grass by quantile so the percentage
-//! targets hold on any seed.
+//! for `age` epochs), `climate` sweeps a prevailing wind over it for
+//! orographic rain and lays a temperature gradient, `flow` routes drainage
+//! over the result, and `classify` cuts water, rock, sand, forest and grass
+//! by quantile so the percentage targets hold on any seed.
 
 use serde::{Deserialize, Serialize};
 
@@ -13,11 +14,14 @@ use crate::sim::params::WorldParams;
 use crate::sim::rng::Rng;
 
 mod classify;
+mod climate;
 mod flow;
 mod noise;
 mod relief;
 #[cfg(test)]
 mod tests;
+
+pub use climate::Wind;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[repr(u8)]
@@ -32,6 +36,9 @@ pub enum Terrain {
     GrassDense = 6,
     Forest = 7,
     Rock = 8,
+    /// Reed beds on flat, wet ground beside water: drinkable, slow to cross,
+    /// dense cover.
+    Marsh = 9,
 }
 
 impl Terrain {
@@ -39,7 +46,7 @@ impl Terrain {
         matches!(self, Self::DeepWater | Self::ShallowWater)
     }
 
-    /// Map a serialised terrain code (`terrain as u8`, 0..=8) back to `Terrain`
+    /// Map a serialised terrain code (`terrain as u8`, 0..=9) back to `Terrain`
     /// (C6 FR1 title-screen strips). Codes outside the range fall back to Rock.
     pub const fn from_code(code: u8) -> Self {
         match code {
@@ -51,6 +58,7 @@ impl Terrain {
             5 => Self::Grass,
             6 => Self::GrassDense,
             7 => Self::Forest,
+            9 => Self::Marsh,
             _ => Self::Rock,
         }
     }
@@ -70,6 +78,7 @@ impl Terrain {
             Self::GrassDense => "meadow",
             Self::Forest => "forest",
             Self::Rock => "rock",
+            Self::Marsh => "marsh",
         }
     }
 }
@@ -79,6 +88,8 @@ pub struct Cell {
     pub terrain: Terrain,
     pub elevation: f32,
     pub moisture: f32,
+    /// Climate temperature 0 (cold) ..= 1 (hot): latitude minus altitude.
+    pub temperature: f32,
     /// Standing vegetation biomass 0..=1.
     pub vegetation: f32,
     /// Synthetic "how many prey pass through here" 0..=1 (fixture decoration only).
@@ -103,9 +114,11 @@ pub struct World {
     pub carcasses: Vec<(usize, usize)>,
     pub seeds: Vec<(usize, usize)>,
     pub regions: Vec<RegionRect>,
+    /// The prevailing wind that shaped the rain field.
+    pub wind: Wind,
     /// Number of water cells at generation, used as the water-level series baseline.
     pub water_cells_at_generation: usize,
-    /// Per cell: 8-adjacent to water (a drinking spot). Refreshed by
+    /// Per cell: 8-adjacent to water, or marsh (a drinking spot). Refreshed by
     /// `refresh_shore` whenever water terrain changes; empty means "compute".
     pub shore: Vec<bool>,
 }
@@ -120,6 +133,10 @@ impl World {
     }
 
     fn compute_shore(&self, x: usize, y: usize) -> bool {
+        // Marsh holds standing water of its own: a drinking spot in itself.
+        if self.cell(x, y).terrain == Terrain::Marsh {
+            return true;
+        }
         for dy in -1i32..=1 {
             for dx in -1i32..=1 {
                 if dx == 0 && dy == 0 {
@@ -199,6 +216,7 @@ impl World {
             carcasses: Vec::new(),
             seeds: Vec::new(),
             regions: build_regions(w, h),
+            wind: relief.wind,
             water_cells_at_generation,
             shore: Vec::new(),
         };
