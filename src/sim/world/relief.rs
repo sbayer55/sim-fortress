@@ -51,6 +51,11 @@ pub(super) struct Relief {
     /// Temperature 0 (cold) ..= 1 (hot).
     pub(super) temperature: Vec<f32>,
     pub(super) wind: Wind,
+    /// Root of each cell's drainage tree on the finished surface (an ocean
+    /// cell, a map edge or a pit): cells sharing a root share a basin.
+    pub(super) basin: Vec<usize>,
+    /// Ocean base level on the finished surface.
+    pub(super) sea: Vec<bool>,
 }
 
 /// Build the relief for `params` from the generation `rng`.
@@ -78,18 +83,31 @@ pub(super) fn build(rng: &mut Rng, grid: Grid, params: &WorldParams) -> Relief {
     let filled = flow::fill_depressions(grid, &height, &outlet, FILL_EPS);
     let routed = flow::route(grid, &filled, &outlet);
     let acc = flow::accumulate(&routed, &vec![1.0f32; grid.len()]);
+    let basin = basins(&routed);
     let depth: Vec<f32> = filled.iter().zip(&height).map(|(f, h)| f - h).collect();
     let slope = flow::slopes(grid, &height);
     // Re-sweep the finished surface: the ocean and the lakes it now holds
     // are the moisture sources the living world sees.
-    let mut source = vec![false; grid.len()];
-    mark_base_level(&height, params.water_pct, &mut source);
+    let mut sea = vec![false; grid.len()];
+    mark_base_level(&height, params.water_pct, &mut sea);
+    let mut source = sea.clone();
     for (s, &d) in source.iter_mut().zip(&depth) {
         *s |= d >= LAKE_SOURCE_DEPTH;
     }
     let rain = climate::rain_field(grid, &height, &source, wind, budget, &rain_noise);
     let temperature = climate::temperature(rng, grid, &height, pole_north);
-    Relief { height, depth, acc, slope, rain, temperature, wind }
+    Relief { height, depth, acc, slope, rain, temperature, wind, basin, sea }
+}
+
+/// The root each cell drains to. `order` lists every root before the cells
+/// that drain into it, so one downstream-first walk labels the whole tree.
+fn basins(routed: &Flow) -> Vec<usize> {
+    let mut basin = vec![0usize; routed.recv.len()];
+    for &i in &routed.order {
+        let r = routed.recv[i];
+        basin[i] = if r == i { i } else { basin[r] };
+    }
+    basin
 }
 
 /// The unaged surface: warped continental noise with ridged mountain chains

@@ -14,7 +14,6 @@ use crate::ui::app::AppState;
 use crate::ui::screens::s01_map::WorldMap;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::SpeciesStyle;
-use crate::widgets::map;
 use crate::widgets::{bars, panel, status, util};
 use crate::{glyphs, theme};
 
@@ -42,6 +41,9 @@ const T_RANDOMIZE: usize = 10;
 const T_BACK: usize = 11;
 const T_COUNT: usize = 12;
 const FORM_W: u16 = 66;
+
+mod preview;
+use preview::preview_panel;
 
 #[derive(Debug)]
 pub struct WorldGen {
@@ -709,76 +711,3 @@ const fn difficulty_name(d: Difficulty) -> &'static str {
 }
 
 // ---------------------------------------------------------------- preview
-
-fn preview_panel(f: &mut Frame<'_>, area: Rect, form: &WorldGenForm) {
-    let world = &form.preview;
-    // Smallest zoom-out (at least 1:2) at which the whole world fits 75x20.
-    let scale = world.width().div_ceil(75).max(world.height().div_ceil(20)).max(2);
-    let hint = format!("seed {}, {}x{} at 1:{}, {} wind", form.seed_text, world.width(), world.height(), scale, world.wind.name());
-    let inner = panel::draw_with_hint(f, area, "Preview", &hint, panel::Kind::Outer);
-
-    let iw = crate::cast!(world.width().div_ceil(scale) => u16);
-    let ih = crate::cast!(world.height().div_ceil(scale) => u16);
-    let px = inner.x + (inner.width.saturating_sub(iw)).div_euclid(2);
-    let py = inner.y + 1;
-    {
-        let buf = f.buffer_mut();
-        for sy in 0..ih {
-            for sx in 0..iw {
-                let wx = (crate::cast!(sx => usize) * scale).min(world.width() - 1);
-                let wy = (crate::cast!(sy => usize) * scale).min(world.height() - 1);
-                let cell = world.cell(wx, wy);
-                let (g, fg, bg) = map::terrain_cell(cell, false);
-                if let Some(c) = buf.cell_mut((px + sx, py + sy)) {
-                    c.set_char(g);
-                    c.set_style(Style::default().fg(fg).bg(bg));
-                }
-            }
-        }
-    }
-    let mut row = ih + 3;
-
-    panel::section(f, inner, row, "Terrain summary");
-    row += 1;
-    let c = terrain_counts(world);
-    let total = crate::cast!(world.cells.len().max(1) => f32);
-    let groups: Vec<(&str, char, ratatui::style::Color, usize)> = vec![
-        ("water", glyphs::DEEP_WATER, theme::SHALLOW_FG, c[0] + c[1]),
-        ("sand / dirt", glyphs::SAND, theme::SAND_FG, c[2] + c[3]),
-        ("grassland", glyphs::GRASS, theme::GRASS_FG, c[4] + c[5]),
-        ("meadow", glyphs::GRASS_DENSE, theme::GRASS_DENSE_FG, c[6]),
-        ("forest", glyphs::FOREST, theme::FOREST_FG, c[7]),
-        ("rock", glyphs::ROCK, theme::ROCK_FG, c[8]),
-        ("marsh", glyphs::MARSH, theme::MARSH_FG, c[9]),
-    ];
-    let half = inner.width.div_euclid(2);
-    for (i, (name, g, color, n)) in groups.iter().enumerate() {
-        let col = crate::cast!((i % 2) => u16);
-        let r = row + crate::cast!((i.div_euclid(2)) => u16);
-        let x = inner.x + 1 + col * half;
-        let y = inner.y + r;
-        let buf = f.buffer_mut();
-        let frac = crate::cast!(*n => f32) / total;
-        buf.set_stringn(x, y, format!("{g} "), 2, Style::default().fg(*color).bg(theme::PANEL_BG));
-        buf.set_stringn(x + 2, y, format!("{name:<12}"), 12, theme::text());
-        bars::bar(buf, x + 14, y, 14, frac, *color);
-        buf.set_stringn(x + 29, y, format!("{:>3}% {:>4}", crate::cast!((frac * 100.0).round() => u32), n), 9, theme::dim_text());
-    }
-    row += 5;
-
-    let forage = c[4] + c[5] + c[6] + c[7] + c[9];
-    let prey_cap = crate::cast!((crate::cast!(forage => f32) * 0.35) => u32);
-    let pred_cap = prey_cap.div_euclid(8);
-    util::line(f, inner, row, Line::from(vec![
-        Span::styled(format!(" forage cells {forage}  "), theme::text()),
-        Span::styled(format!("{} supports about {} prey and {} predators", glyphs::RIGHT, prey_cap, pred_cap), theme::dim_text()),
-    ]));
-}
-
-fn terrain_counts(world: &World) -> [usize; 10] {
-    let mut c = [0usize; 10];
-    for cell in &world.cells {
-        c[crate::cast!(cell.terrain => usize)] += 1;
-    }
-    c
-}

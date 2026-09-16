@@ -85,10 +85,10 @@ impl WorldMap {
 
         panel::section(f, inner, row, "By region");
         row += 1;
-        for r in &world.regions {
+        for (ri, r) in world.regions.iter().enumerate() {
             let mean = match self.overlay {
-                Overlay::Vegetation => crate::sim::ecology::region_land_veg_mean(world, r),
-                Overlay::Moisture => crate::sim::ecology::region_display_moisture_mean(world, r),
+                Overlay::Vegetation => crate::sim::ecology::region_land_veg_mean(world, ri),
+                Overlay::Moisture => crate::sim::ecology::region_display_moisture_mean(world, ri),
                 _ => 0.0,
             };
             bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", r.0), mean, ramp(0.8), 18, 14);

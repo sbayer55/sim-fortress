@@ -112,6 +112,33 @@ Rivers on a dry seed are flanked by a visibly greener band. `forest_pct` and
 
 ## Phase 3 — Biomes as regions
 
+**Status: done (Sept 2026).** `src/sim/world/biome.rs` holds the Whittaker table
+(`Biome::classify`, cuts on the land climate deciles: `COLD` 0.18, `HOT` 0.50),
+two 3×3 majority passes and a small-patch pass that absorbs any 4-connected
+patch under `MIN_PATCH` (4) cells. `Cell.biome` is saved (format version 8);
+the forest quantile skips tundra, steppe and desert (falling back to the
+wettest remainder so `forest_pct` still holds) and `Biome::vegetation_scale`
+(0.7–1.0) multiplies the initial biomass and the ecology cap. `src/sim/world/
+regions.rs` replaces the fixed rectangles: every cell's flow-tree root is a
+basin (ocean cells join the nearest land basin), basins merge smallest-first
+into the neighbour sharing the longest border until eight remain, a neighbour
+over `GROWTH_CAP` (25 % of the world) only takes basins with nowhere else to
+go, and each region is named `<Northern|Southern|Eastern|Western|Central>
+<biome noun>` (≤ 16 cells, `Coast` when mostly water, `Upper`/`Lower` or a
+numeral to break ties). `World.region_map` carries the per-cell index;
+`RegionRect` is now a bounding box and every consumer goes through
+`region_index`, `region_cells`, `region_centre`, `regions_adjacent` and
+`region_size`. Rendering: `map::terrain_cell` blends land colours toward
+`theme::BIOME` (0.24 fg, 0.12 bg); S09 shows the region names on the preview
+and a `biomes` share line. Dev-profile 200×60 generation measured ~17.6 ms
+(relief 12.6, classify 3.0 of which the biome pass is 1.1, regions 1.6–2.7),
+about 1.5 ms over the 16 ms note; the preview still feels live. Tests:
+`regions_cover_world` (eight regions, boxes bound their cells, centres lie
+inside), `regions_are_contiguous_and_named`, `biomes_follow_climate_in_patches`,
+plus the ignored diagnostic `print_biomes_and_regions` (shares, sizes, names,
+climate deciles, stage timings). Checksum re-baselined to
+`0xb4b5_fbec_d0ad_4ff3`.
+
 **Payoff.** High visual payoff: the map stops being a per-cell speckle and reads as
 "the northern taiga", "the dry steppe", with edges you can point at.
 
@@ -250,10 +277,10 @@ ticker screens, `save.rs`.
 |---|---|---|---|---|
 | 1 | Temperature + orographic rain (done) | — | `Cell.temperature`, `World.wind` | yes (v6) |
 | 2 | Marsh, riparian, shore types (done) | 1 | `Terrain::Marsh`, `creatures.marsh_step_cost` | yes (v7) |
-| 3 | Biomes as regions | 1, 2 | `Cell.biome`, watershed regions | yes |
+| 3 | Biomes as regions (done) | 1, 2 | `Cell.biome`, `World.region_map` | yes (v8) |
 | 4 | River morphology | 2 | none | no |
 | 5 | Age regimes + events | — (better after 3) | `World.history` | yes |
 | 6 | Names, log, summary | 3, 4, 5 | `World.names` | yes |
 
-Phases 4 and 5 are independent of each other and could be built in parallel
-branches once 1–3 are in.
+Phases 4 and 5 are independent of each other and can now be built in parallel
+branches.

@@ -170,7 +170,7 @@ fn s02i_parasite_ramp_and_cells() {
     // The ramp and the cell shading.
     assert_eq!(theme::parasite(0.5), theme::WARN);
     assert_eq!(theme::parasite(1.0), theme::BAD);
-    let cell = |terrain: Terrain, load: f32| Cell { terrain, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: load };
+    let cell = |terrain: Terrain, load: f32| Cell { terrain, biome: crate::sim::world::Biome::Grassland, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: load };
     let (g, fg, _) = map::parasite_cell(&cell(Terrain::Dirt, 0.9));
     assert_eq!((g, fg), (glyphs::shade(0.9), theme::parasite(0.9)));
     assert_eq!(map::parasite_cell(&cell(Terrain::Dirt, 0.0)).0, glyphs::DIRT, "an empty shade shows the dirt glyph");

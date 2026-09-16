@@ -182,9 +182,10 @@ Sections from the top, in order; all fit in the 40 inner rows without scrolling.
     `0% 25% 50% 75% 100%` beneath; the low/high words `bare … lush`, `quiet … crowded`,
     `arid … wet`; and one note: `≈ deep water  ▲ rock (not shaded)` for vegetation and
     pressure, `open water counts as 100% moisture` for moisture.
-15. **By region** (12 rows): one labelled bar per named region (eight: Northmarch, Ashen
+15. **By region** (12 rows): one labelled bar per named region (eight drainage basins
+    named per seed, e.g. `Northern Taiga`; the prototype fixture used Northmarch, Ashen
     Ridge, Sunfall Coast, Reedwater Vale, The Long Meadow, Lakeshore, Southern Thicket,
-    Fenlands) showing the **mean cell value** over that region's rectangle, 18-column label,
+    Fenlands) showing the **mean cell value** over that region's cells, 18-column label,
     14-column bar, percentage; bar colour is the ramp at 0.8. Then world statistics over all
     6 000 cells: `mean / min / max` percentages; the count and share of cells at or above
     60 %; the highest region (good colour) and the lowest region (warning colour) by mean.

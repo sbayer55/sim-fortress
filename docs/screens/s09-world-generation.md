@@ -112,10 +112,12 @@ unfocused values are bright text on the plain background.
 
 ### Preview panel
 8. **Terrain preview.** The generated world drawn at 1:2 (every second column and row) as
-   a 75×20 image of terrain glyphs in terrain colours, summer/day palette, no creatures,
-   framed by a single-line box (`┌ ┐ └ ┘ ─ │`). Region names are overlaid, bold and bright,
-   centred on each region's rectangle (clamped inside the frame). Source: generated world
-   cells and regions.
+   a 75×20 image of terrain glyphs in terrain colours (land tinted toward its biome hue,
+   `theme::BIOME`), summer/day palette, no creatures, framed by a single-line box
+   (`┌ ┐ └ ┘ ─ │`). Region names are overlaid, bold and bright, centred on each region's
+   centre cell (clamped inside the image). Regions are the eight drainage basins the
+   generator merged the flow tree into, named for their position and dominant biome
+   (`Northern Taiga`, `Western Coast`). Source: generated world cells and regions.
 9. **Terrain summary.** Six terrain groups in two columns: glyph in terrain colour, name
    (12), a 14-cell bar of the share of all cells, `<pct>% <cells>`:
    `water` (deep + shallow, `≈`), `sand / dirt` (`·`), `grassland` (sparse + grass, `"`),
@@ -127,6 +129,9 @@ unfocused values are bright text on the plain background.
     cells, prey capacity ≈ 0.35 × forage cells and predator capacity ≈ prey capacity / 8.
     Then `starting <p> prey / <q> predators: within capacity` (good, bold) or an
     over-capacity warning, with `(<pct>% / <pct>% of capacity)`.
+10a. **Biome shares.** `biomes  <name> <pct>%  …  regions <n>`: the five largest biomes
+    by share of all cells, each name in its biome tint, then the region count. Source:
+    `Cell.biome`.
 11. **Placement warning.** `! <region> has little forage; <species> placed there tend to
     starve early.` (warn colour) when a region's forage is low relative to the species
     assigned to it.
@@ -171,7 +176,9 @@ fields as characters, not as screen shortcuts.
   Generation must be fast enough to feel live, or the preview needs a `generating…`
   placeholder. Measured with the erosion generator (C1 FR2, `world.age` 8): a 200×60
   preview regenerates in about 14 ms in the dev profile, inside the 16 ms budget, so the
-  preview stays live; larger maps or a higher age are slower in proportion.
+  preview stays live; larger maps or a higher age are slower in proportion. Climate
+  physics took that to ~15.5 ms and biomes-as-regions to ~17.6 ms (biome labelling
+  ~1.1 ms, basin merging ~2 ms); the preview still reads as live.
 - **Invalid seed text.** Non-hex/decimal input should be flagged in the field hint and
   block Generate rather than silently falling back.
 - **Map size changes.** A world larger than 150×40 cannot be shown at 1:2 in 75×20; the preview

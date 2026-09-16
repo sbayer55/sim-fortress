@@ -6,7 +6,7 @@ use crate::sim::creatures::{
 use crate::sim::events::{EventKind, EventRing};
 use crate::sim::species::testing::*;
 use crate::sim::params::{PredationParams };
-use super::migration::{mean_pred_pressure, migrate_group, regions_adjacent};
+use super::migration::{mean_pred_pressure, migrate_group};
 use super::tests::{day_time, hungry_pack, land_cell_in, run_migration_days, test_creature, test_world};
 
 
@@ -26,11 +26,11 @@ fn migration_destination() {
     let ev = events.iter().find(|e| e.kind == EventKind::Migration).expect("one Migration event");
     assert!(ev.text.to_lowercase().contains("herd of 5 hares"), "{}", ev.text);
     let dest: usize = ev.detail.split('>').nth(1).unwrap().parse().unwrap();
-    assert!(regions_adjacent(&w.regions[0], &w.regions[dest]), "destination shares an edge with the origin");
+    assert!(w.regions_adjacent(0, dest), "destination shares an edge with the origin");
     // The destination maximises mean_vegetation × (1 − mean_pred_pressure).
-    let score = |ri: usize| crate::sim::ecology::region_land_veg_mean(&w, &w.regions[ri]) * (1.0 - mean_pred_pressure(&w, &w.regions[ri]));
-    for (ri, r) in w.regions.iter().enumerate() {
-        if ri != 0 && regions_adjacent(&w.regions[0], r) {
+    let score = |ri: usize| crate::sim::ecology::region_land_veg_mean(&w, ri) * (1.0 - mean_pred_pressure(&w, ri));
+    for ri in 0..w.regions.len() {
+        if ri != 0 && w.regions_adjacent(0, ri) {
             assert!(score(dest) >= score(ri), "dest {dest} beats {ri}");
         }
     }
@@ -41,7 +41,7 @@ fn migration_destination() {
         assert!(w.cell(tx, ty).terrain.walkable());
         assert_eq!(h.migrate_until, time.tick + 2 * u64::from(time.ticks_per_day), "for up to 2 days");
     }
-    assert_eq!(ev.pos, Some(((w.regions[0].1 + w.regions[0].3).div_euclid(2), (w.regions[0].2 + w.regions[0].4).div_euclid(2))), "pos = origin region centre");
+    assert_eq!(ev.pos, Some(w.region_centre(0)), "pos = origin region centre");
 }
 
 #[test]

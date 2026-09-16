@@ -95,7 +95,7 @@ pub(super) fn resources_section(f: &mut Frame<'_>, inner: Rect, mut row: u16, ap
         )));
         row += 1;
         let strained = app.params.ui.scarcity_thresholds.strained;
-        let below = world.regions.iter().filter(|r| crate::sim::ecology::region_land_veg_mean(world, r) < strained).count();
+        let below = (0..world.regions.len()).filter(|&ri| crate::sim::ecology::region_land_veg_mean(world, ri) < strained).count();
         if winter || below > 0 {
             util::line(f, inner, row, Line::from(Span::styled(
                 format!(" {} scarcity: {} regions below forage line", glyphs::ALERT, below),

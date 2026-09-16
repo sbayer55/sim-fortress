@@ -151,13 +151,10 @@ pub(super) fn tick_once(store: &mut CreatureStore, w: &mut World, time: &Time, p
 
 /// A walkable land cell inside region `ri` of `w`.
 pub(super) fn land_cell_in(w: &World, ri: usize) -> (usize, usize) {
-    let r = &w.regions[ri];
-    for y in r.2..r.4 {
-        for x in r.1..r.3 {
-            let t = w.cell(x, y).terrain;
-            if t.walkable() && !t.is_water() {
-                return (x, y);
-            }
+    for (x, y) in w.region_cells(ri) {
+        let t = w.cell(x, y).terrain;
+        if t.walkable() && !t.is_water() {
+            return (x, y);
         }
     }
     panic!("region {ri} has no land");

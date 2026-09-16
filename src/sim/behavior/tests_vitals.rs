@@ -139,23 +139,28 @@ fn den_creation_capped() {
     let cp = CreaturesParams { den_create_chance_per_rest_hour: 1.0, max_dens_per_region: 1, ..CreaturesParams::default() };
     let t = day_time(2); // night → rest
 
+    // Two land cells of the same region (regions follow the watersheds, so
+    // pick them from the region rather than assuming neighbours share one).
+    let spots: Vec<(usize, usize)> = w.region_cells(0).filter(|&(x, y)| w.cell(x, y).terrain.walkable() && !w.cell(x, y).terrain.is_water()).take(2).collect();
+    let [(x1, y1), (x2, y2)] = spots[..] else { panic!("region 0 has fewer than two land cells") };
+
     // Resting creature on a bare Dirt cell (vegetation < 0.2).
-    let mut c = test_creature(40, 5);
+    let mut c = test_creature(x1, y1);
     c.goal = Goal::Rest;
     c.rest_reason = Some(RestReason::Night);
     c.target = None;
-    w.cell_mut(40, 5).terrain = Terrain::Dirt;
-    w.cell_mut(40, 5).vegetation = 0.0;
+    w.cell_mut(x1, y1).terrain = Terrain::Dirt;
+    w.cell_mut(x1, y1).vegetation = 0.0;
     maybe_make_den(&c, &mut w, &mut events, &t, roster(), &cp, &mut rng);
     assert_eq!(w.dens.len(), 1);
 
     // Second resting creature in the same region: capped.
-    let mut c2 = test_creature(41, 5);
+    let mut c2 = test_creature(x2, y2);
     c2.goal = Goal::Rest;
     c2.rest_reason = Some(RestReason::Night);
     c2.target = None;
-    w.cell_mut(41, 5).terrain = Terrain::Dirt;
-    w.cell_mut(41, 5).vegetation = 0.0;
+    w.cell_mut(x2, y2).terrain = Terrain::Dirt;
+    w.cell_mut(x2, y2).vegetation = 0.0;
     maybe_make_den(&c2, &mut w, &mut events, &t, roster(), &cp, &mut rng);
     assert_eq!(w.dens.len(), 1, "region den cap should hold");
 }
