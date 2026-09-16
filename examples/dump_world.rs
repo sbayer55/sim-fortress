@@ -42,6 +42,7 @@ fn main() {
                     Terrain::GrassSparse | Terrain::Grass | Terrain::GrassDense => '"',
                     Terrain::Forest => 'T',
                     Terrain::Rock => '^',
+                    Terrain::Marsh => 'm',
                 }
             })
             .collect();

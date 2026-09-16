@@ -190,6 +190,11 @@ pub(super) fn move_toward(c: &mut Creature, world: &World, time: &Time, cp: &Cre
             c.y = ny;
             c.energy -= if c.goal == Goal::Flee { cp.move_cost_energy * pp.flee_energy_factor } else { cp.move_cost_energy };
             c.move_budget -= 1.0;
+            // Marsh is slow going: the step costs extra budget, so a chase
+            // through reeds favours whoever is lighter on the ground.
+            if world.cell(nx, ny).terrain == crate::sim::world::Terrain::Marsh {
+                c.move_budget -= cp.marsh_step_cost;
+            }
             c.trail.push((nx, ny));
             if c.trail.len() > cp.trail_len {
                 c.trail.remove(0);

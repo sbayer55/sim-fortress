@@ -157,12 +157,12 @@ fn totals(f: &mut Frame<'_>, area: Rect, sim: &crate::sim::Sim, world: &World) {
 
     panel::section(f, inner, row, "Terrain");
     row += 1;
-    let mut counts = [0usize; 9];
+    let mut counts = [0usize; 10];
     for c in &world.cells {
         counts[crate::cast!(c.terrain => usize)] += 1;
     }
     let total = crate::cast!(world.cells.len().max(1) => f32);
-    let mut kinds: Vec<Terrain> = [Terrain::DeepWater, Terrain::ShallowWater, Terrain::Sand, Terrain::Dirt, Terrain::GrassSparse, Terrain::Grass, Terrain::GrassDense, Terrain::Forest, Terrain::Rock].to_vec();
+    let mut kinds: Vec<Terrain> = [Terrain::DeepWater, Terrain::ShallowWater, Terrain::Sand, Terrain::Dirt, Terrain::GrassSparse, Terrain::Grass, Terrain::GrassDense, Terrain::Forest, Terrain::Rock, Terrain::Marsh].to_vec();
     kinds.sort_by_key(|t| std::cmp::Reverse(counts[crate::cast!(*t => usize)]));
     let max = crate::cast!(counts.iter().copied().max().unwrap_or(1).max(1) => f32);
     for t in kinds {
