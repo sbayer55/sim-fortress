@@ -7,10 +7,11 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
+use crate::sim::params::DayNightTint;
 use crate::ui::app::AppState;
 use crate::ui::config;
 use crate::ui::screens::{Action, Screen};
-use crate::ui::style::SeasonStyle;
+use crate::ui::style::{clock_status, SeasonStyle};
 use crate::widgets::{panel, status, util};
 use crate::{glyphs, theme};
 
@@ -96,7 +97,7 @@ impl Screen for Controls {
                 Action::None
             }
             KeyCode::Char('t') => {
-                app.params.ui.day_night_tint = !app.params.ui.day_night_tint;
+                app.params.ui.day_night_tint = app.params.ui.day_night_tint.next();
                 persist(app);
                 Action::None
             }
@@ -186,15 +187,11 @@ impl Screen for Controls {
         let status_row = area.y + area.height - 1;
         util::fill(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1), Style::default().bg(theme::STATUS_BG));
         let keys: &[(&str, &str)] = &[("Space", "pause"), ("+/-", "speed"), ("1-5", "set speed"), (".", "step"), ("a/b/c/t/d", "toggle"), ("Esc", "close")];
-        let right = match &app.sim {
-            Some(sim) => {
-                let t = &sim.time;
-                let sky = if t.is_night() { glyphs::MOON } else { glyphs::SUN };
-                format!("{}  {} {}", t.clock_label(), sky, if t.is_night() { "night" } else { "day" })
-            }
-            None => "options".to_string(),
+        let (right, right_fg) = match &app.sim {
+            Some(sim) => clock_status(&sim.time, app.params.ui.day_night_tint),
+            None => ("options".to_string(), theme::ACCENT),
         };
-        status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, &right);
+        status::render_colored(f, Rect::new(area.x, status_row, area.width, 1), keys, &right, right_fg);
     }
 }
 
@@ -233,11 +230,14 @@ fn clock_panel(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState) -> 
 fn options_panel(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState) {
     panel::section(f, inner, row, "Options");
     row += 1;
+        // `[t]` cycles three states; the mark is on for anything but `off`.
+        let tint = app.params.ui.day_night_tint;
+        let tint_label = format!("day/night tint: {}", tint.label());
         let toggles: [(&str, bool, &str); 5] = [
             ("a", app.params.ui.auto_pause_on_extinction, "auto-pause on extinction"),
             ("b", app.params.ui.log_births, "log births to the event log"),
             ("c", app.params.ui.pause_on_follow_death, "pause when a followed creature dies"),
-            ("t", app.params.ui.day_night_tint, "day/night tint"),
+            ("t", tint != DayNightTint::Off, &tint_label),
             ("d", app.params.ui.auto_pause_on_epidemic, "auto-pause on epidemic"),
         ];
         for (key, on, label) in toggles {

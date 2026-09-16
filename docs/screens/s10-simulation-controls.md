@@ -59,7 +59,10 @@ Rows are counted inside the modal, top to bottom (19 rows available).
    - `[x] auto-pause on extinction` — `[a]`
    - `[ ] log births to the event log` — `[b]`
    - `[x] pause when a followed creature dies` — `[c]`
-   - `[x] day/night tint` — `[t]`
+   - `[x] day/night tint: status text` — `[t]` cycles `off` → `map` → `status text`
+     (default). `map` blue-shifts the map palette at night; `status text` leaves the map
+     alone and instead draws the status-bar clock in moon blue at night (accent by day).
+     The mark is `[ ]` only for `off`.
    - `[x] auto-pause on epidemic` — `[d]` (C7: raises [S12b](s12-alert-modal.md))
    then the autosave row `◄ autosave every N days ►` stepped with `[←→]` (`off` at 0).
 6. **Key hints** (last row): `[Space] pause  [+/-] speed  [.] step  [Esc] close` in key /

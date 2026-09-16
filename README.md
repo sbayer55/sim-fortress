@@ -55,7 +55,7 @@ cargo run -- --params params.toml          # play with those parameters
 ```
 
 UI options (auto-pause, log births, follow-death pause, autosave interval,
-day/night tint) are a separate file: `~/.config/sim-fortress/ui.toml`
+day/night cue: `off`, `map` tint, or the default `status_text` clock colour) are a separate file: `~/.config/sim-fortress/ui.toml`
 (`$XDG_CONFIG_HOME/sim-fortress/ui.toml` when set).
 
 ## Headless experiments

@@ -90,8 +90,9 @@ header (defaults when none).
 
 ### FR5 Options modal
 S10 layout enlarged to 60×20 with the Options section (rows 9–14) extended to five rows: auto-pause on extinction, log
-births, pause when a followed creature dies, autosave every `◄ N ►` days, day/night tint
-on/off. Persisted to `$XDG_CONFIG_HOME/sim-fortress/ui.toml`, default
+births, pause when a followed creature dies, autosave every `◄ N ►` days, day/night cue
+(`off` / `map` tint / `status_text` clock colour, the default; a legacy bool in `ui.toml`
+still loads). Persisted to `$XDG_CONFIG_HOME/sim-fortress/ui.toml`, default
 `~/.config/sim-fortress/ui.toml` on every Unix including macOS (no `dirs` crate). `ui.toml`
 overrides `params.ui` from a loaded save.
 

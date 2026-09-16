@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::sim::params::UiParams;
+use crate::sim::params::{DayNightTint, UiParams};
 use crate::sim::{save, Params, Sim};
 use crate::ui::app::{AppState, ConfirmRequest, ConfirmYes};
 use crate::ui::config::{load_ui_from, save_ui_to};
@@ -111,13 +111,29 @@ fn options_persist() {
     let path = dir.join("ui.toml");
     let ui = UiParams {
         autosave_days: 7,
-        day_night_tint: false,
+        day_night_tint: DayNightTint::Off,
         log_births: true,
         pause_on_follow_death: false,
         ..UiParams::default()
     };
     save_ui_to(&path, &ui).unwrap();
     assert_eq!(load_ui_from(&path).unwrap(), ui);
+}
+
+/// `ui.toml` files written before the three-state setting stored a bool.
+#[test]
+fn legacy_bool_day_night_tint_loads() {
+    let dir = tmpdir("legacy-tint");
+    let path = dir.join("ui.toml");
+    std::fs::write(&path, "day_night_tint = true\nlog_births = true\n").unwrap();
+    let ui = load_ui_from(&path).unwrap();
+    assert_eq!(ui.day_night_tint, DayNightTint::Map);
+    assert!(ui.log_births);
+    std::fs::write(&path, "day_night_tint = false\n").unwrap();
+    assert_eq!(load_ui_from(&path).unwrap().day_night_tint, DayNightTint::Off);
+    std::fs::write(&path, "day_night_tint = \"status_text\"\n").unwrap();
+    assert_eq!(load_ui_from(&path).unwrap().day_night_tint, DayNightTint::StatusText);
+    assert_eq!(UiParams::default().day_night_tint, DayNightTint::StatusText, "status text is the default");
 }
 
 /// Regenerate the text renders of the live data screens, the way the C6 snapshot
@@ -197,4 +213,32 @@ fn regenerate_screen_renders() {
     for (path, title, text) in files {
         std::fs::write(path, text).unwrap_or_else(|e| panic!("write {path} ({title}): {e}"));
     }
+}
+
+/// The status-bar clock is the day/night cue only under `StatusText`: moon blue at
+/// night, accent otherwise. The text itself always reports the real sky.
+#[test]
+fn clock_status_colour_by_tint_mode() {
+    use crate::sim::Time;
+    use crate::theme;
+    use crate::ui::style::clock_status;
+    let day = Time::new(8, 30, 24, 6, 20);
+    let night = Time::new(22, 30, 24, 6, 20);
+    assert!(!day.is_night() && night.is_night());
+    for mode in [DayNightTint::Off, DayNightTint::Map, DayNightTint::StatusText] {
+        let (text, fg) = clock_status(&day, mode);
+        assert!(text.ends_with(" day"), "{text}");
+        assert_eq!(fg, theme::ACCENT, "{mode:?} by day");
+    }
+    for mode in [DayNightTint::Off, DayNightTint::Map] {
+        let (text, fg) = clock_status(&night, mode);
+        assert!(text.ends_with(" night"), "{text}");
+        assert_eq!(fg, theme::ACCENT, "{mode:?} at night");
+    }
+    let (text, fg) = clock_status(&night, DayNightTint::StatusText);
+    assert!(text.ends_with(" night"), "{text}");
+    assert_eq!(fg, theme::INFO);
+    assert_eq!(DayNightTint::Off.next(), DayNightTint::Map);
+    assert_eq!(DayNightTint::Map.next(), DayNightTint::StatusText);
+    assert_eq!(DayNightTint::StatusText.next(), DayNightTint::Off);
 }
