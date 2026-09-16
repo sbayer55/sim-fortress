@@ -108,13 +108,13 @@ impl WorldMap {
                 Action::None
             }
             KeyCode::Tab => {
-                if !self.cycle_sense(app) && !self.cycle_species(false) && !self.cycle_pathogen(app, false) {
+                if !self.cycle_sense(app) && !self.cycle_species(app, false) && !self.cycle_pathogen(app, false) {
                     self.wide = !self.wide;
                 }
                 Action::None
             }
             KeyCode::BackTab => {
-                if !self.cycle_species(true) {
+                if !self.cycle_species(app, true) {
                     self.cycle_pathogen(app, true);
                 }
                 Action::None
@@ -211,13 +211,13 @@ impl WorldMap {
             }
             KeyCode::Char('z') => Action::Push(Box::new(Zoom::new())),
             KeyCode::Tab => {
-                if !self.cycle_sense(app) && !self.cycle_species(false) {
+                if !self.cycle_sense(app) && !self.cycle_species(app, false) {
                     self.cycle_pathogen(app, false);
                 }
                 Action::None
             }
             KeyCode::BackTab => {
-                if !self.cycle_species(true) {
+                if !self.cycle_species(app, true) {
                     self.cycle_pathogen(app, true);
                 }
                 Action::None
@@ -261,13 +261,13 @@ impl WorldMap {
                 Action::None
             }
             KeyCode::Tab => {
-                if !self.cycle_sense(app) && !self.cycle_species(false) && !self.cycle_pathogen(app, false) {
+                if !self.cycle_sense(app) && !self.cycle_species(app, false) && !self.cycle_pathogen(app, false) {
                     self.wide = !self.wide;
                 }
                 Action::None
             }
             KeyCode::BackTab => {
-                if !self.cycle_species(true) {
+                if !self.cycle_species(app, true) {
                     self.cycle_pathogen(app, true);
                 }
                 Action::None

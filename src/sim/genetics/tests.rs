@@ -1,6 +1,9 @@
 //! Unit tests for the `genetics` module, extracted from `genetics.rs`.
 
 use super::*;
+use crate::sim::species::testing::*;
+use crate::sim::params::CreaturesParams;
+use crate::sim::params::Roster;
 use crate::sim::creatures::max_age_days;
 use crate::sim::params::{Params, WorldParams};
 use crate::sim::species::{IDX_MATURITY, N_TRAITS};
@@ -24,20 +27,26 @@ fn time_at(tick: u64) -> Time {
 
 /// The doc's FR1 starting values (independent of the tuned balance table).
 fn gp() -> GeneticsParams {
-    let counts = |vals: [u32; 6]| -> std::collections::BTreeMap<SpeciesId, u32> { SpeciesId::ALL.iter().copied().zip(vals).collect() };
-    GeneticsParams {
-        litter_max: SpeciesId::ALL.iter().copied().zip([3.0, 2.0, 1.0, 3.0, 2.0, 1.0]).collect(),
-        mate_cooldown_days: counts([20, 30, 150, 120, 180, 180]),
-        mate_hunger_max: 0.3,
-        mate_cell_vegetation_min: 0.3,
-        ..GeneticsParams::default()
-    }
+    GeneticsParams { mate_hunger_max: 0.3, mate_cell_vegetation_min: 0.3, ..GeneticsParams::default() }
+}
+
+/// The doc's FR1 litter and cooldown table, on top of the default roster.
+fn test_roster() -> &'static Roster {
+    static ROSTER: std::sync::OnceLock<Roster> = std::sync::OnceLock::new();
+    ROSTER.get_or_init(|| {
+        let mut r = Roster::default();
+        for (s, (litter, cooldown)) in r.0.iter_mut().zip([(3.0, 20), (2.0, 30), (1.0, 150), (3.0, 120), (2.0, 180), (1.0, 180)]) {
+            s.litter_max = litter;
+            s.mate_cooldown_days = cooldown;
+        }
+        r
+    })
 }
 
 fn adult(x: usize, y: usize, sex: Sex) -> Creature {
     Creature {
         id: CreatureId(0),
-        species: SpeciesId::Vole,
+        species: VOLE,
         name: 0,
         sex,
         x,
@@ -45,7 +54,7 @@ fn adult(x: usize, y: usize, sex: Sex) -> Creature {
         born_day: -100,
         generation: 1,
         parents: None,
-        genome: SpeciesId::Vole.base_genome(),
+        genome: genome(VOLE),
         hp: 1.0,
         hunger: 0.1,
         thirst: 0.1,
@@ -72,8 +81,8 @@ fn adult(x: usize, y: usize, sex: Sex) -> Creature {
         attempts: 0,
         chased: 0,
         escaped: 0,
-        threats_by_species: [0; 6],
-        kills_by_species: [0; 6],
+        threats_by_species: vec![0; N_SPECIES],
+        kills_by_species: vec![0; N_SPECIES],
         last_kill: None,
         chase_stats: (0, 0),
         chase_longest_year: 0,
@@ -108,21 +117,21 @@ fn mate_eligibility() {
     let gp = gp();
     let t = time_at(12);
     let mut c = adult(5, 5, Sex::Female);
-    assert!(eligible(&c, &t, &w, &gp, &DiseaseParams::default()));
+    assert!(eligible(&c, &t, &w, test_roster(), &gp, &DiseaseParams::default()));
     c.adult = false;
-    assert!(!eligible(&c, &t, &w, &gp, &DiseaseParams::default()), "juveniles never mate");
+    assert!(!eligible(&c, &t, &w, test_roster(), &gp, &DiseaseParams::default()), "juveniles never mate");
     c.adult = true;
     c.hunger = 0.5;
-    assert!(!eligible(&c, &t, &w, &gp, &DiseaseParams::default()), "too hungry");
+    assert!(!eligible(&c, &t, &w, test_roster(), &gp, &DiseaseParams::default()), "too hungry");
     c.hunger = 0.1;
     c.cooldown_until = 100;
-    assert!(!eligible(&c, &t, &w, &gp, &DiseaseParams::default()), "on cooldown");
+    assert!(!eligible(&c, &t, &w, test_roster(), &gp, &DiseaseParams::default()), "on cooldown");
     c.cooldown_until = 0;
     // Winter: day index 270+ → tick 270*24.
-    assert!(!eligible(&c, &time_at(270 * 24), &w, &gp, &DiseaseParams::default()), "not a breeding season");
+    assert!(!eligible(&c, &time_at(270 * 24), &w, test_roster(), &gp, &DiseaseParams::default()), "not a breeding season");
     let mut bare = world();
     bare.cell_mut(5, 5).vegetation = 0.0;
-    assert!(!eligible(&c, &t, &bare, &gp, &DiseaseParams::default()), "prey need vegetation on the cell");
+    assert!(!eligible(&c, &t, &bare, test_roster(), &gp, &DiseaseParams::default()), "prey need vegetation on the cell");
 }
 
 #[test]
@@ -133,7 +142,7 @@ fn mating_sets_cooldown_and_pregnancy() {
     let mut store = CreatureStore::new();
     let f = store.insert(adult(5, 5, Sex::Female));
     let m = store.insert(adult(6, 5, Sex::Male));
-    let view = TickView::build(&store, &t, &w, &gp, &DiseaseParams::default());
+    let view = TickView::build(&store, &t, &w, test_roster(), &gp, &DiseaseParams::default());
     assert!(view.get(f).unwrap().mate_ready);
     let picked = pick_mate(store.get(f).unwrap(), &[m], &view).unwrap();
     assert_eq!(picked.0, m);
@@ -144,13 +153,13 @@ fn mating_sets_cooldown_and_pregnancy() {
     }
     let mut events = EventRing::new(10);
     let mut noted = false;
-    consummate(&mut store, &t, &gp, &mut events, &view, &mut noted);
+    consummate(&mut store, &t, test_roster(), &gp, &mut events, &view, &mut noted);
     let female = store.get(f).unwrap();
     let male = store.get(m).unwrap();
-    let cd = 12 + u64::from(gp.cooldown(SpeciesId::Vole)) * 24;
+    let cd = 12 + u64::from(test_roster().get(VOLE).mate_cooldown_days) * 24;
     assert_eq!(female.cooldown_until, cd);
     assert_eq!(male.cooldown_until, cd);
-    assert_eq!(female.pregnant_due, Some(12 + u64::from(gp.gestation(SpeciesId::Vole)) * 24));
+    assert_eq!(female.pregnant_due, Some(12 + u64::from(test_roster().get(VOLE).gestation_days) * 24));
     assert_eq!(female.mate_id, Some(m));
     assert!(male.pregnant_due.is_none());
     assert!(male.mate_id.is_none());
@@ -160,23 +169,23 @@ fn mating_sets_cooldown_and_pregnancy() {
 fn maturity_scales_adult_age_litter_and_lifespan() {
     let gp = GeneticsParams::default();
     let cp = CreaturesParams::default();
-    let id = SpeciesId::Deer;
-    let neutral = id.base_genome(); // maturity 0.5 by construction
-    let mut slow = id.base_genome();
+    let id = DEER;
+    let neutral = genome(id); // maturity 0.5 by construction
+    let mut slow = genome(id);
     slow.0[IDX_MATURITY] = 0.98;
-    let mut fast = id.base_genome();
+    let mut fast = genome(id);
     fast.0[IDX_MATURITY] = 0.02;
 
     // Maturity 0.5 reproduces the pre-maturity numbers exactly.
-    assert_eq!(adult_age_days(id, &neutral, &cp, &gp), cp.adult_age(id));
+    assert_eq!(adult_age_days(test_roster().get(id), &neutral, &gp), test_roster().get(id).adult_age_days);
     let old_max = cp.max_age_base + crate::cast!((neutral.longevity() * crate::cast!(cp.max_age_per_longevity => f32)) => u32);
     assert_eq!(max_age_days(&neutral, &cp, &gp), old_max);
-    assert_eq!(gp.litter_size(id, neutral.fertility(), 0.5), 1 + crate::cast!((neutral.fertility() * gp.litter_max(id)).round() => u32));
+    assert_eq!(gp.litter_size(test_roster().get(id).litter_max, neutral.fertility(), 0.5), 1 + crate::cast!((neutral.fertility() * test_roster().get(id).litter_max).round() => u32));
 
     // Slow: later, larger, longer. Fast: the reverse.
-    assert!(adult_age_days(id, &slow, &cp, &gp) > adult_age_days(id, &neutral, &cp, &gp));
-    assert!(adult_age_days(id, &neutral, &cp, &gp) > adult_age_days(id, &fast, &cp, &gp));
-    assert!(gp.litter_size(id, slow.fertility(), slow.maturity()) > gp.litter_size(id, fast.fertility(), fast.maturity()));
+    assert!(adult_age_days(test_roster().get(id), &slow, &gp) > adult_age_days(test_roster().get(id), &neutral, &gp));
+    assert!(adult_age_days(test_roster().get(id), &neutral, &gp) > adult_age_days(test_roster().get(id), &fast, &gp));
+    assert!(gp.litter_size(test_roster().get(id).litter_max, slow.fertility(), slow.maturity()) > gp.litter_size(test_roster().get(id).litter_max, fast.fertility(), fast.maturity()));
     assert!(max_age_days(&slow, &cp, &gp) > old_max);
     assert!(max_age_days(&fast, &cp, &gp) < old_max);
 }
@@ -186,7 +195,7 @@ fn inherit_covers_every_slot() {
     // Every trait index, including the two C8 additions, is inherited and can
     // mutate (mutation_rate 1 makes the draw deterministic).
     let gp = GeneticsParams { mutation_rate: 1.0, mutation_strength: 0.0, ..GeneticsParams::default() };
-    let g = SpeciesId::Wolf.base_genome();
+    let g = genome(WOLF);
     let (out, muts) = inherit(&g, &g, 4, &gp, &mut Rng::new(3));
     assert_eq!(muts.len(), N_TRAITS, "one mutation per slot");
     let mut idx: Vec<usize> = muts.iter().map(|m| m.trait_idx).collect();
@@ -199,10 +208,10 @@ fn inherit_covers_every_slot() {
 #[test]
 fn litter_size_from_fertility() {
     let gp = gp();
-    assert_eq!(gp.litter_size(SpeciesId::Vole, 0.0, 0.5), 1);
-    assert_eq!(gp.litter_size(SpeciesId::Vole, 0.9, 0.5), 4);
-    assert_eq!(gp.litter_size(SpeciesId::Deer, 0.35, 0.5), 1);
-    assert_eq!(gp.litter_size(SpeciesId::Hare, 0.75, 0.5), 3);
+    assert_eq!(gp.litter_size(test_roster().get(VOLE).litter_max, 0.0, 0.5), 1);
+    assert_eq!(gp.litter_size(test_roster().get(VOLE).litter_max, 0.9, 0.5), 4);
+    assert_eq!(gp.litter_size(test_roster().get(DEER).litter_max, 0.35, 0.5), 1);
+    assert_eq!(gp.litter_size(test_roster().get(HARE).litter_max, 0.75, 0.5), 3);
 }
 
 /// Shared checks for each newborn in `birth_placement`.
@@ -225,7 +234,7 @@ fn birth_placement() {
     w.cell_mut(5, 5).terrain = Terrain::Grass;
     w.cell_mut(6, 5).terrain = Terrain::Grass;
     let gp = gp();
-    let cp = CreaturesParams::default();
+
     let mut store = CreatureStore::new();
     let mut mother = adult(5, 5, Sex::Female);
     mother.genome.0[6] = 0.9; // litter 1 + round(0.9×3) = 4
@@ -234,9 +243,9 @@ fn birth_placement() {
     store.get_mut(f).unwrap().pregnant_due = Some(10);
     store.get_mut(f).unwrap().mate_id = Some(m);
     let mut events = EventRing::new(10);
-    let mut tallies = DeathTallies::default();
+    let mut tallies = DeathTallies::new(N_SPECIES);
     let mut lineage = Lineage::new();
-    let born = deliver(&mut store, &w, &mut events, &time_at(10), &gp, &cp, &DiseaseParams::default(), &mut Rng::new(3), &mut tallies, &mut lineage, &DiseaseState::new(&DiseaseParams::default()), &mut Rng::new(4));
+    let born = deliver(&mut store, &w, &mut events, &time_at(10), test_roster(), &gp, &DiseaseParams::default(), &mut Rng::new(3), &mut tallies, &mut lineage, &DiseaseState::new(&DiseaseParams::default(), test_roster()), &mut Rng::new(4));
     assert_eq!(born, 4);
     assert_eq!(store.len_living(), 6);
     for c in store.living().filter(|c| c.parents.is_some()) {
@@ -281,7 +290,7 @@ fn inheritance_mean() {
 fn mutation_rate() {
     let gp = gp();
     let mut rng = Rng::new(5);
-    let g = SpeciesId::Hare.base_genome();
+    let g = genome(HARE);
     let n = 10_000;
     let mut count = 0usize;
     for _ in 0..n {
@@ -295,7 +304,7 @@ fn mutation_rate() {
 #[test]
 fn maturity_switch() {
     let mut sim = Sim::new(3, Params::default());
-    let adult_age = sim.params.creatures.adult_age(SpeciesId::Vole);
+    let adult_age = sim.roster().get(VOLE).adult_age_days;
     // Insert a newborn vole and age it across the boundary.
     let mut c = adult(10, 5, Sex::Male);
     c.adult = false;
@@ -323,7 +332,7 @@ fn follow_mother() {
     kid.born_day = 0;
     kid.mother = Some(m);
     let k = store.insert(kid);
-    let view = TickView::build(&store, &t, &w, &gp, &DiseaseParams::default());
+    let view = TickView::build(&store, &t, &w, test_roster(), &gp, &DiseaseParams::default());
     let target = follow_target(store.get(k).unwrap(), &view, &w, &t, &gp, &mut Rng::new(1)).unwrap();
     assert!(geom::cheb(target.0, target.1, 20, 5) <= 3, "target {target:?} not within 3 of the mother");
     // Past follow_mother_days: no following.
@@ -341,16 +350,16 @@ fn soft_cap_blocks_pregnancy() {
     let m = store.insert(adult(6, 5, Sex::Male));
     store.get_mut(f).unwrap().goal = Goal::Mate;
     store.get_mut(f).unwrap().mate_id = Some(m);
-    let view = TickView::build(&store, &t, &w, &gp, &DiseaseParams::default());
+    let view = TickView::build(&store, &t, &w, test_roster(), &gp, &DiseaseParams::default());
     assert!(!view.cap_ok);
     let mut events = EventRing::new(10);
     let mut noted = false;
-    consummate(&mut store, &t, &gp, &mut events, &view, &mut noted);
+    consummate(&mut store, &t, test_roster(), &gp, &mut events, &view, &mut noted);
     assert!(store.get(f).unwrap().pregnant_due.is_none());
     assert!(noted);
     assert_eq!(events.iter().filter(|e| e.kind == EventKind::Note).count(), 1);
     // A second blocked mating does not log again.
-    consummate(&mut store, &t, &gp, &mut events, &view, &mut noted);
+    consummate(&mut store, &t, test_roster(), &gp, &mut events, &view, &mut noted);
     assert_eq!(events.iter().filter(|e| e.kind == EventKind::Note).count(), 1);
 }
 

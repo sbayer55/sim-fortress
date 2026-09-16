@@ -70,7 +70,7 @@ fn disease_fixture() -> (Sim, CreatureId, CreatureId, CreatureId, CreatureId) {
 #[test]
 fn s02h_disease_tint_bands() {
     let (sim, a, b, c, d) = disease_fixture();
-    let species_of = |sim: &Sim, id: CreatureId| sim.creatures.get(id).unwrap().species.color();
+    let species_of = |sim: &Sim, id: CreatureId| sim.roster().color(sim.creatures.get(id).unwrap().species);
 
     // All pathogens shown: every band present.
     let tints = disease_tints(&sim, None);
@@ -176,9 +176,9 @@ fn s02i_parasite_ramp_and_cells() {
     let (g, fg, _) = map::parasite_cell(&cell(Terrain::ShallowWater, 0.3));
     assert_eq!((g, fg), (glyphs::SHALLOW_WATER, theme::WARN), "fouled water draws ~ in WARN");
     // Creature bands.
-    assert_eq!(map::parasite_tint(theme::VOLE, 0.1), (theme::dim(theme::VOLE, map::HEALTHY_FADE), false));
-    assert_eq!(map::parasite_tint(theme::VOLE, 0.3), (theme::WARN, false));
-    assert_eq!(map::parasite_tint(theme::VOLE, 0.7), (theme::BAD, true));
+    assert_eq!(map::parasite_tint(theme::TAN, 0.1), (theme::dim(theme::TAN, map::HEALTHY_FADE), false));
+    assert_eq!(map::parasite_tint(theme::TAN, 0.3), (theme::WARN, false));
+    assert_eq!(map::parasite_tint(theme::TAN, 0.7), (theme::BAD, true));
 }
 
 #[test]

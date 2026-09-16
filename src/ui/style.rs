@@ -1,12 +1,12 @@
 //! UI styling as extension traits on the pure `sim` data types, so `src/sim`
 //! never imports ratatui.
 
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier, Style};
 
 use crate::sim::creatures::{Creature, CreatureId};
 use crate::sim::params::DayNightTint;
 use crate::sim::world::World;
-use crate::sim::{EventKind, Season, Sim, SpeciesId, Time};
+use crate::sim::{EventKind, Roster, Season, Sim, SpeciesId, Time};
 use crate::widgets::map::{MapCreature, MapSource};
 use crate::{glyphs, theme};
 
@@ -73,32 +73,29 @@ impl EventKindStyle for EventKind {
     }
 }
 
+/// How a species looks, read from the roster (`[[species]]` glyph and colour).
 pub trait SpeciesStyle {
-    fn glyph(&self) -> char;
-    fn color(&self) -> Color;
+    /// Juvenile glyph (lowercase).
+    fn glyph(&self, id: SpeciesId) -> char;
+    /// Adult glyph (uppercase).
+    fn adult_glyph(&self, id: SpeciesId) -> char {
+        self.glyph(id).to_ascii_uppercase()
+    }
+    fn color(&self, id: SpeciesId) -> Color;
+    /// Bold species colour on the panel background.
+    fn style(&self, id: SpeciesId) -> Style {
+        Style::default().fg(self.color(id)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)
+    }
 }
 
-impl SpeciesStyle for SpeciesId {
-    fn glyph(&self) -> char {
-        match self {
-            Self::Vole => glyphs::VOLE,
-            Self::Hare => glyphs::HARE,
-            Self::Deer => glyphs::DEER,
-            Self::Fox => glyphs::FOX,
-            Self::Wolf => glyphs::WOLF,
-            Self::Lynx => glyphs::LYNX,
-        }
+impl SpeciesStyle for Roster {
+    fn glyph(&self, id: SpeciesId) -> char {
+        self.get(id).glyph
     }
 
-    fn color(&self) -> Color {
-        match self {
-            Self::Vole => theme::VOLE,
-            Self::Hare => theme::HARE,
-            Self::Deer => theme::DEER,
-            Self::Fox => theme::FOX,
-            Self::Wolf => theme::WOLF,
-            Self::Lynx => theme::LYNX,
-        }
+    fn color(&self, id: SpeciesId) -> Color {
+        let [r, g, b] = self.get(id).color;
+        Color::Rgb(r, g, b)
     }
 }
 
@@ -123,7 +120,7 @@ pub fn condition(c: &Creature) -> (f32, usize) {
 }
 
 /// Build the map renderer's lightweight creature view from a sim creature.
-pub fn map_creature(c: &Creature) -> MapCreature<'_> {
+pub fn map_creature<'a>(c: &'a Creature, roster: &Roster) -> MapCreature<'a> {
     MapCreature {
         id: c.id,
         x: c.x,
@@ -131,8 +128,8 @@ pub fn map_creature(c: &Creature) -> MapCreature<'_> {
         alive: c.alive,
         adult: c.adult,
         species: c.species,
-        glyph: if c.adult { c.species.glyph().to_ascii_uppercase() } else { c.species.glyph() },
-        color: c.species.color(),
+        glyph: if c.adult { roster.adult_glyph(c.species) } else { roster.glyph(c.species) },
+        color: roster.color(c.species),
         sense_cells: c.genome.sense_cells(),
         condition: condition(c).0,
         trail: &c.trail,
@@ -146,11 +143,11 @@ impl MapSource for Sim {
     }
 
     fn living_creatures(&self) -> Vec<MapCreature<'_>> {
-        self.creatures.living().map(map_creature).collect()
+        self.creatures.living().map(|c| map_creature(c, &self.params.species)).collect()
     }
 
     fn creature(&self, id: CreatureId) -> Option<MapCreature<'_>> {
-        self.creatures.get(id).map(map_creature)
+        self.creatures.get(id).map(|c| map_creature(c, &self.params.species))
     }
 }
 

@@ -3,7 +3,7 @@
 use crate::sim::creatures::{Creature, CreatureId, CreatureStore};
 use crate::sim::events::EventRing;
 use crate::sim::geom;
-use crate::sim::params::DiseaseParams;
+use crate::sim::params::{DiseaseParams, Roster};
 use crate::sim::rng::Rng;
 use crate::sim::spatial::SpatialIndex;
 use crate::sim::time::Time;
@@ -111,6 +111,7 @@ pub fn on_eat(
     world: &World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     dp: &DiseaseParams,
     state: &mut DiseaseState,
     rng: &mut Rng,
@@ -142,6 +143,6 @@ pub fn on_eat(
             }
         }
     } else if eater.infection.is_none() && rng.chance(dp.spillover_chance) {
-        spillover(store, eater_id, p, (cx, cy), carcass_species, world, events, time, dp, state, rng);
+        spillover(store, eater_id, p, (cx, cy), carcass_species, world, events, time, roster, dp, state, rng);
     }
 }

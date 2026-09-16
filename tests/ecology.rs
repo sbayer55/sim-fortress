@@ -13,7 +13,7 @@ fn yearly_cycle_ratio() {
     // Pure ecology: no grazers (a breeding herd since C4 grazes winter
     // vegetation far below the seasonal cap and would swamp the ratio).
     let mut p = Params::default();
-    p.creatures.initial_counts.clear();
+    p.species.clear_initial_counts();
     let mut sim = Sim::new(42, p);
     run_days(&mut sim, 720);
 
@@ -68,7 +68,7 @@ fn csv_row_count() {
     let mut sim = Sim::new(42, Params::default());
     run_days(&mut sim, 720);
     let names: Vec<String> = sim.world.regions.iter().map(|r| r.0.clone()).collect();
-    let csv = sim.series.to_csv(&names);
+    let csv = sim.series.to_csv(&names, sim.roster());
     let lines = csv.lines().count();
     assert_eq!(lines, 721, "expected 1 header + 720 data rows");
     assert!(csv.starts_with("day,biomass_total,veg_mean,water_cells"), "unexpected header");

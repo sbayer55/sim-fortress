@@ -3,7 +3,7 @@
 use crate::sim::creatures::{CreatureStore, DeathTallies};
 use crate::sim::events::EventRing;
 use crate::sim::lineage::Lineage;
-use crate::sim::params::DiseaseParams;
+use crate::sim::params::{DiseaseParams, Roster};
 use crate::sim::rng::Rng;
 use crate::sim::time::Time;
 use crate::sim::world::World;
@@ -21,6 +21,7 @@ pub fn progress_daily(
     world: &mut World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     dp: &DiseaseParams,
     state: &mut DiseaseState,
     tallies: &mut DeathTallies,
@@ -56,9 +57,9 @@ pub fn progress_daily(
             Stage::Infectious => {
                 let hazard = (path.params.lethality_per_day * host * (1.0 - dp.lethality_resist_w * r)).clamp(0.0, 1.0);
                 if rng.chance(hazard) {
-                    disease_death(store, world, events, time, tallies, lineage, state, id, day, inf, &path);
+                    disease_death(store, world, events, time, roster, tallies, lineage, state, id, day, inf, &path);
                 } else if day >= inf.ends_day {
-                    recover(store, events, time, dp, state, id, day, inf, &path);
+                    recover(store, events, time, roster, dp, state, id, day, inf, &path);
                 }
             }
         }
@@ -95,14 +96,14 @@ pub fn decay_cells(world: &mut World, dp: &DiseaseParams) {
 }
 
 /// Per-species mean Resistance over the living population.
-pub fn mean_resistance(store: &CreatureStore) -> [f32; 6] {
-    let mut sum = [0.0f32; 6];
-    let mut n = [0u32; 6];
+pub fn mean_resistance(store: &CreatureStore, n_species: usize) -> Vec<f32> {
+    let mut sum = vec![0.0f32; n_species];
+    let mut n = vec![0u32; n_species];
     for c in store.living() {
         sum[c.species.index()] += c.genome.resistance();
         n[c.species.index()] += 1;
     }
-    std::array::from_fn(|i| if n[i] > 0 { sum[i] / crate::cast!(n[i] => f32) } else { 0.0 })
+    (0..n_species).map(|i| if n[i] > 0 { sum[i] / crate::cast!(n[i] => f32) } else { 0.0 }).collect()
 }
 
 /// FR8: after the census — refresh per-pathogen stats, track outbreaks
@@ -113,9 +114,10 @@ pub fn daily_update(
     world: &World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     dp: &DiseaseParams,
     state: &mut DiseaseState,
-    population: &[u32; 6],
+    population: &[u32],
     rng: &mut Rng,
 ) -> Vec<Alert> {
     let mut alerts = Vec::new();
@@ -126,10 +128,10 @@ pub fn daily_update(
     let n = state.pathogens.len();
 
     tally_stats(store, state, n, day);
-    let resist = mean_resistance(store);
-    let (ended, epidemics) = track_outbreaks(store, state, day, dp, population, resist);
+    let resist = mean_resistance(store, roster.len());
+    let (ended, epidemics) = track_outbreaks(store, state, day, dp, population, &resist);
     announce_epidemics(store, world, events, time, state, epidemics, &mut alerts);
     announce_ended(events, time, state, day, ended);
-    seed_emergence(store, world, events, time, dp, state, n, day, population, resist, rng);
+    seed_emergence(store, world, events, time, roster, dp, state, n, day, population, &resist, rng);
     alerts
 }

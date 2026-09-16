@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use crate::sim::species::Kind;
 use crate::sim::stats::census;
 use crate::sim::Sim;
 
@@ -17,15 +18,28 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// A newer version is rejected (FR1), and so is an older one: C8 widened the
 /// genome and C5 `FR5b` added the wary state, so pre-wary files cannot be
 /// read. Version 5 added `world.age` to the serialised parameters
-/// (erosion-based world generation).
+/// (erosion-based world generation) and made the species roster configurable:
+/// every per-species table became a `Vec` and the header carries the roster
+/// labels (a version-4 header still decodes so old files stay listable).
 pub const VERSION: u16 = 5;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 
-/// The header that precedes the `Sim` payload (FR1). `counts` are the six
-/// per-species living counts; `strip_rows` are 4 × 120 terrain codes for the S00
+/// One roster entry as the header records it, so the Load list can label the
+/// counts without decoding the `Sim`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HeaderSpecies {
+    pub plural: String,
+    pub kind: Kind,
+    pub glyph: char,
+    pub color: [u8; 3],
+}
+
+/// The header that precedes the `Sim` payload (FR1).
 ///
-/// decorative strips (world rows at H × {0.45, 0.475, 0.75, 0.775}).
+/// `counts` are the per-species living counts in roster order, labelled by
+/// `species`; `strip_rows` are 4 × 120 terrain codes for the S00 decorative
+/// strips (world rows at H × {0.45, 0.475, 0.75, 0.775}).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SaveHeader {
     pub seed: u64,
@@ -34,8 +48,61 @@ pub struct SaveHeader {
     pub start_hour: u32,
     pub saved_at_unix: u64,
     pub world_name: String,
-    pub counts: [u32; 6],
+    pub counts: Vec<u32>,
+    pub species: Vec<HeaderSpecies>,
     pub strip_rows: [Vec<u8>; 4],
+}
+
+impl SaveHeader {
+    /// `(prey, predators)` living counts.
+    pub fn kind_totals(&self) -> (u32, u32) {
+        let mut prey = 0;
+        let mut pred = 0;
+        for (s, &n) in self.species.iter().zip(&self.counts) {
+            match s.kind {
+                Kind::Prey => prey += n,
+                Kind::Predator => pred += n,
+            }
+        }
+        (prey, pred)
+    }
+}
+
+/// The version-4 header (six fixed species), kept so old files stay listable.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct HeaderV4 {
+    seed: u64,
+    tick: u64,
+    season_days: u32,
+    start_hour: u32,
+    saved_at_unix: u64,
+    world_name: String,
+    counts: [u32; 6],
+    strip_rows: [Vec<u8>; 4],
+}
+
+impl HeaderV4 {
+    fn upgrade(self) -> SaveHeader {
+        let labels = [
+            ("Voles", Kind::Prey, 'v', [188, 156, 116]),
+            ("Hares", Kind::Prey, 'h', [228, 220, 196]),
+            ("Deer", Kind::Prey, 'd', [214, 160, 92]),
+            ("Foxes", Kind::Predator, 'f', [246, 128, 42]),
+            ("Wolves", Kind::Predator, 'w', [224, 66, 66]),
+            ("Lynxes", Kind::Predator, 'l', [236, 110, 150]),
+        ];
+        SaveHeader {
+            seed: self.seed,
+            tick: self.tick,
+            season_days: self.season_days,
+            start_hour: self.start_hour,
+            saved_at_unix: self.saved_at_unix,
+            world_name: self.world_name,
+            counts: self.counts.to_vec(),
+            species: labels.iter().map(|(p, k, g, c)| HeaderSpecies { plural: (*p).to_string(), kind: *k, glyph: *g, color: *c }).collect(),
+            strip_rows: self.strip_rows,
+        }
+    }
 }
 
 /// A fully loaded save: header plus the reconstructed simulation.
@@ -145,9 +212,9 @@ pub fn autosave_due(day_index: u64, autosave_days: u32) -> bool {
     autosave_days > 0 && day_index > 0 && day_index % u64::from(autosave_days) == 0
 }
 
-/// Per-species living counts, `SpeciesId::ALL` order.
-pub fn counts(sim: &Sim) -> [u32; 6] {
-    census(&sim.creatures).population
+/// Per-species living counts, roster order.
+pub fn counts(sim: &Sim) -> Vec<u32> {
+    census(&sim.creatures, sim.params.species.len()).population
 }
 
 /// The four 120-column terrain strips for the S00 title screen (FR1).
@@ -178,6 +245,7 @@ pub fn build_header(sim: &Sim, world_name: &str) -> SaveHeader {
         saved_at_unix: SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
         world_name: world_name.to_string(),
         counts: counts(sim),
+        species: sim.params.species.0.iter().map(|s| HeaderSpecies { plural: s.plural.clone(), kind: s.kind, glyph: s.glyph, color: s.color }).collect(),
         strip_rows: strip_rows(sim),
     }
 }
@@ -270,7 +338,12 @@ pub fn read_header_bytes(bytes: &[u8]) -> Result<(SaveHeader, u16), SaveError> {
     if bytes.len() < 10 + header_len {
         return Err(SaveError::Truncated);
     }
-    let header: SaveHeader = postcard::from_bytes(&bytes[10..10 + header_len])?;
+    let header_bytes = &bytes[10..10 + header_len];
+    let header: SaveHeader = if version < 5 {
+        postcard::from_bytes::<HeaderV4>(header_bytes)?.upgrade()
+    } else {
+        postcard::from_bytes(header_bytes)?
+    };
     Ok((header, version))
 }
 
@@ -359,9 +432,25 @@ mod tests {
         let dir = tmpdir("older-version");
         let sim = Sim::new(7, Params::default());
         let header = build_header(&sim, "v");
-        let mut bytes = encode(&header, &sim).unwrap();
-        // A file written before the C8 genome widening.
-        bytes[4..6].copy_from_slice(&(VERSION - 1).to_le_bytes());
+        // A genuine version-4 file: the fixed six-species header in front of the
+        // current payload (only the header is ever decoded from an old file).
+        let v4 = HeaderV4 {
+            seed: header.seed,
+            tick: header.tick,
+            season_days: header.season_days,
+            start_hour: header.start_hour,
+            saved_at_unix: header.saved_at_unix,
+            world_name: header.world_name.clone(),
+            counts: [1, 2, 3, 4, 5, 6],
+            strip_rows: header.strip_rows,
+        };
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&MAGIC);
+        bytes.extend_from_slice(&(VERSION - 1).to_le_bytes());
+        let header_bytes = postcard::to_allocvec(&v4).unwrap();
+        bytes.extend_from_slice(&(crate::cast!(header_bytes.len() => u32)).to_le_bytes());
+        bytes.extend_from_slice(&header_bytes);
+        bytes.extend_from_slice(&postcard::to_allocvec(&sim).unwrap());
         let path = dir.join("older.simf");
         std::fs::write(&path, &bytes).unwrap();
         match load(&path) {
@@ -379,7 +468,11 @@ mod tests {
         let entries = list_saves(&dir);
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].version, VERSION - 1);
-        assert!(read_header(&path).is_ok());
+        let old = read_header(&path).unwrap();
+        assert_eq!(old.counts, vec![1, 2, 3, 4, 5, 6]);
+        assert_eq!(old.species.len(), 6, "the v4 header is labelled with the fixed six species");
+        assert_eq!(old.species[0].plural, "Voles");
+        assert_eq!(old.kind_totals(), (6, 15));
     }
 
     #[test]

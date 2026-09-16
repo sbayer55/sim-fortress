@@ -266,7 +266,7 @@ impl EventLog {
             buf.set_stringn(area.x + 1, y, format!("{}Y{} D{:03} {:02}:00", if selected { "►" } else { " " }, e.year, e.day, e.hour), 16, when_style);
             buf.set_stringn(area.x + 17, y, format!("{} {:<10}", e.kind.glyph(), e.kind.label()), 14, Style::default().fg(e.kind.color()).bg(bg).add_modifier(Modifier::BOLD));
             let sp_glyph = match e.species {
-                Some(s) => s.glyph().to_ascii_uppercase().to_string(),
+                Some(s) => sim.roster().adult_glyph(s).to_string(),
                 None => "-".to_string(),
             };
             buf.set_stringn(area.x + 32, y, sp_glyph, 1, if selected { bright } else { theme::dim_text() });
@@ -317,8 +317,8 @@ impl EventLog {
             if let Some(c) = sim.creatures.get(subject) {
                 let state = if c.alive { "alive".to_string() } else { format!("dead: {}", c.death.map_or("?", |d| d.cause.label())) };
                 util::line(f, inner, row, Line::from(vec![
-                    Span::styled(format!(" {} ", if c.alive { c.species.glyph().to_ascii_uppercase() } else { glyphs::CARCASS }), Style::default().fg(c.species.color()).bg(bg).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!("{} {}  ", c.name_str(), c.tag()), theme::text()),
+                    Span::styled(format!(" {} ", if c.alive { sim.roster().adult_glyph(c.species) } else { glyphs::CARCASS }), Style::default().fg(sim.roster().color(c.species)).bg(bg).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("{} {}  ", c.name_str(sim.roster()), c.tag(sim.roster())), theme::text()),
                     Span::styled(state, theme::dim_text()),
                 ]));
                 row += 1;
@@ -398,11 +398,11 @@ impl EventLog {
         ]));
         row += 1;
         if let Some((i, _)) = o.species_cases.iter().enumerate().filter(|(_, n)| **n > 0).max_by_key(|(i, n)| (**n, std::cmp::Reverse(*i))) {
-            let id = SpeciesId::ALL[i];
+            let id = SpeciesId::from_index(i);
             let end = if o.ended_day.is_some() { o.resist_at_end[i] } else { sim.series.last().map_or(o.resist_at_start[i], |s| s.genome_mean[i].resistance()) };
             util::line(f, inner, row, Line::from(vec![
                 Span::styled(" resist ", theme::dim_text()),
-                Span::styled(format!("{} ", id.glyph().to_ascii_uppercase()), Style::default().fg(id.color()).bg(bg).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{} ", sim.roster().adult_glyph(id)), Style::default().fg(sim.roster().color(id)).bg(bg).add_modifier(Modifier::BOLD)),
                 Span::styled(format!("{} {} {}", short2(o.resist_at_start[i]), glyphs::RIGHT, short2(end)), Style::default().fg(theme::SICK).bg(bg)),
                 Span::styled(if o.ended_day.is_none() { "  (so far)" } else { "" }, theme::dim_text()),
             ]));
@@ -476,11 +476,11 @@ mod tests {
             recovered: 3,
             peak_active: 4,
             peak_day: 0,
-            species_cases: [0, 9, 0, 0, 0, 0],
-            species_deaths: [0, 2, 0, 0, 0, 0],
+            species_cases: vec![0, 9, 0, 0, 0, 0],
+            species_deaths: vec![0, 2, 0, 0, 0, 0],
             epidemic: false,
-            resist_at_start: [0.31; 6],
-            resist_at_end: [0.0; 6],
+            resist_at_start: vec![0.31; 6],
+            resist_at_end: vec![0.0; 6],
             active: 4,
             cases_today: 1,
         });

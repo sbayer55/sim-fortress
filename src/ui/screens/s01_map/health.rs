@@ -4,7 +4,7 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
-use crate::sim::{Sim, SpeciesId};
+use crate::sim::Sim;
 use crate::ui::style::{SpeciesStyle};
 use crate::widgets::{bars, panel, util};
 use crate::theme;
@@ -24,7 +24,7 @@ fn health_by_species(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim) ->
         let mut all = [0usize; 3];
         let (mut all_n, mut all_sum) = (0usize, 0.0f32);
         let mut weakest = [0usize; 4];
-        for id in SpeciesId::ALL {
+        for id in sim.roster().ids() {
             let mut bands = [0usize; 3];
             let (mut n, mut sum) = (0usize, 0.0f32);
             for c in sim.creatures.living().filter(|c| c.species == id) {
@@ -46,8 +46,8 @@ fn health_by_species(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim) ->
             let count = |k: usize, color: Color| Span::styled(format!("{:>5}", bands[k]), if n == 0 { theme::dim_text() } else { tone(color) });
             let mean = if n > 0 { format!("{:>4}%", crate::cast!((sum / crate::cast!(n => f32) * 100.0).round() => u32)) } else { "    —".to_string() };
             util::line(f, inner, row, Line::from(vec![
-                Span::styled(format!(" {} ", id.glyph().to_ascii_uppercase()), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("{:<8}{n:>4}", id.name()), text),
+                Span::styled(format!(" {} ", sim.roster().adult_glyph(id)), Style::default().fg(sim.roster().color(id)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{:<8}{n:>4}", sim.roster().display_name(id)), text),
                 count(0, theme::GOOD),
                 count(1, theme::WARN),
                 count(2, theme::BAD),

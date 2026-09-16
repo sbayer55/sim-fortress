@@ -143,7 +143,7 @@ fn s04b_disease_section() {
     let species = sim.creatures.get(id).unwrap().species;
     sim.creatures.get_mut(id).unwrap().infection =
         Some(Infection { pathogen: PathogenId(0), stage: Stage::Infectious, since_day: 0, ends_day: 9, severity: 0.8, source: None, outbreak: 0 });
-    let mut species_cases = [0u32; 6];
+    let mut species_cases = vec![0u32; 6];
     species_cases[species.index()] = 12;
     sim.disease.outbreaks.push(Outbreak {
         pathogen: PathogenId(0),
@@ -157,10 +157,10 @@ fn s04b_disease_section() {
         peak_active: 5,
         peak_day: 0,
         species_cases,
-        species_deaths: [0; 6],
+        species_deaths: vec![0; 6],
         epidemic: false,
-        resist_at_start: [0.3; 6],
-        resist_at_end: [0.0; 6],
+        resist_at_start: vec![0.3; 6],
+        resist_at_end: vec![0.0; 6],
         active: 5,
         cases_today: 1,
     });

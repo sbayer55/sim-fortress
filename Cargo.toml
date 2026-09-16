@@ -17,7 +17,7 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 postcard = { version = "1", features = ["alloc"] }
 toml_edit = "0.22"
-serde-big-array = "0.5"
+
 
 [profile.dev]
 opt-level = 1

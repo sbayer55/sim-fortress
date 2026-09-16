@@ -21,7 +21,7 @@ const GUTTER: u16 = 6;
 
 pub(super) fn group_chart(f: &mut Frame<'_>, area: Rect, sim: &Sim) {
     let inner = panel::draw_with_hint(f, area, "Group sizes — herds and packs", "living groups by size, each row scaled to its own tallest bar", panel::Kind::Outer);
-    let living: Vec<SpeciesId> = SpeciesId::ALL.into_iter().filter(|id| sim.species[id.index()].count > 0).collect();
+    let living: Vec<SpeciesId> = sim.roster().ids().filter(|id| sim.species[id.index()].count > 0).collect();
     if living.is_empty() {
         util::line(f, inner, 0, Line::from(sp(" no living creatures", theme::dim_text())));
         return;
@@ -36,8 +36,8 @@ pub(super) fn group_chart(f: &mut Frame<'_>, area: Rect, sim: &Sim) {
 }
 
 /// `(singular, plural)` for a species' groups: prey herd, predators pack.
-const fn group_word(id: SpeciesId) -> (&'static str, &'static str) {
-    match id.kind() {
+const fn group_word(kind: Kind) -> (&'static str, &'static str) {
+    match kind {
         Kind::Prey => ("herd", "herds"),
         Kind::Predator => ("pack", "packs"),
     }
@@ -47,24 +47,24 @@ const fn group_word(id: SpeciesId) -> (&'static str, &'static str) {
 fn species_block(f: &mut Frame<'_>, area: Rect, sim: &Sim, id: SpeciesId) {
     let i = id.index();
     let g = &sim.group_stats;
-    let (word, words) = group_word(id);
+    let (word, words) = group_word(sim.roster().kind(id));
     let noun = if g.groups[i] == 1 { word } else { words };
     let mut spans = vec![
-        sp(format!(" {} ", id.glyph().to_ascii_uppercase()), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-        sp(format!("{:<8}", id.plural()), theme::text()),
+        sp(format!(" {} ", sim.roster().adult_glyph(id)), Style::default().fg(sim.roster().color(id)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+        sp(format!("{:<8}", sim.roster().plural(id)), theme::text()),
     ];
     if g.groups[i] == 0 {
         spans.push(sp(format!("no {words} forming — all {} alone", sim.species[i].count), theme::dim_text()));
     } else {
         spans.push(sp("mean ", theme::dim_text()));
-        spans.push(sp(format!("{:.1}", g.mean[i]), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)));
+        spans.push(sp(format!("{:.1}", g.mean[i]), Style::default().fg(sim.roster().color(id)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)));
         spans.push(sp(format!("  max {}   {} {noun}   {} of {} grouped ({:.0}%)   {} alone", g.max[i], g.groups[i], g.members[i], sim.species[i].count, g.grouped_share(i, sim.species[i].count) * 100.0, g.solo(i)), theme::text()));
     }
     util::line(f, area, 0, Line::from(spans));
 
     let hist = Rect::new(area.x + GUTTER, area.y + 1, COL_W * crate::cast!(GROUP_HIST => u16), area.height - 2);
     let values: Vec<u16> = g.hist[i].iter().map(|&v| crate::cast!(v.min(u32::from(u16::MAX)) => u16)).collect();
-    bars::histogram(f.buffer_mut(), hist, &values, id.color(), COL_W);
+    bars::histogram(f.buffer_mut(), hist, &values, sim.roster().color(id), COL_W);
     let peak = values.iter().copied().max().unwrap_or(0);
     f.buffer_mut().set_stringn(area.x, area.y + 1, format!("{peak:>5}"), 5, theme::dim_text());
 
@@ -83,21 +83,21 @@ fn species_block(f: &mut Frame<'_>, area: Rect, sim: &Sim, id: SpeciesId) {
 pub(super) fn group_sidebar(f: &mut Frame<'_>, area: Rect, sim: &Sim) {
     let inner = panel::draw(f, area, "Group sizes", panel::Kind::Outer);
     let mut row = 0u16;
-    for id in SpeciesId::ALL {
+    for id in sim.roster().ids() {
         let i = id.index();
         let g = &sim.group_stats;
         let absent = sim.species[i].count == 0;
         let style = if absent { theme::dim_text() } else { theme::text() };
         let mut spans = vec![
-            sp(format!(" {} ", id.glyph().to_ascii_uppercase()), Style::default().fg(if absent { theme::DIM } else { id.color() }).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-            sp(format!("{:<8}", id.name()), style),
+            sp(format!(" {} ", sim.roster().adult_glyph(id)), Style::default().fg(if absent { theme::DIM } else { sim.roster().color(id) }).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!("{:<8}", sim.roster().display_name(id)), style),
         ];
         if absent {
             spans.push(sp("—", theme::dim_text()));
         } else if g.groups[i] == 0 {
             spans.push(sp(format!("all {} alone", g.solo(i)), theme::dim_text()));
         } else {
-            let (word, words) = group_word(id);
+            let (word, words) = group_word(sim.roster().kind(id));
             let noun = if g.groups[i] == 1 { word } else { words };
             spans.push(sp(format!("mean {:.1}  max {:<3} {} {}", g.mean[i], g.max[i], g.groups[i], noun), style));
         }

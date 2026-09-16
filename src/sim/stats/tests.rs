@@ -1,6 +1,7 @@
 //! Unit tests for the `stats` module, extracted from `stats.rs`.
 
 use super::*;
+use crate::sim::species::testing::*;
 use crate::sim::creatures::place_founders;
 use crate::sim::params::{CreaturesParams, GeneticsParams, WorldParams};
 use crate::sim::rng::Rng;
@@ -11,12 +12,14 @@ fn census_per_species() {
     let w = World::generate(7, &WorldParams::default());
     let params = CreaturesParams::default();
     let mut store = CreatureStore::new();
-    for c in place_founders(&w, &params, &GeneticsParams::default(), 0.20, &mut Rng::new(5)) {
+    for c in place_founders(&w, roster(), &params, &GeneticsParams::default(), 0.20, &mut Rng::new(5)) {
         store.insert(c);
     }
-    let c = census(&store);
-    for (i, id) in SpeciesId::ALL.iter().enumerate() {
-        let want = params.initial_counts.get(id).copied().unwrap_or(0);
+    let c = census(&store,N_SPECIES);
+    let _ = &params;
+    for id in roster().ids() {
+        let i = id.index();
+        let want = roster().get(id).initial_count;
         assert_eq!(c.population[i], want, "{id:?}");
         assert_eq!(c.adults[i] + c.juveniles[i], want, "{id:?}");
         if want > 0 {
@@ -43,23 +46,23 @@ fn sample(day: u32) -> Sample {
         drought_flags: [false; 8],
         region_veg: [0.0; 8],
         region_moist: [0.0; 8],
-        population: [0; 6],
-        adults: [0; 6],
-        juveniles: [0; 6],
+        population: vec![0; 6],
+        adults: vec![0; 6],
+        juveniles: vec![0; 6],
         deaths_starved: 0,
         deaths_thirst: 0,
         deaths_age: 0,
-        genome_mean: [Genome([0.0; Genome::LEN]); 6],
-        genome_min: [Genome([0.0; Genome::LEN]); 6],
-        genome_max: [Genome([0.0; Genome::LEN]); 6],
-        births: [0; 6],
-        deaths: [0; 6],
-        generation_mean: [0.0; 6],
-        generation_max: [0; 6],
-        infected: [0; 6],
-        immune: [0; 6],
+        genome_mean: vec![Genome([0.0; Genome::LEN]); 6],
+        genome_min: vec![Genome([0.0; Genome::LEN]); 6],
+        genome_max: vec![Genome([0.0; Genome::LEN]); 6],
+        births: vec![0; 6],
+        deaths: vec![0; 6],
+        generation_mean: vec![0.0; 6],
+        generation_max: vec![0; 6],
+        infected: vec![0; 6],
+        immune: vec![0; 6],
         deaths_disease: 0,
-        parasite_mean: [0.0; 6],
+        parasite_mean: vec![0.0; 6],
         active_by_pathogen: [0; 8],
     }
 }
@@ -88,10 +91,10 @@ fn histogram_buckets() {
     assert_eq!(hist_bucket(1.0), 11);
     let w = World::generate(7, &WorldParams::default());
     let mut store = CreatureStore::new();
-    for c in place_founders(&w, &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(5)) {
+    for c in place_founders(&w, roster(), &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(5)) {
         store.insert(c);
     }
-    let c = census(&store);
+    let c = census(&store,N_SPECIES);
     for i in 0..6 {
         for t in 0..Genome::LEN {
             let n: u32 = c.hist[i][t].iter().map(|&v| u32::from(v)).sum();
@@ -113,8 +116,8 @@ fn species_record_incremental_equals_full() {
         sim.step();
     }
     for (i, s) in sim.species.iter().enumerate() {
-        let id = SpeciesId::ALL[i];
-        let full = census(&sim.creatures);
+        let id = SpeciesId::from_index(i);
+        let full = census(&sim.creatures,N_SPECIES);
         assert_eq!(s.count, full.population[i], "{id:?} count");
         assert_eq!(s.adults, full.adults[i], "{id:?} adults");
         assert_eq!(s.juveniles, full.juveniles[i], "{id:?} juveniles");
@@ -141,16 +144,16 @@ fn species_record_incremental_equals_full() {
 fn drift_sample_cadence() {
     let w = World::generate(7, &WorldParams::default());
     let mut store = CreatureStore::new();
-    for c in place_founders(&w, &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(5)) {
+    for c in place_founders(&w, roster(), &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(5)) {
         store.insert(c);
     }
-    let c = census(&store);
-    let mut stats = SpeciesStats::all(&c, 0, 2);
+    let c = census(&store,N_SPECIES);
+    let mut stats = SpeciesStats::all(&c, roster(), 0, 2);
     let vole = &stats[0];
     assert_eq!(vole.drift.len(), 1, "the founding census is the first sample");
     assert_eq!(vole.drift[0].0, 1);
     // Generation grows by one: no new sample; by two: a sample.
-    let tallies = DeathTallies::default();
+    let tallies = DeathTallies::new(N_SPECIES);
     let mut c2 = c;
     c2.max_generation[0] = 2;
     update_species_daily(&mut stats, &c2, &tallies, 1, 2);
@@ -170,7 +173,7 @@ fn drift_sample_cadence() {
 
 fn lineage_creature(id: u32, gen: u32, parents: Option<(u32, u32)>, alive: bool) -> crate::sim::Creature {
     let w = World::generate(7, &WorldParams::default());
-    let mut c = place_founders(&w, &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(1)).remove(0);
+    let mut c = place_founders(&w, roster(), &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(1)).remove(0);
     c.id = crate::sim::CreatureId(id);
     c.generation = gen;
     c.parents = parents.map(|(m, f)| (crate::sim::CreatureId(m), crate::sim::CreatureId(f)));
@@ -186,7 +189,7 @@ fn lineage_prune_keeps_ancestors() {
     // g1: 1 (mother), 2 (father) → g2: 3 → g3: 4 (living) ; 5 is a dead g1 with no living descendants.
     for (id, gen, parents, alive) in [(1, 1, None, false), (2, 1, None, false), (5, 1, None, false), (3, 2, Some((1, 2)), false), (4, 3, Some((3, 3)), true)] {
         let c = lineage_creature(id, gen, parents, alive);
-        lin.record(&c, 0.1);
+        lin.record(&c, roster(), 0.1);
         if !alive {
             lin.record_death(c.id, 50, crate::sim::creatures::Cause::Age, None, 0);
         }
@@ -228,10 +231,10 @@ fn lineage_root_depth_and_cap() {
     let mut next = 100u32;
     for id in 1..=5u32 {
         let parents = if id == 1 { None } else { Some((id - 1, id - 1)) };
-        lin.record(&lineage_creature(id, id, parents, true), 0.1);
+        lin.record(&lineage_creature(id, id, parents, true), roster(), 0.1);
         if id > 1 {
             for _ in 0..200 {
-                lin.record(&lineage_creature(next, id, Some((id - 1, id - 1)), true), 0.1);
+                lin.record(&lineage_creature(next, id, Some((id - 1, id - 1)), true), roster(), 0.1);
                 next += 1;
             }
         }

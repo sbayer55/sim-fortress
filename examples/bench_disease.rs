@@ -75,15 +75,7 @@ fn main() {
             "lethality_resist_w" => d.lethality_resist_w = v.parse().unwrap(),
             "vertical_transmission" => d.vertical_transmission = v.parse().unwrap(),
             "sick_hunger_factor" => d.sick_hunger_factor = v.parse().unwrap(),
-            "fox" => {
-                params.creatures.initial_counts.insert(SpeciesId::Fox, v.parse().unwrap());
-            }
-            "wolf" => {
-                params.creatures.initial_counts.insert(SpeciesId::Wolf, v.parse().unwrap());
-            }
-            "lynx" => {
-                params.creatures.initial_counts.insert(SpeciesId::Lynx, v.parse().unwrap());
-            }
+            "fox" | "wolf" | "lynx" => params.species.set_initial_count(k, v.parse().unwrap()),
             "rain" => {
                 params.world.rainfall = match v.as_str() {
                     "dry" => Rainfall::Dry,
@@ -133,12 +125,12 @@ fn main() {
         println!("\noutbreaks:");
         for (i, o) in sim_on.disease.outbreaks.iter().enumerate() {
             let name = sim_on.disease.name(o.pathogen);
-            let host = (0..6).max_by_key(|&s| o.species_cases[s]).unwrap_or(0);
+            let host = (0..o.species_cases.len()).max_by_key(|&s| o.species_cases[s]).unwrap_or(0);
             println!(
                 "  #{:<2} {:<26} day {:>5} → {:>5}  cases {:>4} dead {:>4} rec {:>4} peak {:>4}{}  resist {} {:.3} → {:.3}",
                 i, name, o.started_day, o.ended_day.map_or_else(|| "open".into(), |d| d.to_string()),
                 o.cases, o.deaths, o.recovered, o.peak_active, if o.epidemic { " EPIDEMIC" } else { "" },
-                SpeciesId::ALL[host].name(), o.resist_at_start[host], o.resist_at_end[host]
+                sim_on.roster().name(SpeciesId::from_index(host)), o.resist_at_start[host], o.resist_at_end[host]
             );
         }
         let spill = sim_on.events.iter().filter(|e| e.kind == EventKind::Spillover).count();
@@ -147,11 +139,11 @@ fn main() {
 }
 
 struct YearRow {
-    pop: [u32; 6],
+    pop: Vec<u32>,
     outbreaks: usize,
     epidemics: usize,
     disease_deaths: u32,
-    resist: [f32; 6],
+    resist: Vec<f32>,
 }
 
 fn run(seed: u64, years: u64, params: &Params) -> (Vec<YearRow>, Sim) {
@@ -161,13 +153,13 @@ fn run(seed: u64, years: u64, params: &Params) -> (Vec<YearRow>, Sim) {
         for _ in 0..360 * 24 {
             sim.step();
         }
-        let census = sim_fortress::sim::stats::census(&sim.creatures);
+        let census = sim_fortress::sim::stats::census(&sim.creatures, sim.roster().len());
         rows.push(YearRow {
             pop: census.population,
             outbreaks: sim.disease.outbreaks.len(),
             epidemics: sim.disease.outbreaks.iter().filter(|o| o.epidemic).count(),
             disease_deaths: sim.disease.stats.iter().map(|s| s.total_deaths).sum(),
-            resist: std::array::from_fn(|i| census.genome_mean[i].resistance()),
+            resist: census.genome_mean.iter().map(sim_fortress::sim::Genome::resistance).collect(),
         });
     }
     (rows, sim)

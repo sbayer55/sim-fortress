@@ -31,7 +31,9 @@ Rust, ratatui 0.30 (crossterm re-exported as `ratatui::crossterm`).
 - **Colors always come from `src/theme.rs`.** Palette plus the ramps `heat`,
   `veg`, `water`, `parasite`, `species_ramp`, and `lerp` / `dim` / `night`.
   Styles: `theme::text()`, `dim_text()`, `title()`, `key()`, `label()`,
-  `border()`, `border_focus()`, `selected()`.
+  `border()`, `border_focus()`, `selected()`. Species glyphs and colours are the
+  exception: they come from the `[[species]]` roster via `ui::style::SpeciesStyle`
+  (`sim.roster().glyph(id)` / `.color(id)`).
 - There is no longer a fixed frame. A screen's `render` receives whatever `area`
   it is given (the full terminal from `App::draw`); tests use a 155×45
   `TestBackend`.
@@ -103,7 +105,7 @@ siblings cannot reach each other's.
 - `src/sim/mod.rs` — no `ratatui`, `HashMap` or `HashSet` under `src/sim`.
 - `src/glyphs.rs` — every glyph is CP437 and one cell wide.
 - `src/sim/mod.rs` — `checksum_is_fnv_stable` pins the simulation checksum to
-  `0x348e3c6eeec2e6d6`. Refactors of `src/sim` must be **pure code motion**: never
+  `0x8c2b_5ee8_5b5a_263d`. Refactors of `src/sim` must be **pure code motion**: never
   reorder or merge RNG draws, or this fails.
 
 `docs/file-split-plan.md` records how the 800-line ceiling was reached.

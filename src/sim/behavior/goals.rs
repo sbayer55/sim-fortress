@@ -7,7 +7,7 @@ use crate::sim::events::EventRing;
 use crate::sim::genetics::{self, TickView};
 use crate::sim::geom;
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{CreaturesParams, EcologyParams, GeneticsParams, PredationParams, SocialParams};
+use crate::sim::params::{CreaturesParams, EcologyParams, GeneticsParams, PredationParams, Roster, SocialParams};
 use crate::sim::rng::Rng;
 use crate::sim::spatial::SpatialIndex;
 use crate::sim::species::Kind;
@@ -30,6 +30,7 @@ pub(super) fn update_one(
     world: &mut World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     cp: &CreaturesParams,
     ep: &EcologyParams,
     gp: &GeneticsParams,
@@ -43,7 +44,7 @@ pub(super) fn update_one(
 ) {
     let fx = disease::effects(c, dp);
     // FR5: Flee pre-empts every goal for prey; FR5b adds the wary tier below it.
-    if c.species.kind() == Kind::Prey {
+    if roster.kind(c.species) == Kind::Prey {
         preempt_prey(c, world, time, pp, tallies);
     }
 
@@ -63,12 +64,12 @@ pub(super) fn update_one(
     }
 
     // Goal satisfied → replan now.
-    if goal_satisfied(c, time, pp) {
+    if goal_satisfied(c, time, roster, pp) {
         c.replan_at = time.tick;
     }
     // Replan when due.
     if time.tick >= c.replan_at {
-        replan(c, spatial, world, time, cp, gp, pp, view, rng, dp, fx.rest_energy, sp);
+        replan(c, spatial, world, time, roster, cp, gp, pp, view, rng, dp, fx.rest_energy, sp);
     }
     // Track the current prey target while hunting (Stalk → Chase).
     if c.goal == Goal::Hunt && c.hunt_phase != HuntPhase::Eat {
@@ -77,13 +78,13 @@ pub(super) fn update_one(
     // Move toward the target.
     move_toward(c, world, time, cp, pp, fx.speed_factor);
     // Act on the goal at the current location.
-    act(c, world, events, time, cp, dp, rng);
+    act(c, world, events, time, roster, cp, dp, rng);
     // Needs and hp.
     needs(c, world, time, cp, ep, gp, dp, fx.hunger_factor);
     // Death.
-    maybe_die(c, world, events, time, tallies, lineage, dp);
+    maybe_die(c, world, events, time, roster, tallies, lineage, dp);
     // Pressure and parasite shedding.
-    pressure(c, world, cp);
+    pressure(c, world, roster, cp);
     disease::parasite_shed(c, world, dp);
 }
 
@@ -151,7 +152,7 @@ fn enter_wary(c: &mut Creature, world: &World, tick: u64, pp: &PredationParams, 
     }
 }
 
-fn goal_satisfied(c: &Creature, time: &Time, pp: &PredationParams) -> bool {
+fn goal_satisfied(c: &Creature, time: &Time, roster: &Roster, pp: &PredationParams) -> bool {
     match c.goal {
         Goal::Drink => c.thirst <= 0.1,
         Goal::Graze => c.hunger <= 0.2,
@@ -160,7 +161,7 @@ fn goal_satisfied(c: &Creature, time: &Time, pp: &PredationParams) -> bool {
             Some(RestReason::Energy) => c.energy >= 0.9,
             // Diurnal wake at sunrise; nocturnal wake at nightfall.
             Some(RestReason::Night) => {
-                if pp.is_nocturnal(c.species) { time.is_night() } else { !time.is_night() }
+                if roster.is_nocturnal(c.species) { time.is_night() } else { !time.is_night() }
             }
             None => true,
         },
@@ -185,6 +186,7 @@ pub(super) fn replan(
     spatial: &SpatialIndex,
     world: &World,
     time: &Time,
+    roster: &Roster,
     cp: &CreaturesParams,
     gp: &GeneticsParams,
     pp: &PredationParams,
@@ -218,10 +220,10 @@ pub(super) fn replan(
         return;
     }
 
-    if c.species.kind() == Kind::Predator {
-        replan_predator(c, spatial, world, time, cp, gp, pp, view, rng, dp, rest_energy, sp);
+    if roster.kind(c.species) == Kind::Predator {
+        replan_predator(c, spatial, world, time, roster, cp, gp, pp, view, rng, dp, rest_energy, sp);
     } else {
-        replan_prey(c, spatial, world, time, cp, gp, pp, view, rng, dp, rest_energy, sp);
+        replan_prey(c, spatial, world, time, roster, cp, gp, pp, view, rng, dp, rest_energy, sp);
     }
 }
 
@@ -231,6 +233,7 @@ fn replan_prey(
     spatial: &SpatialIndex,
     world: &World,
     time: &Time,
+    roster: &Roster,
     cp: &CreaturesParams,
     gp: &GeneticsParams,
     pp: &PredationParams,
@@ -291,7 +294,7 @@ fn replan_prey(
     // 3. Rest (enter energy < rest threshold or night; stay until satisfied).
     // The threshold is 0.25, raised for the sick (C7 FR6).
     let rest_enter = c.energy < rest_energy || time.is_night();
-    let rest_stay = c.goal == Goal::Rest && !goal_satisfied(c, time, pp);
+    let rest_stay = c.goal == Goal::Rest && !goal_satisfied(c, time, roster, pp);
     if rest_enter || rest_stay {
         if c.goal != Goal::Rest {
             c.rest_reason = Some(if c.energy < rest_energy { RestReason::Energy } else { RestReason::Night });
@@ -303,7 +306,7 @@ fn replan_prey(
     }
 
     // 4. Mate (C4 FR2): eligible adults seek the nearest eligible partner.
-    if view.cap_ok && genetics::eligible(c, time, world, gp, dp) {
+    if view.cap_ok && genetics::eligible(c, time, world, roster, gp, dp) {
         if let Some((mate, pos)) = genetics::pick_mate(c, &p.creatures, view) {
             c.goal = Goal::Mate;
             c.rest_reason = None;
@@ -325,6 +328,7 @@ fn replan_predator(
     spatial: &SpatialIndex,
     world: &World,
     time: &Time,
+    roster: &Roster,
     cp: &CreaturesParams,
     gp: &GeneticsParams,
     pp: &PredationParams,
@@ -353,7 +357,7 @@ fn replan_predator(
 
     // 2. Hunt (hunger > hunt_hunger_min and a detectable prey in range).
     if c.hunger > pp.hunt_hunger_min && time.tick >= c.hunt_cooldown_until {
-        if let Some((prey, pos)) = pick_hunt_target(c, &p.creatures, view, world, pp, sp) {
+        if let Some((prey, pos)) = pick_hunt_target(c, &p.creatures, view, world, roster, pp, sp) {
             c.goal = Goal::Hunt;
             c.rest_reason = None;
             c.hunt_phase = HuntPhase::Stalk;
@@ -367,7 +371,7 @@ fn replan_predator(
 
     // 3. Scavenge (hunger > scavenge_hunger_min and a prey carcass in range).
     if c.hunger > pp.scavenge_hunger_min {
-        if let Some((carcass, pos)) = pick_scavenge_target(c, view) {
+        if let Some((carcass, pos)) = pick_scavenge_target(c, view, roster) {
             c.goal = Goal::Scavenge;
             c.rest_reason = None;
             c.scavenge_target = Some(carcass);
@@ -378,7 +382,7 @@ fn replan_predator(
     }
 
     // 4. Mate (C4 rules; the vegetation gate does not apply to predators).
-    if view.cap_ok && genetics::eligible(c, time, world, gp, dp) {
+    if view.cap_ok && genetics::eligible(c, time, world, roster, gp, dp) {
         if let Some((mate, pos)) = genetics::pick_mate(c, &p.creatures, view) {
             c.goal = Goal::Mate;
             c.rest_reason = None;
@@ -391,8 +395,8 @@ fn replan_predator(
 
     // 5. Rest (energy < rest threshold, or night for diurnal / day for nocturnal).
     let rest_enter = c.energy < rest_energy
-        || if pp.is_nocturnal(c.species) { !time.is_night() } else { time.is_night() };
-    let rest_stay = c.goal == Goal::Rest && !goal_satisfied(c, time, pp);
+        || if roster.is_nocturnal(c.species) { !time.is_night() } else { time.is_night() };
+    let rest_stay = c.goal == Goal::Rest && !goal_satisfied(c, time, roster, pp);
     if rest_enter || rest_stay {
         if c.goal != Goal::Rest {
             c.rest_reason = Some(if c.energy < rest_energy { RestReason::Energy } else { RestReason::Night });

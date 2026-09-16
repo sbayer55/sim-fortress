@@ -7,7 +7,7 @@ use ratatui::text::{Line, Span};
 use ratatui::Frame;
 use crate::sim::creatures::CreatureId;
 use crate::sim::disease::{self, PathogenId};
-use crate::sim::{Sim, SpeciesId, World};
+use crate::sim::{Sim, World};
 use crate::ui::style::{SpeciesStyle};
 use crate::widgets::map::{self};
 use crate::widgets::{panel, util};
@@ -86,7 +86,7 @@ fn disease_outbreak(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, ds:
             util::line(f, inner, row, Line::from(vec![Span::styled(" origin ", theme::dim_text()), Span::styled(origin, theme::text())]));
             row += 1;
             let index = match sim.creatures.get(o.index_case) {
-                Some(c) => format!("{} {} ({})", c.tag(), c.name_str(), c.species.name().to_lowercase()),
+                Some(c) => format!("{} {} ({})", c.tag(sim.roster()), c.name_str(sim.roster()), sim.roster().name(c.species)),
                 None => format!("#{}", o.index_case.0),
             };
             util::line(f, inner, row, Line::from(vec![Span::styled(" index case ", theme::dim_text()), Span::styled(index, theme::text())]));
@@ -125,8 +125,8 @@ fn disease_by_species(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, s
         row += 1;
         util::line(f, inner, row, Line::from(Span::styled("   species    n  sick immune resist", theme::dim_text())));
         row += 1;
-        let resist = disease::mean_resistance(&sim.creatures);
-        for id in SpeciesId::ALL {
+        let resist = disease::mean_resistance(&sim.creatures, sim.roster().len());
+        for id in sim.roster().ids() {
             let (mut n, mut sick, mut immune) = (0u32, 0u32, 0u32);
             for c in sim.creatures.living().filter(|c| c.species == id) {
                 n += 1;
@@ -137,7 +137,7 @@ fn disease_by_species(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, s
                     immune += 1;
                 }
             }
-            let base = id.base_genome().resistance();
+            let base = sim.roster().base_genome(id).resistance();
             let mean = resist[id.index()];
             let text = if n == 0 { theme::dim_text() } else { theme::text() };
             let arrow = if n == 0 {
@@ -150,8 +150,8 @@ fn disease_by_species(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, s
                 glyphs::FLAT
             };
             util::line(f, inner, row, Line::from(vec![
-                Span::styled(format!(" {} ", id.glyph().to_ascii_uppercase()), tone(id.color()).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("{:<8}{n:>4}", id.name()), text),
+                Span::styled(format!(" {} ", sim.roster().adult_glyph(id)), tone(sim.roster().color(id)).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{:<8}{n:>4}", sim.roster().display_name(id)), text),
                 Span::styled(format!("{sick:>6}"), if sick > 0 { tone(theme::SICK) } else { theme::dim_text() }),
                 Span::styled(format!("{immune:>7}"), if immune > 0 { tone(theme::IMMUNE) } else { theme::dim_text() }),
                 Span::styled(if n == 0 { "    —".to_string() } else { format!("  {}", fmt2(mean)) }, text),
@@ -170,7 +170,7 @@ pub(super) fn disease_tints(sim: &Sim, shown: Option<PathogenId>) -> HashMap<Cre
         .living()
         .map(|c| {
             let infection = c.infection.map(|i| (i.pathogen, i.stage));
-            (c.id, map::disease_tint(c.species.color(), shown, infection, immune_to_shown(c, shown, slots, day), c.parasite_load))
+            (c.id, map::disease_tint(sim.roster().color(c.species), shown, infection, immune_to_shown(c, shown, slots, day), c.parasite_load))
         })
         .collect()
 }

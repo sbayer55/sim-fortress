@@ -227,8 +227,8 @@ fn draw_resources(world: &World, sim: &Sim, mut put: impl FnMut(usize, usize, ch
         put(x, y, glyphs::CARCASS, theme::CARCASS, false);
     }
     for c in sim.creatures.living() {
-        let glyph = if c.adult { c.species.glyph().to_ascii_uppercase() } else { c.species.glyph() };
-        put(c.x, c.y, glyph, c.species.color(), c.adult);
+        let glyph = if c.adult { sim.roster().adult_glyph(c.species) } else { sim.roster().glyph(c.species) };
+        put(c.x, c.y, glyph, sim.roster().color(c.species), c.adult);
     }
 }
 
@@ -290,7 +290,7 @@ fn sidebar(f: &mut Frame<'_>, area: Rect, sim: &Sim, win: (usize, usize, usize, 
     let here = sim.creatures.living().find(|c| c.x == cx && c.y == cy);
     let den = sim.world.dens.iter().any(|&(x, y)| (x, y) == (cx, cy));
     let occupant = if let Some(c) = here {
-        format!("{} {} is here", c.name_str(), c.tag())
+        format!("{} {} is here", c.name_str(sim.roster()), c.tag(sim.roster()))
     } else if den {
         "a den is here".to_string()
     } else {
@@ -312,10 +312,10 @@ fn sidebar(f: &mut Frame<'_>, area: Rect, sim: &Sim, win: (usize, usize, usize, 
     row += 1;
     for (d, id) in near.iter().take(14) {
         let Some(c) = sim.creatures.get(*id) else { continue };
-        let glyph = if c.adult { c.species.glyph().to_ascii_uppercase() } else { c.species.glyph() };
+        let glyph = if c.adult { sim.roster().adult_glyph(c.species) } else { sim.roster().glyph(c.species) };
         util::line(f, inner, row, Line::from(vec![
-            Span::styled(format!(" {glyph} "), Style::default().fg(c.species.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{:<6} {:<8} {:>4.0}", c.tag(), c.name_str(), d), theme::text()),
+            Span::styled(format!(" {glyph} "), Style::default().fg(sim.roster().color(c.species)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{:<6} {:<8} {:>4.0}", c.tag(sim.roster()), c.name_str(sim.roster()), d), theme::text()),
         ]));
         row += 1;
     }

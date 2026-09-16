@@ -7,7 +7,7 @@ use crate::sim::events::EventRing;
 use crate::sim::genetics::{self, TickView};
 use crate::sim::geom;
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{PredationParams, SocialParams};
+use crate::sim::params::{PredationParams, Roster, SocialParams};
 use crate::sim::predation::{self};
 use crate::sim::rng::Rng;
 use crate::sim::species::{Kind, SpeciesId};
@@ -95,6 +95,7 @@ pub(super) fn pick_hunt_target(
     candidates: &[CreatureId],
     view: &TickView,
     world: &World,
+    roster: &Roster,
     pp: &PredationParams,
     sp: &SocialParams,
 ) -> Option<(CreatureId, (usize, usize))> {
@@ -120,10 +121,10 @@ pub(super) fn pick_hunt_target(
     let mut best: Option<(CreatureId, (usize, usize), f32)> = None;
     for id in ids {
         let Some(peer) = view.get(id) else { continue };
-        if peer.species.kind() != Kind::Prey {
+        if roster.kind(peer.species) != Kind::Prey {
             continue;
         }
-        let pref = pp.preference(c.species, peer.species);
+        let pref = roster.preference(c.species, peer.species);
         if pref <= 0.0 {
             continue;
         }
@@ -143,9 +144,9 @@ pub(super) fn pick_hunt_target(
 }
 
 /// Nearest prey carcass within sense range (ties by id).
-pub(super) fn pick_scavenge_target(c: &Creature, view: &TickView) -> Option<(CreatureId, (usize, usize))> {
+pub(super) fn pick_scavenge_target(c: &Creature, view: &TickView, roster: &Roster) -> Option<(CreatureId, (usize, usize))> {
     let r = f32::from(c.genome.sense_cells());
-    let mut cs: Vec<&genetics::Carcass> = view.carcasses.iter().filter(|k| k.species.kind() == Kind::Prey).collect();
+    let mut cs: Vec<&genetics::Carcass> = view.carcasses.iter().filter(|k| roster.kind(k.species) == Kind::Prey).collect();
     cs.sort_unstable_by_key(|k| k.id);
     let mut best: Option<(CreatureId, (usize, usize))> = None;
     let mut best_d = f32::INFINITY;
@@ -185,6 +186,7 @@ pub(super) fn hunt_contacts(
     world: &mut World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     pp: &PredationParams,
     dp: &DiseaseParams,
     sp: &SocialParams,
@@ -202,7 +204,7 @@ pub(super) fn hunt_contacts(
     hunters.sort_unstable();
 
     for (pred_id, prey_id) in hunters {
-        let Some(snap) = hunt_snapshot(store, pred_id, prey_id, dp) else { continue };
+        let Some(snap) = hunt_snapshot(store, pred_id, prey_id, roster, dp) else { continue };
         if snap.cheb > pp.catch_distance_cheb {
             continue;
         }
@@ -217,7 +219,7 @@ pub(super) fn hunt_contacts(
         .clamp(pp.kill_min, pp.kill_max);
         let chase_ticks = snap.chase_start.map_or(0, |s| crate::cast!(time.tick.saturating_sub(s) => u16));
         if rng.chance(chance) {
-            resolve_kill(store, world, events, time, pp, dp, sp, tallies, lineage, dstate, drng, pred_id, prey_id, &snap, participants, extra, chase_ticks);
+            resolve_kill(store, world, events, time, roster, pp, dp, sp, tallies, lineage, dstate, drng, pred_id, prey_id, &snap, participants, extra, chase_ticks);
         } else {
             resolve_miss(store, world, time, pp, tallies, pred_id, prey_id, snap.pred_at);
         }
@@ -225,7 +227,7 @@ pub(super) fn hunt_contacts(
 }
 
 /// Snapshot the pair, or `None` when the hunt is no longer valid.
-fn hunt_snapshot(store: &CreatureStore, pred_id: CreatureId, prey_id: CreatureId, dp: &DiseaseParams) -> Option<HuntSnap> {
+fn hunt_snapshot(store: &CreatureStore, pred_id: CreatureId, prey_id: CreatureId, roster: &Roster, dp: &DiseaseParams) -> Option<HuntSnap> {
     // Snapshot the facts we need before mutating either creature.
     let (p, q) = (store.get(pred_id)?, store.get(prey_id)?);
     if !(p.alive && q.alive && p.goal == Goal::Hunt && p.hunt_target == Some(prey_id)) {
@@ -241,7 +243,7 @@ fn hunt_snapshot(store: &CreatureStore, pred_id: CreatureId, prey_id: CreatureId
         px: q.x,
         py: q.y,
         cheb: geom::cheb(p.x, p.y, q.x, q.y),
-        killer_label: format!("{} {}", p.name_str(), p.tag()),
+        killer_label: p.label(roster),
         pred_at: (p.x, p.y, p.species),
         sick_bonus: disease::effects(q, dp).kill_bonus,
     })
@@ -278,6 +280,7 @@ fn resolve_kill(
     world: &mut World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     pp: &PredationParams,
     dp: &DiseaseParams,
     sp: &SocialParams,
@@ -297,7 +300,7 @@ fn resolve_kill(
     let prey_size = snap.prey_size;
     if let Some(prey) = store.get_mut(prey_id) {
         if prey.alive {
-            kill(prey, Cause::Predation, world, events, time, tallies, lineage, Some(pred_id), chase_ticks, Some(&snap.killer_label));
+            kill(prey, Cause::Predation, world, events, time, roster, tallies, lineage, Some(pred_id), chase_ticks, Some(&snap.killer_label));
         }
     }
     if let Some(p) = store.get_mut(pred_id) {
@@ -334,7 +337,7 @@ fn resolve_kill(
         carcass.decay = (carcass.decay + eaten).min(1.0);
     }
     // C7 FR7/FR8b: the meal carries parasites, infection or a spillover.
-    disease::on_eat(store, pred_id, prey_id, world, events, time, dp, dstate, drng);
+    disease::on_eat(store, pred_id, prey_id, world, events, time, roster, dp, dstate, drng);
 }
 
 /// A missed catch: the predator re-plans, the prey is forced to flee.
@@ -362,7 +365,7 @@ fn resolve_miss(
 
 /// Post-loop pass: a predator adjacent to its scavenge target eats once (FR3).
 #[allow(clippy::too_many_arguments)]
-pub(super) fn scavenge_contacts(store: &mut CreatureStore, world: &World, events: &mut EventRing, time: &Time, pp: &PredationParams, dp: &DiseaseParams, dstate: &mut DiseaseState, drng: &mut Rng) {
+pub(super) fn scavenge_contacts(store: &mut CreatureStore, world: &World, events: &mut EventRing, time: &Time, roster: &Roster, pp: &PredationParams, dp: &DiseaseParams, dstate: &mut DiseaseState, drng: &mut Rng) {
     let scavengers: Vec<CreatureId> = store
         .living()
         .filter(|c| c.goal == Goal::Scavenge && c.scavenge_target.is_some())
@@ -377,7 +380,7 @@ pub(super) fn scavenge_contacts(store: &mut CreatureStore, world: &World, events
             let Some(c) = store.get(id) else { continue };
             let Some(t) = c.scavenge_target else { continue };
             match store.get(t) {
-                Some(k) if !k.alive && k.species.kind() == Kind::Prey => Some((t, k.x, k.y, k.decay)),
+                Some(k) if !k.alive && roster.kind(k.species) == Kind::Prey => Some((t, k.x, k.y, k.decay)),
                 _ => None,
             }
         };
@@ -402,6 +405,6 @@ pub(super) fn scavenge_contacts(store: &mut CreatureStore, world: &World, events
         if let Some(k) = store.get_mut(carcass_id) {
             k.decay = (k.decay + pp.scavenge_consumes_decay).min(1.0);
         }
-        disease::on_eat(store, id, carcass_id, world, events, time, dp, dstate, drng);
+        disease::on_eat(store, id, carcass_id, world, events, time, roster, dp, dstate, drng);
     }
 }

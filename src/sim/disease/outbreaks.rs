@@ -3,7 +3,6 @@
 use crate::sim::creatures::{Creature, CreatureStore};
 use crate::sim::events::{Event, EventKind, EventRing};
 use crate::sim::params::DiseaseParams;
-use crate::sim::species::SpeciesId;
 use crate::sim::time::Time;
 use crate::sim::world::World;
 use crate::sim::Alert;
@@ -14,7 +13,7 @@ use super::emergence::regions_with_cases;
 pub(super) fn tally_stats(store: &CreatureStore, state: &mut DiseaseState, n: usize, day: u32) {
     for s in &mut state.stats {
         s.active = 0;
-        s.active_by_species = [0; 6];
+        s.active_by_species.fill(0);
         s.immune = 0;
     }
     for c in store.living() {
@@ -47,8 +46,8 @@ pub(super) fn track_outbreaks(
     state: &mut DiseaseState,
     day: u32,
     dp: &DiseaseParams,
-    population: &[u32; 6],
-    resist: [f32; 6],
+    population: &[u32],
+    resist: &[f32],
 ) -> (Vec<u16>, Vec<u16>) {
     let mut active_by_outbreak: Vec<u32> = vec![0; state.outbreaks.len()];
     for c in store.living() {
@@ -62,6 +61,7 @@ pub(super) fn track_outbreaks(
     }
     let mut ended: Vec<u16> = Vec::new();
     let mut epidemics: Vec<u16> = Vec::new();
+    let hosts_by_outbreak: Vec<u32> = state.outbreaks.iter().map(|o| state.hosts_living(o.pathogen, population)).collect();
     for (i, o) in state.outbreaks.iter_mut().enumerate() {
         if o.ended_day.is_some() {
             continue;
@@ -75,16 +75,11 @@ pub(super) fn track_outbreaks(
         let index = state.first_index + crate::cast!(i => u16);
         if active == 0 {
             o.ended_day = Some(day);
-            o.resist_at_end = resist;
+            o.resist_at_end = resist.to_vec();
             ended.push(index);
         }
         // Epidemic threshold, once per outbreak.
-        let pid = o.pathogen;
-        let hosts: u32 = SpeciesId::ALL
-            .iter()
-            .filter(|s| state.pathogens.get(crate::cast!(pid.0 => usize)).is_some_and(|p| p.host(**s) > 0.0))
-            .map(|s| population[s.index()])
-            .sum();
+        let hosts: u32 = hosts_by_outbreak[i];
         if !o.epidemic && active >= dp.epidemic_min_cases && crate::cast!(active => f32) >= dp.epidemic_share * crate::cast!(hosts => f32) {
             o.epidemic = true;
             epidemics.push(index);

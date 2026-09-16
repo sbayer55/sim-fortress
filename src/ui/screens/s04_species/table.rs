@@ -13,8 +13,8 @@ use crate::widgets::{bars, panel, util};
 use crate::{glyphs, theme};
 use super::{SortCol, sorted_indices};
 
-const fn kind_label(id: SpeciesId) -> &'static str {
-    match id.kind() {
+const fn kind_label(kind: Kind) -> &'static str {
+    match kind {
         Kind::Prey => "prey",
         Kind::Predator => "pred",
     }
@@ -22,7 +22,7 @@ const fn kind_label(id: SpeciesId) -> &'static str {
 
 pub(super) fn table(f: &mut Frame<'_>, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesId, kind: panel::Kind) {
     let alive = sim.species.iter().filter(|s| s.count > 0).count();
-    let prey_n = sim.species.iter().filter(|s| s.count > 0 && s.species.kind() == Kind::Prey).count();
+    let prey_n = sim.species.iter().filter(|s| s.count > 0 && sim.roster().kind(s.species) == Kind::Prey).count();
     let inner = panel::draw_with_hint(f, area, "Species", &format!("{} species, {} prey / {} predator", alive, prey_n, alive - prey_n), kind);
     let dim = theme::dim_text();
     // C8: eleven genome columns, so the header is built from `TRAIT_ABBR` (never
@@ -73,9 +73,9 @@ fn table_row(f: &mut Frame<'_>, inner: Rect, row: u16, sim: &Sim, i: usize, sele
     let marker = if is_sel { glyphs::PLAY } else { ' ' };
     let mut spans = vec![
             sp(marker.to_string(), Style::default().fg(theme::KEY).bg(st.bg).add_modifier(Modifier::BOLD)),
-            sp(format!("{} ", id.glyph().to_ascii_uppercase()), Style::default().fg(if st.absent { theme::DIM } else { id.color() }).bg(st.bg).add_modifier(Modifier::BOLD)),
-            sp(format!("{:<8}", id.name()), st.base),
-            sp(format!("{:<5}", kind_label(id)), st.dimmed),
+            sp(format!("{} ", sim.roster().adult_glyph(id)), Style::default().fg(if st.absent { theme::DIM } else { sim.roster().color(id) }).bg(st.bg).add_modifier(Modifier::BOLD)),
+            sp(format!("{:<8}", sim.roster().display_name(id)), st.base),
+            sp(format!("{:<5}", kind_label(sim.roster().kind(id))), st.dimmed),
             sp(format!("{:>6}", s.count), st.base),
             sp(format!("{:>7}", s.adults), st.base),
             sp(format!("{:>6}", s.juveniles), st.base),
@@ -90,7 +90,7 @@ fn table_row(f: &mut Frame<'_>, inner: Rect, row: u16, sim: &Sim, i: usize, sele
             sp("  ", st.base),
         ];
     trait_spans(s, &st, &mut spans);
-    spans.push(sp(format!("  {}", id.diet()), st.dimmed));
+    spans.push(sp(format!("  {}", sim.roster().get(id).diet.as_str()), st.dimmed));
     util::line(f, inner, row, Line::from(spans));
     if is_sel {
         let buf = f.buffer_mut();
@@ -101,7 +101,7 @@ fn table_row(f: &mut Frame<'_>, inner: Rect, row: u16, sim: &Sim, i: usize, sele
         }
     }
     if !s.trend.is_empty() {
-        bars::sparkline(f.buffer_mut(), inner.x + 71, inner.y + row, 14, &s.trend, if absent { theme::DIM } else { id.color() });
+        bars::sparkline(f.buffer_mut(), inner.x + 71, inner.y + row, 14, &s.trend, if absent { theme::DIM } else { sim.roster().color(id) });
     }
 }
 
@@ -125,10 +125,10 @@ fn trait_spans(s: &SpeciesStats, st: &RowStyle, spans: &mut Vec<Span<'static>>) 
 fn table_totals(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim) {
     // Totals row.
     row += 1;
-    let prey: u32 = sim.species.iter().filter(|s| s.species.kind() == Kind::Prey).map(|s| s.count).sum();
-    let pred: u32 = sim.species.iter().filter(|s| s.species.kind() == Kind::Predator).map(|s| s.count).sum();
-    let births: u32 = (0..6).map(|i| sim.births_today(i)).sum();
-    let deaths: u32 = (0..6).map(|i| sim.deaths_today(i)).sum();
+    let prey: u32 = sim.species.iter().filter(|s| sim.roster().kind(s.species) == Kind::Prey).map(|s| s.count).sum();
+    let pred: u32 = sim.species.iter().filter(|s| sim.roster().kind(s.species) == Kind::Predator).map(|s| s.count).sum();
+    let births: u32 = (0..sim.roster().len()).map(|i| sim.births_today(i)).sum();
+    let deaths: u32 = (0..sim.roster().len()).map(|i| sim.deaths_today(i)).sum();
     util::line(f, inner, row, Line::from(vec![
         sp(format!("   {:<14}", "totals"), theme::label()),
         sp(format!("{:>6}", prey + pred), theme::text()),

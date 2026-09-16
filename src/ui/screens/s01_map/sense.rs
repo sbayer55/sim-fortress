@@ -5,7 +5,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 use crate::sim::creatures::CreatureId;
-use crate::sim::{Sim, SpeciesId};
+use crate::sim::Sim;
 use crate::ui::app::AppState;
 use crate::ui::style::{SpeciesStyle};
 use crate::widgets::{bars, panel, util};
@@ -25,7 +25,7 @@ fn ring_tally(sim: &Sim, c: &crate::sim::creatures::Creature, r_f: f32, r: u16) 
         if o.id == c.id || crate::sim::dist(c.x, c.y, o.x, o.y) > r_f {
             continue;
         }
-        if o.species.kind() == crate::sim::Kind::Prey {
+        if sim.roster().kind(o.species) == crate::sim::Kind::Prey {
             prey += 1;
         } else {
             pred += 1;
@@ -65,7 +65,7 @@ fn detected_table(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, c: &c
         row += 1;
         let mut rows: Vec<(f32, &crate::sim::Creature, &'static str)> = Vec::new();
         for o in sim.creatures.living() {
-            if o.species.kind() == c.species.kind() || crate::sim::dist(c.x, c.y, o.x, o.y) > r_f {
+            if sim.roster().kind(o.species) == sim.roster().kind(c.species) || crate::sim::dist(c.x, c.y, o.x, o.y) > r_f {
                 continue;
             }
             let status = if subject_is_prey {
@@ -98,8 +98,8 @@ fn detected_table(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, c: &c
                 _ => Style::default().fg(theme::GOOD).bg(theme::PANEL_BG),
             };
             util::line(f, inner, row, Line::from(vec![
-                Span::styled(format!(" {} ", o.species.glyph()), Style::default().fg(o.species.color()).bg(theme::PANEL_BG)),
-                Span::styled(format!("{:<5}{:<12}", o.tag(), o.name_str()), theme::text()),
+                Span::styled(format!(" {} ", sim.roster().glyph(o.species)), Style::default().fg(sim.roster().color(o.species)).bg(theme::PANEL_BG)),
+                Span::styled(format!("{:<5}{:<12}", o.tag(sim.roster()), o.name_str(sim.roster())), theme::text()),
                 Span::styled(format!("{d:>4.1} "), theme::text()),
                 Span::styled(format!("{:.2} ", o.genome.camouflage()), theme::dim_text()),
                 Span::styled(*status, st),
@@ -135,8 +135,8 @@ impl WorldMap {
         panel::section(f, inner, row, "Selected");
         row += 1;
         util::line(f, inner, row, Line::from(vec![
-            Span::styled(format!(" {} ", if c.adult { c.species.glyph().to_ascii_uppercase() } else { c.species.glyph() }), Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{} {}", c.name_str(), c.tag()), theme::title()),
+            Span::styled(format!(" {} ", if c.adult { sim.roster().adult_glyph(c.species) } else { sim.roster().glyph(c.species) }), Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            Span::styled(c.label(sim.roster()), theme::title()),
         ]));
         row += 1;
         let (sex_g, _) = match c.sex {
@@ -144,7 +144,7 @@ impl WorldMap {
             crate::sim::Sex::Female => (glyphs::FEMALE, "female"),
         };
         util::line(f, inner, row, Line::from(vec![
-            Span::styled(c.species.name(), Style::default().fg(c.species.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            Span::styled(sim.roster().display_name(c.species), Style::default().fg(sim.roster().color(c.species)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
             Span::styled(format!("  {} {}", sex_g, if c.adult { "adult" } else { "juvenile" }), theme::text()),
             Span::styled(format!("  ({}, {})  {}", c.x, c.y, sim.world.region_name(c.x, c.y)), theme::dim_text()),
         ]));
@@ -175,9 +175,9 @@ impl WorldMap {
         ]));
         row += 1;
         let mut listed = Vec::new();
-        for (i, id2) in SpeciesId::ALL.iter().enumerate() {
+        for (i, id2) in sim.roster().ids().map(|id| (id.index(), id)) {
             if tally[i] > 0 {
-                listed.push(format!("{}{} {}", id2.glyph().to_ascii_uppercase(), id2.glyph(), tally[i]));
+                listed.push(format!("{}{} {}", sim.roster().adult_glyph(id2), sim.roster().glyph(id2), tally[i]));
             }
         }
         if listed.is_empty() {
@@ -194,7 +194,7 @@ impl WorldMap {
 
         // Detected prey table (predator subject) or detected predators (prey
         // subject, FR9: the prey rule, halved range while resting).
-        let subject_is_prey = c.species.kind() == crate::sim::Kind::Prey;
+        let subject_is_prey = sim.roster().kind(c.species) == crate::sim::Kind::Prey;
         row = detected_table(f, inner, row, sim, c, pp, r_f, subject_is_prey);
 
         row = self.overlays_selector(f, inner, row);

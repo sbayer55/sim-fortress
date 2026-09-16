@@ -131,6 +131,7 @@ mod tests {
     use crate::ui::screens::s01_map::WorldMap;
     use crate::ui::screens::s09_worldgen::WorldGen;
     use crate::sim::{Params, Sim, SpeciesId};
+    use crate::ui::style::SpeciesStyle;
     use crate::widgets::map::Overlay;
     use ratatui::backend::TestBackend;
     use ratatui::crossterm::event::{KeyCode, KeyModifiers};
@@ -415,6 +416,31 @@ mod tests {
     }
 
     #[test]
+    fn s09_lists_one_row_per_roster_species() {
+        // A seventh species from a params overlay: the form grows a row, the
+        // Tab order grows with it, and Generate carries the roster through.
+        let mut p = Params::default();
+        p.apply_overlay("[[species]]\nname = \"boar\"\nplural = \"Boars\"\nglyph = \"b\"\ninitial_count = 40\n").unwrap();
+        let mut app = AppState::new(p.clone());
+        let mut s = WorldGen::from_params(&p);
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| s.render(&app, f, Rect::new(0, 0, 155, 45))).unwrap();
+        let form: String = (0..45).map(|y| (0..66).map(|x| terminal.backend().buffer()[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect();
+        assert!(form.contains("Boars"), "the seventh species has a row:\n{form}");
+        assert!(form.contains("Lynxes"), "the built-in species keep theirs:\n{form}");
+        // Tab all the way round: 10 world fields, 7 species rows, 12 tail fields.
+        let k = |c| KeyEvent::new(c, KeyModifiers::NONE);
+        for _ in 0..(10 + 7 + 12) {
+            s.handle_key(k(KeyCode::Tab), &mut app);
+        }
+        let generated = s.form_params();
+        assert_eq!(generated.species.len(), 7);
+        assert_eq!(generated.species.0[6].name, "boar");
+        assert_eq!(generated.species.0[6].initial_count, 40);
+    }
+
+    #[test]
     fn s09_q_returns_to_title_when_no_text_focus() {
         let mut app = state();
         let mut s = WorldGen::new();
@@ -633,7 +659,7 @@ mod tests {
         let mut seen = 0;
         for c in sim.creatures.living().filter(|c| c.alive && c.x < 110 && c.y < 40) {
             let cell = &buf[(1 + crate::cast!(c.x => u16), 1 + crate::cast!(c.y => u16))];
-            if cell.symbol() != c.species.glyph().to_string() && cell.symbol() != c.species.glyph().to_ascii_uppercase().to_string() {
+            if cell.symbol() != sim.roster().glyph(c.species).to_string() && cell.symbol() != sim.roster().adult_glyph(c.species).to_string() {
                 continue; // another creature or resource drew over it
             }
             assert!([theme::GOOD, theme::WARN, theme::BAD].contains(&cell.fg), "{:?} at {},{}", cell.fg, c.x, c.y);
@@ -652,14 +678,14 @@ mod tests {
         let Overlay::Species(first) = s.overlay else { panic!("6 opens the species overlay, got {:?}", s.overlay) };
         assert!(app.sim.as_ref().unwrap().creatures.living().any(|c| c.species == first), "defaults to a living species");
         // Tab walks every species in ALL order, wrapping; the sidebar stays put.
-        let n = SpeciesId::ALL.len();
+        let n = app.params.species.len();
         for i in 1..=n {
             s.handle_key(key(KeyCode::Tab), &mut app);
-            assert_eq!(s.overlay, Overlay::Species(SpeciesId::ALL[(first.index() + i) % n]));
+            assert_eq!(s.overlay, Overlay::Species(SpeciesId::from_index((first.index() + i) % n)));
         }
         assert!(!s.wide, "Tab cycles species instead of toggling the sidebar");
         s.handle_key(KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE), &mut app);
-        assert_eq!(s.overlay, Overlay::Species(SpeciesId::ALL[(first.index() + n - 1) % n]));
+        assert_eq!(s.overlay, Overlay::Species(SpeciesId::from_index((first.index() + n - 1) % n)));
         // Arrows still scroll under the species overlay.
         app.viewport_size.set((110, 40));
         s.handle_key(key(KeyCode::Right), &mut app);
@@ -668,7 +694,7 @@ mod tests {
         s.handle_key(key(KeyCode::Esc), &mut app);
         assert_eq!(s.overlay, Overlay::None);
         s.handle_key(key(KeyCode::Char('6')), &mut app);
-        assert_eq!(s.overlay, Overlay::Species(SpeciesId::ALL[(first.index() + n - 1) % n]));
+        assert_eq!(s.overlay, Overlay::Species(SpeciesId::from_index((first.index() + n - 1) % n)));
     }
 
     #[test]
@@ -714,7 +740,7 @@ mod tests {
     fn s01_species_overlay_renders_155x45() {
         let (mut app, mut s) = map_with_sim();
         s.handle_key(key(KeyCode::Char('6')), &mut app);
-        s.overlay = Overlay::Species(SpeciesId::Vole);
+        s.overlay = Overlay::Species(SpeciesId(0));
         s.world_name = "The Valley of Sunfall".into();
         let backend = TestBackend::new(155, 45);
         let mut terminal = Terminal::new(backend).unwrap();

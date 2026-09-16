@@ -35,7 +35,7 @@ impl WorldMap {
         util::line(f, inner, row, Line::from(Span::styled(format!(" {:<2} {:<16}{:>5}{:>6}  status", "▪", "region", "veg", "moist"), theme::dim_text())));
         row += 1;
         let th = &app.params.ui.scarcity_thresholds;
-        let prey_configured = app.params.creatures.initial_counts.iter().filter(|(id, _)| id.kind() == crate::sim::Kind::Prey).map(|(_, n)| *n).sum::<u32>() > 0;
+        let prey_configured = app.params.species.initial_total(crate::sim::Kind::Prey) > 0;
         for (i, r) in world.regions.iter().enumerate() {
             let veg = crate::sim::ecology::region_land_veg_mean(world, r);
             let moist = crate::sim::ecology::region_display_moisture_mean(world, r);

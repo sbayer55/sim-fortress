@@ -15,6 +15,7 @@ pub use social::SocialParams;
 pub use ecology::EcologyParams;
 pub use pathogen::{DiseaseParams, PathogenParams};
 pub use presets::{PRESETS, Preset};
+pub use species::{BaseGenome, Roster, SpeciesParams};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
@@ -30,12 +31,16 @@ pub struct Params {
     pub predation: PredationParams,
     pub disease: DiseaseParams,
     pub social: SocialParams,
+    /// The species roster (`[[species]]`); position is the `SpeciesId`.
+    pub species: Roster,
 }
 
 impl Params {
     /// Parse a (possibly partial) TOML table, deep-merged over defaults.
     pub fn from_toml(s: &str) -> Result<Self, toml::de::Error> {
-        toml::from_str(s)
+        let p: Self = toml::from_str(s)?;
+        p.validate().map_err(serde::de::Error::custom)?;
+        Ok(p)
     }
 
     pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
@@ -48,7 +53,9 @@ impl Params {
         let base = toml::Value::try_from(self.clone()).map_err(|e| e.to_string())?;
         let overlay: toml::Value = toml::from_str(s).map_err(|e| e.to_string())?;
         let merged = deep_merge(base, overlay);
-        *self = merged.try_into().map_err(|e| e.to_string())?;
+        let merged: Self = merged.try_into().map_err(|e| e.to_string())?;
+        merged.validate()?;
+        *self = merged;
         Ok(())
     }
 
@@ -83,6 +90,8 @@ mod pathogen;
 mod docs;
 mod presets;
 mod toml_util;
+mod species;
+mod validate;
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests;

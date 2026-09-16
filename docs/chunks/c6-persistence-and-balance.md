@@ -60,7 +60,8 @@ Networking, mod support, non-terminal frontends, backward-compatible save format
 
 ### FR1 Save format
 File = `magic [u8; 4] = b"SIMF"`, `version: u16`, `header_len: u32`, postcard-encoded
-`SaveHeader { seed, tick, season_days, start_hour, saved_at_unix, world_name, counts: [u32; 6],
+`SaveHeader { seed, tick, season_days, start_hour, saved_at_unix, world_name, counts: Vec<u32>
+(one per roster species), species: Vec<HeaderSpecies { plural, kind, glyph, color }>,
 strip_rows: [Vec<u8>; 4] (terrain codes of world rows round(H × {0.45, 0.475, 0.75, 0.775}),
 central min(120, W) columns padded with a blank code to 120, for the S00 terrain strips) }`,
 then the postcard-encoded `Sim`. A newer `version` fails with `save is from a newer

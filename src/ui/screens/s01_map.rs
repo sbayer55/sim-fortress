@@ -39,17 +39,17 @@ pub struct WorldMap {
 
 impl WorldMap {
     pub const fn new(world_name: String) -> Self {
-        Self { world_name, wide: false, overlay: Overlay::None, region_sel: 0, sense_id: None, species_sel: SpeciesId::Vole }
+        Self { world_name, wide: false, overlay: Overlay::None, region_sel: 0, sense_id: None, species_sel: SpeciesId(0) }
     }
 
-    fn overlay_name(overlay: Overlay) -> String {
+    fn overlay_name(overlay: Overlay, roster: &crate::sim::Roster) -> String {
         match overlay {
             Overlay::Vegetation => "vegetation".into(),
             Overlay::Pressure => "pressure".into(),
             Overlay::Moisture => "moisture".into(),
             Overlay::Sense(_) => "sense range".into(),
             Overlay::Region => "regions".into(),
-            Overlay::Species(sp) => sp.plural().to_lowercase(),
+            Overlay::Species(sp) => roster.plural(sp).to_lowercase(),
             Overlay::Health => "health".into(),
             Overlay::Disease(_) => "disease".into(),
             Overlay::Parasites => "parasites".into(),
@@ -74,7 +74,7 @@ impl WorldMap {
         if alive(self.species_sel) {
             return self.species_sel;
         }
-        SpeciesId::ALL.iter().copied().find(|&sp| alive(sp)).unwrap_or(self.species_sel)
+        sim.roster().ids().find(|&sp| alive(sp)).unwrap_or(self.species_sel)
     }
 
     pub(super) fn open_species(&mut self, app: &AppState) {
@@ -84,13 +84,13 @@ impl WorldMap {
     }
 
     /// `Tab` / `BackTab` with the species overlay active: show the next /
-    /// previous species in `SpeciesId::ALL` order, wrapping, extinct species
-    /// included. Returns false when the overlay is not active.
-    pub(super) const fn cycle_species(&mut self, backwards: bool) -> bool {
+    /// previous species in roster order, wrapping, extinct species included.
+    /// Returns false when the overlay is not active.
+    pub(super) fn cycle_species(&mut self, app: &AppState, backwards: bool) -> bool {
         let Overlay::Species(sp) = self.overlay else { return false };
-        let n = SpeciesId::ALL.len();
+        let n = app.params.species.len().max(1);
         let i = sp.index();
-        let next = SpeciesId::ALL[if backwards { (i + n - 1) % n } else { (i + 1) % n }];
+        let next = SpeciesId::from_index(if backwards { (i + n - 1) % n } else { (i + 1) % n });
         self.species_sel = next;
         self.overlay = Overlay::Species(next);
         true
@@ -158,7 +158,7 @@ impl WorldMap {
         }
         sim.creatures
             .living()
-            .filter(|c| c.species.kind() == crate::sim::Kind::Predator)
+            .filter(|c| sim.roster().kind(c.species) == crate::sim::Kind::Predator)
             .max_by_key(|c| (c.kills, std::cmp::Reverse(c.id.0)))
             .map(|c| c.id)
     }
@@ -181,7 +181,7 @@ impl WorldMap {
         let mut ids: Vec<CreatureId> = sim
             .creatures
             .living()
-            .filter(|c| c.species.kind() == crate::sim::Kind::Predator)
+            .filter(|c| sim.roster().kind(c.species) == crate::sim::Kind::Predator)
             .map(|c| c.id)
             .collect();
         ids.sort_unstable();
@@ -322,7 +322,7 @@ fn map_options(sim: &Sim, app: &AppState, overlay: Overlay, origin: (usize, usiz
             fade_creatures: overlay_active && overlay != Overlay::Region && !matches!(overlay, Overlay::Sense(_)),
             selected_region: if overlay == Overlay::Region { Some(region_sel) } else { None },
             species_color: match overlay {
-                Overlay::Species(sp) => sp.color(),
+                Overlay::Species(sp) => sim.roster().color(sp),
                 _ => theme::TEXT,
             },
             creature_tint: match overlay {
@@ -348,12 +348,12 @@ fn map_origin_title(app: &AppState, sim: &Sim, map_inner_w: usize, map_inner_h: 
         }
 
         let title = if let Some(id) = app.follow {
-            let name = sim.creatures.get(id).map_or("?", crate::sim::creatures::Creature::name_str);
+            let name = sim.creatures.get(id).map_or("?", |c| c.name_str(sim.roster()));
             format!("{world_name} · following {name}")
         } else if app.look_cursor.is_some() {
             format!("{world_name} · look")
         } else if overlay_active {
-            format!("{world_name} · overlay: {}", WorldMap::overlay_name(overlay))
+            format!("{world_name} · overlay: {}", WorldMap::overlay_name(overlay, sim.roster()))
         } else {
             world_name.to_string()
         };
@@ -393,7 +393,7 @@ impl WorldMap {
         row += 1;
         util::line(f, inner, row, Line::from(Span::styled(" [k] look · [e] events · [g] charts", theme::dim_text())));
         row += 2;
-        legend_section(f, inner, row);
+        legend_section(f, inner, row, sim.roster());
     }
 }
 

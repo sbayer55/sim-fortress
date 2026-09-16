@@ -1,6 +1,7 @@
 //! Tests for the disease module.
 
 use super::types::{DiseaseState, Infection, MAX_PATHOGENS, Outbreak, PathogenId, Stage};
+use crate::sim::species::testing::*;
 use super::effects::{effects, infectious_days};
 use super::contagion::{contagion_pass, on_eat, parasite_shed, parasite_uptake};
 use super::spillover::at_birth;
@@ -27,7 +28,7 @@ fn world() -> World {
 
 fn store() -> CreatureStore {
     let mut s = CreatureStore::new();
-    for c in place_founders(&world(), &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(1)) {
+    for c in place_founders(&world(), roster(), &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(1)) {
         s.insert(c);
     }
     s
@@ -51,7 +52,7 @@ fn effects_table() {
     let mut dp = DiseaseParams::default();
     dp.resist_hunger_cost = 0.25;
     let mut st = store();
-    let id = first_of(&st, SpeciesId::Vole);
+    let id = first_of(&st, VOLE);
     let c = st.get_mut(id).unwrap();
     c.genome.0[8] = 0.5;
     c.parasite_load = 0.0;
@@ -77,13 +78,13 @@ fn contact_probability_formula() {
     dp.pathogens[0].transmissibility = 0.02;
     dp.susceptibility_w = 0.8;
     let w = world();
-    let state = DiseaseState::new(&dp);
+    let state = DiseaseState::new(&dp, roster());
     let mut hits = 0u32;
     let n = 10_000;
     let mut rng = Rng::new(3);
     let mut st = store();
-    let a = first_of(&st, SpeciesId::Vole);
-    let b = st.living().filter(|c| c.species == SpeciesId::Vole && c.id != a).map(|c| c.id).next().unwrap();
+    let a = first_of(&st, VOLE);
+    let b = st.living().filter(|c| c.species == VOLE && c.id != a).map(|c| c.id).next().unwrap();
     let (ax, ay) = {
         let c = st.get(a).unwrap();
         (c.x, c.y)
@@ -121,15 +122,15 @@ fn contact_probability_formula() {
 fn immune_and_non_host_never_infected() {
     let dp = DiseaseParams::default();
     let w = world();
-    let state = DiseaseState::new(&dp);
+    let state = DiseaseState::new(&dp, roster());
     let mut st = store();
-    let a = first_of(&st, SpeciesId::Vole);
+    let a = first_of(&st, VOLE);
     let (ax, ay) = {
         let c = st.get(a).unwrap();
         (c.x, c.y)
     };
-    let fox = first_of(&st, SpeciesId::Fox);
-    let b = st.living().filter(|c| c.species == SpeciesId::Vole && c.id != a).map(|c| c.id).next().unwrap();
+    let fox = first_of(&st, FOX);
+    let b = st.living().filter(|c| c.species == VOLE && c.id != a).map(|c| c.id).next().unwrap();
     let (bx, by) = crate::sim::behavior::find_walkable_near(ax, ay, &w).unwrap();
     for id in [fox, b] {
         let c = st.get_mut(id).unwrap();
@@ -158,28 +159,28 @@ fn incubation_progresses_and_recovers() {
     let mut dp = DiseaseParams::default();
     dp.pathogens[0].lethality_per_day = 0.0;
     let mut w = world();
-    let mut state = DiseaseState::new(&dp);
+    let mut state = DiseaseState::new(&dp, roster());
     let mut st = store();
     let mut events = EventRing::new(100);
-    let mut tallies = DeathTallies::default();
+    let mut tallies = DeathTallies::new(N_SPECIES);
     let mut lineage = Lineage::new();
     let mut rng = Rng::new(1);
-    let a = first_of(&st, SpeciesId::Vole);
+    let a = first_of(&st, VOLE);
     st.get_mut(a).unwrap().genome.0[8] = 0.5;
     st.get_mut(a).unwrap().infection = Some(Infection { pathogen: PathogenId(0), stage: Stage::Incubating, since_day: 0, ends_day: 3, severity: 0.8, source: None, outbreak: 0 });
-    progress_daily(&mut st, &mut w, &mut events, &day(2), &dp, &mut state, &mut tallies, &mut lineage, &mut rng);
+    progress_daily(&mut st, &mut w, &mut events, &day(2), roster(), &dp, &mut state, &mut tallies, &mut lineage, &mut rng);
     assert_eq!(st.get(a).unwrap().infection.unwrap().stage, Stage::Incubating);
-    progress_daily(&mut st, &mut w, &mut events, &day(3), &dp, &mut state, &mut tallies, &mut lineage, &mut rng);
+    progress_daily(&mut st, &mut w, &mut events, &day(3), roster(), &dp, &mut state, &mut tallies, &mut lineage, &mut rng);
     let inf = st.get(a).unwrap().infection.unwrap();
     assert_eq!(inf.stage, Stage::Infectious);
     // 10 × (1 − 0.4 × 0.5) = 8 days.
     assert_eq!(inf.ends_day, 3 + 8);
     assert_eq!(state.stats[0].total_cases, 1);
     for d in 4..11 {
-        progress_daily(&mut st, &mut w, &mut events, &day(d), &dp, &mut state, &mut tallies, &mut lineage, &mut rng);
+        progress_daily(&mut st, &mut w, &mut events, &day(d), roster(), &dp, &mut state, &mut tallies, &mut lineage, &mut rng);
         assert!(st.get(a).unwrap().alive);
     }
-    progress_daily(&mut st, &mut w, &mut events, &day(11), &dp, &mut state, &mut tallies, &mut lineage, &mut rng);
+    progress_daily(&mut st, &mut w, &mut events, &day(11), roster(), &dp, &mut state, &mut tallies, &mut lineage, &mut rng);
     let c = st.get(a).unwrap();
     assert!(c.infection.is_none(), "recovered");
     assert_eq!(c.immune_until[0], 11 + 360);
@@ -191,19 +192,19 @@ fn incubation_progresses_and_recovers() {
 fn lethality_kills_on_first_infectious_day() {
     let dp = DiseaseParams::default();
     let mut w = world();
-    let mut state = DiseaseState::new(&dp);
+    let mut state = DiseaseState::new(&dp, roster());
     let mut st = store();
     let mut events = EventRing::new(100);
-    let mut tallies = DeathTallies::default();
+    let mut tallies = DeathTallies::new(N_SPECIES);
     let mut lineage = Lineage::new();
     let mut rng = Rng::new(1);
     // Hazard 1.0 kills on the first infectious day (the runtime pathogen list
     // is what `progress_daily` reads, not the params roster).
     state.pathogens[0].params.lethality_per_day = 1.0;
-    let b = first_of(&st, SpeciesId::Hare);
+    let b = first_of(&st, HARE);
     st.get_mut(b).unwrap().genome.0[8] = 0.0;
     st.get_mut(b).unwrap().infection = Some(Infection { pathogen: PathogenId(0), stage: Stage::Infectious, since_day: 11, ends_day: 21, severity: 0.8, source: None, outbreak: 0 });
-    progress_daily(&mut st, &mut w, &mut events, &day(12), &dp, &mut state, &mut tallies, &mut lineage, &mut rng);
+    progress_daily(&mut st, &mut w, &mut events, &day(12), roster(), &dp, &mut state, &mut tallies, &mut lineage, &mut rng);
     let c = st.get(b).unwrap();
     assert!(!c.alive);
     assert_eq!(c.death.unwrap().cause, Cause::Disease);
@@ -232,9 +233,9 @@ fn lethality_by_resistance() {
 fn vertical_transmission_and_birth_load() {
     let mut dp = DiseaseParams::default();
     dp.vertical_transmission = 1.0;
-    let state = DiseaseState::new(&dp);
+    let state = DiseaseState::new(&dp, roster());
     let st = store();
-    let a = first_of(&st, SpeciesId::Vole);
+    let a = first_of(&st, VOLE);
     let mut mother = st.get(a).unwrap().clone();
     mother.parasite_load = 0.6;
     mother.infection = Some(Infection { pathogen: PathogenId(0), stage: Stage::Infectious, since_day: 0, ends_day: 9, severity: 0.8, source: None, outbreak: 3 });
@@ -254,13 +255,13 @@ fn carcass_transmission_and_parasite_transfer() {
     let mut dp = DiseaseParams::default();
     dp.carcass_transmission = 1.0;
     let w = world();
-    let mut state = DiseaseState::new(&dp);
+    let mut state = DiseaseState::new(&dp, roster());
     let mut st = store();
     let mut events = EventRing::new(10);
     let mut rng = Rng::new(2);
-    let fox = first_of(&st, SpeciesId::Fox);
-    let vole = first_of(&st, SpeciesId::Vole);
-    let hare = first_of(&st, SpeciesId::Hare);
+    let fox = first_of(&st, FOX);
+    let vole = first_of(&st, VOLE);
+    let hare = first_of(&st, HARE);
     {
         let k = st.get_mut(vole).unwrap();
         k.alive = false;
@@ -268,13 +269,13 @@ fn carcass_transmission_and_parasite_transfer() {
         k.died_infected = Some(PathogenId(0)); // Greyfever: fox is not a host
     }
     dp.spillover_chance = 0.0;
-    on_eat(&mut st, fox, vole, &w, &mut events, &day(1), &dp, &mut state, &mut rng);
+    on_eat(&mut st, fox, vole, &w, &mut events, &day(1), roster(), &dp, &mut state, &mut rng);
     let f = st.get(fox).unwrap();
     assert!((f.parasite_load - 0.4).abs() < 1e-5, "trophic transfer ≥ 0.35: {}", f.parasite_load);
     assert!(f.infection.is_none(), "non-host, spillover disabled");
     // A host eater (hare scavenging is not a thing, but the rule is general).
     st.get_mut(hare).unwrap().genome.0[8] = 0.0;
-    on_eat(&mut st, hare, vole, &w, &mut events, &day(1), &dp, &mut state, &mut rng);
+    on_eat(&mut st, hare, vole, &w, &mut events, &day(1), roster(), &dp, &mut state, &mut rng);
     assert!(st.get(hare).unwrap().infection.is_some(), "host eater is infected at transmission 1.0");
 }
 
@@ -283,24 +284,24 @@ fn spillover_creates_strain_and_index_case() {
     let mut dp = DiseaseParams::default();
     dp.spillover_chance = 1.0;
     let w = world();
-    let mut state = DiseaseState::new(&dp);
+    let mut state = DiseaseState::new(&dp, roster());
     let mut st = store();
     let mut events = EventRing::new(10);
     let mut rng = Rng::new(2);
-    let fox = first_of(&st, SpeciesId::Fox);
-    let vole = first_of(&st, SpeciesId::Vole);
+    let fox = first_of(&st, FOX);
+    let vole = first_of(&st, VOLE);
     {
         let k = st.get_mut(vole).unwrap();
         k.alive = false;
         k.died_infected = Some(PathogenId(0));
     }
-    on_eat(&mut st, fox, vole, &w, &mut events, &day(5), &dp, &mut state, &mut rng);
+    on_eat(&mut st, fox, vole, &w, &mut events, &day(5), roster(), &dp, &mut state, &mut rng);
     assert_eq!(state.pathogens.len(), 4);
     let strain = &state.pathogens[3];
     assert_eq!(strain.name(), "Greyfever (foxes strain)");
     assert_eq!(strain.parent, Some(PathogenId(0)));
-    assert_eq!(strain.host(SpeciesId::Fox), 1.0);
-    assert_eq!(strain.host(SpeciesId::Vole), 0.0);
+    assert_eq!(strain.host(FOX), 1.0);
+    assert_eq!(strain.host(VOLE), 0.0);
     let f = st.get(fox).unwrap();
     let inf = f.infection.unwrap();
     assert_eq!(inf.pathogen, PathogenId(3));
@@ -318,25 +319,25 @@ fn spillover_slot_reuse_zeroes_immunity() {
     dp.max_pathogens = 4;
     dp.reservoir_days = 10;
     let w = world();
-    let mut state = DiseaseState::new(&dp);
+    let mut state = DiseaseState::new(&dp, roster());
     let mut st = store();
     let mut events = EventRing::new(10);
     let mut rng = Rng::new(2);
-    let vole = first_of(&st, SpeciesId::Vole);
+    let vole = first_of(&st, VOLE);
     st.get_mut(vole).unwrap().alive = false;
     st.get_mut(vole).unwrap().died_infected = Some(PathogenId(0));
-    let foxes: Vec<CreatureId> = st.living().filter(|c| c.species == SpeciesId::Fox).map(|c| c.id).take(2).collect();
-    on_eat(&mut st, foxes[0], vole, &w, &mut events, &day(5), &dp, &mut state, &mut rng);
+    let foxes: Vec<CreatureId> = st.living().filter(|c| c.species == FOX).map(|c| c.id).take(2).collect();
+    on_eat(&mut st, foxes[0], vole, &w, &mut events, &day(5), roster(), &dp, &mut state, &mut rng);
     assert_eq!(state.pathogens.len(), 4);
     // Second spillover: no free slot, strain not extinct → fails.
-    on_eat(&mut st, foxes[1], vole, &w, &mut events, &day(6), &dp, &mut state, &mut rng);
+    on_eat(&mut st, foxes[1], vole, &w, &mut events, &day(6), roster(), &dp, &mut state, &mut rng);
     assert_eq!(state.failed_spillovers, 1);
     // Mark the strain extinct and past its reservoir; give a fox immunity to it.
     state.pathogens[3].extinct = true;
     state.last_case_day[3] = 0;
     st.get_mut(foxes[1]).unwrap().immune_until[3] = u32::MAX;
     st.get_mut(foxes[1]).unwrap().infection = None;
-    on_eat(&mut st, foxes[1], vole, &w, &mut events, &day(40), &dp, &mut state, &mut rng);
+    on_eat(&mut st, foxes[1], vole, &w, &mut events, &day(40), roster(), &dp, &mut state, &mut rng);
     assert_eq!(state.pathogens.len(), 4);
     assert_eq!(state.pathogens[3].born_day, Some(40));
     assert!(st.get(foxes[1]).unwrap().infection.is_some(), "immunity to the old strain was cleared");
@@ -348,13 +349,13 @@ fn emergence_needs_min_hosts_and_reservoir() {
     dp.emergence_per_day = 1.0;
     dp.emergence_host_ref = 1;
     let w = world();
-    let mut state = DiseaseState::new(&dp);
+    let mut state = DiseaseState::new(&dp, roster());
     let mut st = store();
     let mut events = EventRing::new(10);
     let mut rng = Rng::new(9);
-    let pop = census(&st).population;
+    let pop = census(&st,N_SPECIES).population;
     // Enough hosts: Greyfever emerges on day 1.
-    let alerts = daily_update(&mut st, &w, &mut events, &day(1), &dp, &mut state, &pop, &mut rng);
+    let alerts = daily_update(&mut st, &w, &mut events, &day(1), roster(), &dp, &mut state, &pop, &mut rng);
     assert!(alerts.is_empty());
     assert_eq!(state.stats[0].outbreaks, 1);
     assert!(events.iter().any(|e| e.kind == EventKind::Outbreak && e.text.starts_with("Greyfever breaks out")));
@@ -365,16 +366,16 @@ fn emergence_needs_min_hosts_and_reservoir() {
     let region = crate::cast!(o.origin_region => usize);
     let min_r = st
         .living()
-        .filter(|c| c.species.kind() == crate::sim::species::Kind::Prey && w.region_index(c.x, c.y).min(7) == region)
+        .filter(|c| roster().kind(c.species) == crate::sim::species::Kind::Prey && w.region_index(c.x, c.y).min(7) == region)
         .map(|c| c.genome.resistance())
         .fold(f32::INFINITY, f32::min);
     assert!((idx.genome.resistance() - min_r).abs() < 1e-6);
     // Reservoir: clear the case, no re-emergence within reservoir_days.
     st.get_mut(o.index_case).unwrap().infection = None;
-    let _ = daily_update(&mut st, &w, &mut events, &day(2), &dp, &mut state, &pop, &mut rng);
+    let _ = daily_update(&mut st, &w, &mut events, &day(2), roster(), &dp, &mut state, &pop, &mut rng);
     assert_eq!(state.stats[0].outbreaks, 1, "reservoir cooldown holds");
     assert!(state.outbreaks[0].ended_day.is_some());
-    let _ = daily_update(&mut st, &w, &mut events, &day(200), &dp, &mut state, &pop, &mut rng);
+    let _ = daily_update(&mut st, &w, &mut events, &day(200), roster(), &dp, &mut state, &pop, &mut rng);
     assert_eq!(state.stats[0].outbreaks, 2, "re-emerges after the reservoir");
     // Too few hosts: no emergence.
     let few = [10u32, 10, 10, 0, 0, 0];
@@ -382,8 +383,8 @@ fn emergence_needs_min_hosts_and_reservoir() {
         c.infection = None;
     }
     state.last_case_day = [u32::MAX; MAX_PATHOGENS];
-    let mut state2 = DiseaseState::new(&dp);
-    let _ = daily_update(&mut st, &w, &mut events, &day(300), &dp, &mut state2, &few, &mut rng);
+    let mut state2 = DiseaseState::new(&dp, roster());
+    let _ = daily_update(&mut st, &w, &mut events, &day(300), roster(), &dp, &mut state2, &few, &mut rng);
     assert_eq!(state2.stats[0].outbreaks, 0);
 }
 
@@ -394,12 +395,12 @@ fn epidemic_threshold_once_and_outbreak_ends() {
     dp.epidemic_min_cases = 3;
     dp.epidemic_share = 0.001;
     let w = world();
-    let mut state = DiseaseState::new(&dp);
+    let mut state = DiseaseState::new(&dp, roster());
     let mut st = store();
     let mut events = EventRing::new(10);
     let mut rng = Rng::new(9);
-    let pop = census(&st).population;
-    let voles: Vec<CreatureId> = st.living().filter(|c| c.species == SpeciesId::Vole).map(|c| c.id).take(3).collect();
+    let pop = census(&st,N_SPECIES).population;
+    let voles: Vec<CreatureId> = st.living().filter(|c| c.species == VOLE).map(|c| c.id).take(3).collect();
     let index = state.push_outbreak(Outbreak {
         pathogen: PathogenId(0),
         started_day: 0,
@@ -411,26 +412,26 @@ fn epidemic_threshold_once_and_outbreak_ends() {
         recovered: 0,
         peak_active: 1,
         peak_day: 0,
-        species_cases: [3, 0, 0, 0, 0, 0],
-        species_deaths: [0; 6],
+        species_cases: vec![3, 0, 0, 0, 0, 0],
+        species_deaths: vec![0; N_SPECIES],
         epidemic: false,
-        resist_at_start: [0.0; 6],
-        resist_at_end: [0.0; 6],
+        resist_at_start: vec![0.0; N_SPECIES],
+        resist_at_end: vec![0.0; N_SPECIES],
         active: 0,
         cases_today: 0,
     });
     for id in &voles {
         st.get_mut(*id).unwrap().infection = Some(Infection { pathogen: PathogenId(0), stage: Stage::Infectious, since_day: 0, ends_day: 9, severity: 0.8, source: None, outbreak: index });
     }
-    let alerts = daily_update(&mut st, &w, &mut events, &day(1), &dp, &mut state, &pop, &mut rng);
+    let alerts = daily_update(&mut st, &w, &mut events, &day(1), roster(), &dp, &mut state, &pop, &mut rng);
     assert_eq!(alerts.len(), 1);
     assert!(matches!(alerts[0], Alert::Epidemic { pathogen: PathogenId(0), .. }));
-    let alerts = daily_update(&mut st, &w, &mut events, &day(2), &dp, &mut state, &pop, &mut rng);
+    let alerts = daily_update(&mut st, &w, &mut events, &day(2), roster(), &dp, &mut state, &pop, &mut rng);
     assert!(alerts.is_empty(), "epidemic fires once per outbreak");
     for id in &voles {
         st.get_mut(*id).unwrap().infection = None;
     }
-    let _ = daily_update(&mut st, &w, &mut events, &day(3), &dp, &mut state, &pop, &mut rng);
+    let _ = daily_update(&mut st, &w, &mut events, &day(3), roster(), &dp, &mut state, &pop, &mut rng);
     assert_eq!(state.outbreaks[0].ended_day, Some(3));
     assert!(events.iter().any(|e| e.kind == EventKind::EpidemicOver));
 }
@@ -440,7 +441,7 @@ fn parasite_uptake_shed_clear() {
     let dp = DiseaseParams::default();
     let mut w = world();
     let mut st = store();
-    let a = first_of(&st, SpeciesId::Deer);
+    let a = first_of(&st, DEER);
     let (x, y) = {
         let c = st.get(a).unwrap();
         (c.x, c.y)
@@ -470,6 +471,6 @@ fn disabled_is_inert() {
     for _ in 0..24 * 60 {
         sim.step();
     }
-    assert!(sim.creatures.living().all(|c| c.infection.is_none() && c.parasite_load == 0.0));
+    assert!(sim.creatures.living().all(|c| c.infection.is_none() && c.parasite_load == 0.0 ));
     assert!(sim.disease.outbreaks.is_empty());
 }

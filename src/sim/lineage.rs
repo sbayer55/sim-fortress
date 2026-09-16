@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::sim::creatures::{Cause, Creature, CreatureId, CreatureStore, Mutation, NameId, Sex};
+use crate::sim::params::Roster;
 use crate::sim::species::{Genome, SpeciesId};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -40,8 +41,8 @@ impl LineageNode {
         self.died_day.is_none()
     }
 
-    pub fn name_str(&self) -> &'static str {
-        crate::sim::species::name_for(self.species, self.name)
+    pub fn name_str<'r>(&self, roster: &'r Roster) -> &'r str {
+        roster.name_for(self.species, self.name)
     }
 
     pub fn mother(&self) -> Option<CreatureId> {
@@ -111,14 +112,14 @@ impl Lineage {
 
     /// Record a creature (founder or newborn). Links it into its parents'
     /// `children` lists and flags notability (FR6).
-    pub fn record(&mut self, c: &Creature, mutation_notable: f32) {
+    pub fn record(&mut self, c: &Creature, roster: &Roster, mutation_notable: f32) {
         let notable = c.mutations.iter().any(|m| m.delta.abs() >= mutation_notable);
         self.nodes.insert(
             c.id,
             LineageNode {
                 id: c.id,
                 name: c.name,
-                tag: c.tag(),
+                tag: c.tag(roster),
                 species: c.species,
                 sex: c.sex,
                 generation: c.generation,
@@ -278,7 +279,7 @@ impl Lineage {
 
     /// Delete dead nodes with `generation < species_max_gen − keep` that are not
     /// ancestors of a living creature (FR6). Returns the number removed.
-    pub fn prune(&mut self, species_max_gen: &[u32; 6], keep: u32, store: &CreatureStore) -> usize {
+    pub fn prune(&mut self, species_max_gen: &[u32], keep: u32, store: &CreatureStore) -> usize {
         // Mark every ancestor of a living creature.
         let mut marked: BTreeSet<CreatureId> = BTreeSet::new();
         let mut stack: Vec<CreatureId> = store.living().map(|c| c.id).collect();

@@ -4,14 +4,14 @@ use crate::sim::creatures::{
     Creature, Goal,
 };
 use crate::sim::events::{Event, EventKind, EventRing};
-use crate::sim::params::CreaturesParams;
+use crate::sim::params::{CreaturesParams, Roster};
 use crate::sim::rng::Rng;
 use crate::sim::disease::{self};
 use crate::sim::params::DiseaseParams;
 use crate::sim::time::Time;
 use crate::sim::world::{Terrain, World};
 
-pub(super) fn act(c: &mut Creature, world: &mut World, events: &mut EventRing, time: &Time, cp: &CreaturesParams, dp: &DiseaseParams, rng: &mut Rng) {
+pub(super) fn act(c: &mut Creature, world: &mut World, events: &mut EventRing, time: &Time, roster: &Roster, cp: &CreaturesParams, dp: &DiseaseParams, rng: &mut Rng) {
     match c.goal {
         Goal::Graze => {
             graze(c, world, cp);
@@ -21,7 +21,7 @@ pub(super) fn act(c: &mut Creature, world: &mut World, events: &mut EventRing, t
             drink(c, world, cp);
             disease::parasite_uptake(c, world, dp);
         }
-        Goal::Rest => maybe_make_den(c, world, events, time, cp, rng),
+        Goal::Rest => maybe_make_den(c, world, events, time, roster, cp, rng),
         _ => {}
     }
 }
@@ -40,7 +40,7 @@ pub(super) fn drink(c: &mut Creature, world: &World, cp: &CreaturesParams) {
     }
 }
 
-pub(super) fn maybe_make_den(c: &Creature, world: &mut World, events: &mut EventRing, time: &Time, cp: &CreaturesParams, rng: &mut Rng) {
+pub(super) fn maybe_make_den(c: &Creature, world: &mut World, events: &mut EventRing, time: &Time, roster: &Roster, cp: &CreaturesParams, rng: &mut Rng) {
     if !is_resting(c) || in_den(c, world) {
         return;
     }
@@ -62,7 +62,7 @@ pub(super) fn maybe_make_den(c: &Creature, world: &mut World, events: &mut Event
             kind: EventKind::Note,
             species: Some(c.species),
             subject: Some(c.id),
-            text: format!("{} {} discovered a new den site in {}", c.name_str(), c.tag(), world.region_name(c.x, c.y)),
+            text: format!("{} discovered a new den site in {}", c.label(roster), world.region_name(c.x, c.y)),
             pos: Some((c.x, c.y)),
             detail: String::new(),
         });

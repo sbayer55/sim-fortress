@@ -36,7 +36,7 @@ flowchart LR
         subgraph F["New World form — 66 cols"]
             direction TB
             F1["World: 9 fields"]
-            F2["Initial species: 6 rows + total"]
+            F2["Initial species: one row per species + total"]
             F3["Evolution: 4 fields + note"]
             F4["Presets: 5 rows"]
             F5["Generate note"]
@@ -88,7 +88,7 @@ unfocused values are bright text on the plain background.
    in the current preview (water = deep + shallow; forest; rock), so the form and preview
    never disagree. Source: generated world cells.
 3. **Initial species section.** Header `species  kind  count  share of starting
-   population`, then one row per species in fixed order: glyph (upper-case, species
+   population`, then one row per roster species (`[[species]]` order, six by default): glyph (upper-case, species
    colour), plural name, `prey`/`predator` (dim), `◄ <count> ►` (arrows in key colour when
    focused), a 22-cell bar of the species' share of the total in the species colour, and
    the share as `<pct>%`. The focused row is highlighted across the full width. Prototype

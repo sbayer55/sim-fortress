@@ -2,7 +2,7 @@
 
 use crate::sim::creatures::{Creature, CreatureId, CreatureStore};
 use crate::sim::events::{Event, EventKind, EventRing};
-use crate::sim::params::DiseaseParams;
+use crate::sim::params::{DiseaseParams, Roster};
 use crate::sim::rng::Rng;
 use crate::sim::species::SpeciesId;
 use crate::sim::time::Time;
@@ -19,6 +19,7 @@ fn spillover_strain(
     eater_id: CreatureId,
     parent: PathogenId,
     day: u32,
+    roster: &Roster,
     dp: &DiseaseParams,
     state: &DiseaseState,
     rng: &mut Rng,
@@ -28,12 +29,14 @@ fn spillover_strain(
     let root_name = state.name(state.root(parent)).to_string();
     let jitter = |rng: &mut Rng| (1.0 + rng.gauss(0.0, dp.spillover_jitter)).clamp(0.25, 2.0);
     let mut params = parent_p.params;
-    params.name = format!("{} ({} strain)", root_name, species.plural().to_lowercase());
-    params.hosts = std::iter::once((species, 1.0)).collect();
+    params.name = format!("{} ({} strain)", root_name, roster.plural(species).to_lowercase());
+    params.hosts = std::iter::once((roster.name(species).to_string(), 1.0)).collect();
+    let mut host_by_species = vec![0.0; roster.len()];
+    host_by_species[species.index()] = 1.0;
     params.transmissibility *= jitter(rng);
     params.lethality_per_day *= jitter(rng);
     params.infectious_days = (crate::cast!((crate::cast!(params.infectious_days => f32) * jitter(rng)).round() => u32)).max(2);
-    let strain = Pathogen { params, parent: Some(parent), born_day: Some(day), extinct: false };
+    let strain = Pathogen { params, host_by_species, parent: Some(parent), born_day: Some(day), extinct: false };
     Some((strain, species))
 }
 
@@ -73,11 +76,12 @@ fn open_strain_outbreak(
     eater_id: CreatureId,
     slot: usize,
     species: SpeciesId,
+    n_species: usize,
     region: u8,
     day: u32,
 ) -> u16 {
-    let resist = mean_resistance(store);
-    let mut cases = [0u32; 6];
+    let resist = mean_resistance(store, n_species);
+    let mut cases = vec![0u32; n_species];
     cases[species.index()] = 1;
     let index = state.push_outbreak(Outbreak {
         pathogen: PathogenId(crate::cast!(slot => u8)),
@@ -91,9 +95,9 @@ fn open_strain_outbreak(
         peak_active: 1,
         peak_day: day,
         species_cases: cases,
-        species_deaths: [0; 6],
+        species_deaths: vec![0; n_species],
         epidemic: false,
-        resist_at_start: resist,
+        resist_at_start: resist.clone(),
         resist_at_end: resist,
         active: 1,
         cases_today: 1,
@@ -115,12 +119,13 @@ pub(super) fn spillover(
     world: &World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     dp: &DiseaseParams,
     state: &mut DiseaseState,
     rng: &mut Rng,
 ) {
     let day = crate::cast!(time.day_index() => u32);
-    let Some((strain, species)) = spillover_strain(store, eater_id, parent, day, dp, state, rng) else { return };
+    let Some((strain, species)) = spillover_strain(store, eater_id, parent, day, roster, dp, state, rng) else { return };
     let root_name = state.name(state.root(parent)).to_string();
     let Some(slot) = strain_slot(state, store, day, dp, strain) else {
         state.failed_spillovers += 1;
@@ -128,7 +133,7 @@ pub(super) fn spillover(
     };
     let pid = PathogenId(crate::cast!(slot => u8));
     let region = crate::cast!(world.region_index(carcass_pos.0, carcass_pos.1).min(7) => u8);
-    let index = open_strain_outbreak(state, store, eater_id, slot, species, region, day);
+    let index = open_strain_outbreak(state, store, eater_id, slot, species, roster.len(), region, day);
     let inf = match store.get(eater_id) {
         Some(e) => new_infection(e, pid, Stage::Infectious, day, None, index, dp, state),
         None => return,
@@ -136,7 +141,7 @@ pub(super) fn spillover(
     let (name, tag, ex, ey) = match store.get_mut(eater_id) {
         Some(e) => {
             e.infection = Some(inf);
-            (e.name_str().to_string(), e.tag(), e.x, e.y)
+            (e.name_str(roster).to_string(), e.tag(roster), e.x, e.y)
         }
         None => return,
     };
@@ -147,7 +152,7 @@ pub(super) fn spillover(
         kind: EventKind::Spillover,
         species: Some(species),
         subject: Some(eater_id),
-        text: format!("{} has jumped to the {}: {} {} ate a sick {}", root_name, species.plural().to_lowercase(), name, tag, prey_species.name().to_lowercase()),
+        text: format!("{} has jumped to the {}: {} {} ate a sick {}", root_name, roster.plural(species).to_lowercase(), name, tag, roster.name(prey_species)),
         pos: Some((ex, ey)),
         detail: format!("new strain {} in slot {}", state.name(pid), slot),
     });

@@ -6,7 +6,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 use crate::sim::creatures::CreatureId;
-use crate::sim::{Sim, SpeciesId, World};
+use crate::sim::{Sim, World};
 use crate::ui::style::{SpeciesStyle};
 use crate::widgets::map::{self};
 use crate::widgets::{bars, panel, util};
@@ -23,8 +23,8 @@ pub(super) fn disease_parasites(f: &mut Frame<'_>, inner: Rect, mut row: u16, si
         row += 1;
         let (means, _heavy) = parasite_by_species(sim);
         let mut spans = vec![Span::styled(" mean load", theme::dim_text())];
-        for id in SpeciesId::ALL {
-            spans.push(Span::styled(format!(" {}", id.glyph()), tone(id.color()).add_modifier(Modifier::BOLD)));
+        for id in sim.roster().ids() {
+            spans.push(Span::styled(format!(" {}", sim.roster().glyph(id)), tone(sim.roster().color(id)).add_modifier(Modifier::BOLD)));
             spans.push(Span::styled(fmt2(means[id.index()]), theme::text()));
         }
         util::line(f, inner, row, Line::from(spans));
@@ -48,13 +48,13 @@ fn parasite_species_section(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &
         util::line(f, inner, row, Line::from(Span::styled(format!("{:<3}{:<5}{:>4} {:<12}{:>4}{:>4}{:>7}", "", "name", "n", "load", "mean", "hvy", "litter"), theme::dim_text())));
         row += 1;
         let (means, heavy) = parasite_by_species(sim);
-        for id in SpeciesId::ALL {
+        for id in sim.roster().ids() {
             let i = id.index();
             let n = sim.creatures.living().filter(|c| c.species == id).count();
             let text = if n == 0 { theme::dim_text() } else { theme::text() };
             util::line(f, inner, row, Line::from(vec![
-                Span::styled(format!(" {} ", id.glyph().to_ascii_uppercase()), tone(id.color()).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("{:<5}{n:>4}", id.name()), text),
+                Span::styled(format!(" {} ", sim.roster().adult_glyph(id)), tone(sim.roster().color(id)).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{:<5}{n:>4}", sim.roster().display_name(id)), text),
             ]));
             bars::bar(f.buffer_mut(), inner.x + 13, inner.y + row, 12, means[i], theme::WARN);
             let litter = crate::cast!((dp.parasite_fertility_w * means[i] * 100.0).round() => u32);
@@ -79,11 +79,11 @@ fn parasite_carriers(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, wo
         for k in 0..3 {
             match carriers.get(k) {
                 Some(c) => {
-                    let (color, _) = map::parasite_tint(c.species.color(), c.parasite_load);
-                    let name: String = c.name_str().chars().take(8).collect();
+                    let (color, _) = map::parasite_tint(sim.roster().color(c.species), c.parasite_load);
+                    let name: String = c.name_str(sim.roster()).chars().take(8).collect();
                     util::line(f, inner, row, Line::from(vec![
-                        Span::styled(format!(" {} ", c.species.glyph()), tone(c.species.color()).add_modifier(Modifier::BOLD)),
-                        Span::styled(format!("{:<6} {name:<8} ", c.tag()), theme::text()),
+                        Span::styled(format!(" {} ", sim.roster().glyph(c.species)), tone(sim.roster().color(c.species)).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("{:<6} {name:<8} ", c.tag(sim.roster())), theme::text()),
                         Span::styled(fmt2(c.parasite_load), tone(color)),
                         Span::styled(format!(" {}", world.region_name(c.x, c.y)), theme::dim_text()),
                     ]));
@@ -98,12 +98,13 @@ fn parasite_carriers(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, wo
 
 /// S02i: every living creature's colour under the parasite overlay.
 pub(super) fn parasite_tints(sim: &Sim) -> HashMap<CreatureId, (Color, bool)> {
-    sim.creatures.living().map(|c| (c.id, map::parasite_tint(c.species.color(), c.parasite_load))).collect()
+    sim.creatures.living().map(|c| (c.id, map::parasite_tint(sim.roster().color(c.species), c.parasite_load))).collect()
 }
 
 /// Mean parasite load and heavy-carrier count (`≥ PARASITE_HEAVY`) per species.
-fn parasite_by_species(sim: &Sim) -> ([f32; 6], [u32; 6]) {
-    let (mut sum, mut n, mut heavy) = ([0.0f32; 6], [0u32; 6], [0u32; 6]);
+fn parasite_by_species(sim: &Sim) -> (Vec<f32>, Vec<u32>) {
+    let k = sim.roster().len();
+    let (mut sum, mut n, mut heavy) = (vec![0.0f32; k], vec![0u32; k], vec![0u32; k]);
     for c in sim.creatures.living() {
         let i = c.species.index();
         sum[i] += c.parasite_load;
@@ -112,7 +113,7 @@ fn parasite_by_species(sim: &Sim) -> ([f32; 6], [u32; 6]) {
             heavy[i] += 1;
         }
     }
-    (std::array::from_fn(|i| if n[i] > 0 { sum[i] / crate::cast!(n[i] => f32) } else { 0.0 }), heavy)
+    ((0..k).map(|i| if n[i] > 0 { sum[i] / crate::cast!(n[i] => f32) } else { 0.0 }).collect(), heavy)
 }
 
 impl WorldMap {

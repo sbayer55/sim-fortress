@@ -1,10 +1,7 @@
 //! Genetics tunables.
 
-use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
-use crate::sim::species::SpeciesId;
 use crate::sim::time::Season;
-use super::creatures::{counts, per_species};
 
 /// Reproduction, inheritance and lineage tunables (C4 FR1, the `[genetics]` table).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -16,11 +13,6 @@ pub struct GeneticsParams {
     pub mutation_strength: f32,
     /// `|Δ| ≥ this` emits a `Mutation` event.
     pub mutation_notable: f32,
-    pub gestation_days: BTreeMap<SpeciesId, u32>,
-    /// `litter = 1 + round(fertility × litter_max)`; fractional values give a
-    /// graded litter (only high-fertility mothers reach the next pup).
-    pub litter_max: BTreeMap<SpeciesId, f32>,
-    pub mate_cooldown_days: BTreeMap<SpeciesId, u32>,
     pub mate_hunger_max: f32,
     pub mate_thirst_max: f32,
     pub mate_energy_min: f32,
@@ -50,10 +42,6 @@ impl Default for GeneticsParams {
             mutation_rate: 0.04,
             mutation_strength: 0.06,
             mutation_notable: 0.10,
-            gestation_days: counts([3, 6, 30, 20, 30, 30]),
-            // Balance table (C4 acceptance): see docs/chunks/c4-evolution.md FR1.
-            litter_max: per_species([0.0, 1.0, 8.0, 3.0, 2.0, 1.0]),
-            mate_cooldown_days: counts([60, 75, 30, 120, 180, 180]),
             mate_hunger_max: 0.45,
             mate_thirst_max: 0.5,
             mate_energy_min: 0.4,
@@ -75,21 +63,12 @@ impl Default for GeneticsParams {
 }
 
 impl GeneticsParams {
-    pub fn gestation(&self, id: SpeciesId) -> u32 {
-        self.gestation_days.get(&id).copied().unwrap_or(1)
-    }
-    pub fn litter_max(&self, id: SpeciesId) -> f32 {
-        self.litter_max.get(&id).copied().unwrap_or(1.0)
-    }
-    pub fn cooldown(&self, id: SpeciesId) -> u32 {
-        self.mate_cooldown_days.get(&id).copied().unwrap_or(1)
-    }
-    /// Litter size for a given fertility and maturity:
-    /// `1 + round(fertility × litter_max × maturity_factor(maturity, litter_span))`,
+    /// Litter size for a species' `litter_max` (from the roster), a fertility
+    /// and a maturity: `1 + round(fertility × litter_max × maturity_factor)`,
     /// floored at one pup so a slow, small litter is never empty.
-    pub fn litter_size(&self, id: SpeciesId, fertility: f32, maturity: f32) -> u32 {
+    pub fn litter_size(&self, litter_max: f32, fertility: f32, maturity: f32) -> u32 {
         let factor = Self::maturity_factor(maturity, self.maturity_litter_span);
-        (1 + crate::cast!((fertility * self.litter_max(id) * factor).round() => u32)).max(1)
+        (1 + crate::cast!((fertility * litter_max * factor).round() => u32)).max(1)
     }
 
     /// The shared maturity multiplier `1 + (maturity − 0.5) × 2 × span`:

@@ -27,13 +27,13 @@ fn shade_empty(buf: &mut Buffer, x: u16, y0: u16, y1: u16, band: Color) {
 }
 
 pub(super) fn stacked_chart(f: &mut Frame<'_>, area: Rect, sim: &Sim, w: &Window<'_>) {
-    let inner = panel::draw_with_hint(f, area, "Stacked populations + vegetation", &format!("{} days, three prey species", w.len()), panel::Kind::Outer);
-    let _ = sim;
+    let prey: Vec<SpeciesId> = sim.roster().prey_ids().collect();
+    let inner = panel::draw_with_hint(f, area, "Stacked populations + vegetation", &format!("{} days, {} prey species", w.len(), prey.len()), panel::Kind::Outer);
     // Legend row.
     let mut spans = vec![sp(" ", theme::text())];
-    for id in SpeciesId::ALL.iter().take(3) {
-        spans.push(sp(glyphs::FULL_BLOCK.to_string(), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)));
-        spans.push(sp(format!(" {}   ", id.plural()), theme::text()));
+    for &id in &prey {
+        spans.push(sp(glyphs::FULL_BLOCK.to_string(), Style::default().fg(sim.roster().color(id)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)));
+        spans.push(sp(format!(" {}   ", sim.roster().plural(id)), theme::text()));
     }
     spans.push(sp(glyphs::DOT.to_string(), Style::default().fg(theme::VEGETATION).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)));
     spans.push(sp(" vegetation biomass (right axis, % of max)", theme::text()));
@@ -50,13 +50,14 @@ pub(super) fn stacked_chart(f: &mut Frame<'_>, area: Rect, sim: &Sim, w: &Window
     let cols = crate::cast!(plot_w => usize);
     let n = w.len();
 
-    let (stack, veg) = stacked_bins(w, cols);
+    let (stack, veg) = stacked_bins(w, cols, &prey);
+    let colors: Vec<Color> = prey.iter().map(|&id| sim.roster().color(id)).collect();
     let max_total = stack.iter().map(|v| v.iter().sum::<f32>()).fold(0.0f32, f32::max);
     let y_max = round_up(max_total, 50.0);
     let halves = crate::cast!(plot_h => usize) * 2;
     let band = theme::lerp(theme::PANEL_BG, theme::WARN, 0.22);
     let buf = f.buffer_mut();
-    let band_x = stacked_columns(buf, w, plot_x, plot_y, plot_h, cols, y_max, halves, band, n, &stack, &veg);
+    let band_x = stacked_columns(buf, w, plot_x, plot_y, plot_h, cols, y_max, halves, band, n, &stack, &veg, &colors);
     if let Some(bx) = band_x {
         shade_empty(buf, bx, plot_y, axis_y, band);
         buf.set_stringn(bx + 1, plot_y, format!("{} drought", glyphs::DROUGHT), 12, Style::default().fg(theme::WARN).bg(band));
@@ -94,16 +95,16 @@ pub(super) fn stacked_chart(f: &mut Frame<'_>, area: Rect, sim: &Sim, w: &Window
 }
 
 /// Per-column stacked prey populations and vegetation means.
-fn stacked_bins(w: &Window<'_>, cols: usize) -> (Vec<[f32; 3]>, Vec<f32>) {
+fn stacked_bins(w: &Window<'_>, cols: usize, prey: &[SpeciesId]) -> (Vec<Vec<f32>>, Vec<f32>) {
     let n = w.len();
-    let mut stack: Vec<[f32; 3]> = Vec::with_capacity(cols);
+    let mut stack: Vec<Vec<f32>> = Vec::with_capacity(cols);
     let mut veg: Vec<f32> = Vec::with_capacity(cols);
     for c in 0..cols {
-        let mut v = [0.0f32; 3];
+        let mut v = vec![0.0f32; prey.len()];
         if n > 0 {
             let (a, b) = w.bin(c, cols);
-            for (k, item) in v.iter_mut().enumerate() {
-                *item = w.samples[a..b].iter().map(|s| crate::cast!(s.population[k] => f32)).sum::<f32>() / crate::cast!((b - a) => f32);
+            for (item, id) in v.iter_mut().zip(prey) {
+                *item = w.samples[a..b].iter().map(|s| crate::cast!(s.population[id.index()] => f32)).sum::<f32>() / crate::cast!((b - a) => f32);
             }
             veg.push(w.mean_over(&w.veg, c, cols));
         } else {
@@ -117,23 +118,23 @@ fn stacked_bins(w: &Window<'_>, cols: usize) -> (Vec<[f32; 3]>, Vec<f32>) {
 /// Draw the stacked columns, the vegetation dots and the drought banding.
 /// Returns the x of the first drought column, if any.
 #[allow(clippy::too_many_arguments)]
-fn stacked_columns(buf: &mut Buffer, w: &Window<'_>, plot_x: u16, plot_y: u16, plot_h: u16, cols: usize, y_max: f32, halves: usize, band: Color, n: usize, stack: &[[f32; 3]], veg: &[f32]) -> Option<u16> {
+fn stacked_columns(buf: &mut Buffer, w: &Window<'_>, plot_x: u16, plot_y: u16, plot_h: u16, cols: usize, y_max: f32, halves: usize, band: Color, n: usize, stack: &[Vec<f32>], veg: &[f32], colors: &[Color]) -> Option<u16> {
     let mut band_x: Option<u16> = None;
     for (c, v) in stack.iter().enumerate() {
         let x = plot_x + crate::cast!(c => u16);
         let mut lower: Vec<Option<Color>> = vec![None; crate::cast!(plot_h => usize)];
         let mut upper: Vec<Option<Color>> = vec![None; crate::cast!(plot_h => usize)];
         let mut cum = 0.0f32;
-        for (k, id) in SpeciesId::ALL.iter().take(3).enumerate() {
+        for (k, &color) in colors.iter().enumerate() {
             let h0 = crate::cast!((cum / y_max * crate::cast!(halves => f32)).round() => usize);
             cum += v[k];
             let h1 = crate::cast!((cum / y_max * crate::cast!(halves => f32)).round() => usize);
             for h in h0..h1.min(halves) {
                 let row = crate::cast!(plot_h => usize) - 1 - h.div_euclid(2);
                 if h % 2 == 0 {
-                    lower[row] = Some(id.color());
+                    lower[row] = Some(color);
                 } else {
-                    upper[row] = Some(id.color());
+                    upper[row] = Some(color);
                 }
             }
         }
@@ -212,15 +213,17 @@ fn stacked_today(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, w: &Wi
     row += 1;
     util::line(f, inner, row, Line::from(sp("   species   count  share   240d range", theme::dim_text())));
     row += 1;
-    let total: u32 = sim.species.iter().take(3).map(|s| s.count).sum();
-    for (k, id) in SpeciesId::ALL.iter().take(3).enumerate() {
+    let prey: Vec<SpeciesId> = sim.roster().prey_ids().collect();
+    let total: u32 = prey.iter().map(|id| sim.species[id.index()].count).sum();
+    for &id in &prey {
+        let k = id.index();
         let s = &sim.species[k];
         let share = if total > 0 { crate::cast!(s.count => f32) / crate::cast!(total => f32) * 100.0 } else { 0.0 };
         let series: Vec<u32> = w.samples.iter().map(|x| x.population[k]).collect();
         let (lo, hi) = (series.iter().min().copied().unwrap_or(0), series.iter().max().copied().unwrap_or(0));
         util::line(f, inner, row, Line::from(vec![
-            sp(format!(" {} ", glyphs::FULL_BLOCK), Style::default().fg(id.color()).bg(theme::PANEL_BG)),
-            sp(format!("{:<8}{:>6}  {:>4.0}%   {}-{}", id.plural(), s.count, share, lo, hi), theme::text()),
+            sp(format!(" {} ", glyphs::FULL_BLOCK), Style::default().fg(sim.roster().color(id)).bg(theme::PANEL_BG)),
+            sp(format!("{:<8}{:>6}  {:>4.0}%   {}-{}", sim.roster().plural(id), s.count, share, lo, hi), theme::text()),
         ]));
         row += 1;
     }
@@ -235,11 +238,12 @@ fn stacked_today(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, w: &Wi
         let mut used = 0usize;
         let buf = f.buffer_mut();
         let y = inner.y + row;
-        for (k, id) in SpeciesId::ALL.iter().take(3).enumerate() {
-            let s = &sim.species[k];
-            let cells = if k == 2 { width.saturating_sub(used) } else if total > 0 { (crate::cast!(s.count => usize) * width).div_euclid(crate::cast!(total => usize)) } else { 0 };
+        let last = prey.len().saturating_sub(1);
+        for (k, &id) in prey.iter().enumerate() {
+            let s = &sim.species[id.index()];
+            let cells = if k == last { width.saturating_sub(used) } else if total > 0 { (crate::cast!(s.count => usize) * width).div_euclid(crate::cast!(total => usize)) } else { 0 };
             let seg: String = std::iter::repeat_n(glyphs::FULL_BLOCK, cells).collect();
-            buf.set_stringn(inner.x + 1 + crate::cast!(used => u16), y, &seg, cells, Style::default().fg(id.color()).bg(theme::PANEL_BG));
+            buf.set_stringn(inner.x + 1 + crate::cast!(used => u16), y, &seg, cells, Style::default().fg(sim.roster().color(id)).bg(theme::PANEL_BG));
             used += cells;
         }
     }
@@ -285,15 +289,15 @@ fn stacked_peaks(f: &mut Frame<'_>, inner: Rect, mut row: u16, w: &Window<'_>) -
 fn stacked_trend(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim) -> u16 {
     panel::section(f, inner, row, "30-day trend");
     row += 1;
-    for (k, id) in SpeciesId::ALL.iter().take(3).enumerate() {
-        let s = &sim.species[k];
+    for id in sim.roster().prey_ids() {
+        let s = &sim.species[id.index()];
         let a = s.trend.first().copied().unwrap_or(0);
         let b = s.trend.last().copied().unwrap_or(0);
         let arrow = trend_arrow(&s.trend);
         let pct = s.change_pct().map_or_else(|| "–".into(), |p| format!("{p:+.0}%"));
         util::line(f, inner, row, Line::from(vec![
-            sp(format!(" {} ", id.glyph().to_ascii_uppercase()), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-            sp(format!("{:<7}{:>5} {} {:<5}", id.plural(), a, glyphs::RIGHT, b), theme::text()),
+            sp(format!(" {} ", sim.roster().adult_glyph(id)), Style::default().fg(sim.roster().color(id)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!("{:<7}{:>5} {} {:<5}", sim.roster().plural(id), a, glyphs::RIGHT, b), theme::text()),
             sp(format!(" {arrow} {pct}"), Style::default().fg(arrow_color(arrow)).bg(theme::PANEL_BG)),
         ]));
         row += 1;

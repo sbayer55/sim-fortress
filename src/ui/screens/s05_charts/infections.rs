@@ -17,7 +17,7 @@ use super::{Window, round_up};
 /// Lower-case delta (CP437 0xEB); the capital Δ is not in CP437.
 const DELTA: char = 'δ';
 
-const PATHOGEN_COLORS: [Color; 8] = [theme::SICK, theme::WARN, theme::MAGENTA, theme::INFO, theme::ACCENT, theme::LYNX, theme::DEER, theme::HARE];
+const PATHOGEN_COLORS: [Color; 8] = [theme::SICK, theme::WARN, theme::MAGENTA, theme::INFO, theme::ACCENT, theme::ROSE, theme::TAN, theme::PREY];
 
 const fn slot_color(slot: usize) -> Color {
     PATHOGEN_COLORS[slot % PATHOGEN_COLORS.len()]
@@ -35,18 +35,18 @@ fn case_series(w: &Window<'_>) -> Vec<(usize, Vec<f32>)> {
 
 /// Species with a nonzero population inside the window, with their mean
 /// Resistance series.
-fn resistance_series(w: &Window<'_>) -> Vec<(SpeciesId, Vec<f32>)> {
-    SpeciesId::ALL
-        .iter()
+fn resistance_series(w: &Window<'_>, roster: &crate::sim::Roster) -> Vec<(SpeciesId, Vec<f32>)> {
+    roster
+        .ids()
         .filter(|id| w.samples.iter().any(|s| s.population[id.index()] > 0))
-        .map(|id| (*id, w.samples.iter().map(|s| s.genome_mean[id.index()].resistance()).collect()))
+        .map(|id| (id, w.samples.iter().map(|s| s.genome_mean[id.index()].resistance()).collect()))
         .collect()
 }
 
 /// The species an outbreak hit hardest (most cases), or `None` before any case.
 fn outbreak_host(o: &Outbreak) -> Option<SpeciesId> {
     let (i, n) = o.species_cases.iter().enumerate().max_by_key(|(i, n)| (**n, std::cmp::Reverse(*i)))?;
-    if *n == 0 { None } else { Some(SpeciesId::ALL[i]) }
+    if *n == 0 { None } else { Some(SpeciesId::from_index(i)) }
 }
 
 /// Several half-block series over one y scale, with epidemic windows shaded;
@@ -190,16 +190,16 @@ pub(super) fn infection_chart(f: &mut Frame<'_>, area: Rect, sim: &Sim, w: &Wind
 
     // Bottom: mean Resistance per species with the base value as a reference.
     panel::section(f, inner, half, "Mean Resistance (host species)");
-    let resist = resistance_series(w);
+    let resist = resistance_series(w, sim.roster());
     let mut spans = vec![sp(" 0..1", theme::dim_text())];
-    for (id, _) in &resist {
-        spans.push(sp(format!("   {}{} ", glyphs::HALF_UPPER, glyphs::HALF_LOWER), Style::default().fg(id.color()).bg(theme::PANEL_BG)));
-        spans.push(sp(id.plural().to_string(), theme::text()));
+    for &(id, _) in &resist {
+        spans.push(sp(format!("   {}{} ", glyphs::HALF_UPPER, glyphs::HALF_LOWER), Style::default().fg(sim.roster().color(id)).bg(theme::PANEL_BG)));
+        spans.push(sp(sim.roster().plural(id).to_string(), theme::text()));
     }
     spans.push(sp(format!("   {} base", glyphs::DOT), theme::dim_text()));
     util::line(f, lower, 0, Line::from(spans));
-    let resist_lines: Vec<(Vec<f32>, Color)> = resist.iter().map(|(id, v)| (v.clone(), id.color())).collect();
-    let reference: Vec<(f32, Color)> = resist.iter().map(|(id, _)| (id.base_genome().resistance(), id.color())).collect();
+    let resist_lines: Vec<(Vec<f32>, Color)> = resist.iter().map(|(id, v)| (v.clone(), sim.roster().color(*id))).collect();
+    let reference: Vec<(f32, Color)> = resist.iter().map(|(id, _)| (sim.roster().base_genome(*id).resistance(), sim.roster().color(*id))).collect();
     multi_line_chart(f, Rect::new(lower.x, lower.y + 1, lower.width, lower.height - 1), w, &resist_lines, &reference, 1.0, |v| format!("{v:.2}"));
 }
 
@@ -229,13 +229,13 @@ pub(super) fn infection_sidebar(f: &mut Frame<'_>, area: Rect, sim: &Sim, w: &Wi
             Some(id) => {
                 let i = id.index();
                 let delta = if o.ended_day.is_none() { "open".to_string() } else { format!("{:+.2}", o.resist_at_end[i] - o.resist_at_start[i]).replace("0.", ".") };
-                (format!("{} ", id.glyph().to_ascii_uppercase()), delta)
+                (format!("{} ", sim.roster().adult_glyph(id)), delta)
             }
             None => ("- ".to_string(), "open".to_string()),
         };
         let _ = today;
         util::line(f, inner, row, Line::from(vec![
-            sp(format!("   {host_glyph}"), Style::default().fg(outbreak_host(o).map_or(theme::DIM, |id| id.color())).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!("   {host_glyph}"), Style::default().fg(outbreak_host(o).map_or(theme::DIM, |id| sim.roster().color(id))).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
             sp(format!("cases {:<5} dead {:<5} {}resist {}", o.cases, o.deaths, DELTA, delta), theme::text()),
         ]));
         row += 1;
@@ -268,7 +268,7 @@ pub(super) fn infection_sidebar(f: &mut Frame<'_>, area: Rect, sim: &Sim, w: &Wi
     row += 1;
     for (glyph, desc, color) in [
         ("▀▄", "active cases per pathogen (top)", theme::SICK),
-        ("▀▄", "mean Resistance per species (bottom)", theme::HARE),
+        ("▀▄", "mean Resistance per species (bottom)", theme::PREY),
         ("·", "base Resistance of the species", theme::DIM),
         ("░", "epidemic window", theme::SICK),
     ] {

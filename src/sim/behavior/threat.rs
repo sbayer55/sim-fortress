@@ -4,7 +4,7 @@ use crate::sim::creatures::{
     Creature, CreatureId, CreatureStore, Goal, HuntPhase,
 };
 use crate::sim::geom;
-use crate::sim::params::{PredationParams, SocialParams};
+use crate::sim::params::{PredationParams, Roster, SocialParams};
 use crate::sim::predation::MAX_SENSE_CELLS;
 use crate::sim::spatial::SpatialIndex;
 use crate::sim::species::{Kind, SpeciesId};
@@ -57,22 +57,22 @@ struct Pred {
     hungry: bool,
 }
 
-pub(super) fn mark_threats(store: &mut CreatureStore, spatial: &SpatialIndex, world: &World, tick: u64, pp: &PredationParams, sp: &SocialParams) {
-    let mut preds = build_preds(store, pp);
+pub(super) fn mark_threats(store: &mut CreatureStore, spatial: &SpatialIndex, world: &World, tick: u64, roster: &Roster, pp: &PredationParams, sp: &SocialParams) {
+    let mut preds = build_preds(store, roster, pp);
     preds.sort_unstable_by_key(|p| p.id);
-    let mut prey = build_prey(store);
+    let mut prey = build_prey(store, roster);
     prey.sort_unstable_by_key(|p| p.id);
 
     scan_prey(&preds, &mut prey, spatial, pp);
     propagate_alarms(&mut prey, spatial, sp);
-    apply_threats(store, &prey, world, tick, pp);
+    apply_threats(store, &prey, world, tick, roster, pp);
 }
 
 /// Snapshot every predator's threat-relevant facts.
-fn build_preds(store: &CreatureStore, pp: &PredationParams) -> Vec<Pred> {
+fn build_preds(store: &CreatureStore, roster: &Roster, pp: &PredationParams) -> Vec<Pred> {
     store
         .living()
-        .filter(|c| c.species.kind() == Kind::Predator)
+        .filter(|c| roster.kind(c.species) == Kind::Predator)
         .map(|c| Pred {
             id: c.id,
             x: c.x,
@@ -86,10 +86,10 @@ fn build_preds(store: &CreatureStore, pp: &PredationParams) -> Vec<Pred> {
 }
 
 /// Snapshot every prey's detection-relevant facts.
-fn build_prey(store: &CreatureStore) -> Vec<PreySnap> {
+fn build_prey(store: &CreatureStore, roster: &Roster) -> Vec<PreySnap> {
     store
         .living()
-        .filter(|c| c.species.kind() == Kind::Prey)
+        .filter(|c| roster.kind(c.species) == Kind::Prey)
         .map(|c| PreySnap {
             id: c.id,
             rest: c.goal == Goal::Rest,
@@ -98,12 +98,12 @@ fn build_prey(store: &CreatureStore) -> Vec<PreySnap> {
             count: 0,
             dist: f32::INFINITY,
             pos: (0, 0),
-            species: SpeciesId::Vole,
+            species: SpeciesId::default(),
             own: c.species,
             sociality: c.genome.sociality(),
             wary_dist: f32::INFINITY,
             wary_pos: (0, 0),
-            wary_species: SpeciesId::Vole,
+            wary_species: SpeciesId::default(),
         })
         .collect()
 }
@@ -179,9 +179,9 @@ fn propagate_alarms(prey: &mut [PreySnap], spatial: &SpatialIndex, sp: &SocialPa
 }
 
 /// Write the scan results (and predation risk) back onto the prey.
-fn apply_threats(store: &mut CreatureStore, prey: &[PreySnap], world: &World, tick: u64, pp: &PredationParams) {
+fn apply_threats(store: &mut CreatureStore, prey: &[PreySnap], world: &World, tick: u64, roster: &Roster, pp: &PredationParams) {
     for c in store.living_mut() {
-        if c.species.kind() != Kind::Prey {
+        if roster.kind(c.species) != Kind::Prey {
             continue;
         }
         // A forced flee (FR4) keeps its last known threat until the timer ends.

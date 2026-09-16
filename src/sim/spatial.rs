@@ -132,6 +132,7 @@ impl SpatialIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sim::species::testing::*;
     use crate::sim::creatures::{place_founders, CreatureStore};
     use crate::sim::params::{CreaturesParams, GeneticsParams, WorldParams};
     use crate::sim::rng::Rng;
@@ -143,7 +144,7 @@ mod tests {
     fn store_and_index() -> (CreatureStore, SpatialIndex) {
         let w = world();
         let mut store = CreatureStore::new();
-        for c in place_founders(&w, &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(1)) {
+        for c in place_founders(&w, roster(), &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(1)) {
             store.insert(c);
         }
         let mut idx = SpatialIndex::new(&w);

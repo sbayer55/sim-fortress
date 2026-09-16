@@ -18,7 +18,7 @@
 
 use std::path::Path;
 
-use sim_fortress::sim::{self, Params, Sim, SpeciesId};
+use sim_fortress::sim::{self, Params, Roster, Sim};
 use sim_fortress::ui;
 
 fn main() -> std::io::Result<()> {
@@ -26,10 +26,6 @@ fn main() -> std::io::Result<()> {
 
     if has_flag(&args, "--dump-params") {
         print!("{}", Params::dump_toml());
-        return Ok(());
-    }
-    if has_flag(&args, "--header") {
-        println!("{}", summary_header());
         return Ok(());
     }
 
@@ -52,6 +48,10 @@ fn main() -> std::io::Result<()> {
     }
 
     let params = load_params(params_file, width, height)?;
+    if has_flag(&args, "--header") {
+        println!("{}", summary_header(&params.species));
+        return Ok(());
+    }
 
     let mut terminal = ratatui::init();
     let result = ui::app::run(&mut terminal, params, saves_dir, params_file.is_some());
@@ -89,7 +89,7 @@ fn run_headless(
             let sim = run_one(s, ticks, &params, out.profile);
             rows.push(summary_row(&sim, s, sim_fortress::cast!(ticks => f64) / sim_fortress::cast!(ticks_per_year => f64)));
         }
-        let mut out = summary_header();
+        let mut out = summary_header(&params.species);
         out.push('\n');
         out.push_str(&rows.join("\n"));
         out.push('\n');
@@ -108,7 +108,7 @@ fn run_headless(
     let sim = run_one(seed, ticks, &params, out.profile);
 
     if out.summary {
-        let mut out = summary_header();
+        let mut out = summary_header(&params.species);
         out.push('\n');
         out.push_str(&summary_row(&sim, seed, sim_fortress::cast!(ticks => f64) / sim_fortress::cast!(ticks_per_year => f64)));
         out.push('\n');
@@ -127,7 +127,7 @@ fn run_headless(
     }
     if let Some(path) = csv {
         let names: Vec<String> = sim.world.regions.iter().map(|r| r.0.clone()).collect();
-        std::fs::write(path, sim.series.to_csv(&names))?;
+        std::fs::write(path, sim.series.to_csv(&names, sim.roster()))?;
     }
     Ok(())
 }
@@ -141,27 +141,27 @@ fn run_one(seed: u64, ticks: u64, params: &Params, profile: bool) -> Sim {
     sim
 }
 
-fn summary_header() -> String {
+fn summary_header(roster: &Roster) -> String {
     let mut cols = vec!["seed".to_string(), "years".to_string()];
-    for id in SpeciesId::ALL {
-        cols.push(id.name().to_lowercase());
+    for id in roster.ids() {
+        cols.push(roster.name(id).to_string());
     }
     cols.push("extinctions".to_string());
     cols.push("lag_days".to_string());
-    for id in SpeciesId::ALL {
-        cols.push(format!("speed_{}", id.name().to_lowercase()));
+    for id in roster.ids() {
+        cols.push(format!("speed_{}", roster.name(id)));
     }
     // C7 FR10
     cols.push("outbreaks".to_string());
     cols.push("epidemics".to_string());
     cols.push("spillovers".to_string());
     cols.push("disease_deaths".to_string());
-    for id in SpeciesId::ALL {
-        cols.push(format!("resistance_{}", id.name().to_lowercase()));
+    for id in roster.ids() {
+        cols.push(format!("resistance_{}", roster.name(id)));
     }
     // C8 follow-up: the group sizes the cohesion rule actually produces.
-    for id in SpeciesId::ALL {
-        let n = id.name().to_lowercase();
+    for id in roster.ids() {
+        let n = roster.name(id);
         cols.push(format!("group_mean_{n}"));
         cols.push(format!("group_max_{n}"));
     }
@@ -170,7 +170,9 @@ fn summary_header() -> String {
 
 fn summary_row(sim: &Sim, seed: u64, years: f64) -> String {
     let mut cols = vec![format!("{seed}"), format!("{years}")];
-    for id in SpeciesId::ALL {
+    let roster = sim.roster();
+    let n = roster.len();
+    for id in roster.ids() {
         cols.push(sim.species[id.index()].count.to_string());
     }
     let extinctions = sim.extinct.iter().filter(|&&e| e).count();
@@ -179,18 +181,18 @@ fn summary_row(sim: &Sim, seed: u64, years: f64) -> String {
         .series
         .samples()
         .iter()
-        .map(|s| sim_fortress::cast!((s.population[0] + s.population[1] + s.population[2]) => f32))
+        .map(|s| sim_fortress::cast!(roster.prey_ids().map(|id| s.population[id.index()]).sum::<u32>() => f32))
         .collect();
     let pred: Vec<f32> = sim
         .series
         .samples()
         .iter()
-        .map(|s| sim_fortress::cast!((s.population[3] + s.population[4] + s.population[5]) => f32))
+        .map(|s| sim_fortress::cast!(roster.predator_ids().map(|id| s.population[id.index()]).sum::<u32>() => f32))
         .collect();
     let lag = sim::stats::peak_lag(&prey, &pred).map(|l| l.to_string()).unwrap_or_default();
     cols.push(lag);
-    let census = sim::stats::census(&sim.creatures);
-    for i in 0..6 {
+    let census = sim::stats::census(&sim.creatures, n);
+    for i in 0..n {
         cols.push(format!("{:.3}", census.genome_mean[i].speed()));
     }
     let d = &sim.disease;
@@ -198,10 +200,10 @@ fn summary_row(sim: &Sim, seed: u64, years: f64) -> String {
     cols.push(d.outbreaks.iter().filter(|o| o.epidemic).count().to_string());
     cols.push(d.pathogens.iter().filter(|p| p.is_strain()).count().to_string());
     cols.push(d.stats.iter().map(|s| s.total_deaths).sum::<u32>().to_string());
-    for i in 0..6 {
+    for i in 0..n {
         cols.push(format!("{:.3}", census.genome_mean[i].resistance()));
     }
-    for i in 0..6 {
+    for i in 0..n {
         cols.push(format!("{:.2}", sim.group_stats.mean[i]));
         cols.push(sim.group_stats.max[i].to_string());
     }

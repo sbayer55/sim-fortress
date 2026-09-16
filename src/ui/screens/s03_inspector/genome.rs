@@ -65,7 +65,7 @@ fn genome_derived(buf: &mut Buffer, inner: Rect, mut row: u16, sim: &crate::sim:
     row += 1;
     let g = &c.genome;
     let social = &sim.params.social;
-    let group_word = match c.species.kind() {
+    let group_word = match sim.roster().kind(c.species) {
         Kind::Prey => {
             if social.herding(g.sociality(), c.kin_nearby) {
                 "herd"
@@ -85,18 +85,18 @@ fn genome_derived(buf: &mut Buffer, inner: Rect, mut row: u16, sim: &crate::sim:
         ("sense range".into(), format!("{} cells", g.sense_cells())),
         ("move speed".into(), format!("{:.1} cells/tick", 0.5 + g.speed() * 2.0)),
         ("daily food need".into(), format!("{:.2} biomass", 24.0 * sim.params.creatures.hunger_per_hour(g.size(), g.metabolism(), 1.0))),
-        ("adult at".into(), format!("{} days", adult_age_days(c.species, g, &sim.params.creatures, &sim.params.genetics))),
+        ("adult at".into(), format!("{} days", adult_age_days(sim.species_params(c.species), g, &sim.params.genetics))),
         ("max lifespan".into(), format!("{} days", c.max_age_days(&sim.params.creatures, &sim.params.genetics))),
         (
             "litter size".into(),
             format!(
                 "{} (fert {:.2}, mat {:.2})",
-                sim.params.genetics.litter_size(c.species, g.fertility(), g.maturity()),
+                sim.params.genetics.litter_size(sim.species_params(c.species).litter_max, g.fertility(), g.maturity()),
                 g.fertility(),
                 g.maturity()
             ),
         ),
-        ("mate cooldown".into(), format!("{} days", sim.params.genetics.cooldown(c.species))),
+        ("mate cooldown".into(), format!("{} days", sim.species_params(c.species).mate_cooldown_days)),
         ("resistance cost".into(), format!("+{} % food", crate::cast!((100.0 * sim.params.disease.resist_hunger_cost * g.resistance()).round() => u32))),
         ("kin nearby".into(), format!("{} ({})", c.kin_nearby, group_word)),
     ];

@@ -4,8 +4,8 @@ use crate::sim::creatures::{
     CreatureStore, Goal, 
 };
 use crate::sim::events::{EventKind, EventRing};
+use crate::sim::species::testing::*;
 use crate::sim::params::{PredationParams };
-use crate::sim::species::{SpeciesId};
 use super::migration::{mean_pred_pressure, migrate_group, regions_adjacent};
 use super::tests::{day_time, hungry_pack, land_cell_in, run_migration_days, test_creature, test_world};
 
@@ -17,12 +17,12 @@ fn migration_destination() {
     let (x, y) = land_cell_in(&w, 0);
     for _ in 0..5 {
         let mut h = test_creature(x, y);
-        h.species = SpeciesId::Hare;
+        h.species = HARE;
         store.insert(h);
     }
     let mut events = EventRing::new(16);
     let time = day_time(0);
-    migrate_group(&mut store, &w, &mut events, &time, SpeciesId::Hare, 0);
+    migrate_group(&mut store, &w, &mut events, &time, roster(), HARE, 0);
     let ev = events.iter().find(|e| e.kind == EventKind::Migration).expect("one Migration event");
     assert!(ev.text.to_lowercase().contains("herd of 5 hares"), "{}", ev.text);
     let dest: usize = ev.detail.split('>').nth(1).unwrap().parse().unwrap();
@@ -49,7 +49,7 @@ fn predator_migration_on_low_prey() {
     let (w, mut store) = hungry_pack();
     let mut events = EventRing::new(16);
     let mut time = day_time(0);
-    let (mut cd, mut db) = ([0u64; 48], [0u32; 48]);
+    let (mut cd, mut db) = (vec![0u64; N_SPECIES * 8], vec![0u32; N_SPECIES * 8]);
     let pp = PredationParams::default();
     run_migration_days(&w, &mut store, &mut events, &mut time, &mut cd, &mut db, pp.migrate_days - 1);
     assert!(!events.iter().any(|e| e.kind == EventKind::Migration), "needs migrate_days consecutive days");
@@ -57,7 +57,7 @@ fn predator_migration_on_low_prey() {
     let ev: Vec<_> = events.iter().filter(|e| e.kind == EventKind::Migration).collect();
     assert_eq!(ev.len(), 1);
     assert!(ev[0].text.to_lowercase().contains("pack of 4 wolves"), "{}", ev[0].text);
-    assert!(store.living().all(|c| c.goal == Goal::Migrate));
+    assert!(store.living().all(|c| c.goal == Goal::Migrate ));
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn migration_cooldown() {
     let (w, mut store) = hungry_pack();
     let mut events = EventRing::new(16);
     let mut time = day_time(0);
-    let (mut cd, mut db) = ([0u64; 48], [0u32; 48]);
+    let (mut cd, mut db) = (vec![0u64; N_SPECIES * 8], vec![0u32; N_SPECIES * 8]);
     let pp = PredationParams::default();
     run_migration_days(&w, &mut store, &mut events, &mut time, &mut cd, &mut db, pp.migrate_days);
     // Keep the pack in region 0 so the trigger keeps holding.

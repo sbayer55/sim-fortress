@@ -73,6 +73,7 @@ fn in_den(world: &World, x: usize, y: usize) -> bool {
 mod tests {
 
     use super::*;
+    use crate::sim::species::testing::*;
     use crate::sim::creatures::{CreatureId, Sex};
     use crate::sim::params::{CreaturesParams, GeneticsParams, PredationParams, WorldParams};
     use crate::sim::species::SpeciesId;
@@ -82,6 +83,7 @@ mod tests {
     fn creature(id: u32, species: SpeciesId, x: usize, y: usize) -> Creature {
         let mut c = crate::sim::creatures::place_founders(
             &World::generate(7, &WorldParams::default()),
+            roster(),
             &CreaturesParams::default(),
             &GeneticsParams::default(),
             0.20,
@@ -92,7 +94,7 @@ mod tests {
         c.species = species;
         c.x = x;
         c.y = y;
-        c.genome = species.base_genome();
+        c.genome = genome(species);
         c.sex = Sex::Female;
         c.alive = true;
         c.goal = Goal::Wander;
@@ -116,9 +118,9 @@ mod tests {
         let forest = flat_world(Terrain::Forest);
         let sand = flat_world(Terrain::Sand);
 
-        let mut wolf = creature(1, SpeciesId::Wolf, 5, 5);
+        let mut wolf = creature(1, WOLF, 5, 5);
         wolf.genome.0[2] = 0.7; // sense
-        let mut hare = creature(2, SpeciesId::Hare, 6, 5);
+        let mut hare = creature(2, HARE, 6, 5);
         hare.genome.0[5] = 0.9; // camouflage
 
         assert!(!can_detect(&wolf, &hare, &forest, &p), "0.90 ≥ 0.56 → hidden in Forest");
@@ -130,9 +132,9 @@ mod tests {
         let p = PredationParams::default();
         let mut w = flat_world(Terrain::Grass);
         w.dens.push((6, 5));
-        let mut wolf = creature(1, SpeciesId::Wolf, 5, 5);
+        let mut wolf = creature(1, WOLF, 5, 5);
         wolf.genome.0[2] = 1.0; // strong sense
-        let mut hare = creature(2, SpeciesId::Hare, 6, 5);
+        let mut hare = creature(2, HARE, 6, 5);
         hare.genome.0[5] = 0.0; // no camouflage
         hare.goal = Goal::Rest;
         assert!(!can_detect(&wolf, &hare, &w, &p), "resting prey on a den is never targeted");
@@ -149,9 +151,9 @@ mod tests {
         // cells away, so a sense-6 creature sees it; a cell at dx=0, dy=7 is 7 away.
         let p = PredationParams::default();
         let w = flat_world(Terrain::Grass);
-        let mut wolf = creature(1, SpeciesId::Wolf, 5, 5);
+        let mut wolf = creature(1, WOLF, 5, 5);
         wolf.genome.0[2] = 0.4; // sense_cells = 2 + 4 = 6
-        let mut hare = creature(2, SpeciesId::Hare, 5, 5);
+        let mut hare = creature(2, HARE, 5, 5);
         hare.genome.0[5] = 0.0;
         hare.x = 7; // dx 2 → ellipse 1.0
         hare.y = 5;
@@ -178,7 +180,7 @@ mod tests {
     /// predation overrides; creatures are inserted by the test.
     fn arena(tweak: impl Fn(&mut PredationParams)) -> Sim {
         let mut p = Params::default();
-        p.creatures.initial_counts.clear();
+        p.species.clear_initial_counts();
         tweak(&mut p.predation);
         let mut sim = Sim::new(7, p);
         for c in &mut sim.world.cells {
@@ -215,7 +217,7 @@ mod tests {
 
     /// A hungry diurnal wolf at (10,5) that a hare cannot detect (camouflage 0.99).
     fn stealthy_wolf() -> Creature {
-        let mut w = creature(0, SpeciesId::Wolf, 10, 5);
+        let mut w = creature(0, WOLF, 10, 5);
         w.genome.0[5] = 0.99; // camouflage: the hare never detects it (prey rule)
         w.genome.0[2] = 0.7; // sense_cells 9
         w
@@ -229,7 +231,7 @@ mod tests {
             p.kill_max = 1.0;
         });
         let wolf = put(&mut sim, stealthy_wolf(), 0.9);
-        let mut hare = creature(0, SpeciesId::Hare, 11, 5);
+        let mut hare = creature(0, HARE, 11, 5);
         hare.genome.0[5] = 0.0; // no camouflage: always visible
         let hare = put(&mut sim, hare, 0.3);
         still(&mut sim, hare);
@@ -241,10 +243,10 @@ mod tests {
         assert_eq!(h.death.unwrap().killer, Some(wolf));
         assert_eq!((w.kills, w.attempts), (1, 1), "one roll per contact");
         assert_eq!(w.hunt_phase, HuntPhase::Eat);
-        assert_eq!(w.kills_by_species[SpeciesId::Hare.index()], 1);
+        assert_eq!(w.kills_by_species[HARE.index()], 1);
         assert!(w.last_kill.map(|k| k.0) == Some(hare));
         assert!(sim.events.iter().any(|e| e.kind == EventKind::DeathPredation && e.subject == Some(hare)));
-        assert_eq!(sim.deaths.hunt_kills[SpeciesId::Wolf.index()], 1);
+        assert_eq!(sim.deaths.hunt_kills[WOLF.index()], 1);
         sim.step();
         let w = sim.creatures.get(wolf).unwrap();
         assert_eq!(w.attempts, 1, "no second roll while eating");
@@ -260,7 +262,7 @@ mod tests {
             p.hunt_cooldown_hours = 100; // no second attempt during the flee
         });
         let wolf = put(&mut sim, stealthy_wolf(), 0.9);
-        let mut hare = creature(0, SpeciesId::Hare, 11, 5);
+        let mut hare = creature(0, HARE, 11, 5);
         hare.genome.0[5] = 0.0;
         let hare = put(&mut sim, hare, 0.3);
         still(&mut sim, hare);
@@ -283,7 +285,7 @@ mod tests {
         assert_eq!(h.flee_until, t + u64::from(sim.params.predation.flee_ticks));
         assert!(h.threatened_by.is_some(), "the forced threat gives the away-vector");
         assert_eq!(h.chased, 1);
-        assert_eq!(sim.deaths.hunt_attempts[SpeciesId::Wolf.index()], 1);
+        assert_eq!(sim.deaths.hunt_attempts[WOLF.index()], 1);
     }
 
     #[test]
@@ -309,7 +311,7 @@ mod tests {
         });
         let wolf = put(&mut sim, stealthy_wolf(), 0.9);
         // dy = 7 → ellipse distance 7 (inside sense 9), cheb 7 > chase_trigger 4.
-        let mut hare = creature(0, SpeciesId::Hare, 10, 12);
+        let mut hare = creature(0, HARE, 10, 12);
         hare.genome.0[5] = 0.0;
         let hare = put(&mut sim, hare, 0.3);
         still(&mut sim, hare);
@@ -349,7 +351,7 @@ mod tests {
             p.kill_max = 1.0;
         });
         let wolf = put(&mut sim, stealthy_wolf(), 0.9);
-        let mut hare = creature(0, SpeciesId::Hare, 11, 5);
+        let mut hare = creature(0, HARE, 11, 5);
         hare.genome.0[5] = 0.0;
         let size = hare.genome.size();
         let hare = put(&mut sim, hare, 0.3);
@@ -383,7 +385,7 @@ mod tests {
     fn scavenge_consumes_decay() {
         let mut sim = arena(|_| {});
         let wolf = put(&mut sim, stealthy_wolf(), 0.8); // > scavenge_hunger_min
-        let k = sim.creatures.insert(carcass(SpeciesId::Hare, 11, 5, 0.2));
+        let k = sim.creatures.insert(carcass(HARE, 11, 5, 0.2));
         sim.world.carcasses.push((11, 5));
         sim.spatial.rebuild(&sim.creatures, &sim.world);
         sim.step();
@@ -400,7 +402,7 @@ mod tests {
     fn scavenge_prey_carcass_only() {
         let mut sim = arena(|_| {});
         let wolf = put(&mut sim, stealthy_wolf(), 0.8);
-        let k = sim.creatures.insert(carcass(SpeciesId::Fox, 11, 5, 0.2));
+        let k = sim.creatures.insert(carcass(FOX, 11, 5, 0.2));
         sim.world.carcasses.push((11, 5));
         sim.spatial.rebuild(&sim.creatures, &sim.world);
         sim.step();

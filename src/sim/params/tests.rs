@@ -7,7 +7,6 @@ use super::genetics::GeneticsParams;
 use super::social::SocialParams;
 use super::presets::PRESETS;
 use std::collections::BTreeMap;
-use crate::sim::species::SpeciesId;
 
 #[test]
 fn toml_round_trip() {
@@ -87,7 +86,7 @@ fn maturity_factor_is_neutral_at_half() {
     assert!(GeneticsParams::maturity_factor(0.98, p.maturity_litter_span) > 1.0);
     assert!(GeneticsParams::maturity_factor(0.98, p.maturity_lifespan_span) > 1.0);
     // Litter never drops below one, however fast the life history.
-    assert_eq!(p.litter_size(SpeciesId::Deer, 0.0, 0.02), 1);
+    assert_eq!(p.litter_size(8.0, 0.0, 0.02), 1);
 }
 
 #[test]
@@ -103,13 +102,9 @@ fn field_docs_complete() {
     let value = toml::Value::try_from(Params::default()).unwrap();
     let docs: BTreeMap<&str, &str> = Params::field_docs().iter().copied().collect();
     let map_fields: &[&str] = &[
-        "creatures.initial_counts",
-        "creatures.adult_age_days",
-        "genetics.gestation_days",
-        "genetics.litter_max",
-        "genetics.mate_cooldown_days",
         "predation.cover_by_terrain",
-        "predation.prey_preference",
+        "species.prey_preference",
+        "disease.pathogens.hosts",
         "ecology.max_vegetation",
         "ecology.season_cap",
         "ecology.season_regrowth",
@@ -137,6 +132,12 @@ fn collect_leaves(v: &toml::Value, prefix: &str, map_fields: &[&str], out: &mut 
             }
             for (k, val) in t {
                 collect_leaves(val, &join(prefix, k), map_fields, out);
+            }
+        }
+        // An array of tables (`[[species]]`): its first element carries the leaves.
+        toml::Value::Array(items) if items.first().is_some_and(toml::Value::is_table) => {
+            if let Some(first) = items.first() {
+                collect_leaves(first, prefix, map_fields, out);
             }
         }
         _ => out.push(prefix.to_string()),

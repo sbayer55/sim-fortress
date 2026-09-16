@@ -161,18 +161,20 @@ fn regenerate_screen_renders() {
     let prey = sim
         .creatures
         .living()
-        .filter(|c| c.species.kind() == Kind::Prey)
+        .filter(|c| sim.roster().kind(c.species) == Kind::Prey)
         .min_by_key(|c| (c.born_day, c.id))
         .map(|c| (c.id, c.species))
         .expect("the default world keeps prey alive for a year");
 
     // S04b: a predator with living members if there is one, else the most numerous.
-    let detail_species = SpeciesId::ALL
-        .iter()
-        .copied()
+    let detail_species = sim
+        .roster()
+        .ids()
         .filter(|s| sim.species[s.index()].count > 0)
-        .max_by_key(|s| (s.kind() == Kind::Predator, sim.species[s.index()].count))
-        .unwrap_or(SpeciesId::Vole);
+        .max_by_key(|s| (sim.roster().kind(*s) == Kind::Predator, sim.species[s.index()].count))
+        .unwrap_or(SpeciesId(0));
+    let prey_name = sim.roster().display_name(prey.1);
+    let detail_name = sim.roster().display_name(detail_species);
 
     let mut app = AppState::new(Params::default());
     app.sim = Some(sim);
@@ -199,8 +201,8 @@ fn regenerate_screen_renders() {
         out
     };
 
-    let s03_title = format!("S03a  Creature Inspector - prey ({})", prey.1.name());
-    let s04b_title = format!("S04b  Species Browser - species detail ({})", detail_species.name());
+    let s03_title = format!("S03a  Creature Inspector - prey ({prey_name})");
+    let s04b_title = format!("S04b  Species Browser - species detail ({detail_name})");
     let files = [
         ("docs/screens/renders/S03a.txt", s03_title.clone(), snap(&app, &Inspector::new(prey.0), &s03_title)),
         (

@@ -40,15 +40,15 @@ pub const fn arrow_color(a: char) -> Color {
 pub const fn trait_color(t: usize) -> Color {
     match t {
         0 => theme::INFO,
-        1 => theme::DEER,
+        1 => theme::TAN,
         2 => theme::ACCENT,
         3 => theme::WARN,
         4 => theme::BAD,
         5 => theme::VEGETATION,
         6 => theme::MAGENTA,
-        7 => theme::LYNX,
+        7 => theme::ROSE,
         8 => theme::SICK,
-        9 => theme::HARE,
+        9 => theme::CREAM,
         10 => theme::SEED,
         _ => theme::DIM,
     }

@@ -8,7 +8,7 @@ use crate::sim::creatures::{
 use crate::sim::events::{Event, EventKind, EventRing};
 use crate::sim::genetics::{self, TickView};
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{CreaturesParams, EcologyParams, GeneticsParams, PredationParams, SocialParams};
+use crate::sim::params::{CreaturesParams, EcologyParams, GeneticsParams, PredationParams, Roster, SocialParams};
 use crate::sim::rng::Rng;
 use crate::sim::spatial::SpatialIndex;
 use crate::sim::species::SpeciesId;
@@ -33,6 +33,7 @@ pub fn tick_creatures(
     world: &mut World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     cp: &CreaturesParams,
     ep: &EcologyParams,
     gp: &GeneticsParams,
@@ -46,27 +47,29 @@ pub fn tick_creatures(
     dstate: &mut DiseaseState,
     drng: &mut Rng,
 ) {
-    let view = TickView::build(store, time, world, gp, dp);
+    let view = TickView::build(store, time, world, roster, gp, dp);
     // FR5: predator-first threat marking (bucket-bounded; never per-prey scans).
-    mark_threats(store, spatial, world, time.tick, pp, sp);
+    mark_threats(store, spatial, world, time.tick, roster, pp, sp);
     for c in store.living_mut() {
-        update_one(c, spatial, world, events, time, cp, ep, gp, pp, dp, sp, &view, rng, tallies, lineage);
+        update_one(c, spatial, world, events, time, roster, cp, ep, gp, pp, dp, sp, &view, rng, tallies, lineage);
     }
     // C7 FR4: infectious-first contagion over the same spatial snapshot.
     disease::contagion_pass(store, spatial, world, time, dp, dstate, drng);
-    genetics::consummate(store, time, gp, events, &view, soft_cap_noted);
-    hunt_contacts(store, world, events, time, pp, dp, sp, rng, tallies, lineage, dstate, drng);
-    scavenge_contacts(store, world, events, time, pp, dp, dstate, drng);
-    genetics::deliver(store, world, events, time, gp, cp, dp, rng, tallies, lineage, dstate, drng);
+    genetics::consummate(store, time, roster, gp, events, &view, soft_cap_noted);
+    hunt_contacts(store, world, events, time, roster, pp, dp, sp, rng, tallies, lineage, dstate, drng);
+    scavenge_contacts(store, world, events, time, roster, pp, dp, dstate, drng);
+    genetics::deliver(store, world, events, time, roster, gp, dp, rng, tallies, lineage, dstate, drng);
 }
 
 /// The day-boundary step: age death, adult re-evaluation, carcass decay/free and
 /// pressure decay. Runs at midnight, before the census.
+#[allow(clippy::too_many_arguments)]
 pub fn day_boundary(
     store: &mut CreatureStore,
     world: &mut World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     cp: &CreaturesParams,
     gp: &GeneticsParams,
     dp: &DiseaseParams,
@@ -78,17 +81,17 @@ pub fn day_boundary(
     let day_index = time.day_index();
 
     // C5 `FR5b`: flush the day's wary encounters as one event per region.
-    flush_wary(world, events, time, tallies);
+    flush_wary(world, events, time, roster, tallies);
 
     // 0. C7 FR5: infection progression, lethality, recovery, parasite clearance.
-    disease::progress_daily(store, world, events, time, dp, dstate, tallies, lineage, drng);
+    disease::progress_daily(store, world, events, time, roster, dp, dstate, tallies, lineage, drng);
 
     // 1. Age death + adult re-evaluation (FR3, FR7).
     for c in store.living_mut() {
         let age = c.age_days(day_index);
-        c.adult = age >= adult_age_days(c.species, &c.genome, cp, gp);
+        c.adult = age >= adult_age_days(roster.get(c.species), &c.genome, gp);
         if age >= c.max_age_days(cp, gp) {
-            kill(c, Cause::Age, world, events, time, tallies, lineage, None, 0, None);
+            kill(c, Cause::Age, world, events, time, roster, tallies, lineage, None, 0, None);
         }
     }
 
@@ -129,7 +132,7 @@ struct WaryDay {
 /// `detail` carries `region:prey:predator:total` for tests, like Migration's
 /// `origin>dest`. The tally is a `BTreeMap`, so regions are visited in ascending
 /// order and the first of any tied pair wins: deterministic event order.
-fn flush_wary(world: &World, events: &mut EventRing, time: &Time, tallies: &mut DeathTallies) {
+fn flush_wary(world: &World, events: &mut EventRing, time: &Time, roster: &Roster, tallies: &mut DeathTallies) {
     if tallies.wary_today.is_empty() {
         return;
     }
@@ -161,8 +164,8 @@ fn flush_wary(world: &World, events: &mut EventRing, time: &Time, tallies: &mut 
             subject: None,
             text: format!(
                 "{} give {} room in {} ({} wary encounters)",
-                s.prey.plural(),
-                s.pred.plural().to_lowercase(),
+                roster.plural(s.prey),
+                roster.plural(s.pred).to_lowercase(),
                 r.0,
                 s.total
             ),
@@ -182,6 +185,7 @@ pub(crate) fn kill(
     world: &mut World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     tallies: &mut DeathTallies,
     lineage: &mut Lineage,
     killer: Option<CreatureId>,
@@ -204,8 +208,8 @@ pub(crate) fn kill(
     tallies.last_death[c.species.index()] = Some(crate::sim::creatures::ExtinctionRecord {
         species: c.species,
         last: c.id,
-        name: c.name_str().to_string(),
-        tag: c.tag(),
+        name: c.name_str(roster).to_string(),
+        tag: c.tag(roster),
         cause,
         day: crate::cast!(time.day_index() => u32),
         age: c.age_days(time.day_index()),
@@ -239,17 +243,18 @@ pub(crate) fn kill(
     };
 
     let region = world.region_name(c.x, c.y).to_string();
+    let who = c.label(roster);
     let text = match cause {
-        Cause::Starved => format!("{} {} starved in {}", c.name_str(), c.tag(), region),
-        Cause::Thirst => format!("{} {} died of thirst in {}", c.name_str(), c.tag(), region),
-        Cause::Age => format!("{} {} died of old age at {} days in {}", c.name_str(), c.tag(), c.age_days(time.day_index()), region),
+        Cause::Starved => format!("{who} starved in {region}"),
+        Cause::Thirst => format!("{who} died of thirst in {region}"),
+        Cause::Age => format!("{who} died of old age at {} days in {region}", c.age_days(time.day_index())),
         Cause::Predation => match killer_label {
-            Some(k) => format!("{} {} was killed by {} in {}", c.name_str(), c.tag(), k, region),
-            None => format!("{} {} was killed in {}", c.name_str(), c.tag(), region),
+            Some(k) => format!("{who} was killed by {k} in {region}"),
+            None => format!("{who} was killed in {region}"),
         },
         Cause::Disease => match killer_label {
-            Some(p) => format!("{} {} died of {} in {}", c.name_str(), c.tag(), p, region),
-            None => format!("{} {} died of disease in {}", c.name_str(), c.tag(), region),
+            Some(p) => format!("{who} died of {p} in {region}"),
+            None => format!("{who} died of disease in {region}"),
         },
         Cause::Injury => unreachable!(),
     };

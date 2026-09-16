@@ -32,13 +32,8 @@ pub const CARCASS: char = '%';
 pub const DEN: char = 'Ω';
 pub const SEED: char = '*';
 
-// ---- creatures (lowercase = juvenile, uppercase = adult)
-pub const VOLE: char = 'v';
-pub const HARE: char = 'h';
-pub const DEER: char = 'd';
-pub const FOX: char = 'f';
-pub const WOLF: char = 'w';
-pub const LYNX: char = 'l';
+// Creature glyphs live in the `[[species]]` roster (lowercase = juvenile,
+// uppercase = adult); the loader checks each one is an ASCII letter.
 
 // ---- cursor / selection / marks
 pub const CURSOR: char = 'X';
@@ -128,7 +123,7 @@ mod tests {
     const ALL: &[char] = &[
         DEEP_WATER, SHALLOW_WATER, SAND, DIRT, GRASS_SPARSE, GRASS, GRASS_DENSE, FOREST, ROCK,
         HILL, SNOW, SHADE_1, SHADE_2, SHADE_3, SHADE_4, HALF_UPPER, HALF_LOWER, FULL_BLOCK,
-        SQUARE, CARCASS, DEN, SEED, VOLE, HARE, DEER, FOX, WOLF, LYNX, CURSOR, CORNER, TRAIL,
+        SQUARE, CARCASS, DEN, SEED, CURSOR, CORNER, TRAIL,
         RING, DOT, BULLET, BAR_L, BAR_R, BAR_FILL, BAR_EMPTY, H_LINE, V_LINE, CROSS, SPRING,
         SUMMER, AUTUMN, WINTER, SUN, MOON, BIRTH, DEATH, MUTATION, MIGRATION, EXTINCTION,
         DROUGHT, ALERT, NOTE, PLAY, REWIND, HAPPY, UNHAPPY, MALE, FEMALE, UP, DOWN, FLAT, LEFT,
