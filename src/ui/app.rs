@@ -59,6 +59,9 @@ pub struct AppState {
     pub viewport_size: Cell<(usize, usize)>,
     /// Look-mode cursor cell (S01c); `Some` means the map is in look mode.
     pub look_cursor: Option<(usize, usize)>,
+    /// Pause state and speed index from before look mode paused the sim;
+    /// restored by `leave_look`.
+    pub speed_before_look: Option<(bool, usize)>,
     /// Followed creature id (S01e); `Some` means the map is in follow mode.
     pub follow: Option<CreatureId>,
     /// Tick at which the followed creature died (for the 3-hour grace period).
@@ -95,6 +98,7 @@ impl AppState {
             viewport_origin: (0, 0),
             viewport_size: Cell::new((0, 0)),
             look_cursor: None,
+            speed_before_look: None,
             follow: None,
             follow_death_tick: None,
             alert_queue: Vec::new(),
@@ -302,6 +306,27 @@ impl AppState {
                 self.speed_idx = s;
                 self.paused = false;
             }
+        }
+    }
+
+    /// Enter look mode at `pos`: remember the current pause/speed and pause
+    /// the sim. Moving the cursor while already in look mode keeps the
+    /// original remembered speed.
+    pub const fn enter_look(&mut self, pos: (usize, usize)) {
+        if self.look_cursor.is_none() && self.speed_before_look.is_none() {
+            self.speed_before_look = Some((self.paused, self.speed_idx));
+        }
+        self.look_cursor = Some(pos);
+        self.paused = true;
+    }
+
+    /// Leave look mode (Esc, or a selection such as inspect/follow) and go
+    /// back to the pause state and speed in effect before it was entered.
+    pub const fn leave_look(&mut self) {
+        self.look_cursor = None;
+        if let Some((paused, idx)) = self.speed_before_look.take() {
+            self.paused = paused;
+            self.speed_idx = idx;
         }
     }
 

@@ -104,7 +104,7 @@ impl WorldMap {
         match key.code {
             KeyCode::Char('k') => {
                 let (vw, vh) = app.viewport_size.get();
-                app.look_cursor = Some((app.viewport_origin.0 + vw.div_euclid(2), app.viewport_origin.1 + vh.div_euclid(2)));
+                app.enter_look((app.viewport_origin.0 + vw.div_euclid(2), app.viewport_origin.1 + vh.div_euclid(2)));
                 Action::None
             }
             KeyCode::Tab => {
@@ -194,6 +194,7 @@ impl WorldMap {
             KeyCode::Enter => {
                 if let Some((x, y)) = app.look_cursor {
                     if let Some(id) = Self::creature_at_cursor(sim, x, y) {
+                        app.leave_look();
                         return Action::Push(Box::new(Inspector::new(id)));
                     }
                 }
@@ -203,6 +204,7 @@ impl WorldMap {
                 if let Some((x, y)) = app.look_cursor {
                     if let Some(id) = Self::creature_at_cursor(sim, x, y) {
                         app.follow = Some(id);
+                        app.leave_look();
                     }
                 }
                 Action::None
@@ -225,7 +227,7 @@ impl WorldMap {
                 Action::None
             }
             KeyCode::Esc => {
-                app.look_cursor = None;
+                app.leave_look();
                 Action::None
             }
             _ => Action::Unhandled,

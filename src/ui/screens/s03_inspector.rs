@@ -109,7 +109,7 @@ impl Screen for Inspector {
         match key.code {
             KeyCode::Char('f') => {
                 app.follow = Some(self.id);
-                app.look_cursor = None;
+                app.leave_look();
                 Action::Pop
             }
             KeyCode::Tab => {
