@@ -78,8 +78,9 @@ grass quantiles follow the banks. Sand is ocean shore only. Marsh is a drinking
 spot (`World::compute_shore`), costs `creatures.marsh_step_cost` extra move
 budget per step, has cover 1.0 and vegetation cap 0.9. `vegetation()` now scales
 by moisture and temperature, centred so the mid-range world is unchanged. Save
-format version 7. Tests: `marsh_lies_on_flat_wet_land`, `rivers_carry_riparian_bands`.
-Ecology tests that strip bare cells did not need Marsh added.
+format version 7. Dev-profile 200×60 generation still ~15.5 ms. Tests:
+`marsh_lies_on_flat_wet_land`, `rivers_carry_riparian_bands`. Ecology tests that
+strip bare cells did not need Marsh added.
 
 **Payoff.** High and cheap: everything needed is already computed (slope, acc,
 moisture, water kind). This is the phase that makes rivers *matter* to the map.
