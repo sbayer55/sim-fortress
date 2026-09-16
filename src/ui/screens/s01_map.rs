@@ -8,14 +8,15 @@ use ratatui::text::{Line, Span};
 use ratatui::Frame;
 use crate::sim::creatures::CreatureId;
 use crate::sim::disease::PathogenId;
+use crate::sim::params::DayNightTint;
 use crate::sim::{Season, Sim, SpeciesId, World};
 use crate::ui::app::AppState;
 use crate::ui::screens::{Action, Screen};
-use crate::ui::style::{EventKindStyle, SpeciesStyle};
+use crate::ui::style::{clock_status, EventKindStyle, SpeciesStyle};
 use crate::ui::viewport::{self, GUTTER_W, MAP_CHROME_ROWS, MIN_MAP_W, SIDEBAR_W};
 use crate::widgets::map::{self, MapOptions, Overlay};
 use crate::widgets::{panel, status, util};
-use crate::{glyphs, theme};
+use crate::theme;
 
 use base::{clock_section, legend_section, population_section, resources_section};
 use disease_overlay::disease_tints;
@@ -239,8 +240,6 @@ impl Screen for WorldMap {
         let max = viewport::max_origin(world.width(), world.height(), map_inner_w, map_inner_h);
 
         let (origin, title) = map_origin_title(app, sim, map_inner_w, map_inner_h, max, overlay, overlay_active, &self.world_name);
-        // The status bar still needs to know whether it is night.
-        let night = !overlay_active && time.is_night() && app.params.ui.day_night_tint;
 
         let map_area = Rect::new(area.x, area.y, map_w, map_rows);
         let map_inner = panel::draw_with_hint(f, map_area, &title, &map_hint(world, origin, map_inner_w), panel::Kind::Outer);
@@ -255,10 +254,8 @@ impl Screen for WorldMap {
         // Status bar.
         let status_row = area.y + area.height - 1;
         let keys = status_keys(app, self.overlay, overlay);
-        let sky = if night { glyphs::MOON } else { glyphs::SUN };
-        let skyname = if night { "night" } else { "day" };
-        let right = format!("{}  {} {}", time.clock_label(), sky, skyname);
-        status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, &right);
+        let (right, right_fg) = clock_status(time, app.params.ui.day_night_tint);
+        status::render_colored(f, Rect::new(area.x, status_row, area.width, 1), keys, &right, right_fg);
     }
 }
 
@@ -312,7 +309,7 @@ fn draw_ticker(f: &mut Frame<'_>, area: Rect, map_rows: u16, sim: &Sim, app: &Ap
 /// The `MapOptions` for the current frame.
 #[allow(clippy::too_many_arguments)]
 fn map_options(sim: &Sim, app: &AppState, overlay: Overlay, origin: (usize, usize), time: &crate::sim::Time, region_sel: usize, overlay_active: bool) -> MapOptions {
-    let night = !overlay_active && time.is_night() && app.params.ui.day_night_tint;
+    let night = !overlay_active && time.is_night() && app.params.ui.day_night_tint == DayNightTint::Map;
     let winter = !overlay_active && time.season() == Season::Winter;
     MapOptions {
             overlay,

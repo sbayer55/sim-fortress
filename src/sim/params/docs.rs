@@ -23,7 +23,7 @@ pub(super) const FIELD_DOCS: &[(&str, &str)] = &[
             ("ui.log_births", "Show births in the map ticker."),
             ("ui.pause_on_follow_death", "Pause when the followed creature dies."),
             ("ui.autosave_days", "Autosave every N days (0 = off)."),
-            ("ui.day_night_tint", "Apply the blue night tint to the map."),
+            ("ui.day_night_tint", "Day/night cue: off | map (blue night tint on the map) | status_text (coloured clock in the status bar)."),
             ("ui.auto_pause_on_epidemic", "Pause when a pathogen becomes epidemic."),
             ("ui.scarcity_thresholds.scarce", "Vegetation below this fraction is Scarce."),
             ("ui.scarcity_thresholds.strained", "Vegetation below this fraction is Strained."),
