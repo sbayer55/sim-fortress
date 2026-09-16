@@ -643,7 +643,9 @@ mod tests {
         // Re-baselined for C5 FR5b: prey now spend wary ticks steering away from
         // predators that are not hunting them, so every trajectory downstream of
         // the first such encounter moves. Deliberate, not an accident.
-        assert_eq!(a.checksum(), 0x8c2b_5ee8_5b5a_263d);
+        // Re-baselined for the erosion-based world generator: every cell's
+        // terrain, elevation and moisture changed, so founders land elsewhere.
+        assert_eq!(a.checksum(), 0xfe19_543f_c5fd_7dbe);
     }
 
     #[test]

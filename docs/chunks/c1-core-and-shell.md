@@ -71,21 +71,48 @@ and has no effect until C2. Unknown TOML keys are an error naming the key. A `--
 deep-merged over the defaults (so `[world] rainfall = "dry"` alone is valid).
 
 ### FR2 World generation
-`World::generate(seed, &WorldParams)` is pure. Terrain thresholds are **quantiles** so the
-percentage targets are met on any seed:
-1. Compute elevation and moisture as multi-octave value noise (5 and 4 octaves) sampled
-   in a w × 2h space (cells are twice as tall as wide) through a low-frequency domain
-   warp; the base feature size is `max(w, 2h) / 5` (at least 22) so large worlds get
-   continents rather than speckle. The reference river and lake features are scaled to
-   width/height as before.
-2. Sort elevations. Cells at or below the `water_pct` quantile are water: the lower ⅔ of
-   them `DeepWater`, the upper ⅓ `ShallowWater`. Cells above the `100 − rock_pct` quantile
-   are `Rock`. The next 4 % of cells above the water line are `Sand`.
-3. Of the remaining land, the top `forest_pct` (of all cells) by moisture are `Forest`;
-   the rest are `Dirt` / `GrassSparse` / `Grass` / `GrassDense` by moisture bands
-   0.28 / 0.42 / 0.58.
-4. Initial vegetation per terrain as in the fixture; it does not change in C1.
-Test: for seeds 1..=20 at default size, each share is within ±3 percentage points.
+`World::generate(seed, &WorldParams)` is pure: one `Rng` seeded from `seed` feeds every
+noise lattice and every erosion epoch, so the same seed and parameters give the same
+cells. The generator lives in `src/sim/world/` (`noise`, `relief`, `flow`, `classify`).
+1. **Tectonics** (`relief::tectonics`): elevation is 5-octave value noise sampled in a
+   w × 2h space (cells are twice as tall as wide) through a low-frequency domain warp,
+   with a 4-octave *ridged* field folded in only where the continent is high, so
+   mountain chains sit on the uplands and lowlands roll gently. The base feature size is
+   `max(w, 2h) / 5` (at least 22). A 3-octave rain field gives every cell a long-run
+   rainfall weight in 0.5..=1.5.
+2. **Time** (`relief::epoch`, `world.age` epochs, default 8): the lowest 60 % of the
+   water target is fixed as base level. Each epoch lays a fresh seeded microrelief
+   (scale 2.5 cells, amplitude 0.015), samples a seeded storm field that modulates
+   rainfall, routes drainage by steepest descent (D8 with 1 : 2 : √5 step lengths),
+   accumulates discharge, incises channels with the stream-power law `h ← (h + f·h_r) /
+   (1 + f)`, `f = K·√(A·6000/N) / d` (implicit, so any epoch length is stable), and
+   relaxes hillslopes with explicit diffusion (0.12, no-flux edges). Age 0 is the raw
+   tectonic surface; age 30 is old, low and gullied.
+3. **Water** (`classify::water_bodies`): the finished surface is depression-filled by
+   priority flood from the base level and the map edges (rivers may leave the world), and
+   drainage is re-routed over the filled surface. Of the `water_pct` target, up to 25 %
+   goes to lakes (the deepest depressions), 15 % to rivers (the largest drainage areas,
+   at least 6 cells) and the rest to the ocean (the lowest remaining cells). Because
+   discharge only grows downstream, every river cell is connected to the ocean, a lake
+   or the edge. Interior ocean and lake cells are `DeepWater`; shores and rivers are
+   `ShallowWater`.
+4. **Moisture**: `0.02 + 0.40·rain + 0.28·e^(−d/5) + 0.28·(1 − elevation) ± 0.07`, where
+   `rain` is the rain field stretched to 1.8× contrast (rain shadows leave bare dirt),
+   `d` is the chamfer distance to water and the last term is the rainfall climate
+   (`dry` −, `wet` +), clamped to 0..=1. Land averages about 0.5 on a normal world with
+   a few percent of bare dirt.
+5. **Land cover** by quantile so the targets hold on any seed: the top `rock_pct` of all
+   cells by `elevation + 0.6 × normalised slope` are `Rock`; up to 4 % of cells are
+   `Sand`, the lowest land touching the ocean or a lake; the top `forest_pct` of the
+   remaining land by moisture are `Forest`; the rest are `Dirt` / `GrassSparse` /
+   `Grass` / `GrassDense` by moisture bands 0.28 / 0.42 / 0.58.
+6. Initial vegetation per terrain as in the fixture; it does not change in C1.
+
+Tests (`sim::world::tests`): for seeds 1..=20 at default size each share is within ±3
+percentage points; generation is deterministic; age 30 is measurably smoother than age
+0; a 0 % water target yields no water; water forms bodies, not speckle. Measured
+generation time (best of 15): 150×40 ≈ 7 ms dev / 4 ms release, 200×60 ≈ 14 ms dev /
+10 ms release, 1000×1000 ≈ 0.9 s release.
 
 ### FR3 Regions
 The eight fixture rectangles, scaled `x' = round(x × W / 150)`, `y' = round(y × H / 40)`,

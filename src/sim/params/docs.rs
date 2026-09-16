@@ -9,6 +9,7 @@ pub(super) const FIELD_DOCS: &[(&str, &str)] = &[
             ("world.water_pct", "Target percentage of water cells (lakes + rivers)."),
             ("world.forest_pct", "Target percentage of forest cells."),
             ("world.rock_pct", "Target percentage of impassable rock cells."),
+            ("world.age", "Geological age: erosion epochs over the raw relief (0 = unweathered, 30 = old and gentle)."),
             ("world.rainfall", "Climate: dry | normal | wet."),
             // ---- time
             ("time.season_days", "Days per season (a year is four seasons)."),

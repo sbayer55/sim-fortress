@@ -28,18 +28,19 @@ const F_HEIGHT: usize = 3;
 const F_WATER: usize = 4;
 const F_FOREST: usize = 5;
 const F_ROCK: usize = 6;
-const F_RAINFALL: usize = 7;
-const F_SEASON: usize = 8;
-const F_SPECIES: usize = 9; // 9..=14, one row per species
-const F_MUTATION_RATE: usize = 15;
-const F_MUTATION_STRENGTH: usize = 16;
-const F_DIFFICULTY: usize = 17;
-const F_REGROWTH: usize = 18;
-const F_PRESETS: usize = 19; // 19..=23, five presets
-const F_GENERATE: usize = 24;
-const F_RANDOMIZE: usize = 25;
-const F_BACK: usize = 26;
-const FIELD_COUNT: usize = 27;
+const F_AGE: usize = 7;
+const F_RAINFALL: usize = 8;
+const F_SEASON: usize = 9;
+const F_SPECIES: usize = 10; // 10..=15, one row per species
+const F_MUTATION_RATE: usize = 16;
+const F_MUTATION_STRENGTH: usize = 17;
+const F_DIFFICULTY: usize = 18;
+const F_REGROWTH: usize = 19;
+const F_PRESETS: usize = 20; // 20..=24, five presets
+const F_GENERATE: usize = 25;
+const F_RANDOMIZE: usize = 26;
+const F_BACK: usize = 27;
+const FIELD_COUNT: usize = 28;
 const FORM_W: u16 = 66;
 
 #[derive(Debug)]
@@ -309,6 +310,7 @@ fn adjust(form: &mut WorldGenForm, focus: usize, dir: i32) {
         F_WATER => w.water_pct = crate::cast!(clamp_i64(i64::from(w.water_pct) + d, 0, 60) => u8),
         F_FOREST => w.forest_pct = crate::cast!(clamp_i64(i64::from(w.forest_pct) + d, 0, 50) => u8),
         F_ROCK => w.rock_pct = crate::cast!(clamp_i64(i64::from(w.rock_pct) + d, 0, 30) => u8),
+        F_AGE => w.age = crate::cast!(clamp_i64(i64::from(w.age) + d, 0, 30) => u8),
         F_RAINFALL => cycle_rainfall(&mut w.rainfall, dir),
         F_SEASON => form.season_days = crate::cast!(clamp_i64(i64::from(form.season_days) + d * 10, 30, 180) => u32),
         F_SPECIES..F_MUTATION_RATE => {
@@ -325,7 +327,7 @@ fn adjust(form: &mut WorldGenForm, focus: usize, dir: i32) {
 
 /// Fields whose value can be typed in directly (Space opens the entry).
 const fn is_numeric_field(focus: usize) -> bool {
-    matches!(focus, F_WIDTH..=F_ROCK | F_SEASON..=F_MUTATION_STRENGTH | F_REGROWTH)
+    matches!(focus, F_WIDTH..=F_AGE | F_SEASON..=F_MUTATION_STRENGTH | F_REGROWTH)
 }
 
 /// Apply a typed value to a numeric field, clamped to the same range the
@@ -344,6 +346,7 @@ fn commit_edit(form: &mut WorldGenForm, focus: usize, text: &str) {
         F_WATER => int(text).map(|v| w.water_pct = crate::cast!(clamp_i64(v, 0, 60) => u8)).is_some(),
         F_FOREST => int(text).map(|v| w.forest_pct = crate::cast!(clamp_i64(v, 0, 50) => u8)).is_some(),
         F_ROCK => int(text).map(|v| w.rock_pct = crate::cast!(clamp_i64(v, 0, 30) => u8)).is_some(),
+        F_AGE => int(text).map(|v| w.age = crate::cast!(clamp_i64(v, 0, 30) => u8)).is_some(),
         F_SEASON => int(text).map(|v| form.season_days = crate::cast!(clamp_i64(v, 30, 180) => u32)).is_some(),
         F_SPECIES..F_MUTATION_RATE => int(text).map(|v| form.counts[focus - F_SPECIES] = crate::cast!(clamp_i64(v, 0, 999) => u32)).is_some(),
         F_MUTATION_RATE => flt(text).map(|v| form.genetics.mutation_rate = clamp_f32(v, 0.0, 0.2)).is_some(),
@@ -452,6 +455,7 @@ fn draw_world_section(f: &mut Frame<'_>, inner: Rect, form: &WorldGenForm, row: 
         field("Water %", shown(form, F_WATER, form.world.water_pct.to_string()), true, "lakes + rivers"),
         field("Forest %", shown(form, F_FOREST, form.world.forest_pct.to_string()), true, "predator cover"),
         field("Rock %", shown(form, F_ROCK, form.world.rock_pct.to_string()), true, "impassable"),
+        field("World age", shown(form, F_AGE, form.world.age.to_string()), true, "erosion 0 - 30"),
         field("Rainfall", rainfall_name(form.world.rainfall).to_string(), true, "dry/normal/wet"),
         field("Season length", shown(form, F_SEASON, format!("{} days", form.season_days)), true, "30 - 180 days"),
     ];
