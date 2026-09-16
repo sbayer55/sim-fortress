@@ -22,7 +22,8 @@ src/glyphs.rs    named CP437 glyph constants
 tests/           integration acceptance tests (one file per chunk)
 examples/        throwaway balance/bench/diagnostic dev tools
 docs/            the specification: roadmap chunks, screen requirements, references
-scripts/         sweep.sh (parallel seed sweep → summary.csv)
+scripts/         sweep.sh (parallel seed sweep), affected-tests.sh, hooks/ (Claude Code)
+justfile         named test tiers — see "Tests are tiered"
 ```
 
 Time model (fixed): 1 tick = 1 simulated hour, 24 ticks/day, 90 days/season,
@@ -34,19 +35,51 @@ Time model (fixed): 1 tick = 1 simulated hour, 24 ticks/day, 90 days/season,
 cargo build                                   # dev profile is opt-level 1
 cargo run                                     # live app (title → New World → play)
 cargo clippy --all-targets                    # MUST be 0 warnings
-cargo test                                    # lib + integration
-cargo test --lib                              # ~180 tests, ~95 s (save round-trip dominates)
+just check                                    # clippy + 800-line guard, seconds
+just test-unit sim::disease                   # cargo test --lib <filter>
+just test-chunk predators                     # one tests/*.rs binary, in release
+just test-affected                            # the tests the current diff touches
 ```
 
-Slow multi-year tests are debug-hostile; run the relevant binary in release:
+## Tests are tiered — run the narrowest tier that covers the change
 
-```sh
-cargo test --release --test predators
-cargo test --release --test evolution
-cargo test --release --test disease
-cargo test --test file_size                   # structural guard, fast
-cargo test --release --test sweep -- --ignored
-```
+The lib suite takes ~95 s (save round-trip dominates) and each acceptance binary
+in `tests/` simulates years of world time, so an unfocused `cargo test` costs
+minutes and tells you nothing a focused run would not. A PreToolUse hook
+(`scripts/hooks/guard-cargo-test.sh`, wired in `.claude/settings.json`) rejects
+bare `cargo test`, unfiltered `cargo test --lib`, and slow chunks run without
+`--release`. The `justfile` names the tiers:
+
+| Tier | Command | Cost | When |
+|---|---|---|---|
+| gate | `just check` | seconds | always, before calling anything done |
+| unit | `just test-unit <module::path>` | seconds to tens of seconds | the module you edited (`sim::disease`, `ui`, `sim::params`) |
+| chunk | `just test-chunk <name>` | 1–3 min in release | the chunk your change affects; **run in the background** |
+| affected | `just test-affected` | varies | when the diff spans modules; `just test-affected-plan` prints the plan first |
+| lib | `just test-unit-all` | ~95 s | **only when the user explicitly asks** |
+| full | `just test-full` | several minutes | **only when the user explicitly asks** |
+
+Rules:
+
+- **Never run the full or whole-lib suite on your own initiative.** "Make sure
+  the tests pass" means the tiers above. If you believe a full run is warranted,
+  say so and let the user ask for it; the hook prompts them on `just test-full`.
+- **Run chunk tests in the background** (`run_in_background`) and keep working;
+  read the result when it arrives. Do not sit and wait on a multi-minute run.
+- **Do not re-run a green tier** unless a file it covers changed since.
+- **Filter by module path.** `cargo test --lib sim::behavior` runs every unit
+  test under that module. Failing test names are full paths, so a failure tells
+  you the filter for the re-run. The determinism tripwire is
+  `just test-unit sim::tests::checksum`.
+- **Slow chunks are debug-hostile** (`predators`, `evolution`, `disease`,
+  `sweep`); `just test-chunk` already passes `--release`. The 20-seed sweep
+  (`cargo test --release --test sweep -- --ignored`) is never part of any tier.
+- **Source-to-test mapping** (`scripts/affected-tests.sh`): `src/sim/disease*` →
+  `disease`; `genetics*`/`lineage` → `evolution`; `predation`, `behavior/hunt`,
+  `behavior/threat`, `behavior/migration` → `predators`; other `behavior/*` →
+  `herbivores`; `ecology` → `ecology`; `params*`, `save`, `main.rs` → `headless`;
+  the shared sim primitives and `Cargo.toml` fan out to every chunk. Update the
+  script's table when you add a module.
 
 Headless experiments and tooling:
 
@@ -148,7 +181,7 @@ Do not weaken these to make a change pass. Fix the change.
   renders. Modals return `opaque() == false` so the stack dims what is beneath them.
 - **Tests.** Acceptance criteria live in `tests/` (one file per chunk); unit tests live
   in `src/**/tests.rs`. Prefer extending the existing acceptance test over inventing a
-  parallel suite.
+  parallel suite. Run them by tier (see above), never the whole suite unprompted.
 - **State of the tree.** Work happens on `main`; `claude/*` branches and
   `.claude/worktrees/` are other agents' in-flight work — leave them alone. Check
   `git status` before editing.
@@ -195,9 +228,9 @@ Do not weaken these to make a change pass. Fix the change.
 ## Before you call a change done
 
 ```sh
-cargo clippy --all-targets                      # 0 warnings
-cargo test                                      # green; checksum unchanged
-cargo test --test file_size                     # no src file over 800 lines
+just check                                      # 0 clippy warnings, no src file over 800 lines
+just test-unit <module::path>                   # the modules you touched; checksum unchanged
+just test-chunk <name>                          # the affected chunk(s), in the background
 git diff --stat                                 # only the files you meant to touch
 ```
 
