@@ -12,10 +12,13 @@ use crate::sim::Sim;
 
 /// File magic: `b"SIMF"`.
 pub const MAGIC: [u8; 4] = *b"SIMF";
-/// Current on-disk format version. A newer version is rejected (FR1), and so is
-/// an older one: C8 widened the genome and C5 `FR5b` added the wary state, so
-/// pre-wary files cannot be read.
-pub const VERSION: u16 = 4;
+/// Current on-disk format version.
+///
+/// A newer version is rejected (FR1), and so is an older one: C8 widened the
+/// genome and C5 `FR5b` added the wary state, so pre-wary files cannot be
+/// read. Version 5 added `world.age` to the serialised parameters
+/// (erosion-based world generation).
+pub const VERSION: u16 = 5;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 

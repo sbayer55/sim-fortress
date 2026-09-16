@@ -525,8 +525,10 @@ mod tests {
         let mut p = Params::default();
         p.creatures.initial_counts.clear(); // pure ecology test, no grazing
         let mut sim = Sim::new(42, p);
+        // Sites sprout on bare dirt and sparse grass; strip both so every
+        // seed's world offers plenty of candidates.
         for c in &mut sim.world.cells {
-            if c.terrain == Terrain::Dirt {
+            if matches!(c.terrain, Terrain::Dirt | Terrain::GrassSparse) {
                 c.vegetation = 0.0;
             }
         }
@@ -543,7 +545,7 @@ mod tests {
     fn one_seed_note_per_region_per_day() {
         let mut sim = Sim::new(42, Params::default());
         for c in &mut sim.world.cells {
-            if c.terrain == Terrain::Dirt {
+            if matches!(c.terrain, Terrain::Dirt | Terrain::GrassSparse) {
                 c.vegetation = 0.0;
             }
         }

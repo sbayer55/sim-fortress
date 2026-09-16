@@ -65,7 +65,7 @@ unfocused values are bright text on the plain background.
 ### New World form
 1. **Panel hint** `field <current> of <total>` tracks keyboard focus through every
    focusable field (world fields, species count rows, evolution fields, presets, buttons).
-2. **World section** — nine fields in this order:
+2. **World section** — ten fields in this order:
 
    | Label          | Example value          | Adjustable | Hint            |
    |----------------|------------------------|------------|-----------------|
@@ -76,6 +76,7 @@ unfocused values are bright text on the plain background.
    | Water %        | derived from preview   | `◄ ►`      | `lakes + rivers`|
    | Forest %       | derived from preview   | `◄ ►`      | `predator cover`|
    | Rock %         | derived from preview   | `◄ ►`      | `impassable`    |
+   | World age      | 8                      | `◄ ►`      | `erosion 0 - 30`|
    | Rainfall       | normal                 | `◄ ►`      | `dry/normal/wet`|
    | Season length  | 90 days                | `◄ ►`      | `30 - 180 days` |
 
@@ -168,7 +169,9 @@ fields as characters, not as screen shortcuts.
 - **Preview regeneration.** The preview, the derived Water/Forest/Rock percentages, the
   terrain summary and the capacity estimate all recompute on every seed or terrain change.
   Generation must be fast enough to feel live, or the preview needs a `generating…`
-  placeholder.
+  placeholder. Measured with the erosion generator (C1 FR2, `world.age` 8): a 200×60
+  preview regenerates in about 14 ms in the dev profile, inside the 16 ms budget, so the
+  preview stays live; larger maps or a higher age are slower in proportion.
 - **Invalid seed text.** Non-hex/decimal input should be flagged in the field hint and
   block Generate rather than silently falling back.
 - **Map size changes.** A world larger than 150×40 cannot be shown at 1:2 in 75×20; the preview

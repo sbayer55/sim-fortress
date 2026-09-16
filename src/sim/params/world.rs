@@ -18,6 +18,8 @@ pub struct WorldParams {
     pub water_pct: u8,
     pub forest_pct: u8,
     pub rock_pct: u8,
+    /// Geological age: erosion epochs run over the raw relief (0 = unweathered).
+    pub age: u8,
     pub rainfall: Rainfall,
 }
 
@@ -29,6 +31,7 @@ impl Default for WorldParams {
             water_pct: 20,
             forest_pct: 15,
             rock_pct: 5,
+            age: 8,
             rainfall: Rainfall::Normal,
         }
     }

@@ -389,8 +389,8 @@ mod tests {
         let p = s.form_params();
         assert_eq!(p.world.water_pct, 12);
         // Now on Forest %: a float field further down accepts decimals.
-        for _ in 0..10 {
-            s.handle_key(k(KeyCode::Tab), &mut app); // -> field 15, Mutation rate
+        for _ in 0..11 {
+            s.handle_key(k(KeyCode::Tab), &mut app); // -> field 16, Mutation rate
         }
         s.handle_key(k(KeyCode::Char(' ')), &mut app);
         for c in "0.15".chars() {
