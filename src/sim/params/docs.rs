@@ -56,6 +56,7 @@ pub(super) const FIELD_DOCS: &[(&str, &str)] = &[
             ("creatures.move_speed_base", "Base movement speed."),
             ("creatures.move_speed_per_trait", "Extra speed per speed trait."),
             ("creatures.move_cost_energy", "Energy cost per move."),
+            ("creatures.marsh_step_cost", "Extra move budget spent stepping into marsh."),
             ("creatures.replan_ticks", "Ticks between goal replans."),
             ("creatures.pressure_per_creature_tick", "Prey pressure added per passing creature."),
             ("creatures.pressure_decay_per_day", "Daily prey-pressure decay."),

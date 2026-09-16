@@ -131,7 +131,7 @@ pub trait MapSource {
 
 /// Glyph and style for a bare terrain cell.
 pub const fn terrain_cell(cell: &Cell, winter: bool) -> (char, Color, Color) {
-    use Terrain::{DeepWater, ShallowWater, Sand, Dirt, GrassSparse, Grass, GrassDense, Forest, Rock};
+    use Terrain::{DeepWater, ShallowWater, Sand, Dirt, GrassSparse, Grass, GrassDense, Forest, Rock, Marsh};
     let (g, fg, bg) = match cell.terrain {
         DeepWater => (glyphs::DEEP_WATER, theme::DEEP_WATER_FG, theme::DEEP_WATER_BG),
         ShallowWater => (glyphs::SHALLOW_WATER, theme::SHALLOW_FG, theme::SHALLOW_BG),
@@ -142,6 +142,7 @@ pub const fn terrain_cell(cell: &Cell, winter: bool) -> (char, Color, Color) {
         GrassDense => (glyphs::GRASS_DENSE, theme::GRASS_DENSE_FG, theme::GRASS_BG),
         Forest => (glyphs::FOREST, theme::FOREST_FG, theme::FOREST_BG),
         Rock => (glyphs::ROCK, theme::ROCK_FG, theme::ROCK_BG),
+        Marsh => (glyphs::MARSH, theme::MARSH_FG, theme::MARSH_BG),
     };
     if winter {
         match cell.terrain {
@@ -150,6 +151,7 @@ pub const fn terrain_cell(cell: &Cell, winter: bool) -> (char, Color, Color) {
             Grass | GrassDense => (glyphs::GRASS_SPARSE, Color::Rgb(170, 190, 170), theme::SNOW_BG),
             Forest => (glyphs::FOREST, Color::Rgb(70, 120, 80), Color::Rgb(48, 58, 62)),
             Rock => (glyphs::ROCK, theme::SNOW_FG, Color::Rgb(84, 84, 96)),
+            Marsh => (glyphs::MARSH, Color::Rgb(140, 170, 160), Color::Rgb(30, 50, 56)),
             DeepWater => (g, fg, bg),
         }
     } else {
@@ -157,7 +159,7 @@ pub const fn terrain_cell(cell: &Cell, winter: bool) -> (char, Color, Color) {
     }
 }
 
-/// Glyph and colors for a serialised terrain code (0..=8), summer/day palette
+/// Glyph and colors for a serialised terrain code (0..=9), summer/day palette
 /// (used by the S00 title-screen decorative strips, C6 FR1).
 pub const fn terrain_code_cell(code: u8) -> (char, Color, Color) {
     let cell = Cell {
@@ -634,6 +636,7 @@ pub fn legend() -> Vec<(char, Color, &'static str)> {
         (glyphs::GRASS_DENSE, theme::GRASS_DENSE_FG, "meadow"),
         (glyphs::FOREST, theme::FOREST_FG, "forest"),
         (glyphs::ROCK, theme::ROCK_FG, "rock"),
+        (glyphs::MARSH, theme::MARSH_FG, "marsh"),
         (glyphs::DEN, theme::DEN, "den / burrow"),
         (glyphs::CARCASS, theme::CARCASS, "carcass"),
         (glyphs::SEED, theme::SEED, "regrowth"),

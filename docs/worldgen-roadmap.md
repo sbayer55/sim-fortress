@@ -69,6 +69,18 @@ world.rs` if wind becomes a param, `tests.rs`.
 
 ## Phase 2 — Wetlands, riparian corridors and shore types
 
+**Status: done (Sept 2026).** `Terrain::Marsh` (code 9, glyph `≡`) is cut in
+`classify::land_terrain` from the bottom slope quintile of the land with moisture
+≥ 0.55 and either a catchment of ≥ 4 cells or a lake rim, capped at 5% of cells
+(3–5% in practice). `classify::riparian` adds a moisture bonus one cell out from
+rivers draining ≥ 24 cells (two cells out for trunks ≥ 80), so the forest and
+grass quantiles follow the banks. Sand is ocean shore only. Marsh is a drinking
+spot (`World::compute_shore`), costs `creatures.marsh_step_cost` extra move
+budget per step, has cover 1.0 and vegetation cap 0.9. `vegetation()` now scales
+by moisture and temperature, centred so the mid-range world is unchanged. Save
+format version 7. Tests: `marsh_lies_on_flat_wet_land`, `rivers_carry_riparian_bands`.
+Ecology tests that strip bare cells did not need Marsh added.
+
 **Payoff.** High and cheap: everything needed is already computed (slope, acc,
 moisture, water kind). This is the phase that makes rivers *matter* to the map.
 
@@ -236,7 +248,7 @@ ticker screens, `save.rs`.
 | Phase | Theme | Depends on | New fields | Save bump |
 |---|---|---|---|---|
 | 1 | Temperature + orographic rain (done) | — | `Cell.temperature`, `World.wind` | yes (v6) |
-| 2 | Marsh, riparian, shore types | 1 | `Terrain::Marsh` | yes |
+| 2 | Marsh, riparian, shore types (done) | 1 | `Terrain::Marsh`, `creatures.marsh_step_cost` | yes (v7) |
 | 3 | Biomes as regions | 1, 2 | `Cell.biome`, watershed regions | yes |
 | 4 | River morphology | 2 | none | no |
 | 5 | Age regimes + events | — (better after 3) | `World.history` | yes |

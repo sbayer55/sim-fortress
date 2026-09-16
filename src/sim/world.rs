@@ -36,6 +36,9 @@ pub enum Terrain {
     GrassDense = 6,
     Forest = 7,
     Rock = 8,
+    /// Reed beds on flat, wet ground beside water: drinkable, slow to cross,
+    /// dense cover.
+    Marsh = 9,
 }
 
 impl Terrain {
@@ -43,7 +46,7 @@ impl Terrain {
         matches!(self, Self::DeepWater | Self::ShallowWater)
     }
 
-    /// Map a serialised terrain code (`terrain as u8`, 0..=8) back to `Terrain`
+    /// Map a serialised terrain code (`terrain as u8`, 0..=9) back to `Terrain`
     /// (C6 FR1 title-screen strips). Codes outside the range fall back to Rock.
     pub const fn from_code(code: u8) -> Self {
         match code {
@@ -55,6 +58,7 @@ impl Terrain {
             5 => Self::Grass,
             6 => Self::GrassDense,
             7 => Self::Forest,
+            9 => Self::Marsh,
             _ => Self::Rock,
         }
     }
@@ -74,6 +78,7 @@ impl Terrain {
             Self::GrassDense => "meadow",
             Self::Forest => "forest",
             Self::Rock => "rock",
+            Self::Marsh => "marsh",
         }
     }
 }
@@ -113,7 +118,7 @@ pub struct World {
     pub wind: Wind,
     /// Number of water cells at generation, used as the water-level series baseline.
     pub water_cells_at_generation: usize,
-    /// Per cell: 8-adjacent to water (a drinking spot). Refreshed by
+    /// Per cell: 8-adjacent to water, or marsh (a drinking spot). Refreshed by
     /// `refresh_shore` whenever water terrain changes; empty means "compute".
     pub shore: Vec<bool>,
 }
@@ -128,6 +133,10 @@ impl World {
     }
 
     fn compute_shore(&self, x: usize, y: usize) -> bool {
+        // Marsh holds standing water of its own: a drinking spot in itself.
+        if self.cell(x, y).terrain == Terrain::Marsh {
+            return true;
+        }
         for dy in -1i32..=1 {
             for dx in -1i32..=1 {
                 if dx == 0 && dy == 0 {

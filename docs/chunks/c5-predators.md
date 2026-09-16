@@ -43,7 +43,7 @@ Save/load, title, presets, tuning tooling (C6).
 ```toml
 # defaults of params.creatures.initial_counts change to fox = 8, wolf = 6, lynx = 4 (balance table; spec start 30/24/12)
 detect_threshold = 0.8         # hidden when camouflage × cover ≥ sense × detect_threshold
-cover_by_terrain = { forest = 1.0, grass_dense = 1.0, grass = 0.8, grass_sparse = 0.6, dirt = 0.6, sand = 0.4, shallow_water = 0.4 }
+cover_by_terrain = { forest = 1.0, grass_dense = 1.0, marsh = 1.0, grass = 0.8, grass_sparse = 0.6, dirt = 0.6, sand = 0.4, shallow_water = 0.4 }
 den_protects = true            # a resting prey on a den cell cannot be targeted
 chase_trigger_cheb = 4
 chase_max_ticks = 30           # clock starts at cheb ≤ chase_trigger_cheb, not at detection

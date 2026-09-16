@@ -661,7 +661,9 @@ mod tests {
         // Re-baselined for climate physics: the wind and pole draws precede
         // the tectonic noise and orographic rain replaces the free rain
         // field, so every cell's moisture and terrain moved again.
-        assert_eq!(a.checksum(), 0x4a21_08fc_4589_0590);
+        // Re-baselined for wetlands: marsh and riparian corridors recut the
+        // land and the initial vegetation reads moisture and temperature.
+        assert_eq!(a.checksum(), 0x06d2_065a_9fc4_3107);
     }
 
     #[test]

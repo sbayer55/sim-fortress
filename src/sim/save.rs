@@ -22,8 +22,9 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// every per-species table became a `Vec` and the header carries the roster
 /// labels (a version-4 header still decodes so old files stay listable).
 /// Version 6 added the per-cell temperature and the world's prevailing wind
-/// (climate physics).
-pub const VERSION: u16 = 6;
+/// (climate physics); version 7 added the `Marsh` terrain and the marsh step
+/// cost parameter (wetlands and riparian corridors).
+pub const VERSION: u16 = 7;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 
@@ -519,7 +520,7 @@ mod tests {
         assert_eq!(rows.len(), 4);
         for r in &rows {
             assert_eq!(r.len(), 120);
-            assert!(r.iter().all(|&c| c <= 8 || c == BLANK_TERRAIN));
+            assert!(r.iter().all(|&c| c <= 9 || c == BLANK_TERRAIN));
         }
         // Default world is 150 wide: no blank padding (centre 120 of 150).
         assert!(rows[0].iter().all(|&c| c != BLANK_TERRAIN));

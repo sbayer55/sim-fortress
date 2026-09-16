@@ -3,8 +3,8 @@
 use super::*;
 use crate::sim::params::Rainfall;
 
-fn counts(world: &World) -> [usize; 9] {
-    let mut c = [0usize; 9];
+fn counts(world: &World) -> [usize; 10] {
+    let mut c = [0usize; 10];
     for cell in &world.cells {
         c[crate::cast!(cell.terrain => usize)] += 1;
     }
@@ -39,9 +39,9 @@ fn target_percentages_20_seeds() {
 }
 
 /// Count each terrain type in the top and bottom halves of `world`.
-fn split_halves(world: &World, w: usize, h: usize) -> ([usize; 9], [usize; 9]) {
-    let mut top = [0usize; 9];
-    let mut bottom = [0usize; 9];
+fn split_halves(world: &World, w: usize, h: usize) -> ([usize; 10], [usize; 10]) {
+    let mut top = [0usize; 10];
+    let mut bottom = [0usize; 10];
     for y in 0..h {
         for x in 0..w {
             let t = crate::cast!(world.cell(x, y).terrain => usize);
@@ -239,7 +239,7 @@ fn rainfall_setting_scales_moisture() {
 #[ignore = "diagnostic: prints moisture and terrain bands per climate"]
 fn print_climate_bands() {
     for rainfall in [Rainfall::Dry, Rainfall::Normal, Rainfall::Wet] {
-        let mut acc = [0usize; 9];
+        let mut acc = [0usize; 10];
         let mut moist = 0.0f32;
         let mut land = 0usize;
         let mut winds = std::collections::BTreeMap::new();
@@ -256,6 +256,97 @@ fn print_climate_bands() {
         }
         let total = crate::cast!(acc.iter().sum::<usize>() => f32);
         let pct: Vec<String> = acc.iter().map(|&n| format!("{:.1}", crate::cast!(n => f32) / total * 100.0)).collect();
-        println!("{rainfall:?}: land moisture {:.3}; water/shallow/sand/dirt/sparse/grass/dense/forest/rock = {} winds {winds:?}", moist / crate::cast!(land => f32), pct.join("/"));
+        println!("{rainfall:?}: land moisture {:.3}; water/shallow/sand/dirt/sparse/grass/dense/forest/rock/marsh = {} winds {winds:?}", moist / crate::cast!(land => f32), pct.join("/"));
+    }
+}
+
+#[test]
+fn marsh_lies_on_flat_wet_land() {
+    // Marsh is the bottom slope quintile of the land and never bone dry; it
+    // appears on every default seed and touches water or a catchment.
+    let params = WorldParams::default();
+    let grid = flow::Grid { w: params.width, h: params.height };
+    for seed in 1..=10u64 {
+        let world = World::generate(seed, &params);
+        // `generate` draws the relief first from a fresh rng, so rebuilding it
+        // from the seed reproduces the slope field the cells were cut from.
+        let relief = relief::build(&mut Rng::new(seed), grid, &params);
+        let mut land_slopes: Vec<f32> = world.cells.iter().enumerate().filter(|(_, c)| !c.terrain.is_water()).map(|(i, _)| relief.slope[i]).collect();
+        land_slopes.sort_by(f32::total_cmp);
+        let quintile = land_slopes[land_slopes.len().div_euclid(5)];
+        let marsh: Vec<usize> = world.cells.iter().enumerate().filter(|(_, c)| c.terrain == Terrain::Marsh).map(|(i, _)| i).collect();
+        assert!(!marsh.is_empty(), "seed {seed}: no marsh");
+        assert!(marsh.len() * 100 <= world.cells.len() * 6, "seed {seed}: {} marsh cells", marsh.len());
+        for &i in &marsh {
+            assert!(relief.slope[i] <= quintile, "seed {seed}: marsh at {i} on slope {}", relief.slope[i]);
+            assert!(world.cells[i].moisture >= 0.55, "seed {seed}: marsh at {i} with moisture {}", world.cells[i].moisture);
+        }
+        // Marsh is a drinking spot in itself.
+        let (x, y) = (marsh[0] % world.width, marsh[0].div_euclid(world.width));
+        assert!(world.is_shore(x, y));
+    }
+}
+
+/// In-bounds cell index for `(x + dx, y + dy)`, if any.
+fn offset(world: &World, x: usize, y: usize, dx: i64, dy: i64) -> Option<usize> {
+    let (nx, ny) = (crate::cast!(x => i64) + dx, crate::cast!(y => i64) + dy);
+    (nx >= 0 && ny >= 0 && nx < crate::cast!(world.width => i64) && ny < crate::cast!(world.height => i64))
+        .then(|| crate::cast!(ny => usize) * world.width + crate::cast!(nx => usize))
+}
+
+/// A river cell: shallow water with no deep water within two cells.
+fn is_river(world: &World, x: usize, y: usize) -> bool {
+    if world.cell(x, y).terrain != Terrain::ShallowWater {
+        return false;
+    }
+    let mut deep = false;
+    for dy in -2i64..=2 {
+        for dx in -2i64..=2 {
+            deep |= offset(world, x, y, dx, dy).is_some_and(|j| world.cells[j].terrain == Terrain::DeepWater);
+        }
+    }
+    !deep
+}
+
+/// Chebyshev distance from every cell to the nearest river cell.
+fn river_distance(world: &World) -> Vec<usize> {
+    let w = world.width;
+    let mut dist = vec![usize::MAX; world.cells.len()];
+    let mut queue = std::collections::VecDeque::new();
+    for i in 0..world.cells.len() {
+        if is_river(world, i % w, i.div_euclid(w)) {
+            dist[i] = 0;
+            queue.push_back(i);
+        }
+    }
+    while let Some(i) = queue.pop_front() {
+        let (x, y) = (i % w, i.div_euclid(w));
+        for dy in -1i64..=1 {
+            for dx in -1i64..=1 {
+                let Some(j) = offset(world, x, y, dx, dy) else { continue };
+                if dist[j] == usize::MAX {
+                    dist[j] = dist[i] + 1;
+                    queue.push_back(j);
+                }
+            }
+        }
+    }
+    dist
+}
+
+#[test]
+fn rivers_carry_riparian_bands() {
+    // Land beside a river is wetter and greener than land a few cells away,
+    // even on a dry world: the corridor is where the forest and meadow go.
+    let params = WorldParams { rainfall: Rainfall::Dry, ..WorldParams::default() };
+    for seed in 1..=10u64 {
+        let world = World::generate(seed, &params);
+        let dist = river_distance(&world);
+        let mean_veg = |lo: usize, hi: usize| {
+            let cells: Vec<f32> = world.cells.iter().enumerate().filter(|(i, c)| !c.terrain.is_water() && c.terrain != Terrain::Rock && (lo..=hi).contains(&dist[*i])).map(|(_, c)| c.vegetation).collect();
+            cells.iter().sum::<f32>() / crate::cast!(cells.len().max(1) => f32)
+        };
+        let (bank, away) = (mean_veg(1, 1), mean_veg(5, 7));
+        assert!(bank > away * 1.1, "seed {seed}: bank vegetation {bank:.3} vs {away:.3} five cells out");
     }
 }

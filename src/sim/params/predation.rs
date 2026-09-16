@@ -76,12 +76,13 @@ pub struct PredationParams {
 
 impl Default for PredationParams {
     fn default() -> Self {
-        use Terrain::{Forest, GrassDense, Grass, GrassSparse, Dirt, Sand, ShallowWater};
+        use Terrain::{Forest, GrassDense, Grass, GrassSparse, Dirt, Sand, ShallowWater, Marsh};
         Self {
             detect_threshold: 0.8,
             cover_by_terrain: BTreeMap::from([
                 (Forest, 1.0),
                 (GrassDense, 1.0),
+                (Marsh, 1.0),
                 (Grass, 0.8),
                 (GrassSparse, 0.6),
                 (Dirt, 0.6),
