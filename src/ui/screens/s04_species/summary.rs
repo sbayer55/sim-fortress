@@ -3,7 +3,7 @@
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
-use ratatui::Frame;
+use ratatui::buffer::Buffer;
 use crate::sim::stats::SpeciesStats;
 use crate::sim::{Genome, Kind, Sim, SpeciesId, TRAIT_NAMES};
 use crate::ui::screens::common::{arrow_color, delta_style, downsample, sp, trait_color, trend_arrow};
@@ -12,42 +12,69 @@ use crate::widgets::{bars, panel, util};
 use crate::{glyphs, theme};
 use super::table::narrative;
 
-pub(super) fn summary(f: &mut Frame<'_>, area: Rect, sim: &Sim, id: SpeciesId) {
-    let s = &sim.species[id.index()];
-    let inner = panel::draw_with_hint(f, area, &format!("Selected: {}", id.name()), "Enter for full detail", panel::Kind::Focus);
-    let left_w = 64u16;
-    let left = Rect::new(inner.x, inner.y, left_w, inner.height);
-    let right = Rect::new(inner.x + left_w + 1, inner.y, inner.width - left_w - 1, inner.height);
+/// Narrowest right column worth placing beside the left one; below that the
+/// history column stacks under the identity column instead.
+const LEFT_W: u16 = 64;
+const MIN_RIGHT_W: u16 = 40;
+/// Cells the plot reserves on its left for the max/min axis labels.
+const PLOT_GUTTER: u16 = 6;
+/// Widest the population plot grows (one 240-day series over 100 buckets).
+const PLOT_MAX_COLS: u16 = 100;
 
-    // ---- left: identity + trait table
+/// The summary body, drawn into a scroll canvas; returns the rows it used.
+///
+/// The left column (identity, genome, interactions, notable individuals) and
+/// the right one (population history, habitat) sit side by side when the
+/// canvas is at least `LEFT_W + 1 + MIN_RIGHT_W` wide, and stack otherwise.
+pub(super) fn summary_body(buf: &mut Buffer, canvas: Rect, sim: &Sim, id: SpeciesId) -> u16 {
+    let s = &sim.species[id.index()];
+    let side_by_side = canvas.width >= LEFT_W + 1 + MIN_RIGHT_W;
+    let left_w = if side_by_side { LEFT_W } else { canvas.width };
+    let left = Rect::new(canvas.x, canvas.y, left_w, canvas.height);
+    let left_rows = summary_left(buf, left, sim, id, s);
+    let right = if side_by_side {
+        Rect::new(canvas.x + LEFT_W + 1, canvas.y, canvas.width - LEFT_W - 1, canvas.height)
+    } else {
+        let y = canvas.y + (left_rows + 1).min(canvas.height);
+        Rect::new(canvas.x, y, canvas.width, canvas.height.saturating_sub(left_rows + 1))
+    };
+    let right_rows = summary_history(buf, right, sim, id, s);
+    if side_by_side {
+        left_rows.max(right_rows)
+    } else {
+        (left_rows + 1 + right_rows).min(canvas.height)
+    }
+}
+
+/// Identity, genome, interactions and notable individuals; returns rows used.
+fn summary_left(buf: &mut Buffer, left: Rect, sim: &Sim, id: SpeciesId, s: &SpeciesStats) -> u16 {
     let mut row = 0u16;
-    util::line(f, left, row, Line::from(vec![
+    util::line_in(buf, left, row, Line::from(vec![
         sp(format!(" {} ", id.glyph().to_ascii_uppercase()), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
         sp(id.plural(), theme::title()),
         sp(format!("   {}   diet: {}", if id.kind() == Kind::Prey { "prey" } else { "predator" }, id.diet()), theme::text()),
     ]));
     row += 1;
-    util::line(f, left, row, Line::from(vec![
+    util::line_in(buf, left, row, Line::from(vec![
         sp(format!(" {} alive  {} adults  {} juveniles  generation {}  peak {}", s.count, s.adults, s.juveniles, s.generation, s.peak), theme::dim_text()),
     ]));
     row += 1;
     // C8 follow-up: the group sizes the cohesion rule holds together, on the
     // blank row the counts line used to leave (the left column has no spare
     // rows; the full size distribution is S05e).
-    summary_group_line(f, left, row, sim, id);
+    summary_group_line(buf, left, row, sim, id);
     row += 1;
-    panel::section(f, left, row, "Base genome vs current mean");
+    panel::section_in(buf, left, row, "Base genome vs current mean");
     row += 1;
-    util::line(f, left, row, Line::from(sp(" trait        base   current            delta   spread", theme::dim_text())));
+    util::line_in(buf, left, row, Line::from(sp(" trait        base   current            delta   spread", theme::dim_text())));
     row += 1;
-    row = summary_genome(f, left, row, id, s);
-    row = summary_interactions(f, left, row, sim, id);
-    summary_notable(f, left, row, sim, id);
-    summary_history(f, right, sim, id, s);
+    row = summary_genome(buf, left, row, id, s);
+    row = summary_interactions(buf, left, row, sim, id);
+    summary_notable(buf, left, row, sim, id)
 }
 
 /// Base genome vs the current mean, per trait.
-fn summary_genome(f: &mut Frame<'_>, left: Rect, mut row: u16, id: SpeciesId, s: &SpeciesStats) -> u16 {
+fn summary_genome(buf: &mut Buffer, left: Rect, mut row: u16, id: SpeciesId, s: &SpeciesStats) -> u16 {
     let base = id.base_genome();
     for t in 0..Genome::LEN {
         let b = base.0[t];
@@ -55,7 +82,6 @@ fn summary_genome(f: &mut Frame<'_>, left: Rect, mut row: u16, id: SpeciesId, s:
         let d = m - b;
         let color = trait_color(t);
         let y = left.y + row;
-        let buf = f.buffer_mut();
         buf.set_stringn(left.x, y, format!(" {:<12}", TRAIT_NAMES[t]), 13, theme::text());
         buf.set_stringn(left.x + 13, y, format!("{b:.2}"), 4, theme::dim_text());
         buf.set_stringn(left.x + 20, y, format!("{m:.2}"), 4, theme::text());
@@ -66,7 +92,7 @@ fn summary_genome(f: &mut Frame<'_>, left: Rect, mut row: u16, id: SpeciesId, s:
         bars::range(buf, left.x + 49, y, 13, s.min.0[t], m, s.max.0[t], color);
         row += 1;
     }
-    util::line(f, left, row, Line::from(vec![
+    util::line_in(buf, left, row, Line::from(vec![
         sp(format!(" {} base marker   spread = min/mean/max across living {}", glyphs::V_LINE, id.plural()), theme::dim_text()),
     ]));
     row += 2;
@@ -74,13 +100,13 @@ fn summary_genome(f: &mut Frame<'_>, left: Rect, mut row: u16, id: SpeciesId, s:
 }
 
 /// Kill shares, competition and pathogens/parasites for the selected species.
-fn summary_interactions(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: SpeciesId) -> u16 {
-    panel::section(f, left, row, "Interactions");
+fn summary_interactions(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: SpeciesId) -> u16 {
+    panel::section_in(buf, left, row, "Interactions");
     let kills = kill_matrix(sim);
     if id.kind() == Kind::Prey {
-        prey_interactions(f, left, row + 1, sim, id, &kills)
+        prey_interactions(buf, left, row + 1, sim, id, &kills)
     } else {
-        predator_interactions(f, left, row + 1, sim, id, &kills)
+        predator_interactions(buf, left, row + 1, sim, id, &kills)
     }
 }
 
@@ -98,7 +124,7 @@ fn kill_matrix(sim: &Sim) -> [[u32; 6]; 6] {
 }
 
 /// Prey view: who eats it, and what it competes with for grass.
-fn prey_interactions(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: SpeciesId, kills: &[[u32; 6]; 6]) -> u16 {
+fn prey_interactions(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: SpeciesId, kills: &[[u32; 6]; 6]) -> u16 {
     let mut row = row;
         let by_pred: u32 = SpeciesId::ALL.iter().map(|p| kills[p.index()][id.index()]).sum();
         let hunters: Vec<String> = SpeciesId::ALL
@@ -113,9 +139,9 @@ fn prey_interactions(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: Spe
             })
             .collect();
         if hunters.is_empty() {
-            util::line(f, left, row, Line::from(vec![sp(" eaten by: ", theme::dim_text()), sp("none", theme::text())]));
+            util::line_in(buf, left, row, Line::from(vec![sp(" eaten by: ", theme::dim_text()), sp("none", theme::text())]));
         } else {
-            util::line(f, left, row, Line::from(vec![sp(" eaten by: ", theme::dim_text()), sp(hunters.join(" and "), theme::text())]));
+            util::line_in(buf, left, row, Line::from(vec![sp(" eaten by: ", theme::dim_text()), sp(hunters.join(" and "), theme::text())]));
         }
         row += 1;
         let others: Vec<String> = SpeciesId::ALL
@@ -123,17 +149,17 @@ fn prey_interactions(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: Spe
             .filter(|o| o.kind() == Kind::Prey && **o != id)
             .map(|o| format!("{} {}", o.glyph().to_ascii_uppercase(), o.name()))
             .collect();
-        util::line(f, left, row, Line::from(vec![
+        util::line_in(buf, left, row, Line::from(vec![
             sp(" competes with ", theme::dim_text()),
             sp(others.join(" and "), theme::text()),
             sp(" for grass", theme::dim_text()),
         ]));
         row += 1;
-    susceptibility_lines(f, left, row, sim, id)
+    susceptibility_lines(buf, left, row, sim, id)
 }
 
 /// Predator view: what it hunts, and its rivals.
-fn predator_interactions(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: SpeciesId, kills: &[[u32; 6]; 6]) -> u16 {
+fn predator_interactions(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: SpeciesId, kills: &[[u32; 6]; 6]) -> u16 {
     let mut row = row;
         let total: u32 = kills[id.index()].iter().sum();
         let prey: Vec<String> = SpeciesId::ALL
@@ -148,7 +174,7 @@ fn predator_interactions(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id:
                 format!("{} {} {:.0}%", p.glyph().to_ascii_uppercase(), p.name(), share * 100.0)
             })
             .collect();
-        util::line(f, left, row, Line::from(vec![
+        util::line_in(buf, left, row, Line::from(vec![
             sp(" hunts ", theme::dim_text()),
             sp(if prey.is_empty() { "nothing".to_string() } else { prey.join(", ") }, theme::text()),
             sp(if total >= 5 { format!("  ({total} kills)") } else { "  (preference)".to_string() }, theme::dim_text()),
@@ -164,21 +190,21 @@ fn predator_interactions(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id:
             })
             .map(|o| format!("{} {}", o.glyph().to_ascii_uppercase(), o.name()))
             .collect();
-        util::line(f, left, row, Line::from(vec![
+        util::line_in(buf, left, row, Line::from(vec![
             sp(" competes with ", theme::dim_text()),
             sp(if rivals.is_empty() { "no one".to_string() } else { rivals.join(" and ") }, theme::text()),
             sp(" for prey", theme::dim_text()),
         ]));
         row += 1;
-    susceptibility_lines(f, left, row, sim, id)
+    susceptibility_lines(buf, left, row, sim, id)
 }
 
 /// C7: pathogens that can infect this species, and the mean worm load.
-fn susceptibility_lines(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: SpeciesId) -> u16 {
+fn susceptibility_lines(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: SpeciesId) -> u16 {
     let mut row = row;
     // C7: pathogens that can infect this species, and the mean worm load.
     let pathogens: Vec<&str> = sim.disease.pathogens.iter().filter(|p| !p.extinct && p.host(id) > 0.0).map(crate::sim::disease::Pathogen::name).collect();
-    util::line(f, left, row, Line::from(vec![
+    util::line_in(buf, left, row, Line::from(vec![
         sp(" susceptible to: ", theme::dim_text()),
         if pathogens.is_empty() {
             sp("none", theme::dim_text())
@@ -189,7 +215,7 @@ fn susceptibility_lines(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: 
     row += 1;
     let (load_sum, load_n) = sim.creatures.living().filter(|c| c.species == id).fold((0.0f32, 0u32), |(a, n), c| (a + c.parasite_load, n + 1));
     let load = if load_n > 0 { load_sum / crate::cast!(load_n => f32) } else { 0.0 };
-    util::line(f, left, row, Line::from(vec![
+    util::line_in(buf, left, row, Line::from(vec![
         sp(format!(" {} worms: mean load ", glyphs::PARASITE), theme::dim_text()),
         sp(format!(".{:02}", (crate::cast!((load * 100.0).round() => u32)).min(99)), Style::default().fg(if load >= 0.2 { theme::WARN } else { theme::TEXT }).bg(theme::PANEL_BG)),
     ]));
@@ -201,20 +227,20 @@ fn susceptibility_lines(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: 
 /// how many herds/packs, their mean and max size, and how much of the species
 /// is grouped. The full size distribution is S05e. Fits the blank row under the
 /// counts line, so the left column below it does not move.
-fn summary_group_line(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: SpeciesId) {
+fn summary_group_line(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: SpeciesId) {
     let g = &sim.group_stats;
     let i = id.index();
     if sim.species[i].count == 0 {
-        util::line(f, left, row, Line::from(sp(" groups: none living", theme::dim_text())));
+        util::line_in(buf, left, row, Line::from(sp(" groups: none living", theme::dim_text())));
         return;
     }
     let word = if id.kind() == Kind::Prey { "herd" } else { "pack" };
     if g.groups[i] == 0 {
-        util::line(f, left, row, Line::from(sp(format!(" groups: none forming — all {} alone", sim.species[i].count), theme::dim_text())));
+        util::line_in(buf, left, row, Line::from(sp(format!(" groups: none forming — all {} alone", sim.species[i].count), theme::dim_text())));
         return;
     }
     let noun = if g.groups[i] == 1 { word.to_string() } else { format!("{word}s") };
-    util::line(f, left, row, Line::from(vec![
+    util::line_in(buf, left, row, Line::from(vec![
         sp(" groups: ", theme::dim_text()),
         sp(format!("{} {noun}", g.groups[i]), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
         sp(
@@ -231,20 +257,20 @@ fn summary_group_line(f: &mut Frame<'_>, left: Rect, row: u16, sim: &Sim, id: Sp
 }
 
 /// Notable living individuals of the selected species.
-fn summary_notable(f: &mut Frame<'_>, left: Rect, mut row: u16, sim: &Sim, id: SpeciesId) -> u16 {
-    panel::section(f, left, row, "Notable individuals");
+fn summary_notable(buf: &mut Buffer, left: Rect, mut row: u16, sim: &Sim, id: SpeciesId) -> u16 {
+    panel::section_in(buf, left, row, "Notable individuals");
     row += 1;
     let day = sim.time.day_index();
     let mut members: Vec<&crate::sim::Creature> = sim.creatures.living().filter(|c| c.species == id).collect();
     members.sort_by(|a, b| b.offspring.cmp(&a.offspring).then(b.age_days(day).cmp(&a.age_days(day))).then(a.id.cmp(&b.id)));
     if members.is_empty() {
-        util::line(f, left, row, Line::from(sp(" none living", theme::dim_text())));
+        util::line_in(buf, left, row, Line::from(sp(" none living", theme::dim_text())));
     }
     for c in members.iter().take(5) {
         if row >= left.height {
             break;
         }
-        util::line(f, left, row, Line::from(vec![
+        util::line_in(buf, left, row, Line::from(vec![
             sp(format!(" {} ", if c.adult { id.glyph().to_ascii_uppercase() } else { id.glyph() }), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
             sp(format!("{:<9}{:<7}", c.name_str(), c.tag()), theme::text()),
             sp(format!("{:>3} offspring  gen {:<3} {:>4} days  ", c.offspring, c.generation, c.age_days(day)), theme::dim_text()),
@@ -255,36 +281,37 @@ fn summary_notable(f: &mut Frame<'_>, left: Rect, mut row: u16, sim: &Sim, id: S
     row
 }
 
-/// The right-hand 240-day population history plot.
-fn summary_history(f: &mut Frame<'_>, right: Rect, sim: &Sim, id: SpeciesId, s: &SpeciesStats) {
+/// The right-hand 240-day population history plot; returns rows used.
+fn summary_history(buf: &mut Buffer, right: Rect, sim: &Sim, id: SpeciesId, s: &SpeciesStats) -> u16 {
+    if right.width == 0 || right.height == 0 {
+        return 0;
+    }
     // ---- right: population history
     let mut row = 0u16;
-    panel::section(f, right, row, "Population, last 240 days");
+    panel::section_in(buf, right, row, "Population, last 240 days");
     row += 1;
     let samples = sim.series.samples();
     let start = samples.len().saturating_sub(240);
     let series: Vec<f32> = samples[start..].iter().map(|x| crate::cast!(x.population[id.index()] => f32)).collect();
     let drought: Vec<bool> = samples[start..].iter().map(|x| x.drought_regions >= 2).collect();
-    let cols = 100usize;
+    // The plot never grows past its column: one bucket per cell after the
+    // axis-label gutter, capped at 100 buckets for the 240-day series.
+    let cols = crate::cast!(right.width.saturating_sub(PLOT_GUTTER).clamp(1, PLOT_MAX_COLS) => usize);
     let data = downsample(&series, cols);
     let max = f32::from(*data.iter().max().unwrap_or(&1));
     let min = f32::from(*data.iter().min().unwrap_or(&0));
     let rows = 6u16;
-    history_plot(f, right, row, id, &data, &drought, cols, rows, max, min);
+    history_plot(buf, right, row, id, &data, &drought, cols, rows, max, min);
     row += rows;
     let span_days = series.len().max(1);
-    util::line(f, right, row, Line::from(vec![
-        sp(format!("      D-{span_days:<3}"), theme::dim_text()),
-        sp(format!("{:>34}", if drought.iter().any(|&d| d) { "drought bands shaded" } else { "" }), Style::default().fg(theme::WARN).bg(theme::PANEL_BG)),
-        sp(format!("{:>49}", "today"), theme::dim_text()),
-    ]));
+    history_axis(buf, right, row, cols, span_days, drought.iter().any(|&d| d));
     row += 2;
-    util::line(f, right, row, Line::from(sp(" 30-day trend ", theme::dim_text())));
+    util::line_in(buf, right, row, Line::from(sp(" 30-day trend ", theme::dim_text())));
     if !s.trend.is_empty() {
-        bars::sparkline(f.buffer_mut(), right.x + 14, right.y + row, 30, &s.trend, id.color());
+        bars::sparkline(buf, right.x + 14, right.y + row, 30, &s.trend, id.color());
     }
     let a = trend_arrow(&s.trend);
-    f.buffer_mut().set_stringn(
+    buf.set_stringn(
         right.x + 45,
         right.y + row,
         format!(" {} {}", a, if a == glyphs::UP { "growing" } else if a == glyphs::DOWN { "declining" } else { "stable" }),
@@ -313,21 +340,47 @@ fn summary_history(f: &mut Frame<'_>, right: Rect, sim: &Sim, id: SpeciesId, s: 
         ),
     ];
     for (k, v, st) in stats {
-        util::line(f, right, row, Line::from(vec![sp(format!(" {k:<14}"), theme::dim_text()), sp(v, st)]));
+        util::line_in(buf, right, row, Line::from(vec![sp(format!(" {k:<14}"), theme::dim_text()), sp(v, st)]));
         row += 1;
     }
     row += 1;
     let (text, st) = narrative(s);
-    util::line(f, right, row, Line::from(vec![sp(format!(" {} ", glyphs::NOTE), theme::label()), sp(text, st)]));
+    util::line_in(buf, right, row, Line::from(vec![sp(format!(" {} ", glyphs::NOTE), theme::label()), sp(text, st)]));
     row += 2;
-    habitat_section(f, right, row, sim, id);
+    habitat_section(buf, right, row, sim, id)
+}
+
+/// The `D-240 … drought bands shaded … today` axis line under the plot,
+/// laid out over the plot's own width.
+fn history_axis(buf: &mut Buffer, right: Rect, row: u16, cols: usize, span_days: usize, drought: bool) {
+    if row >= right.height {
+        return;
+    }
+    let y = right.y + row;
+    let plot_w = crate::cast!(cols => u16);
+    let x0 = right.x + PLOT_GUTTER;
+    let start = format!("D-{span_days}");
+    let start_w = crate::cast!(start.len() => u16);
+    let end = "today";
+    let end_w = crate::cast!(end.len() => u16);
+    buf.set_stringn(x0, y, &start, cols, theme::dim_text());
+    if plot_w > start_w + end_w + 1 {
+        buf.set_stringn(x0 + plot_w - end_w, y, end, cols, theme::dim_text());
+    }
+    let note = "drought bands shaded";
+    let note_w = crate::cast!(note.len() => u16);
+    if drought && plot_w > start_w + end_w + note_w + 4 {
+        buf.set_stringn(x0 + (plot_w - note_w).div_euclid(2), y, note, cols, Style::default().fg(theme::WARN).bg(theme::PANEL_BG));
+    }
 }
 
 /// The bar-style population history plot.
 #[allow(clippy::too_many_arguments)]
-fn history_plot(f: &mut Frame<'_>, right: Rect, row: u16, id: SpeciesId, data: &[u16], drought: &[bool], cols: usize, rows: u16, max: f32, min: f32) {
+fn history_plot(buf: &mut Buffer, right: Rect, row: u16, id: SpeciesId, data: &[u16], drought: &[bool], cols: usize, rows: u16, max: f32, min: f32) {
+    if row + rows > right.height {
+        return;
+    }
     {
-        let buf = f.buffer_mut();
         for (i, v) in data.iter().enumerate() {
             let t = if max > min { (f32::from(*v) - min) / (max - min) } else { 0.5 };
             let halves = crate::cast!((t * f32::from(rows) * 2.0).round() => u16);
@@ -345,7 +398,7 @@ fn history_plot(f: &mut Frame<'_>, right: Rect, row: u16, id: SpeciesId, data: &
                 };
                 let color = if level >= 1 { id.color() } else { theme::dim(theme::DIM, 0.6) };
                 let bg = if dry { theme::dim(theme::WARN, 0.78) } else { theme::PANEL_BG };
-                buf.set_stringn(right.x + 6 + crate::cast!(i => u16), y, ch.to_string(), 1, Style::default().fg(color).bg(bg));
+                buf.set_stringn(right.x + PLOT_GUTTER + crate::cast!(i => u16), y, ch.to_string(), 1, Style::default().fg(color).bg(bg));
             }
         }
         buf.set_stringn(right.x, right.y + row, format!("{:>4} ", crate::cast!(max => u32)), 5, theme::dim_text());
@@ -354,10 +407,10 @@ fn history_plot(f: &mut Frame<'_>, right: Rect, row: u16, id: SpeciesId, data: &
 
 }
 
-/// Living individuals per region, two columns at a time.
-fn habitat_section(f: &mut Frame<'_>, right: Rect, mut row: u16, sim: &Sim, id: SpeciesId) {
+/// Living individuals per region, two columns at a time; returns rows used.
+fn habitat_section(buf: &mut Buffer, right: Rect, mut row: u16, sim: &Sim, id: SpeciesId) -> u16 {
     // The section header the cleanup wave dropped (S04 content requirement 14).
-    panel::section(f, right, row, "Habitat (living individuals by region)");
+    panel::section_in(buf, right, row, "Habitat (living individuals by region)");
     row += 1;
     let mut per_region: Vec<(&str, usize)> = sim.world.regions.iter().map(|r| (r.0.as_str(), 0usize)).collect();
     for c in sim.creatures.living().filter(|c| c.species == id) {
@@ -368,18 +421,22 @@ fn habitat_section(f: &mut Frame<'_>, right: Rect, mut row: u16, sim: &Sim, id: 
     }
     per_region.sort_by(|a, b| b.1.cmp(&a.1));
     let max = crate::cast!(per_region.first().map_or(1, |e| e.1).max(1) => f32);
-    let half = right.width.div_euclid(2);
+    // Two columns of 37-cell entries when they fit, one otherwise.
+    let ncols = if right.width >= 2 * 37 { 2usize } else { 1 };
+    let half = right.width.div_euclid(crate::cast!(ncols => u16));
+    let mut last = row;
     for (i, (name, n)) in per_region.iter().enumerate() {
-        let col = crate::cast!((i % 2) => u16);
-        let r = row + crate::cast!((i.div_euclid(2)) => u16);
+        let col = crate::cast!((i % ncols) => u16);
+        let r = row + crate::cast!((i.div_euclid(ncols)) => u16);
         if r >= right.height {
             break;
         }
         let x = right.x + 1 + col * half;
         let y = right.y + r;
-        let buf = f.buffer_mut();
         buf.set_stringn(x, y, format!("{name:<17}"), 17, theme::text());
         bars::bar(buf, x + 17, y, 14, crate::cast!(*n => f32) / max, id.color());
         buf.set_stringn(x + 32, y, format!("{n:>4}"), 4, theme::dim_text());
+        last = r + 1;
     }
+    last
 }
