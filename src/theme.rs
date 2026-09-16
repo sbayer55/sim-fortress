@@ -161,6 +161,33 @@ pub fn night(c: Color) -> Color {
     }
 }
 
+// ---------------------------------------------------------------- biomes
+/// Tint hue per biome, indexed by `Biome as u8`.
+///
+/// In order: tundra, taiga, temperate forest, grassland, steppe, savanna,
+/// desert, wetland. Land terrain is blended a little toward its biome's hue
+/// so cold ground reads blue-grey and hot, dry ground reads yellow, while
+/// the terrain glyph stays legible.
+pub const BIOME: [Color; 8] = [
+    Color::Rgb(170, 196, 220), // tundra: pale blue-grey
+    Color::Rgb(60, 120, 150),  // taiga: cold blue-green
+    Color::Rgb(60, 150, 70),   // temperate forest: green
+    Color::Rgb(130, 180, 70),  // grassland: fresh green
+    Color::Rgb(200, 176, 90),  // steppe: dry straw
+    Color::Rgb(220, 190, 60),  // savanna: yellow
+    Color::Rgb(230, 170, 90),  // desert: orange-tan
+    Color::Rgb(70, 160, 140),  // wetland: teal
+];
+/// How far a land cell's foreground leans toward its biome hue.
+pub const BIOME_TINT_FG: f32 = 0.24;
+/// How far its background leans (kept low so the terrain bands stay distinct).
+pub const BIOME_TINT_BG: f32 = 0.12;
+
+/// The tint hue for biome code `b`.
+pub const fn biome(b: u8) -> Color {
+    BIOME[crate::cast!(b => usize) % BIOME.len()]
+}
+
 // ---------------------------------------------------------------- regions
 /// Categorical palette for the region overlay: eight muted, mutually
 /// distinguishable hues (one per fixed region). Indexed modulo the length so

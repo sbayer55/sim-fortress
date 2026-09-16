@@ -79,15 +79,147 @@ fn rows_vary_vertically() {
 fn regions_cover_world() {
     for (w, h) in [(150usize, 40usize), (200, 60), (100, 30)] {
         let world = World::generate(7, &WorldParams { width: w, height: h, ..WorldParams::default() });
-        // Every cell is covered by exactly one region (no gaps, no overlap).
-        let area: usize = world.regions.iter().map(|r| (r.3 - r.1) * (r.4 - r.2)).sum();
-        assert_eq!(area, w * h, "{w}x{h}");
+        // Exactly eight regions, every cell in one of them, each inside its box.
+        assert_eq!(world.regions.len(), REGION_COUNT, "{w}x{h}");
+        let sizes: usize = (0..REGION_COUNT).map(|ri| world.region_size(ri)).sum();
+        assert_eq!(sizes, w * h, "{w}x{h}");
         for y in 0..h {
             for x in 0..w {
                 assert_ne!(world.region_name(x, y), "The Wilds", "uncovered ({x},{y})");
+                let r = &world.regions[world.region_index(x, y)];
+                assert!(x >= r.1 && x < r.3 && y >= r.2 && y < r.4, "({x},{y}) outside the box of {}", r.0);
+            }
+        }
+        for ri in 0..REGION_COUNT {
+            assert!(world.region_size(ri) > 0, "{w}x{h}: region {ri} is empty");
+            assert_eq!(world.region_cells(ri).count(), world.region_size(ri));
+            let (cx, cy) = world.region_centre(ri);
+            assert_eq!(world.region_index(cx, cy), ri, "{w}x{h}: centre of {ri} lies outside it");
+        }
+    }
+}
+
+#[test]
+fn regions_are_contiguous_and_named() {
+    for seed in 1..=10u64 {
+        let world = World::generate(seed, &WorldParams::default());
+        let (w, h) = (world.width, world.height);
+        let mut names = std::collections::BTreeSet::new();
+        for (ri, r) in world.regions.iter().enumerate() {
+            assert!(r.0.chars().count() <= NAME_MAX, "seed {seed}: {:?} is too long", r.0);
+            assert!(names.insert(r.0.clone()), "seed {seed}: duplicate region name {:?}", r.0);
+            // Flood-fill from the centre reaches every cell of the region.
+            let (cx, cy) = world.region_centre(ri);
+            let reached = flood(w, h, cy * w + cx, &mut vec![false; w * h], |j| world.region_map[j] == crate::cast!(ri => u8));
+            assert_eq!(reached, world.region_size(ri), "seed {seed}: region {} ({ri}) is not contiguous", r.0);
+        }
+        // Every region borders at least one other, so migrations have somewhere to go.
+        for a in 0..world.regions.len() {
+            assert!((0..world.regions.len()).any(|b| world.regions_adjacent(a, b)), "seed {seed}: region {a} has no neighbour");
+        }
+    }
+}
+
+/// Size of the 4-connected component of `start` over cells accepted by
+/// `member`, marking what it visits in `seen`.
+fn flood(w: usize, h: usize, start: usize, seen: &mut [bool], member: impl Fn(usize) -> bool) -> usize {
+    let mut stack = vec![start];
+    seen[start] = true;
+    let mut size = 0usize;
+    while let Some(i) = stack.pop() {
+        size += 1;
+        let (x, y) = (i % w, i.div_euclid(w));
+        let around = [(x > 0).then(|| i - 1), (x + 1 < w).then(|| i + 1), (y > 0).then(|| i - w), (y + 1 < h).then(|| i + w)];
+        for j in around.into_iter().flatten() {
+            if !seen[j] && member(j) {
+                seen[j] = true;
+                stack.push(j);
             }
         }
     }
+    size
+}
+
+#[test]
+fn biomes_follow_climate_in_patches() {
+    for seed in 1..=10u64 {
+        let world = World::generate(seed, &WorldParams::default());
+        let (w, h) = (world.width, world.height);
+        // Cold biomes sit on colder cells than hot ones; forest never grows
+        // in the treeless biomes.
+        let mean_t = |pred: &dyn Fn(Biome) -> bool| {
+            let v: Vec<f32> = world.cells.iter().filter(|c| !c.terrain.is_water() && pred(c.biome)).map(|c| c.temperature).collect();
+            (!v.is_empty()).then(|| v.iter().sum::<f32>() / crate::cast!(v.len() => f32))
+        };
+        let cold = mean_t(&|b| matches!(b, Biome::Tundra | Biome::Taiga));
+        let hot = mean_t(&|b| matches!(b, Biome::Desert | Biome::Savanna));
+        if let (Some(cold), Some(hot)) = (cold, hot) {
+            assert!(cold < hot, "seed {seed}: cold biomes at {cold:.2} vs hot at {hot:.2}");
+        }
+        assert!(world.cells.iter().all(|c| c.terrain != Terrain::Forest || c.biome.allows_forest()), "seed {seed}: forest in a treeless biome");
+        // No biome patch (4-connected) smaller than MIN_PATCH cells.
+        let mut seen = vec![false; w * h];
+        for start in 0..w * h {
+            if seen[start] {
+                continue;
+            }
+            let b = world.cells[start].biome;
+            let size = flood(w, h, start, &mut seen, |j| world.cells[j].biome == b);
+            assert!(size >= MIN_PATCH, "seed {seed}: a {b:?} patch of {size} cells at {start}");
+        }
+    }
+}
+
+#[test]
+#[ignore = "diagnostic: prints biome shares, region sizes and names per seed"]
+fn print_biomes_and_regions() {
+    let params = WorldParams::default();
+    let mut shares = [0usize; 8];
+    for seed in 1..=10u64 {
+        let started = std::time::Instant::now();
+        let world = World::generate(seed, &params);
+        let took = started.elapsed();
+        for c in &world.cells {
+            shares[crate::cast!(c.biome => usize)] += 1;
+        }
+        let regions: Vec<String> = (0..world.regions.len()).map(|ri| format!("{} {}", world.regions[ri].0, world.region_size(ri))).collect();
+        println!("seed {seed} ({took:?}): {}", regions.join(" | "));
+    }
+    let total = crate::cast!(shares.iter().sum::<usize>() => f32);
+    for (b, n) in Biome::ALL.iter().zip(shares) {
+        println!("{:<17}{:>5.1}%", b.name(), crate::cast!(n => f32) / total * 100.0);
+    }
+    // Land climate deciles over the same seeds, for retuning the biome table.
+    let (mut temps, mut moists) = (Vec::new(), Vec::new());
+    for seed in 1..=10u64 {
+        for c in World::generate(seed, &params).cells.iter().filter(|c| !c.terrain.is_water()) {
+            temps.push(c.temperature);
+            moists.push(c.moisture);
+        }
+    }
+    temps.sort_by(f32::total_cmp);
+    moists.sort_by(f32::total_cmp);
+    let deciles = |v: &[f32]| (1..10).map(|d| format!("{:.2}", v[(v.len() * d).div_euclid(10)])).collect::<Vec<_>>().join(" ");
+    println!("land temperature deciles: {}", deciles(&temps));
+    println!("land moisture deciles:    {}", deciles(&moists));
+    let big = WorldParams { width: 200, height: 60, ..params };
+    let grid = flow::Grid { w: big.width, h: big.height };
+    let started = std::time::Instant::now();
+    let mut rng = Rng::new(3);
+    let relief = relief::build(&mut rng, grid, &big);
+    let t_relief = started.elapsed();
+    let cells = classify::cells(&mut rng, grid, &relief, &big);
+    let t_cells = started.elapsed();
+    let moisture: Vec<f32> = cells.iter().map(|c| c.moisture).collect();
+    let t0 = std::time::Instant::now();
+    let _ = biome::label(grid, &relief.temperature, &moisture);
+    println!("200x60 biome::label alone: {:?}", t0.elapsed());
+    let _ = regions::build(grid, &relief.basin, &relief.sea, &cells);
+    let t_regions = started.elapsed();
+    println!("200x60 stages: relief {t_relief:?}, +classify {:?}, +regions {:?}", t_cells - t_relief, t_regions - t_cells);
+    let started = std::time::Instant::now();
+    let _ = World::generate(3, &big);
+    println!("200x60 generate: {:?}", started.elapsed());
 }
 
 #[test]

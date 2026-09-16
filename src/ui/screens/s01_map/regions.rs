@@ -37,8 +37,8 @@ impl WorldMap {
         let th = &app.params.ui.scarcity_thresholds;
         let prey_configured = app.params.species.initial_total(crate::sim::Kind::Prey) > 0;
         for (i, r) in world.regions.iter().enumerate() {
-            let veg = crate::sim::ecology::region_land_veg_mean(world, r);
-            let moist = crate::sim::ecology::region_display_moisture_mean(world, r);
+            let veg = crate::sim::ecology::region_land_veg_mean(world, i);
+            let moist = crate::sim::ecology::region_display_moisture_mean(world, i);
             let status = region_status(veg, 0, prey_configured, th);
             let status_color = match status {
                 "Scarce" => theme::BAD,
@@ -63,8 +63,8 @@ impl WorldMap {
         panel::section(f, inner, row, "Selected");
         row += 1;
         if let Some(r) = world.regions.get(self.region_sel) {
-            let cells = (r.3 - r.1) * (r.4 - r.2);
-            let water = (r.2..r.4).flat_map(|y| (r.1..r.3).map(move |x| (x, y))).filter(|&(x, y)| world.cell(x, y).terrain.is_water()).count();
+            let cells = world.region_size(self.region_sel);
+            let water = world.region_cells(self.region_sel).filter(|&(x, y)| world.cell(x, y).terrain.is_water()).count();
             util::line(f, inner, row, Line::from(vec![
                 Span::styled(format!(" {}", glyphs::FULL_BLOCK), Style::default().fg(theme::region(self.region_sel)).bg(theme::PANEL_BG)),
                 Span::styled(format!(" {}", r.0), theme::title()),
@@ -101,14 +101,12 @@ impl WorldMap {
     }
 }
 
-/// Mean `parasite_load` over a region's rectangle.
-pub(super) fn region_load_mean(world: &World, r: &crate::sim::world::RegionRect) -> f32 {
+/// Mean `parasite_load` over a region's cells.
+pub(super) fn region_load_mean(world: &World, ri: usize) -> f32 {
     let (mut sum, mut n) = (0.0f32, 0usize);
-    for y in r.2..r.4.min(world.height()) {
-        for x in r.1..r.3.min(world.width()) {
-            sum += world.cells[y * world.width() + x].parasite_load;
-            n += 1;
-        }
+    for (x, y) in world.region_cells(ri) {
+        sum += world.cell(x, y).parasite_load;
+        n += 1;
     }
     if n == 0 {
         0.0
@@ -122,6 +120,7 @@ pub(super) fn worst_region(world: &World) -> (&str, f32) {
     world
         .regions
         .iter()
-        .map(|r| (r.0.as_str(), region_load_mean(world, r)))
+        .enumerate()
+        .map(|(ri, r)| (r.0.as_str(), region_load_mean(world, ri)))
         .fold(("—", -1.0), |best, cur| if cur.1 > best.1 { cur } else { best })
 }

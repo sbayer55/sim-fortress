@@ -9,7 +9,7 @@ use crate::sim::rng::Rng;
 use super::flow::{highest, lowest, Grid};
 use super::noise::Noise;
 use super::relief::Relief;
-use super::{Cell, Terrain};
+use super::{biome, Biome, Cell, Terrain};
 
 /// Share of the water target spent on lakes (at most) and on rivers.
 const LAKE_SHARE: f32 = 0.25;
@@ -54,18 +54,20 @@ pub(super) fn cells(rng: &mut Rng, grid: Grid, relief: &Relief, params: &WorldPa
     let distance = water_distance(grid, &water);
     let mut moisture = moisture(relief, &water, &distance, params.rainfall);
     riparian(grid, relief, &water, &mut moisture);
+    let biomes = biome::label(grid, &relief.temperature, &moisture);
     let mut terrain = water_terrain(grid, &water);
-    land_terrain(grid, relief, &water, &moisture, params, &mut terrain);
+    land_terrain(grid, relief, &water, &moisture, &biomes, params, &mut terrain);
     let veg = Noise::new(rng, 5.0, crate::cast!(grid.w => f32), crate::cast!(grid.h => f32) * 2.0);
     (0..grid.len())
         .map(|i| {
             let (x, y) = (crate::cast!(i % grid.w => f32), crate::cast!(i.div_euclid(grid.w) => f32) * 2.0);
             Cell {
                 terrain: terrain[i],
+                biome: biomes[i],
                 elevation: relief.height[i],
                 moisture: moisture[i],
                 temperature: relief.temperature[i],
-                vegetation: vegetation(terrain[i], veg.at(x, y), moisture[i], relief.temperature[i]),
+                vegetation: vegetation(terrain[i], veg.at(x, y), moisture[i], relief.temperature[i]) * biomes[i].vegetation_scale(),
                 prey_pressure: 0.0,
                 pred_pressure: 0.0,
                 dried_from: None,
@@ -214,8 +216,9 @@ fn water_terrain(grid: Grid, water: &[Water]) -> Vec<Terrain> {
 
 /// Land by quantile: rock on the highest, steepest ground; marsh on the
 /// flattest wet ground beside water; sand on the lowest ocean shores;
-/// forest on the wettest remainder; grass bands by moisture.
-fn land_terrain(grid: Grid, relief: &Relief, water: &[Water], moisture: &[f32], params: &WorldParams, terrain: &mut [Terrain]) {
+/// forest on the wettest remainder whose biome grows trees; grass bands by
+/// moisture.
+fn land_terrain(grid: Grid, relief: &Relief, water: &[Water], moisture: &[f32], biomes: &[Biome], params: &WorldParams, terrain: &mut [Terrain]) {
     let n = grid.len();
     let is_land = |i: usize| water[i] == Water::Land;
     let max_slope = relief.slope.iter().copied().fold(0.0f32, f32::max).max(1.0e-6);
@@ -251,7 +254,15 @@ fn land_terrain(grid: Grid, relief: &Relief, water: &[Water], moisture: &[f32], 
         terrain[i] = Terrain::Sand;
     }
 
-    for &i in &highest((0..n).filter(|&i| open(i, terrain)), moisture, share(n, params.forest_pct)) {
+    // Forest goes to the wettest open land in a wooded biome; if the treeless
+    // biomes hold so much of the land that the target cannot be met there,
+    // the wettest of the rest make up the shortfall so `forest_pct` holds.
+    let target = share(n, params.forest_pct);
+    let wooded = highest((0..n).filter(|&i| open(i, terrain) && biomes[i].allows_forest()), moisture, target);
+    for &i in &wooded {
+        terrain[i] = Terrain::Forest;
+    }
+    for &i in &highest((0..n).filter(|&i| open(i, terrain)), moisture, target - wooded.len()) {
         terrain[i] = Terrain::Forest;
     }
 

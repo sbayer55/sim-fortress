@@ -500,7 +500,7 @@ impl Sim {
                         species: Some(id),
                         subject: None,
                         text: format!("The {} line of {} is extinct", self.params.species.plural(id), r.0),
-                        pos: Some(((r.1 + r.3).div_euclid(2), (r.2 + r.4).div_euclid(2))),
+                        pos: Some(self.world.region_centre(ri)),
                         detail: String::new(),
                     });
                 }
@@ -663,7 +663,10 @@ mod tests {
         // field, so every cell's moisture and terrain moved again.
         // Re-baselined for wetlands: marsh and riparian corridors recut the
         // land and the initial vegetation reads moisture and temperature.
-        assert_eq!(a.checksum(), 0x06d2_065a_9fc4_3107);
+        // Re-baselined for biomes as regions: the forest quantile skips the
+        // treeless biomes, vegetation scales by biome, and regions are
+        // drainage basins, so rain, drought and migration act on new areas.
+        assert_eq!(a.checksum(), 0xb4b5_fbec_d0ad_4ff3);
     }
 
     #[test]

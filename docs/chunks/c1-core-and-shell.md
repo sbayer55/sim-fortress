@@ -119,6 +119,11 @@ The eight fixture rectangles, scaled `x' = round(x Ã— W / 150)`, `y' = round(y Ã
 with the last column and row extended to the world edge so the regions tile the world.
 Names are the fixed eight. Test `regions_cover_world`.
 
+*Superseded (Sept 2026, world generation roadmap phase 3): regions are the eight
+drainage basins the generator merges the flow tree into, named from position and
+dominant biome; `RegionRect` is a bounding box and `World.region_map` holds each
+cell's region. Still exactly eight, still tiling the world.*
+
 ### FR4 Time
 `tick: u64` starts at 0 = Year 1, Day 1 of Spring, `start_hour`.
 - `hour() = (tick + start_hour) % 24`

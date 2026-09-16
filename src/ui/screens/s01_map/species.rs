@@ -23,9 +23,9 @@ fn species_by_region(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, sp
         row += 1;
         let mut densest: Option<(usize, f32)> = None;
         for (i, r) in world.regions.iter().enumerate() {
-            let n = sim.creatures.living().filter(|c| c.species == sp && c.x >= r.1 && c.x < r.3 && c.y >= r.2 && c.y < r.4).count();
+            let n = sim.creatures.living().filter(|c| c.species == sp && world.region_index(c.x, c.y) == i).count();
             let share = if total > 0 { crate::cast!(n => f32) / crate::cast!(total => f32) } else { 0.0 };
-            let cells = crate::cast!(((r.3 - r.1) * (r.4 - r.2)).max(1) => f32);
+            let cells = crate::cast!(world.region_size(i).max(1) => f32);
             let per_cell = crate::cast!(n => f32) / cells;
             if n > 0 && densest.is_none_or(|(_, d)| per_cell > d) {
                 densest = Some((i, per_cell));

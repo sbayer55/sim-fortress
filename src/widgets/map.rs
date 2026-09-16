@@ -130,9 +130,23 @@ pub trait MapSource {
 }
 
 /// Glyph and style for a bare terrain cell.
-pub const fn terrain_cell(cell: &Cell, winter: bool) -> (char, Color, Color) {
+///
+/// Land is tinted a little toward its biome's hue (cold ground blue-grey,
+/// hot dry ground yellow) so the biomes read as areas; the winter palette,
+/// water and rock are left alone.
+pub fn terrain_cell(cell: &Cell, winter: bool) -> (char, Color, Color) {
+    let (g, fg, bg) = terrain_base(cell.terrain, winter);
+    if winter || cell.terrain.is_water() || cell.terrain == Terrain::Rock {
+        return (g, fg, bg);
+    }
+    let hue = theme::biome(crate::cast!(cell.biome => u8));
+    (g, theme::lerp(fg, hue, theme::BIOME_TINT_FG), theme::lerp(bg, hue, theme::BIOME_TINT_BG))
+}
+
+/// Glyph and colours for a terrain before any biome tint.
+pub const fn terrain_base(terrain: Terrain, winter: bool) -> (char, Color, Color) {
     use Terrain::{DeepWater, ShallowWater, Sand, Dirt, GrassSparse, Grass, GrassDense, Forest, Rock, Marsh};
-    let (g, fg, bg) = match cell.terrain {
+    let (g, fg, bg) = match terrain {
         DeepWater => (glyphs::DEEP_WATER, theme::DEEP_WATER_FG, theme::DEEP_WATER_BG),
         ShallowWater => (glyphs::SHALLOW_WATER, theme::SHALLOW_FG, theme::SHALLOW_BG),
         Sand => (glyphs::SAND, theme::SAND_FG, theme::SAND_BG),
@@ -145,7 +159,7 @@ pub const fn terrain_cell(cell: &Cell, winter: bool) -> (char, Color, Color) {
         Marsh => (glyphs::MARSH, theme::MARSH_FG, theme::MARSH_BG),
     };
     if winter {
-        match cell.terrain {
+        match terrain {
             ShallowWater => (glyphs::SHALLOW_WATER, Color::Rgb(150, 190, 230), Color::Rgb(36, 66, 110)),
             Sand | Dirt | GrassSparse => (glyphs::SNOW, theme::SNOW_FG, theme::SNOW_BG),
             Grass | GrassDense => (glyphs::GRASS_SPARSE, Color::Rgb(170, 190, 170), theme::SNOW_BG),
@@ -160,20 +174,9 @@ pub const fn terrain_cell(cell: &Cell, winter: bool) -> (char, Color, Color) {
 }
 
 /// Glyph and colors for a serialised terrain code (0..=9), summer/day palette
-/// (used by the S00 title-screen decorative strips, C6 FR1).
+/// with no biome tint (used by the S00 title-screen decorative strips, C6 FR1).
 pub const fn terrain_code_cell(code: u8) -> (char, Color, Color) {
-    let cell = Cell {
-        terrain: Terrain::from_code(code),
-        elevation: 0.5,
-        moisture: 0.5,
-        temperature: 0.5,
-        vegetation: 0.0,
-        prey_pressure: 0.0,
-        pred_pressure: 0.0,
-        dried_from: None,
-        parasite_load: 0.0,
-    };
-    terrain_cell(&cell, false)
+    terrain_base(Terrain::from_code(code), false)
 }
 
 /// Glyph and colors for a cell under an overlay (before creatures are drawn).
@@ -542,9 +545,6 @@ pub const REGION_TINT: f32 = 0.30;
 /// Blend factor for the selected region.
 pub const REGION_TINT_SELECTED: f32 = 0.50;
 
-/// Tint the background of every visible cell of every region toward that
-/// region's colour. Iterates the region rectangles clipped to the viewport
-/// rather than looking up a region per cell.
 /// Dim one interior cell of a sense ellipse, when it is on screen.
 fn tint_sense_cell(buf: &mut Buffer, wx: usize, wy: usize, ox: usize, oy: usize, area: Rect) {
     if wx < ox || wy < oy {
@@ -560,35 +560,31 @@ fn tint_sense_cell(buf: &mut Buffer, wx: usize, wy: usize, ox: usize, oy: usize,
     }
 }
 
+/// Tint the background of every visible cell toward its region's colour.
 fn region_tint(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions) {
     let (ox, oy) = opts.origin;
-    let (vx1, vy1) = (ox + crate::cast!(area.width => usize), oy + crate::cast!(area.height => usize));
-    for (i, r) in world.regions.iter().enumerate() {
-        let (x0, y0, x1, y1) = (r.1.max(ox), r.2.max(oy), r.3.min(vx1).min(world.width()), r.4.min(vy1).min(world.height()));
-        if x0 >= x1 || y0 >= y1 {
-            continue;
-        }
-        let amount = if opts.selected_region == Some(i) { REGION_TINT_SELECTED } else { REGION_TINT };
-        let color = theme::region(i);
-        for wy in y0..y1 {
-            for wx in x0..x1 {
-                if let Some(cell) = cell_at(buf, area, opts, wx, wy) {
-                    let bg = theme::lerp(cell.bg, color, amount);
-                    cell.set_bg(bg);
-                }
+    let (x1, y1) = ((ox + crate::cast!(area.width => usize)).min(world.width()), (oy + crate::cast!(area.height => usize)).min(world.height()));
+    for wy in oy..y1 {
+        for wx in ox..x1 {
+            let i = world.region_index(wx, wy);
+            let amount = if opts.selected_region == Some(i) { REGION_TINT_SELECTED } else { REGION_TINT };
+            if let Some(cell) = cell_at(buf, area, opts, wx, wy) {
+                let bg = theme::lerp(cell.bg, theme::region(i), amount);
+                cell.set_bg(bg);
             }
         }
     }
 }
 
-/// Where a region's label starts in world coordinates: centred on the
-/// rectangle, clamped so the whole label stays inside it.
-pub fn region_label_origin(r: &crate::sim::RegionRect, world_w: usize) -> (usize, usize) {
+/// Where region `ri`'s label starts in world coordinates: centred on the
+/// region's centre cell, clamped so the whole label stays inside its
+/// bounding box and the world.
+pub fn region_label_origin(world: &World, ri: usize) -> (usize, usize) {
+    let Some(r) = world.regions.get(ri) else { return (0, 0) };
     let w = r.0.chars().count();
-    let cx = (r.1 + r.3).div_euclid(2);
-    let cy = (r.2 + r.4).div_euclid(2);
+    let (cx, cy) = world.region_centre(ri);
     let x = cx.saturating_sub(w.div_euclid(2)).max(r.1);
-    let x = x.min(r.3.saturating_sub(w)).min(world_w.saturating_sub(w));
+    let x = x.min(r.3.saturating_sub(w)).min(world.width().saturating_sub(w));
     (x, cy)
 }
 
@@ -596,7 +592,7 @@ pub fn region_label_origin(r: &crate::sim::RegionRect, world_w: usize) -> (usize
 /// viewport edge.
 fn region_labels(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions) {
     for (i, r) in world.regions.iter().enumerate() {
-        let (lx, ly) = region_label_origin(r, world.width());
+        let (lx, ly) = region_label_origin(world, i);
         let selected = opts.selected_region == Some(i);
         for (k, ch) in r.0.chars().enumerate() {
             if let Some(cell) = cell_at(buf, area, opts, lx + k, ly) {
@@ -671,7 +667,7 @@ mod tests {
 
     /// A `w`×`h` all-dirt world split into two regions down the middle.
     fn two_region_world(w: usize, h: usize) -> World {
-        let cell = Cell { terrain: Terrain::Dirt, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 };
+        let cell = Cell { terrain: Terrain::Dirt, biome: crate::sim::world::Biome::Grassland, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 };
         World {
             cells: vec![cell; w * h],
             width: w,
@@ -680,6 +676,7 @@ mod tests {
             carcasses: vec![],
             seeds: vec![],
             regions: vec![("Ab".to_string(), 0, 0, w.div_euclid(2), h), ("Cd".to_string(), w.div_euclid(2), 0, w, h)],
+            region_map: vec![],
             wind: crate::sim::world::Wind::Westerly,
             water_cells_at_generation: 0,
             shore: vec![],
@@ -770,9 +767,11 @@ mod tests {
         let world = two_region_world(8, 4);
         let opts = MapOptions { overlay: Overlay::Region, selected_region: Some(1), ..MapOptions::default() };
         let buf = draw(&world, &opts, 8, 4);
-        // Row 0 carries no label (labels sit on row 2), so its cells show the pure tint.
-        assert_eq!(buf[(0, 0)].bg, theme::lerp(theme::DIRT_BG, theme::region(0), REGION_TINT));
-        assert_eq!(buf[(7, 0)].bg, theme::lerp(theme::DIRT_BG, theme::region(1), REGION_TINT_SELECTED));
+        // Row 0 carries no label (labels sit on row 2), so its cells show the pure tint
+        // over the (biome-tinted) terrain background.
+        let base = terrain_cell(world.cell(0, 0), false).2;
+        assert_eq!(buf[(0, 0)].bg, theme::lerp(base, theme::region(0), REGION_TINT));
+        assert_eq!(buf[(7, 0)].bg, theme::lerp(base, theme::region(1), REGION_TINT_SELECTED));
         // Terrain glyph is kept.
         assert_eq!(buf[(0, 0)].symbol(), glyphs::DIRT.to_string());
         // Label "Ab" is centred in the left region: x = (0+4)/2 - 1 = 1, y = (0+4)/2 = 2.
@@ -792,7 +791,7 @@ mod tests {
         // A label wider than its region is clamped inside the world, never past it.
         let mut wide = two_region_world(8, 4);
         wide.regions[1].0 = "Toolongname".to_string();
-        assert_eq!(region_label_origin(&wide.regions[1], wide.width()), (0, 2));
+        assert_eq!(region_label_origin(&wide, 1), (0, 2));
         let _ = draw(&wide, &opts, 6, 4);
     }
 }

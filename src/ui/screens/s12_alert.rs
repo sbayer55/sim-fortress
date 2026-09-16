@@ -238,8 +238,8 @@ impl AlertModal {
         app.pending_overlay = Some(pathogen);
         let centre = app.sim.as_ref().and_then(|sim| {
             let ob = sim.disease.outbreak(outbreak)?;
-            let r = sim.world.regions.get(crate::cast!(ob.origin_region => usize))?;
-            Some(((r.1 + r.3).div_euclid(2), (r.2 + r.4).div_euclid(2)))
+            let ri = crate::cast!(ob.origin_region => usize);
+            (ri < sim.world.regions.len()).then(|| sim.world.region_centre(ri))
         });
         if let Some((cx, cy)) = centre {
             app.centre_viewport_on(cx, cy);

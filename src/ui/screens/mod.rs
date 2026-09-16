@@ -769,8 +769,7 @@ mod tests {
         assert_eq!(app.viewport_origin, (0, 0));
         s.region_sel = n - 1;
         s.handle_key(key(KeyCode::Enter), &mut app);
-        let r = app.sim.as_ref().unwrap().world.regions[n - 1].clone();
-        let (cx, cy) = ((r.1 + r.3).div_euclid(2), (r.2 + r.4).div_euclid(2));
+        let (cx, cy) = app.sim.as_ref().unwrap().world.region_centre(n - 1);
         let (mx, my) = app.viewport_max();
         assert_eq!(app.viewport_origin, (cx.saturating_sub(55).min(mx), cy.saturating_sub(20).min(my)));
     }
@@ -786,7 +785,9 @@ mod tests {
         let row = |y: u16| -> String { (0..155).map(|x| buf[(x, y)].symbol().to_string()).collect() };
         assert!(row(0).contains("overlay: regions"), "{}", row(0));
         let side: String = (0..45).map(row).collect::<Vec<_>>().join("\n");
-        assert!(side.contains("Fenlands"));
+        for r in &app.sim.as_ref().unwrap().world.regions {
+            assert!(side.contains(&r.0), "region {:?} missing from the sidebar", r.0);
+        }
         assert!(side.contains("Enter"));
     }
 }

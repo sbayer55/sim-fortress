@@ -53,17 +53,17 @@ impl Ecology {
         let mut idx: Vec<usize> = (0..world.regions.len()).collect();
         match self.sort {
             1 => idx.sort_by(|&a, &b| {
-                let va = crate::sim::ecology::region_land_veg_mean(world, &world.regions[a]);
-                let vb = crate::sim::ecology::region_land_veg_mean(world, &world.regions[b]);
+                let va = crate::sim::ecology::region_land_veg_mean(world, a);
+                let vb = crate::sim::ecology::region_land_veg_mean(world, b);
                 vb.partial_cmp(&va).unwrap_or(std::cmp::Ordering::Equal)
             }),
             2 => idx.sort_by(|&a, &b| {
-                let va = crate::sim::ecology::region_display_moisture_mean(world, &world.regions[a]);
-                let vb = crate::sim::ecology::region_display_moisture_mean(world, &world.regions[b]);
+                let va = crate::sim::ecology::region_display_moisture_mean(world, a);
+                let vb = crate::sim::ecology::region_display_moisture_mean(world, b);
                 vb.partial_cmp(&va).unwrap_or(std::cmp::Ordering::Equal)
             }),
             3 => idx.sort_by_key(|&i| {
-                let veg = crate::sim::ecology::region_land_veg_mean(world, &world.regions[i]);
+                let veg = crate::sim::ecology::region_land_veg_mean(world, i);
                 let th = &ScarcityThresholds::default();
                 // Sort by status severity: Scarce < Strained < Stable < Plenty.
                 match region_status(veg, 0, true, th) {
@@ -101,8 +101,7 @@ impl Screen for Ecology {
             KeyCode::Tab => Action::None,
             KeyCode::Enter => {
                 if let Some(sim) = &app.sim {
-                    let r = &sim.world.regions[self.selected];
-                    let (cx, cy) = ((r.1 + r.3).div_euclid(2), (r.2 + r.4).div_euclid(2));
+                    let (cx, cy) = sim.world.region_centre(self.selected);
                     app.centre_viewport_on(cx, cy);
                 }
                 Action::Pop
@@ -167,7 +166,7 @@ fn totals(f: &mut Frame<'_>, area: Rect, sim: &crate::sim::Sim, world: &World) {
     let max = crate::cast!(counts.iter().copied().max().unwrap_or(1).max(1) => f32);
     for t in kinds {
         let n = counts[crate::cast!(t => usize)];
-        let (g, fg, _bg) = map::terrain_cell(&crate::sim::Cell { terrain: t, elevation: 0.0, moisture: 0.0, temperature: 0.5, vegetation: 0.0, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 }, false);
+        let (g, fg, _bg) = map::terrain_cell(&crate::sim::Cell { terrain: t, biome: crate::sim::world::Biome::Grassland, elevation: 0.0, moisture: 0.0, temperature: 0.5, vegetation: 0.0, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 }, false);
         let buf = f.buffer_mut();
         let y = inner.y + row;
         buf.set_stringn(inner.x + 1, y, format!("{g} "), 2, Style::default().fg(fg).bg(theme::PANEL_BG));
@@ -300,10 +299,10 @@ fn region_counts(sim: &crate::sim::Sim, world: &World, ri: usize) -> (u32, u32, 
 /// One region row: counts, bars and status.
 #[allow(clippy::too_many_arguments)]
 fn region_row(buf: &mut ratatui::buffer::Buffer, inner: Rect, y: u16, ri: usize, r: &(String, usize, usize, usize, usize), world: &World, app: &AppState, selected: bool, th: &ScarcityThresholds, prey_configured: bool) {
-    let veg = crate::sim::ecology::region_land_veg_mean(world, r);
-    let moist = crate::sim::ecology::region_display_moisture_mean(world, r);
-    let cells = (r.3 - r.1) * (r.4 - r.2);
-    let water = region_water_cells(world, r);
+    let veg = crate::sim::ecology::region_land_veg_mean(world, ri);
+    let moist = crate::sim::ecology::region_display_moisture_mean(world, ri);
+    let cells = world.region_size(ri);
+    let water = region_water_cells(world, ri);
     if selected {
         for x in inner.x..inner.right() {
             if let Some(c) = buf.cell_mut((x, y)) {
@@ -326,7 +325,7 @@ fn region_row(buf: &mut ratatui::buffer::Buffer, inner: Rect, y: u16, ri: usize,
         None => (0, 0, 0),
     };
     let (label, color) = region_status_label(veg, sick_n, prey_configured, th);
-    let pressure = region_pressure(world, r);
+    let pressure = region_pressure(world, ri);
     buf.set_stringn(inner.x + 86, y, format!("{prey_n:>5}"), 5, region_cell_style(selected, theme::PREY));
     buf.set_stringn(inner.x + 91, y, format!("{pred_n:>5}"), 5, region_cell_style(selected, theme::PRED));
     let sick_color = if sick_n > 0 { theme::SICK } else { theme::DIM };
@@ -341,29 +340,19 @@ fn region_cell_style(selected: bool, fg: ratatui::style::Color) -> Style {
 }
 
 /// Water cells inside a region rectangle.
-fn region_water_cells(world: &World, r: &(String, usize, usize, usize, usize)) -> usize {
-    world
-        .cells
-        .iter()
-        .enumerate()
-        .filter(|(idx, c)| {
-            let (x, y) = (idx % world.width, idx / world.width);
-            x >= r.1 && x < r.3 && y >= r.2 && y < r.4 && c.terrain.is_water()
-        })
-        .count()
+fn region_water_cells(world: &World, ri: usize) -> usize {
+    world.region_cells(ri).filter(|&(x, y)| world.cell(x, y).terrain.is_water()).count()
 }
 
 /// Mean predator pressure over the region's land cells.
-fn region_pressure(world: &World, r: &(String, usize, usize, usize, usize)) -> f32 {
+fn region_pressure(world: &World, ri: usize) -> f32 {
     let mut psum = 0.0f32;
     let mut pn = 0usize;
-    for yy in r.2..r.4 {
-        for xx in r.1..r.3 {
-            let cell = world.cell(xx, yy);
-            if !cell.terrain.is_water() {
-                psum += cell.pred_pressure;
-                pn += 1;
-            }
+    for (xx, yy) in world.region_cells(ri) {
+        let cell = world.cell(xx, yy);
+        if !cell.terrain.is_water() {
+            psum += cell.pred_pressure;
+            pn += 1;
         }
     }
     if pn > 0 {

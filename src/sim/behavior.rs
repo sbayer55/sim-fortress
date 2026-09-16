@@ -154,7 +154,7 @@ fn flush_wary(world: &World, events: &mut EventRing, time: &Time, roster: &Roste
     let (year, day, hour) = (time.year(), time.day_of_year(), time.hour());
     for s in summaries {
         let r = &world.regions[s.region];
-        let pos = ((r.1 + r.3).div_euclid(2), (r.2 + r.4).div_euclid(2));
+        let pos = world.region_centre(s.region);
         events.push(Event {
             year,
             day,

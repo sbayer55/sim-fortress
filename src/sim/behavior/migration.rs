@@ -48,8 +48,7 @@ pub fn migration_daily(
                 continue;
             }
             let trigger = if roster.kind(id) == Kind::Prey {
-                let r = &world.regions[ri];
-                let veg_mean = crate::sim::ecology::region_land_veg_mean(world, r);
+                let veg_mean = crate::sim::ecology::region_land_veg_mean(world, ri);
                 let shortfall = season_cap > 0.0 && veg_mean / season_cap < pp.migrate_veg;
                 let group_pressure = occupied_pressure[si][ri] / crate::cast!(counts[si][ri] => f32);
                 let pressure = group_pressure > pp.migrate_pressure;
@@ -71,26 +70,17 @@ pub fn migration_daily(
     }
 }
 
-pub(super) fn mean_pred_pressure(world: &World, r: &crate::sim::world::RegionRect) -> f32 {
+/// Mean `pred_pressure` over the land cells of region `ri`.
+pub(super) fn mean_pred_pressure(world: &World, ri: usize) -> f32 {
     let (mut sum, mut n) = (0.0f32, 0usize);
-    for y in r.2..r.4 {
-        for x in r.1..r.3 {
-            let c = &world.cells[y * world.width + x];
-            if !c.terrain.is_water() {
-                sum += c.pred_pressure;
-                n += 1;
-            }
+    for (x, y) in world.region_cells(ri) {
+        let c = world.cell(x, y);
+        if !c.terrain.is_water() {
+            sum += c.pred_pressure;
+            n += 1;
         }
     }
     if n > 0 { sum / crate::cast!(n => f32) } else { 0.0 }
-}
-
-pub(super) const fn regions_adjacent(a: &crate::sim::world::RegionRect, b: &crate::sim::world::RegionRect) -> bool {
-    let (ax0, ay0, ax1, ay1) = (a.1, a.2, a.3, a.4);
-    let (bx0, by0, bx1, by1) = (b.1, b.2, b.3, b.4);
-    let overlap_y = ay0 < by1 && by0 < ay1;
-    let overlap_x = ax0 < bx1 && bx0 < ax1;
-    (ax1 == bx0 || bx1 == ax0) && overlap_y || (ay1 == by0 || by1 == ay0) && overlap_x
 }
 
 pub(super) fn migrate_group(store: &mut CreatureStore, world: &World, events: &mut EventRing, time: &Time, roster: &Roster, id: SpeciesId, origin_ri: usize) {
@@ -107,12 +97,12 @@ pub(super) fn migrate_group(store: &mut CreatureStore, world: &World, events: &m
     // Destination = adjacent region maximising the species' score.
     let mut best_dest: Option<usize> = None;
     let mut best_score = f32::NEG_INFINITY;
-    for (di, r) in world.regions.iter().enumerate() {
-        if di == origin_ri || !regions_adjacent(&world.regions[origin_ri], r) {
+    for di in 0..world.regions.len() {
+        if di == origin_ri || !world.regions_adjacent(origin_ri, di) {
             continue;
         }
         let score = if roster.kind(id) == Kind::Prey {
-            crate::sim::ecology::region_land_veg_mean(world, r) * (1.0 - mean_pred_pressure(world, r))
+            crate::sim::ecology::region_land_veg_mean(world, di) * (1.0 - mean_pred_pressure(world, di))
         } else {
             crate::cast!(store.living().filter(|c| roster.kind(c.species) == Kind::Prey && world.region_index(c.x, c.y) == di).count() => f32)
         };
@@ -138,7 +128,7 @@ pub(super) fn migrate_group(store: &mut CreatureStore, world: &World, events: &m
     let group_word = if n <= 3 { "family" } else if roster.kind(id) == Kind::Prey { "herd" } else { "pack" };
     let origin = &world.regions[origin_ri];
     let dest_name = world.regions[dest].0.clone();
-    let pos = ((origin.1 + origin.3).div_euclid(2), (origin.2 + origin.4).div_euclid(2));
+    let pos = world.region_centre(origin_ri);
     events.push(Event {
         year: time.year(),
         day: time.day_of_year(),
@@ -156,20 +146,17 @@ pub(super) fn migrate_group(store: &mut CreatureStore, world: &World, events: &m
 /// The walkable destination cell with the highest vegetation (prey) or
 /// `prey_pressure` (predators) — the group's `target_cell` (FR7).
 fn migration_target_cell(world: &World, kind: Kind, dest: usize) -> Option<(usize, usize)> {
-    let r = &world.regions[dest];
     let mut best: Option<(usize, usize)> = None;
     let mut best_score = f32::NEG_INFINITY;
-    for y in r.2..r.4 {
-        for x in r.1..r.3 {
-            let c = &world.cells[y * world.width + x];
-            if !c.terrain.walkable() || c.terrain.is_water() {
-                continue;
-            }
-            let score = if kind == Kind::Prey { c.vegetation } else { c.prey_pressure };
-            if score > best_score {
-                best_score = score;
-                best = Some((x, y));
-            }
+    for (x, y) in world.region_cells(dest) {
+        let c = world.cell(x, y);
+        if !c.terrain.walkable() || c.terrain.is_water() {
+            continue;
+        }
+        let score = if kind == Kind::Prey { c.vegetation } else { c.prey_pressure };
+        if score > best_score {
+            best_score = score;
+            best = Some((x, y));
         }
     }
     best

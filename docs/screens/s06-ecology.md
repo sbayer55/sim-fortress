@@ -103,21 +103,15 @@ block-beta
 
 ### Regions panel (title `Regions`, hint `sorted by name   [r] cycle sort`)
 16. Header row: `region  cells  water  vegetation  moisture  prey  pred  sick  pressure  status`.
-17. One row per named region. The fixture regions tile the 150×40 world:
-
-    | Region           | x0–x1   | y0–y1 |
-    |------------------|---------|-------|
-    | Northmarch       | 0–50    | 0–14  |
-    | Ashen Ridge      | 50–100  | 0–12  |
-    | Sunfall Coast    | 100–150 | 0–16  |
-    | Reedwater Vale   | 0–50    | 14–28 |
-    | The Long Meadow  | 50–100  | 12–28 |
-    | Lakeshore        | 100–150 | 16–40 |
-    | Southern Thicket | 0–50    | 28–40 |
-    | Fenlands         | 50–100  | 28–40 |
-
-    Cells outside any region belong to `The Wilds`.
-18. Per-region values, all computed from the cells inside the rectangle and the alive
+17. One row per named region. The eight regions are the drainage basins the world
+    generator merges the flow tree into (world generation roadmap, phase 3), so they
+    follow ridgelines and coastlines rather than a grid; each is named for its position
+    and dominant biome (`Northern Taiga`, `Western Coast`, at most 16 cells) and the
+    names differ per seed. The prototype fixture used eight fixed rectangles
+    (Northmarch, Ashen Ridge, Sunfall Coast, Reedwater Vale, The Long Meadow, Lakeshore,
+    Southern Thicket, Fenlands) tiling the 150×40 world. Cells outside any region belong
+    to `The Wilds` (never, on a generated world).
+18. Per-region values, all computed from the cells of the region and the alive
     creatures standing in it: `cells`, `water` (% of cells that are water, shallow-water
     colour), `vegetation` (20-col bar coloured by the vegetation ramp + mean to 2 dp),
     `moisture` (20-col bar on the water ramp + mean), `prey` and `pred` counts (hare / wolf

@@ -147,8 +147,8 @@ impl WorldMap {
             }
             KeyCode::Enter if self.overlay == Overlay::Region => {
                 if let Some(sim) = &app.sim {
-                    if let Some(r) = sim.world.regions.get(self.region_sel) {
-                        let (cx, cy) = ((r.1 + r.3).div_euclid(2), (r.2 + r.4).div_euclid(2));
+                    if self.region_sel < sim.world.regions.len() {
+                        let (cx, cy) = sim.world.region_centre(self.region_sel);
                         app.centre_viewport_on(cx, cy);
                     }
                 }

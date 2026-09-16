@@ -165,8 +165,8 @@ impl WorldMap {
         // By region: mean cell load, then the worst region and the fouled count.
         panel::section(f, inner, row, "By region");
         row += 1;
-        for r in &world.regions {
-            bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", r.0), region_load_mean(world, r), theme::WARN, 18, 14);
+        for (ri, r) in world.regions.iter().enumerate() {
+            bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", r.0), region_load_mean(world, ri), theme::WARN, 18, 14);
             row += 1;
         }
         let (worst, _) = worst_region(world);
