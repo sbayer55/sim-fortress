@@ -1,5 +1,12 @@
 //! S04: the live species browser — S04a table + selected-species summary and
 //! S04b per-species trait distributions and drift (C4 FR7).
+//!
+//! S04a has two panels. `Tab` / `Shift+Tab` (or `← →`) move the focus between
+//! them: with the table focused `↑ ↓` move the selection; with the summary
+//! focused `↑ ↓ PgUp PgDn Home End` scroll it. The focused panel draws the
+//! Focus border.
+
+use std::cell::Cell;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
@@ -7,11 +14,12 @@ use ratatui::Frame;
 use crate::sim::{Sim, SpeciesId};
 use crate::ui::app::AppState;
 use crate::ui::screens::{Action, Screen};
-use crate::widgets::status;
+use crate::widgets::scroll::{self, Overflow};
+use crate::widgets::{panel, status};
 use crate::glyphs;
 
 use table::table;
-use summary::summary;
+use summary::summary_body;
 use histograms::histograms;
 use drift::drift;
 pub use drift::selection_pressure;
@@ -71,11 +79,34 @@ pub fn sorted_indices(sim: &Sim, sort: SortCol) -> Vec<usize> {
     idx
 }
 
+/// The two S04a panels that can hold the keyboard focus.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pane {
+    Table,
+    Summary,
+}
+
+impl Pane {
+    const fn other(self) -> Self {
+        match self {
+            Self::Table => Self::Summary,
+            Self::Summary => Self::Table,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct SpeciesBrowser {
     /// Position in the sorted table.
     pub sel: usize,
     pub sort: SortCol,
+    /// The panel `↑ ↓` act on.
+    pub focus: Pane,
+    /// Requested summary scroll offset; clamped at render time.
+    offset: u16,
+    /// Rows the summary body used and the rows visible, measured by the last
+    /// render (the same interior-mutability trick as `viewport_size`).
+    measured: Cell<(u16, u16)>,
 }
 
 impl Default for SpeciesBrowser {
@@ -86,12 +117,31 @@ impl Default for SpeciesBrowser {
 
 impl SpeciesBrowser {
     pub const fn new() -> Self {
-        Self { sel: 0, sort: SortCol::Count }
+        Self { sel: 0, sort: SortCol::Count, focus: Pane::Table, offset: 0, measured: Cell::new((0, 0)) }
     }
 
     fn selected_species(&self, sim: &Sim) -> SpeciesId {
         let order = sorted_indices(sim, self.sort);
         SpeciesId::ALL[order[self.sel.min(5)]]
+    }
+
+    /// Scroll the summary by `delta` rows, clamped to its measured content.
+    fn scroll_by(&mut self, delta: i32) {
+        let (content, visible) = self.measured.get();
+        let max = i32::from(Overflow::max_offset(content, visible));
+        self.offset = crate::cast!((i32::from(self.offset) + delta).clamp(0, max) => u16);
+    }
+
+    fn panel_kind(&self, pane: Pane) -> panel::Kind {
+        if self.focus == pane { panel::Kind::Focus } else { panel::Kind::Outer }
+    }
+
+    /// Move the table selection to `sel`; a new species starts its summary at the top.
+    const fn select(&mut self, sel: usize) {
+        if sel != self.sel {
+            self.sel = sel;
+            self.offset = 0;
+        }
     }
 }
 
@@ -101,13 +151,42 @@ impl Screen for SpeciesBrowser {
     }
 
     fn handle_key(&mut self, key: KeyEvent, app: &mut AppState) -> Action {
+        let page = i32::from(self.measured.get().1.max(1));
         match key.code {
+            KeyCode::Tab | KeyCode::BackTab | KeyCode::Left | KeyCode::Right => {
+                self.focus = self.focus.other();
+                Action::None
+            }
+            KeyCode::Up if self.focus == Pane::Table => {
+                self.select(self.sel.saturating_sub(1));
+                Action::None
+            }
+            KeyCode::Down if self.focus == Pane::Table => {
+                self.select((self.sel + 1).min(5));
+                Action::None
+            }
             KeyCode::Up => {
-                self.sel = self.sel.saturating_sub(1);
+                self.scroll_by(-1);
                 Action::None
             }
             KeyCode::Down => {
-                self.sel = (self.sel + 1).min(5);
+                self.scroll_by(1);
+                Action::None
+            }
+            KeyCode::PageUp => {
+                self.scroll_by(-page);
+                Action::None
+            }
+            KeyCode::PageDown => {
+                self.scroll_by(page);
+                Action::None
+            }
+            KeyCode::Home => {
+                self.scroll_by(i32::MIN.div_euclid(2));
+                Action::None
+            }
+            KeyCode::End => {
+                self.scroll_by(i32::MAX.div_euclid(2));
                 Action::None
             }
             KeyCode::Char('s') => {
@@ -132,14 +211,21 @@ impl Screen for SpeciesBrowser {
     fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let Some(sim) = &app.sim else { return };
         let status_row = area.y + area.height - 1;
-        let body_h = area.height - 1;
+        let body_h = area.height.saturating_sub(1);
         let species = self.selected_species(sim);
-        table(f, Rect::new(area.x, area.y, area.width, TABLE_H), sim, self.sort, species);
-        summary(f, Rect::new(area.x, area.y + TABLE_H, area.width, body_h - TABLE_H), sim, species);
+        let table_h = TABLE_H.min(body_h);
+        table(f, Rect::new(area.x, area.y, area.width, table_h), sim, self.sort, species, self.panel_kind(Pane::Table));
+
+        let summary_area = Rect::new(area.x, area.y + table_h, area.width, body_h - table_h);
+        let inner = panel::draw_with_hint(f, summary_area, &format!("Selected: {}", species.name()), "Enter for full detail", self.panel_kind(Pane::Summary));
+        let ov = scroll::draw(f, summary_area, inner, self.offset, |buf, canvas| summary_body(buf, canvas, sim, species));
+        self.measured.set((ov.content, inner.height));
+
+        let updown = if self.focus == Pane::Table { "select" } else { "scroll" };
         status::render(
             f,
             Rect::new(area.x, status_row, area.width, 1),
-            &[("↑↓", "select"), ("Enter", "detail"), ("s", "sort"), ("Esc", "back")],
+            &[("↑↓", updown), ("Tab", "panel"), ("Enter", "detail"), ("s", "sort"), ("Esc", "back")],
             &format!("sorted by {} {}  {}", self.sort.label(), glyphs::DOWN, sim.time.clock_label()),
         );
     }

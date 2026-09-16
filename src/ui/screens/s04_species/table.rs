@@ -20,10 +20,10 @@ const fn kind_label(id: SpeciesId) -> &'static str {
     }
 }
 
-pub(super) fn table(f: &mut Frame<'_>, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesId) {
+pub(super) fn table(f: &mut Frame<'_>, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesId, kind: panel::Kind) {
     let alive = sim.species.iter().filter(|s| s.count > 0).count();
     let prey_n = sim.species.iter().filter(|s| s.count > 0 && s.species.kind() == Kind::Prey).count();
-    let inner = panel::draw_with_hint(f, area, "Species", &format!("{} species, {} prey / {} predator", alive, prey_n, alive - prey_n), panel::Kind::Outer);
+    let inner = panel::draw_with_hint(f, area, "Species", &format!("{} species, {} prey / {} predator", alive, prey_n, alive - prey_n), kind);
     let dim = theme::dim_text();
     // C8: eleven genome columns, so the header is built from `TRAIT_ABBR` (never
     // hand-typed) and the sparkline slot is trimmed to keep the row inside 153.
