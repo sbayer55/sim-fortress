@@ -62,11 +62,12 @@ fn all_die_without_reproduction() {
 fn death_causes_all_present() {
     // Both starvation and old age kill in a no-breeding world. Which seed starves
     // how many is a lottery — the founder RNG stream changed when the genome
-    // widened in C8, and seed 42 happens to be benign now — so the property is
-    // asserted over a few worlds rather than pinned to one lucky seed.
+    // widened in C8, and every layout moved again with the climate sweep in
+    // world generation (seed 4 is the one that starves now) — so the property
+    // is asserted over a few worlds rather than pinned to one lucky seed.
     let (mut starved, mut age) = (0, 0);
     let mut report = Vec::new();
-    for seed in [1u64, 7, 42] {
+    for seed in [1u64, 4, 7, 42] {
         let mut sim = Sim::new(seed, no_breeding());
         run_to_extinction(&mut sim, 1200);
         let s = sim.events.iter().filter(|e| e.kind == EventKind::DeathStarved).count();
