@@ -81,6 +81,7 @@ impl Screen for Zoom {
             KeyCode::Enter => {
                 if let Some((x, y)) = cur {
                     if let Some(id) = crate::ui::screens::s01_map::WorldMap::creature_at_cursor(sim, x, y) {
+                        app.leave_look();
                         return Action::Push(Box::new(Inspector::new(id)));
                     }
                 }
@@ -90,7 +91,7 @@ impl Screen for Zoom {
                 if let Some((x, y)) = cur {
                     if let Some(id) = crate::ui::screens::s01_map::WorldMap::creature_at_cursor(sim, x, y) {
                         app.follow = Some(id);
-                        app.look_cursor = None;
+                        app.leave_look();
                         return Action::Pop;
                     }
                 }

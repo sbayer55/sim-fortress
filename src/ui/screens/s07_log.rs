@@ -162,8 +162,8 @@ impl Screen for EventLog {
                     let events = self.filtered(sim);
                     if let Some(pos) = events.get(self.selected).and_then(|e| e.pos) {
                         app.centre_viewport_on(pos.0, pos.1);
-                        app.look_cursor = Some(pos);
                         app.follow = None;
+                        app.enter_look(pos);
                         return Action::Pop;
                     }
                 }

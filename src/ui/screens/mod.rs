@@ -536,6 +536,58 @@ mod tests {
     }
 
     #[test]
+    fn s01_look_mode_pauses_and_esc_restores_previous_speed() {
+        let (mut app, mut s) = map_with_sim();
+        app.set_speed(2);
+        assert!(!app.paused);
+        s.handle_key(key(KeyCode::Char('k')), &mut app);
+        assert!(app.look_cursor.is_some());
+        assert!(app.paused, "entering look mode pauses the sim");
+        // Cursor moves keep the sim paused and the remembered speed intact.
+        s.handle_key(key(KeyCode::Right), &mut app);
+        assert!(app.paused);
+        s.handle_key(key(KeyCode::Esc), &mut app);
+        assert!(app.look_cursor.is_none());
+        assert!(!app.paused, "leaving look mode resumes");
+        assert_eq!(app.speed_idx, 2, "and restores the previous speed");
+    }
+
+    #[test]
+    fn s01_look_mode_restores_paused_when_entered_paused() {
+        let (mut app, mut s) = map_with_sim();
+        app.paused = true;
+        s.handle_key(key(KeyCode::Char('k')), &mut app);
+        assert!(app.paused);
+        s.handle_key(key(KeyCode::Esc), &mut app);
+        assert!(app.paused, "was paused before look mode, stays paused after");
+    }
+
+    #[test]
+    fn s01_look_mode_selection_restores_speed() {
+        let (mut app, mut s) = map_with_sim();
+        app.set_speed(1);
+        s.handle_key(key(KeyCode::Char('k')), &mut app);
+        assert!(app.paused);
+        let pos = app.sim.as_ref().unwrap().creatures.living().next().map(|c| (c.x, c.y)).expect("a living creature");
+        app.look_cursor = Some(pos);
+        // Following the creature under the cursor is a selection: look ends.
+        s.handle_key(key(KeyCode::Char('f')), &mut app);
+        assert!(app.follow.is_some());
+        assert!(app.look_cursor.is_none());
+        assert!(!app.paused);
+        assert_eq!(app.speed_idx, 1);
+        // Inspecting is a selection too.
+        app.follow = None;
+        s.handle_key(key(KeyCode::Char('k')), &mut app);
+        app.look_cursor = Some(pos);
+        let action = s.handle_key(key(KeyCode::Enter), &mut app);
+        assert!(matches!(action, Action::Push(_)));
+        assert!(app.look_cursor.is_none());
+        assert!(!app.paused);
+        assert_eq!(app.speed_idx, 1);
+    }
+
+    #[test]
     fn s01_key_7_opens_health_overlay_in_every_mode() {
         let (mut app, mut s) = map_with_sim();
         s.handle_key(key(KeyCode::Char('7')), &mut app);
