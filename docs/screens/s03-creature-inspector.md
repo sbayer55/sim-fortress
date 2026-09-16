@@ -258,17 +258,18 @@ classDiagram
 23. **Legacy (S03c only).** `<n> offspring alive, <n> descendants`, a line naming a
     mutation carried by descendants, and `carcass feeds: wolves <n>  foxes <n>  soil
     regrowth +<x>`.
-24. **Recent events section.** Up to 10 event-log lines that mention the creature by name,
+24. **Recent events section.** Up to 20 event-log lines that mention the creature by name,
     oldest first, each as event glyph (event colour), `Y<y> D<d> <hh>h` stamp and text
     truncated with `·` to the panel width. If fewer than 10 mention the creature the list
     is padded with the most recent world events. Ends with a dim hint `[e] open full log
     filtered to this creature` when a row is free.
-25. **Kin nearby section.** The five closest living creatures of the same species, each as
+25. **Kin nearby section.** The ten closest living creatures of the same species, each as
     glyph, name, tag, distance, compass and a relationship word (`sibling`, `offspring`,
     `cousin`, `unrelated`).
 
 ### Status bar
-26. Key hints `[f] follow  [l] lineage  [Tab] next creature  [Esc] back`; right text
+26. Key hints `[f] follow  [l] lineage  [Tab] next creature  [←→] panel  [↑↓] scroll
+    [Esc] back`; right text
     `<name> <tag>  <clock label>`.
 
 ## Glyphs and colors
@@ -293,7 +294,9 @@ classDiagram
 |-------|---------------------------------------------------------|---------|
 | `f`   | follow this creature on the map                         | [S01e World Map, follow mode](s01-world-map.md) |
 | `l`   | open the family tree focused on this creature           | [S08 Lineage](s08-lineage.md) |
-| `Tab` | inspect the next creature (see open questions for order) | stays on S03 |
+| `Tab` | inspect the next creature (see open questions for order); resets every panel's scroll | stays on S03 |
+| `← →` | move the focus (double border in `border_focus`) between the three panels | stays on S03 |
+| `↑ ↓` | scroll the focused panel one row; `PgUp` / `PgDn` a page; `Home` / `End` to the top / bottom | stays on S03 |
 | `Esc` | back to the map                                         | [S01 World Map](s01-world-map.md) |
 | `e`   | (hinted in the Life panel, not in the status bar) open the event log filtered to this creature | [S07 Event Log](s07-event-log.md) |
 
@@ -312,12 +315,15 @@ be disabled or centre the map on the carcass.
   empty parent strings.
 - **No mutations.** Mutation history shows `none recorded`.
 - **No target / no trail.** `target none`, `trail no recent movement`.
-- **Fewer than 10 events / fewer than 5 kin / fewer than 2 foxes.** Lists are shorter;
+- **Fewer than 20 events / fewer than 10 kin / fewer than 2 foxes.** Lists are shorter;
   padding events with unrelated world events is a prototype convenience and should be
   replaced by an empty-state line.
-- **Overflow.** The Timeline and Offspring forecast both stop drawing at the panel bottom;
-  the Recent events list is capped to the rows remaining. Long event text is truncated
-  with `·`.
+- **Overflow.** Each panel body is drawn into a tall off-screen canvas (160 rows,
+  `widgets::scroll`) and the focused panel scrolls with `↑ ↓ PgUp PgDn Home End`. When
+  the content is taller than the panel, the bottom border shows ` ↑n ↓m ` — the rows
+  hidden above and below; each half disappears at that end. Nothing is dropped: the
+  full Timeline and Offspring forecast are reachable by scrolling. Long event text is
+  still truncated with `·` to the panel width.
 - **Creature dies while inspected.** The screen must switch to the corpse variant in
   place (or return to the map) rather than keep showing stale vitals.
 - **Paused simulation.** All values are static; the clock in the status bar shows the
