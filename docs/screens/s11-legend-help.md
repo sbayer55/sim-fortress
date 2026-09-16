@@ -98,8 +98,9 @@ flowchart TB
      controls panel.
    - **Screens**: `s` species & traits · `g` graphs & charts · `y` ecology & regions · `e`
      event log · `l` lineage tree · `w` world generation · `?` this help · `q` quit.
-10. The column is exactly filled (5 rules + 31 rows = 36 of 36 rows); adding a binding
-    requires dropping or merging one.
+10. The column is exactly filled (5 rules + 31 rows = 36 of 36 rows). The whole content
+    area scrolls (`widgets::scroll`, all three columns together), so a new binding pushes
+    the column past the bottom and the bottom border shows ` ↑n ↓m ` for the hidden rows.
 
 ### Status bar
 11. Left: the hints in the table below. Right: the fixed text `help overlay` (no clock).
@@ -118,7 +119,8 @@ regrowth and the winter season glyph, and `☼` for both summer and daytime.
 |----------------|---------------------------------------------------|---------|
 | `?`            | close help                                        | [S01 World Map](s01-world-map.md) (or whichever screen opened it) |
 | `Esc`          | close                                             | same as above |
-| `PgUp` `PgDn`  | scroll the help content                           | stays here |
+| `↑` `↓`        | scroll the help content one row                   | stays here |
+| `PgUp` `PgDn`  | scroll the help content a page; `Home` / `End` jump to the top / bottom | stays here |
 | `k`            | close help and enter look mode                    | [S01c Look mode](s01-world-map.md) |
 | `o`            | close help and cycle to the first overlay         | [S02 Map Overlay](s02-map-overlay.md) |
 | `s`            | close help and open the species browser           | [S04 Species Browser](s04-species-browser.md) |
@@ -143,8 +145,6 @@ the player reads the binding and presses it directly. By extension the other doc
   the two must change.
 - `Tab` = "next notable creature" here, "next predator" in S02d and "next creature" in S13;
   the help text should describe one consistent rule.
-- Should `PgUp`/`PgDn` scroll, or should the help become tabbed / paged when it outgrows a
-  single 120 × 38 modal? The current layout has no slack in column 3.
 - The gameplay notes (e.g. *summer: water cells shrink*, *dens: −60 % detection*) describe
   simulation rules that do not exist yet; the help must be regenerated from real rules, or
   the notes dropped until then.
