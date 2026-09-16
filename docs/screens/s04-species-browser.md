@@ -24,10 +24,10 @@ the screen where evolution is actually visible.
 ### S04a — species table
 | Panel                       | Position          | Size     | Border |
 |-----------------------------|-------------------|----------|--------|
-| Species (table)             | rows 0–12         | 155 × 13 | Outer, right hint `<n> species, <p> prey / <q> predator` |
-| Selected: `<Species>`       | rows 13–42        | 155 × 30 | Focus, right hint `Enter for full detail` |
+| Species (table)             | rows 0–12         | 155 × 13 | Outer; Focus while it holds the focus (the default). Right hint `<n> species, <p> prey / <q> predator` |
+| Selected: `<Species>`       | rows 13–42        | 155 × 30 | Outer; Focus while it holds the focus. Right hint `Enter for full detail`; scrolls, with a `↑n ↓m` overflow indicator in the bottom border |
 | ├ left: identity, genome, interactions, notable individuals | inner cols 0–63 | 64 wide | — |
-| └ right: population history, habitat | inner cols 65–152 | 88 wide | — |
+| └ right: population history, habitat | inner cols 65–152 | 88 wide | — (stacks under the left column when the inner width is under 105) |
 | Status bar                  | row 43            | 155 × 1  | — |
 
 ```mermaid
@@ -193,8 +193,10 @@ classDiagram
    gen <g>  <age> days  <region>`.
 
 ### S04a — Selected species panel, right column (88 cols)
-10. **Population, last 240 days.** A 6-row block chart, 100 columns wide, of the species'
-    240-day population series downsampled to 100 buckets (bucket mean). Each column is a
+10. **Population, last 240 days.** A 6-row block chart, one column per cell of the
+    right column after a 6-cell label gutter (100 columns at most), of the species'
+    240-day population series downsampled to that many buckets (bucket mean); it never
+    overflows the panel on a narrower terminal. Each column is a
     stack of `█` with a `▄` half-step; empty rows are `░` in dim. Max and min values are
     printed at the left of the top and bottom rows. Under the chart an axis line reads
     `D-240 … drought … today`, with a warn-coloured `drought` marker at the day the
@@ -276,7 +278,9 @@ classDiagram
 ## Interaction
 | Key      | Action                                             | Goes to |
 |----------|----------------------------------------------------|---------|
-| `↑` `↓`  | move the selection through the table rows; the summary panel follows the selection | stays on S04a |
+| `Tab` `Shift+Tab` `←` `→` | move the focus between the Species table and the Selected panel; the focused panel draws the Focus border | stays on S04a |
+| `↑` `↓`  | table focused (default): move the selection through the table rows; the summary panel follows the selection and scrolls back to the top | stays on S04a |
+| `↑` `↓` `PgUp` `PgDn` `Home` `End` | summary focused: scroll the summary panel | stays on S04a |
 | `Enter`  | open the detail view for the selected species      | S04b (from S04a) |
 | `s`      | cycle the sort column (count is the default, descending) | stays on S04a |
 | `Esc`    | back                                               | from S04b to S04a; from S04a to [S01 World Map](s01-world-map.md) |

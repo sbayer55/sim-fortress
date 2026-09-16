@@ -10,7 +10,7 @@ use crate::sim::params::ScarcityThresholds;
 use crate::sim::{Season, Terrain, World};
 use crate::ui::app::AppState;
 use crate::ui::screens::{Action, Screen};
-use crate::ui::style::SeasonStyle;
+use crate::ui::style::{clock_status, SeasonStyle};
 use crate::widgets::map;
 use crate::widgets::{bars, panel, status, util};
 use crate::{glyphs, theme};
@@ -130,9 +130,8 @@ impl Screen for Ecology {
         season(f, season_area, sim, time, ecology);
         regions(f, regions_area, app, world, time, self);
 
-        let sky = if time.is_night() { glyphs::MOON } else { glyphs::SUN };
-        let right = format!("{}  {} {}", time.clock_label(), sky, if time.is_night() { "night" } else { "day" });
-        status::render(f, Rect::new(area.x, status_row, area.width, 1), &[("r", "sort regions"), ("↑↓", "select"), ("Enter", "jump"), ("Esc", "back")], &right);
+        let (right, right_fg) = clock_status(time, app.params.ui.day_night_tint);
+        status::render_colored(f, Rect::new(area.x, status_row, area.width, 1), &[("r", "sort regions"), ("↑↓", "select"), ("Enter", "jump"), ("Esc", "back")], &right, right_fg);
     }
 }
 

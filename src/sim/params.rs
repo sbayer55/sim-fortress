@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use docs::FIELD_DOCS;
 use toml_util::{attach_comment, deep_merge};
-pub use world::{EventsParams, Rainfall, ScarcityThresholds, StatsParams, TimeParams, UiParams, WorldParams};
+pub use world::{DayNightTint, EventsParams, Rainfall, ScarcityThresholds, StatsParams, TimeParams, UiParams, WorldParams};
 pub use creatures::CreaturesParams;
 pub use predation::{Difficulty, PredationParams};
 pub use genetics::GeneticsParams;

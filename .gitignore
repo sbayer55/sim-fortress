@@ -2,6 +2,9 @@
 /saves
 /summary.csv
 /.cargo-home
+/.idea
+/.vscode
+/.curspr
 
 /cargo-flamegraph.trace
 /flamegraph.svg

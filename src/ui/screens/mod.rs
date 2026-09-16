@@ -634,6 +634,31 @@ mod tests {
     }
 
     #[test]
+    fn s11_help_scrolls_when_the_modal_is_short() {
+        use crate::ui::screens::s11_help::Help;
+        let (mut app, _) = map_with_sim();
+        let mut h = Help::new();
+        let text = |h: &Help, app: &AppState| -> String {
+            let backend = TestBackend::new(155, 30);
+            let mut terminal = Terminal::new(backend).unwrap();
+            terminal.draw(|f| h.render(app, f, Rect::new(0, 0, 155, 30))).unwrap();
+            let buf = terminal.backend().buffer();
+            (0..29).map(|y| (0..155).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect()
+        };
+        let top = text(&h, &app);
+        assert!(top.contains("Navigation"), "{top}");
+        assert!(!top.contains("world generation"), "last key row must be hidden: {top}");
+        assert!(top.contains(&format!("{}", crate::glyphs::DOWN)), "no ↓ indicator: {top}");
+        h.handle_key(key(KeyCode::End), &mut app);
+        let bottom = text(&h, &app);
+        assert!(bottom.contains("world generation"), "{bottom}");
+        assert!(bottom.contains(&format!("{}", crate::glyphs::UP)), "no ↑ indicator: {bottom}");
+        assert!(!bottom.contains("Navigation"), "{bottom}");
+        h.handle_key(key(KeyCode::Home), &mut app);
+        assert!(text(&h, &app).contains("Navigation"));
+    }
+
+    #[test]
     fn s01_species_overlay_renders_155x45() {
         let (mut app, mut s) = map_with_sim();
         s.handle_key(key(KeyCode::Char('6')), &mut app);

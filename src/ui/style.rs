@@ -4,8 +4,9 @@
 use ratatui::style::Color;
 
 use crate::sim::creatures::{Creature, CreatureId};
+use crate::sim::params::DayNightTint;
 use crate::sim::world::World;
-use crate::sim::{EventKind, Season, Sim, SpeciesId};
+use crate::sim::{EventKind, Season, Sim, SpeciesId, Time};
 use crate::widgets::map::{MapCreature, MapSource};
 use crate::{glyphs, theme};
 
@@ -151,4 +152,20 @@ impl MapSource for Sim {
     fn creature(&self, id: CreatureId) -> Option<MapCreature<'_>> {
         self.creatures.get(id).map(map_creature)
     }
+}
+
+/// The status-bar clock text and the colour to draw it in.
+///
+/// Under `DayNightTint::StatusText` the text (`Year 1, Day 4 of Spring  08:00  ☼ day`)
+/// is the day/night cue: accent by day, moon blue at night. The other modes keep the
+/// accent colour.
+pub fn clock_status(time: &Time, tint: DayNightTint) -> (String, Color) {
+    let night = time.is_night();
+    let (sky, name) = if night { (glyphs::MOON, "night") } else { (glyphs::SUN, "day") };
+    let text = format!("{}  {} {}", time.clock_label(), sky, name);
+    let color = match (tint, night) {
+        (DayNightTint::StatusText, true) => theme::INFO,
+        _ => theme::ACCENT,
+    };
+    (text, color)
 }
