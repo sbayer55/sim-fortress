@@ -42,7 +42,7 @@ fn corpse_summary(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, c: &c
             let gone_in = crate::cast!((nutrition * crate::cast!(sim.params.creatures.carcass_decay_days => f32)).ceil() => u32);
             util::line(f, inner, row, Line::from(sp(format!(" {kg} kg of meat; gone in ~{gone_in} days"), theme::dim_text())));
             row += 2;
-            row = killer_and_scavengers(f, inner, row, sim, c);
+            row = killer_and_scavengers(f.buffer_mut(), inner, row, sim, c);
             row += 1;
             WorldMap::follow_events(f, inner, row, sim, id);
 }

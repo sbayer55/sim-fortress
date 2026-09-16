@@ -23,11 +23,16 @@ pub fn fill(buf: &mut Buffer, area: Rect, style: Style) {
 
 /// Render a `Line` at a row inside `area`.
 pub fn line(f: &mut Frame<'_>, area: Rect, row: u16, l: Line<'_>) {
+    line_in(f.buffer_mut(), area, row, l);
+}
+
+/// [`line`] straight into a buffer (for off-screen canvases).
+pub fn line_in(buf: &mut Buffer, area: Rect, row: u16, l: Line<'_>) {
     if row >= area.height {
         return;
     }
     let r = Rect::new(area.x, area.y + row, area.width, 1);
-    Paragraph::new(l).render(r, f.buffer_mut());
+    Paragraph::new(l).render(r, buf);
 }
 
 /// Dim every cell in the area toward the background (for modal backdrops).

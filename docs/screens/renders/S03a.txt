@@ -16,11 +16,11 @@
 ║ target  ♦ (131, 23)  0 cells                     ║║─ Mutation history ───────────────────────────────║║ escape rate    [██████████████]   100%          ║
 ║ trail   (131,23) (132,23) (133,22) (133,23) (133,║║ none recorded                                    ║║─ Threats seen ──────────────────────────────────║
 ║                                                  ║║ from 1 lines; rate 0.04 per trait per birth      ║║ Foxes          [████████████░░]    82% 61 times ║
-║─ Timeline ───────────────────────────────────────║║                                                  ║║ Wolves         [██░░░░░░░░░░░░]    18% 13 times ║
-║ ♥ founder   placed as a founder]   100%          ║║─ Derived ────────────────────────────────────────║║                                                 ║
-║ ♥ Y1 D031   litter of 4░░░░░░░░]    24%          ║║ sense range       6 cells                        ║║─ Legacy ────────────────────────────────────────║
-║ ♥ Y1 D075   litter of 4░░░░░░░░]    26%          ║║ move speed        1.7 cells/tick                 ║║ 12 offspring, 2 living descendants, 0 notable   ║
-║ ♥ Y1 D108   litter of 4░░░░░░░░]    28%          ║║ daily food need   0.21 biomass                   ║║ no notable mutations among descendants          ║
+║─ Vitals ─────────────────────────────────────────║║                                                  ║║ Wolves         [██░░░░░░░░░░░░]    18% 13 times ║
+║ health  [██████████████████████]   100%          ║║─ Derived ────────────────────────────────────────║║                                                 ║
+║ hunger  [█████░░░░░░░░░░░░░░░░░]    24%          ║║ sense range       6 cells                        ║║─ Legacy ────────────────────────────────────────║
+║ thirst  [██████░░░░░░░░░░░░░░░░]    26%          ║║ move speed        1.7 cells/tick                 ║║ 12 offspring, 2 living descendants, 0 notable   ║
+║ energy  [██████░░░░░░░░░░░░░░░░]    28%          ║║ daily food need   0.21 biomass                   ║║ no notable mutations among descendants          ║
 ║ sicknesshealthy                                  ║║ adult at          169 days                       ║║                                                 ║
 ║ immune  none                                     ║║ max lifespan      843 days                       ║║─ Kin nearby ────────────────────────────────────║
 ║ ∩ parasites[░░░░░░░░░░░░░░░░░░░░░░]     1% light ║║ litter size       4 (fert 0.38, mat 0.44)        ║║ D Cress   d#725    1 cells S  child             ║
@@ -34,12 +34,12 @@
 ║─ Behaviour ──────────────────────────────────────║║ Sense       [░░░░░░░░▒▒█▒░░░░░░░░] 0.43..0.58    ║║                                                 ║
 ║ seeking water because thirst = 0.26              ║║ Metabolism  [░░░░▒▒█▒▒▒░░░░░░░░░░] 0.22..0.46    ║║                                                 ║
 ║                                                  ║║ Aggression  [░░▒█▒▒░░░░░░░░░░░░░░] 0.09..0.24    ║║                                                 ║
-║                                                  ║║ Camouflage  [░░░░░▒▒█▒▒░░░░░░░░░░] 0.28..0.49    ║║                                                 ║
-║                                                  ║║ Fertility   [░░░░░▒▒█▒░░░░░░░░░░░] 0.28..0.44    ║║                                                 ║
-║                                                  ║║ Longevity   [░░░░░░░░░░░░▒▒█▒░░░░] 0.64..0.80    ║║                                                 ║
-║                                                  ║║ Resistance  [░░░░░░░░▒█▒░░░░░░░░░] 0.40..0.52    ║║                                                 ║
-║                                                  ║║ Sociality   [░░░░░░░░░░░░░▒█▒▒░░░] 0.67..0.83    ║║                                                 ║
+║─ Timeline ───────────────────────────────────────║║ Camouflage  [░░░░░▒▒█▒▒░░░░░░░░░░] 0.28..0.49    ║║                                                 ║
+║ ♥ founder   placed as a founder                  ║║ Fertility   [░░░░░▒▒█▒░░░░░░░░░░░] 0.28..0.44    ║║                                                 ║
+║ ♥ Y1 D031   litter of 4                          ║║ Longevity   [░░░░░░░░░░░░▒▒█▒░░░░] 0.64..0.80    ║║                                                 ║
+║ ♥ Y1 D075   litter of 4                          ║║ Resistance  [░░░░░░░░▒█▒░░░░░░░░░] 0.40..0.52    ║║                                                 ║
+║ ♥ Y1 D108   litter of 4                          ║║ Sociality   [░░░░░░░░░░░░░▒█▒▒░░░] 0.67..0.83    ║║                                                 ║
 ║                                                  ║║ Maturity    [░░░░░░░▒▒█▒░░░░░░░░░] 0.38..0.55    ║║                                                 ║
 ║                                                  ║║                                                  ║║                                                 ║
 ╚══════════════════════════════════════════════════╝╚══════════════════════════════════════════════════╝╚═════════════════════════════════════════════════╝
- [f] follow  [l] lineage  [Tab] next creature  [Esc] back                                                     Mallow d#488  Year 2, Day 1 of Spring  06:00 
+ [f] follow  [l] lineage  [Tab] next creature  [←→] panel  [↑↓] scroll  [Esc] back                            Mallow d#488  Year 2, Day 1 of Spring  06:00 
