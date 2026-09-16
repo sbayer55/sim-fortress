@@ -1,11 +1,12 @@
 # Sim Fortress
 
 A terminal predator / prey / evolution / resource-scarcity simulation with a
-Dwarf-Fortress-inspired text UI. Six species — voles, hares, deer, foxes, wolves
-and lynxes — are born, graze, drink, hunt, breed, mutate and die by the numbers
-in their genomes across a procedurally generated world of forests, meadows,
-rivers and rock. You watch it run, follow individual creatures, inspect their
-traits and lineages, and tune the balance from TOML files without recompiling.
+Dwarf-Fortress-inspired text UI. A roster of species — six by default: voles,
+hares, deer, foxes, wolves and lynxes — are born, graze, drink, hunt, breed,
+mutate and die by the numbers in their genomes across a procedurally generated
+world of forests, meadows, rivers and rock. You watch it run, follow individual
+creatures, inspect their traits and lineages, and tune the balance — or add a
+whole new animal — from TOML files without recompiling.
 
 ## Running
 
@@ -67,8 +68,8 @@ scripts/sweep.sh 1 20 10                                                # parall
 cargo run --release -- --headless --seed 1 --ticks 100000 --profile     # per-system timings
 ```
 
-`summary.csv` columns: `seed, years,` then final counts × 6, `extinctions`,
-`lag_days` (predator–prey lag) and `mean_speed_by_species` × 6.
+`summary.csv` columns: `seed, years,` then one final count per species,
+`extinctions`, `lag_days` (predator–prey lag) and `speed_<species>` per species.
 `scripts/sweep.sh <first> <last> <years>` runs each seed as its own process with
 `xargs -P $(nproc)`.
 

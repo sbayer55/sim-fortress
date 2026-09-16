@@ -4,7 +4,7 @@ use crate::sim::creatures::{
     CreatureId, CreatureStore, Goal,
 };
 use crate::sim::events::{Event, EventKind, EventRing};
-use crate::sim::params::{EcologyParams, PredationParams};
+use crate::sim::params::{EcologyParams, PredationParams, Roster};
 use crate::sim::species::{Kind, SpeciesId};
 use crate::sim::time::Time;
 use crate::sim::world::World;
@@ -17,35 +17,37 @@ pub fn migration_daily(
     world: &World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     ep: &EcologyParams,
     pp: &PredationParams,
-    cooldown_until: &mut [u64; 48],
-    days_below: &mut [u32; 48],
+    cooldown_until: &mut [u64],
+    days_below: &mut [u32],
 ) {
     let n_regions = world.regions.len().min(8);
-    let mut counts = [[0u32; 8]; 6];
+    let mut counts = vec![[0u32; 8]; roster.len()];
     let mut prey_per_region = [0u32; 8];
     // Sum of `pred_pressure` over the cells the group occupies (FR7: the prey
     // trigger uses the mean over occupied cells, not the region mean).
-    let mut occupied_pressure = [[0.0f32; 8]; 6];
+    let mut occupied_pressure = vec![[0.0f32; 8]; roster.len()];
     for c in store.living() {
         let ri = world.region_index(c.x, c.y).min(7);
         counts[c.species.index()][ri] += 1;
         occupied_pressure[c.species.index()][ri] += world.cell(c.x, c.y).pred_pressure;
-        if c.species.kind() == Kind::Prey {
+        if roster.kind(c.species) == Kind::Prey {
             prey_per_region[ri] += 1;
         }
     }
     let season_cap = ep.season_cap.get(&time.season()).copied().unwrap_or(1.0);
 
-    for (si, id) in SpeciesId::ALL.iter().enumerate() {
+    for id in roster.ids() {
+        let si = id.index();
         for ri in 0..n_regions {
             let key = si * 8 + ri;
             if counts[si][ri] == 0 || time.tick < cooldown_until[key] {
                 days_below[key] = 0;
                 continue;
             }
-            let trigger = if id.kind() == Kind::Prey {
+            let trigger = if roster.kind(id) == Kind::Prey {
                 let r = &world.regions[ri];
                 let veg_mean = crate::sim::ecology::region_land_veg_mean(world, r);
                 let shortfall = season_cap > 0.0 && veg_mean / season_cap < pp.migrate_veg;
@@ -60,7 +62,7 @@ pub fn migration_daily(
                 if days_below[key] >= pp.migrate_days {
                     days_below[key] = 0;
                     cooldown_until[key] = time.tick + u64::from(pp.migrate_cooldown_days) * u64::from(time.ticks_per_day);
-                    migrate_group(store, world, events, time, *id, ri);
+                    migrate_group(store, world, events, time, roster, id, ri);
                 }
             } else {
                 days_below[key] = 0;
@@ -91,7 +93,7 @@ pub(super) const fn regions_adjacent(a: &crate::sim::world::RegionRect, b: &crat
     (ax1 == bx0 || bx1 == ax0) && overlap_y || (ay1 == by0 || by1 == ay0) && overlap_x
 }
 
-pub(super) fn migrate_group(store: &mut CreatureStore, world: &World, events: &mut EventRing, time: &Time, id: SpeciesId, origin_ri: usize) {
+pub(super) fn migrate_group(store: &mut CreatureStore, world: &World, events: &mut EventRing, time: &Time, roster: &Roster, id: SpeciesId, origin_ri: usize) {
     let members: Vec<CreatureId> = store
         .living()
         .filter(|c| c.species == id && world.region_index(c.x, c.y) == origin_ri)
@@ -109,10 +111,10 @@ pub(super) fn migrate_group(store: &mut CreatureStore, world: &World, events: &m
         if di == origin_ri || !regions_adjacent(&world.regions[origin_ri], r) {
             continue;
         }
-        let score = if id.kind() == Kind::Prey {
+        let score = if roster.kind(id) == Kind::Prey {
             crate::sim::ecology::region_land_veg_mean(world, r) * (1.0 - mean_pred_pressure(world, r))
         } else {
-            crate::cast!(store.living().filter(|c| c.species.kind() == Kind::Prey && world.region_index(c.x, c.y) == di).count() => f32)
+            crate::cast!(store.living().filter(|c| roster.kind(c.species) == Kind::Prey && world.region_index(c.x, c.y) == di).count() => f32)
         };
         if score > best_score {
             best_score = score;
@@ -120,7 +122,7 @@ pub(super) fn migrate_group(store: &mut CreatureStore, world: &World, events: &m
         }
     }
     let Some(dest) = best_dest else { return };
-    let Some((tx, ty)) = migration_target_cell(world, id, dest) else { return };
+    let Some((tx, ty)) = migration_target_cell(world, roster.kind(id), dest) else { return };
 
     let migrate_until = time.tick + 2 * u64::from(time.ticks_per_day);
     for mid in &members {
@@ -133,7 +135,7 @@ pub(super) fn migrate_group(store: &mut CreatureStore, world: &World, events: &m
         }
     }
 
-    let group_word = if n <= 3 { "family" } else if id.kind() == Kind::Prey { "herd" } else { "pack" };
+    let group_word = if n <= 3 { "family" } else if roster.kind(id) == Kind::Prey { "herd" } else { "pack" };
     let origin = &world.regions[origin_ri];
     let dest_name = world.regions[dest].0.clone();
     let pos = ((origin.1 + origin.3).div_euclid(2), (origin.2 + origin.4).div_euclid(2));
@@ -144,7 +146,7 @@ pub(super) fn migrate_group(store: &mut CreatureStore, world: &World, events: &m
         kind: EventKind::Migration,
         species: Some(id),
         subject: None,
-        text: format!("A {} of {} {} migrated from {} to {}", group_word, n, id.plural(), origin.0, dest_name),
+        text: format!("A {} of {} {} migrated from {} to {}", group_word, n, roster.plural(id), origin.0, dest_name),
         pos: Some(pos),
         // `detail` carries "origin→dest" region indices for tests and S06.
         detail: format!("{origin_ri}>{dest}"),
@@ -153,7 +155,7 @@ pub(super) fn migrate_group(store: &mut CreatureStore, world: &World, events: &m
 
 /// The walkable destination cell with the highest vegetation (prey) or
 /// `prey_pressure` (predators) — the group's `target_cell` (FR7).
-fn migration_target_cell(world: &World, id: SpeciesId, dest: usize) -> Option<(usize, usize)> {
+fn migration_target_cell(world: &World, kind: Kind, dest: usize) -> Option<(usize, usize)> {
     let r = &world.regions[dest];
     let mut best: Option<(usize, usize)> = None;
     let mut best_score = f32::NEG_INFINITY;
@@ -163,7 +165,7 @@ fn migration_target_cell(world: &World, id: SpeciesId, dest: usize) -> Option<(u
             if !c.terrain.walkable() || c.terrain.is_water() {
                 continue;
             }
-            let score = if id.kind() == Kind::Prey { c.vegetation } else { c.prey_pressure };
+            let score = if kind == Kind::Prey { c.vegetation } else { c.prey_pressure };
             if score > best_score {
                 best_score = score;
                 best = Some((x, y));

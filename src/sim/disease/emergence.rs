@@ -2,7 +2,7 @@
 
 use crate::sim::creatures::CreatureStore;
 use crate::sim::events::{Event, EventKind, EventRing};
-use crate::sim::params::DiseaseParams;
+use crate::sim::params::{DiseaseParams, Roster};
 use crate::sim::rng::Rng;
 use crate::sim::time::Time;
 use crate::sim::world::World;
@@ -16,12 +16,13 @@ pub(super) fn seed_emergence(
     world: &World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     dp: &DiseaseParams,
     state: &mut DiseaseState,
     n: usize,
     day: u32,
-    population: &[u32; 6],
-    resist: [f32; 6],
+    population: &[u32],
+    resist: &[f32],
     rng: &mut Rng,
 ) {
     for slot in 0..n {
@@ -42,7 +43,7 @@ pub(super) fn seed_emergence(
         if !rng.chance(hazard.clamp(0.0, 1.0)) {
             continue;
         }
-        emerge(store, world, events, time, dp, state, pid, resist);
+        emerge(store, world, events, time, roster, dp, state, pid, resist);
     }
 }
 
@@ -65,7 +66,7 @@ pub(super) fn regions_with_cases(store: &CreatureStore, world: &World, outbreak:
 /// FR8: pick the index case (densest region, lowest Resistance, ties by id),
 /// push the outbreak record and emit the `Outbreak` event.
 #[allow(clippy::too_many_arguments)]
-fn emerge(store: &mut CreatureStore, world: &World, events: &mut EventRing, time: &Time, dp: &DiseaseParams, state: &mut DiseaseState, pid: PathogenId, resist: [f32; 6]) {
+fn emerge(store: &mut CreatureStore, world: &World, events: &mut EventRing, time: &Time, roster: &Roster, dp: &DiseaseParams, state: &mut DiseaseState, pid: PathogenId, resist: &[f32]) {
     let day = crate::cast!(time.day_index() => u32);
     let Some(path) = state.pathogen(pid).cloned() else { return };
     let mut region_hosts = [0u32; 8];
@@ -84,7 +85,7 @@ fn emerge(store: &mut CreatureStore, world: &World, events: &mut EventRing, time
         .min_by(|a, b| a.genome.resistance().partial_cmp(&b.genome.resistance()).unwrap_or(std::cmp::Ordering::Equal).then(a.id.cmp(&b.id)))
         .map(|c| (c.id, c.species, c.x, c.y));
     let Some((id, species, x, y)) = index_case else { return };
-    let mut cases = [0u32; 6];
+    let mut cases = vec![0u32; roster.len()];
     cases[species.index()] = 1;
     let index = state.push_outbreak(Outbreak {
         pathogen: pid,
@@ -98,10 +99,10 @@ fn emerge(store: &mut CreatureStore, world: &World, events: &mut EventRing, time
         peak_active: 1,
         peak_day: day,
         species_cases: cases,
-        species_deaths: [0; 6],
+        species_deaths: vec![0; roster.len()],
         epidemic: false,
-        resist_at_start: resist,
-        resist_at_end: resist,
+        resist_at_start: resist.to_vec(),
+        resist_at_end: resist.to_vec(),
         active: 1,
         cases_today: 1,
     });
@@ -124,7 +125,7 @@ fn emerge(store: &mut CreatureStore, world: &World, events: &mut EventRing, time
         kind: EventKind::Outbreak,
         species: Some(species),
         subject: Some(id),
-        text: format!("{} breaks out among the {} of {}", path.name(), species.plural().to_lowercase(), region_name),
+        text: format!("{} breaks out among the {} of {}", path.name(), roster.plural(species).to_lowercase(), region_name),
         pos: Some((x, y)),
         detail: String::new(),
     });

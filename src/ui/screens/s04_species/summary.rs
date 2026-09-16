@@ -50,9 +50,9 @@ pub(super) fn summary_body(buf: &mut Buffer, canvas: Rect, sim: &Sim, id: Specie
 fn summary_left(buf: &mut Buffer, left: Rect, sim: &Sim, id: SpeciesId, s: &SpeciesStats) -> u16 {
     let mut row = 0u16;
     util::line_in(buf, left, row, Line::from(vec![
-        sp(format!(" {} ", id.glyph().to_ascii_uppercase()), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-        sp(id.plural(), theme::title()),
-        sp(format!("   {}   diet: {}", if id.kind() == Kind::Prey { "prey" } else { "predator" }, id.diet()), theme::text()),
+        sp(format!(" {} ", sim.roster().adult_glyph(id)), Style::default().fg(sim.roster().color(id)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+        sp(sim.roster().plural(id), theme::title()),
+        sp(format!("   {}   diet: {}", if sim.roster().kind(id) == Kind::Prey { "prey" } else { "predator" }, sim.roster().get(id).diet.as_str()), theme::text()),
     ]));
     row += 1;
     util::line_in(buf, left, row, Line::from(vec![
@@ -68,14 +68,14 @@ fn summary_left(buf: &mut Buffer, left: Rect, sim: &Sim, id: SpeciesId, s: &Spec
     row += 1;
     util::line_in(buf, left, row, Line::from(sp(" trait        base   current            delta   spread", theme::dim_text())));
     row += 1;
-    row = summary_genome(buf, left, row, id, s);
+    row = summary_genome(buf, left, row, sim, id, s);
     row = summary_interactions(buf, left, row, sim, id);
     summary_notable(buf, left, row, sim, id)
 }
 
 /// Base genome vs the current mean, per trait.
-fn summary_genome(buf: &mut Buffer, left: Rect, mut row: u16, id: SpeciesId, s: &SpeciesStats) -> u16 {
-    let base = id.base_genome();
+fn summary_genome(buf: &mut Buffer, left: Rect, mut row: u16, sim: &Sim, id: SpeciesId, s: &SpeciesStats) -> u16 {
+    let base = sim.roster().base_genome(id);
     for t in 0..Genome::LEN {
         let b = base.0[t];
         let m = s.mean.0[t];
@@ -93,7 +93,7 @@ fn summary_genome(buf: &mut Buffer, left: Rect, mut row: u16, id: SpeciesId, s: 
         row += 1;
     }
     util::line_in(buf, left, row, Line::from(vec![
-        sp(format!(" {} base marker   spread = min/mean/max across living {}", glyphs::V_LINE, id.plural()), theme::dim_text()),
+        sp(format!(" {} base marker   spread = min/mean/max across living {}", glyphs::V_LINE, sim.roster().plural(id)), theme::dim_text()),
     ]));
     row += 2;
     row
@@ -103,7 +103,7 @@ fn summary_genome(buf: &mut Buffer, left: Rect, mut row: u16, id: SpeciesId, s: 
 fn summary_interactions(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: SpeciesId) -> u16 {
     panel::section_in(buf, left, row, "Interactions");
     let kills = kill_matrix(sim);
-    if id.kind() == Kind::Prey {
+    if sim.roster().kind(id) == Kind::Prey {
         prey_interactions(buf, left, row + 1, sim, id, &kills)
     } else {
         predator_interactions(buf, left, row + 1, sim, id, &kills)
@@ -111,10 +111,11 @@ fn summary_interactions(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: S
 }
 
 /// Total kills per `[predator][prey]` pair, living and carcasses alike.
-fn kill_matrix(sim: &Sim) -> [[u32; 6]; 6] {
-    let mut kills = [[0u32; 6]; 6]; // [predator][prey]
+fn kill_matrix(sim: &Sim) -> Vec<Vec<u32>> {
+    let n = sim.roster().len();
+    let mut kills = vec![vec![0u32; n]; n]; // [predator][prey]
     for c in sim.creatures.living().chain(sim.creatures.carcasses()) {
-        if c.species.kind() == Kind::Predator {
+        if sim.roster().kind(c.species) == Kind::Predator {
             for (i, k) in c.kills_by_species.iter().enumerate() {
                 kills[c.species.index()][i] += k;
             }
@@ -124,17 +125,18 @@ fn kill_matrix(sim: &Sim) -> [[u32; 6]; 6] {
 }
 
 /// Prey view: who eats it, and what it competes with for grass.
-fn prey_interactions(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: SpeciesId, kills: &[[u32; 6]; 6]) -> u16 {
+fn prey_interactions(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: SpeciesId, kills: &[Vec<u32>]) -> u16 {
     let mut row = row;
-        let by_pred: u32 = SpeciesId::ALL.iter().map(|p| kills[p.index()][id.index()]).sum();
-        let hunters: Vec<String> = SpeciesId::ALL
-            .iter()
-            .filter(|p| p.kind() == Kind::Predator && (sim.params.predation.preference(**p, id) > 0.0 || kills[p.index()][id.index()] > 0))
+        let by_pred: u32 = sim.roster().ids().map(|p| kills[p.index()][id.index()]).sum();
+        let hunters: Vec<String> = sim
+            .roster()
+            .predator_ids()
+            .filter(|p| sim.roster().preference(*p, id) > 0.0 || kills[p.index()][id.index()] > 0)
             .map(|p| {
                 if by_pred >= 5 {
-                    format!("{} {} {:.0}%", p.glyph().to_ascii_uppercase(), p.name(), crate::cast!(kills[p.index()][id.index()] => f32) / crate::cast!(by_pred => f32) * 100.0)
+                    format!("{} {} {:.0}%", sim.roster().adult_glyph(p), sim.roster().display_name(p), crate::cast!(kills[p.index()][id.index()] => f32) / crate::cast!(by_pred => f32) * 100.0)
                 } else {
-                    format!("{} {}", p.glyph().to_ascii_uppercase(), p.name())
+                    format!("{} {}", sim.roster().adult_glyph(p), sim.roster().display_name(p))
                 }
             })
             .collect();
@@ -144,10 +146,11 @@ fn prey_interactions(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: Spec
             util::line_in(buf, left, row, Line::from(vec![sp(" eaten by: ", theme::dim_text()), sp(hunters.join(" and "), theme::text())]));
         }
         row += 1;
-        let others: Vec<String> = SpeciesId::ALL
-            .iter()
-            .filter(|o| o.kind() == Kind::Prey && **o != id)
-            .map(|o| format!("{} {}", o.glyph().to_ascii_uppercase(), o.name()))
+        let others: Vec<String> = sim
+            .roster()
+            .prey_ids()
+            .filter(|o| *o != id)
+            .map(|o| format!("{} {}", sim.roster().adult_glyph(o), sim.roster().display_name(o)))
             .collect();
         util::line_in(buf, left, row, Line::from(vec![
             sp(" competes with ", theme::dim_text()),
@@ -159,19 +162,20 @@ fn prey_interactions(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: Spec
 }
 
 /// Predator view: what it hunts, and its rivals.
-fn predator_interactions(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: SpeciesId, kills: &[[u32; 6]; 6]) -> u16 {
+fn predator_interactions(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: SpeciesId, kills: &[Vec<u32>]) -> u16 {
     let mut row = row;
         let total: u32 = kills[id.index()].iter().sum();
-        let prey: Vec<String> = SpeciesId::ALL
-            .iter()
-            .filter(|p| p.kind() == Kind::Prey && (sim.params.predation.preference(id, **p) > 0.0 || kills[id.index()][p.index()] > 0))
+        let prey: Vec<String> = sim
+            .roster()
+            .prey_ids()
+            .filter(|p| sim.roster().preference(id, *p) > 0.0 || kills[id.index()][p.index()] > 0)
             .map(|p| {
                 let share = if total >= 5 {
                     crate::cast!(kills[id.index()][p.index()] => f32) / crate::cast!(total => f32)
                 } else {
-                    sim.params.predation.preference(id, *p)
+                    sim.roster().preference(id, p)
                 };
-                format!("{} {} {:.0}%", p.glyph().to_ascii_uppercase(), p.name(), share * 100.0)
+                format!("{} {} {:.0}%", sim.roster().adult_glyph(p), sim.roster().display_name(p), share * 100.0)
             })
             .collect();
         util::line_in(buf, left, row, Line::from(vec![
@@ -181,14 +185,11 @@ fn predator_interactions(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: 
         ]));
         row += 1;
         // Rivals share at least one prey species.
-        let rivals: Vec<String> = SpeciesId::ALL
-            .iter()
-            .filter(|o| {
-                o.kind() == Kind::Predator
-                    && **o != id
-                    && SpeciesId::ALL.iter().any(|p| sim.params.predation.preference(id, *p) > 0.0 && sim.params.predation.preference(**o, *p) > 0.0)
-            })
-            .map(|o| format!("{} {}", o.glyph().to_ascii_uppercase(), o.name()))
+        let rivals: Vec<String> = sim
+            .roster()
+            .predator_ids()
+            .filter(|o| *o != id && sim.roster().prey_ids().any(|p| sim.roster().preference(id, p) > 0.0 && sim.roster().preference(*o, p) > 0.0))
+            .map(|o| format!("{} {}", sim.roster().adult_glyph(o), sim.roster().display_name(o)))
             .collect();
         util::line_in(buf, left, row, Line::from(vec![
             sp(" competes with ", theme::dim_text()),
@@ -234,7 +235,7 @@ fn summary_group_line(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: Spe
         util::line_in(buf, left, row, Line::from(sp(" groups: none living", theme::dim_text())));
         return;
     }
-    let word = if id.kind() == Kind::Prey { "herd" } else { "pack" };
+    let word = if sim.roster().kind(id) == Kind::Prey { "herd" } else { "pack" };
     if g.groups[i] == 0 {
         util::line_in(buf, left, row, Line::from(sp(format!(" groups: none forming — all {} alone", sim.species[i].count), theme::dim_text())));
         return;
@@ -242,7 +243,7 @@ fn summary_group_line(buf: &mut Buffer, left: Rect, row: u16, sim: &Sim, id: Spe
     let noun = if g.groups[i] == 1 { word.to_string() } else { format!("{word}s") };
     util::line_in(buf, left, row, Line::from(vec![
         sp(" groups: ", theme::dim_text()),
-        sp(format!("{} {noun}", g.groups[i]), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+        sp(format!("{} {noun}", g.groups[i]), Style::default().fg(sim.roster().color(id)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
         sp(
             format!(
                 ", mean {:.1}, max {}, {:.0}% grouped, {} alone",
@@ -271,8 +272,8 @@ fn summary_notable(buf: &mut Buffer, left: Rect, mut row: u16, sim: &Sim, id: Sp
             break;
         }
         util::line_in(buf, left, row, Line::from(vec![
-            sp(format!(" {} ", if c.adult { id.glyph().to_ascii_uppercase() } else { id.glyph() }), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-            sp(format!("{:<9}{:<7}", c.name_str(), c.tag()), theme::text()),
+            sp(format!(" {} ", if c.adult { sim.roster().adult_glyph(id) } else { sim.roster().glyph(id) }), Style::default().fg(sim.roster().color(id)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!("{:<9}{:<7}", c.name_str(sim.roster()), c.tag(sim.roster())), theme::text()),
             sp(format!("{:>3} offspring  gen {:<3} {:>4} days  ", c.offspring, c.generation, c.age_days(day)), theme::dim_text()),
             sp(sim.world.region_name(c.x, c.y).to_string(), theme::dim_text()),
         ]));
@@ -301,14 +302,14 @@ fn summary_history(buf: &mut Buffer, right: Rect, sim: &Sim, id: SpeciesId, s: &
     let max = f32::from(*data.iter().max().unwrap_or(&1));
     let min = f32::from(*data.iter().min().unwrap_or(&0));
     let rows = 6u16;
-    history_plot(buf, right, row, id, &data, &drought, cols, rows, max, min);
+    history_plot(buf, right, row, sim, id, &data, &drought, cols, rows, max, min);
     row += rows;
     let span_days = series.len().max(1);
     history_axis(buf, right, row, cols, span_days, drought.iter().any(|&d| d));
     row += 2;
     util::line_in(buf, right, row, Line::from(sp(" 30-day trend ", theme::dim_text())));
     if !s.trend.is_empty() {
-        bars::sparkline(buf, right.x + 14, right.y + row, 30, &s.trend, id.color());
+        bars::sparkline(buf, right.x + 14, right.y + row, 30, &s.trend, sim.roster().color(id));
     }
     let a = trend_arrow(&s.trend);
     buf.set_stringn(
@@ -376,7 +377,7 @@ fn history_axis(buf: &mut Buffer, right: Rect, row: u16, cols: usize, span_days:
 
 /// The bar-style population history plot.
 #[allow(clippy::too_many_arguments)]
-fn history_plot(buf: &mut Buffer, right: Rect, row: u16, id: SpeciesId, data: &[u16], drought: &[bool], cols: usize, rows: u16, max: f32, min: f32) {
+fn history_plot(buf: &mut Buffer, right: Rect, row: u16, sim: &Sim, id: SpeciesId, data: &[u16], drought: &[bool], cols: usize, rows: u16, max: f32, min: f32) {
     if row + rows > right.height {
         return;
     }
@@ -396,7 +397,7 @@ fn history_plot(buf: &mut Buffer, right: Rect, row: u16, id: SpeciesId, data: &[
                 } else {
                     glyphs::SHADE_1
                 };
-                let color = if level >= 1 { id.color() } else { theme::dim(theme::DIM, 0.6) };
+                let color = if level >= 1 { sim.roster().color(id) } else { theme::dim(theme::DIM, 0.6) };
                 let bg = if dry { theme::dim(theme::WARN, 0.78) } else { theme::PANEL_BG };
                 buf.set_stringn(right.x + PLOT_GUTTER + crate::cast!(i => u16), y, ch.to_string(), 1, Style::default().fg(color).bg(bg));
             }
@@ -434,7 +435,7 @@ fn habitat_section(buf: &mut Buffer, right: Rect, mut row: u16, sim: &Sim, id: S
         let x = right.x + 1 + col * half;
         let y = right.y + r;
         buf.set_stringn(x, y, format!("{name:<17}"), 17, theme::text());
-        bars::bar(buf, x + 17, y, 14, crate::cast!(*n => f32) / max, id.color());
+        bars::bar(buf, x + 17, y, 14, crate::cast!(*n => f32) / max, sim.roster().color(id));
         buf.set_stringn(x + 32, y, format!("{n:>4}"), 4, theme::dim_text());
         last = r + 1;
     }

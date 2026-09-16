@@ -10,7 +10,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
-use crate::sim::{EventKind, Kind, Season, SpeciesId};
+use crate::sim::{EventKind, Kind, Season};
 use crate::ui::app::AppState;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{EventKindStyle, SeasonStyle, SpeciesStyle};
@@ -67,11 +67,12 @@ impl Screen for Help {
         Action::None
     }
 
-    fn render(&self, _app: &AppState, f: &mut Frame<'_>, area: Rect) {
+    fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let modal = util::centered(area, 120.min(area.width.saturating_sub(2)), 38.min(area.height.saturating_sub(2)));
         let inner = panel::draw_with_hint(f, modal, "Legend & Help", "? or Esc closes", panel::Kind::Focus);
 
-        let ov = scroll::draw(f, modal, inner, self.offset, columns);
+        let roster = &app.params.species;
+        let ov = scroll::draw(f, modal, inner, self.offset, |buf, canvas| columns(buf, canvas, roster));
         self.measured.set((ov.content, inner.height));
 
         let status_row = area.y + area.height - 1;
@@ -81,7 +82,7 @@ impl Screen for Help {
 }
 
 /// The three columns with their dividers; returns the tallest column's rows.
-fn columns(buf: &mut Buffer, canvas: Rect) -> u16 {
+fn columns(buf: &mut Buffer, canvas: Rect, roster: &crate::sim::Roster) -> u16 {
     let col_w = (canvas.width - 2).div_euclid(3);
     let cols = [
         Rect::new(canvas.x, canvas.y, col_w, canvas.height),
@@ -94,7 +95,7 @@ fn columns(buf: &mut Buffer, canvas: Rect) -> u16 {
         }
     }
     let a = terrain_column(buf, cols[0]);
-    let b = creature_column(buf, cols[1]);
+    let b = creature_column(buf, cols[1], roster);
     let c = keys_column(buf, cols[2]);
     a.max(b).max(c)
 }
@@ -173,22 +174,22 @@ fn terrain_column(buf: &mut Buffer, col: Rect) -> u16 {
     row
 }
 
-fn creature_column(buf: &mut Buffer, col: Rect) -> u16 {
+fn creature_column(buf: &mut Buffer, col: Rect, roster: &crate::sim::Roster) -> u16 {
     let mut row = 0u16;
     panel::section_in(buf, col, row, "Creatures");
     row += 1;
     util::line_in(buf, col, row, Line::from(Span::styled(" ad jv  species role      diet", theme::label())));
     row += 1;
-    for id in SpeciesId::ALL {
-        let kind = match id.kind() {
+    for id in roster.ids() {
+        let kind = match roster.kind(id) {
             Kind::Prey => ("prey", theme::GOOD),
             Kind::Predator => ("predator", theme::BAD),
         };
         util::line_in(buf, col, row, Line::from(vec![
-            Span::styled(format!(" {}  {}  ", id.glyph().to_ascii_uppercase(), id.glyph()), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("{:<7}", id.name()), theme::text()),
+            Span::styled(format!(" {}  {}  ", roster.adult_glyph(id), roster.glyph(id)), Style::default().fg(roster.color(id)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            Span::styled(format!("{:<7}", roster.display_name(id)), theme::text()),
             Span::styled(format!("{:<10}", kind.0), Style::default().fg(kind.1).bg(theme::PANEL_BG)),
-            Span::styled(id.diet(), theme::dim_text()),
+            Span::styled(roster.get(id).diet.as_str(), theme::dim_text()),
         ]));
         row += 1;
     }

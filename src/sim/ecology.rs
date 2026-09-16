@@ -300,23 +300,23 @@ fn sample_series(world: &World, time: &Time, drought: [bool; 8], regions: &[Regi
         drought_flags: drought,
         region_veg,
         region_moist,
-        population: c.population,
-        adults: c.adults,
-        juveniles: c.juveniles,
+        population: c.population.clone(),
+        adults: c.adults.clone(),
+        juveniles: c.juveniles.clone(),
         deaths_starved: deaths.starved,
         deaths_thirst: deaths.thirst,
         deaths_age: deaths.age,
-        genome_mean: c.genome_mean,
-        genome_min: c.genome_min,
-        genome_max: c.genome_max,
-        births: deaths.births,
-        deaths: deaths.deaths,
-        generation_mean: std::array::from_fn(|i| c.generation_mean(i)),
-        generation_max: c.max_generation,
-        infected: c.infected,
-        immune: c.immune,
+        genome_mean: c.genome_mean.clone(),
+        genome_min: c.genome_min.clone(),
+        genome_max: c.genome_max.clone(),
+        births: deaths.births.clone(),
+        deaths: deaths.deaths.clone(),
+        generation_mean: (0..c.population.len()).map(|i| c.generation_mean(i)).collect(),
+        generation_max: c.max_generation.clone(),
+        infected: c.infected.clone(),
+        immune: c.immune.clone(),
         deaths_disease: deaths.disease,
-        parasite_mean: std::array::from_fn(|i| if c.population[i] > 0 { c.parasite_sum[i] / crate::cast!(c.population[i] => f32) } else { 0.0 }),
+        parasite_mean: (0..c.population.len()).map(|i| c.parasite_mean(i)).collect(),
         active_by_pathogen: std::array::from_fn(|i| disease.stats[i].active),
     }
 }
@@ -453,7 +453,7 @@ mod tests {
             .map(|&rf| {
                 let mut p = Params::default();
                 p.world.rainfall = rf;
-                p.creatures.initial_counts.clear(); // pure ecology test, no grazing
+                p.species.clear_initial_counts(); // pure ecology test, no grazing
                 let mut sim = Sim::new(42, p);
                 run_days(&mut sim, 720);
                 let (s, n) = sim
@@ -497,7 +497,7 @@ mod tests {
         // Ecology only: creatures (grazing, and since C5 predation) perturb the
         // vegetation the rain stream is drawn against, so keep the world empty.
         let mut p = Params::default();
-        p.creatures.initial_counts.clear();
+        p.species.clear_initial_counts();
         let mut sim = Sim::new(42, p);
         for c in &mut sim.world.cells {
             if !c.terrain.is_water() {
@@ -523,7 +523,7 @@ mod tests {
     #[test]
     fn seeds_sprout_and_clear_on_dirt() {
         let mut p = Params::default();
-        p.creatures.initial_counts.clear(); // pure ecology test, no grazing
+        p.species.clear_initial_counts(); // pure ecology test, no grazing
         let mut sim = Sim::new(42, p);
         // Sites sprout on bare dirt and sparse grass; strip both so every
         // seed's world offers plenty of candidates.

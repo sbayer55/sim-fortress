@@ -54,7 +54,7 @@ fn species_by_region(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, sp
 fn species_list(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, sp: SpeciesId) -> u16 {
         panel::section(f, inner, row, "Species");
         row += 1;
-        for id in SpeciesId::ALL {
+        for id in sim.roster().ids() {
             let active = id == sp;
             let n = sim.creatures.living().filter(|c| c.species == id).count();
             let text = if active { theme::selected() } else { theme::text() };
@@ -62,8 +62,8 @@ fn species_list(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, sp: Spe
             let status = if n == 0 { "extinct" } else { "" };
             util::line(f, inner, row, Line::from(vec![
                 Span::styled(if active { "►" } else { " " }, text),
-                Span::styled(format!("{} ", id.glyph().to_ascii_uppercase()), Style::default().fg(id.color()).bg(bg).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("{:<8}{n:>5}  ", id.name()), text),
+                Span::styled(format!("{} ", sim.roster().adult_glyph(id)), Style::default().fg(sim.roster().color(id)).bg(bg).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{:<8}{n:>5}  ", sim.roster().display_name(id)), text),
                 Span::styled(status, Style::default().fg(theme::DIM).bg(bg)),
             ]));
             row += 1;
@@ -84,13 +84,13 @@ impl WorldMap {
     pub(super) fn species_sidebar(&self, f: &mut Frame<'_>, area: Rect, sim: &Sim, sp: SpeciesId) {
         let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
         let mut row = 0u16;
-        let color = sp.color();
+        let color = sim.roster().color(sp);
         let ramp = |t: f32| theme::species_ramp(color, t);
 
-        panel::section(f, inner, row, &format!("{} density", sp.name()));
+        panel::section(f, inner, row, &format!("{} density", sim.roster().display_name(sp)));
         row += 1;
         for note in [
-            format!(" living {} within {} cells of a spot;", sp.plural().to_lowercase(), map::DENSITY_RADIUS),
+            format!(" living {} within {} cells of a spot;", sim.roster().plural(sp).to_lowercase(), map::DENSITY_RADIUS),
             " one animal reads faint, a herd bright.".to_string(),
         ] {
             util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));

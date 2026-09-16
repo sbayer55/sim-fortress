@@ -9,9 +9,9 @@ use sim_fortress::sim::{EventKind, Params, Sim};
 fn no_breeding() -> Params {
     let mut p = Params::default();
     p.genetics.breeding_seasons.clear();
-    p.creatures.initial_counts.insert(sim_fortress::sim::SpeciesId::Fox, 0);
-    p.creatures.initial_counts.insert(sim_fortress::sim::SpeciesId::Wolf, 0);
-    p.creatures.initial_counts.insert(sim_fortress::sim::SpeciesId::Lynx, 0);
+    for name in ["fox", "wolf", "lynx"] {
+        p.species.set_initial_count(name, 0);
+    }
     // C3 needs-and-movement acceptance: the disease chunk (C7) adds a hunger
     // cost and epidemics that are asserted in tests/disease.rs instead.
     p.disease.enabled = false;
@@ -96,7 +96,8 @@ fn deer_deaths_not_all_starvation() {
     // DeathStarved (vacuously true when there are no deer deaths).
     let mut sim = Sim::new(42, no_breeding());
     run_days(&mut sim, 90);
-    let deer_deaths: Vec<_> = sim.events.iter().filter(|e| e.species == Some(sim_fortress::sim::SpeciesId::Deer) && e.kind.is_death()).collect();
+    let deer = sim.roster().id("deer").unwrap();
+    let deer_deaths: Vec<_> = sim.events.iter().filter(|e| e.species == Some(deer) && e.kind.is_death()).collect();
     if deer_deaths.is_empty() {
         return;
     }

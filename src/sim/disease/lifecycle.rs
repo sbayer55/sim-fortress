@@ -3,7 +3,7 @@
 use crate::sim::creatures::{Cause, CreatureId, CreatureStore, DeathTallies};
 use crate::sim::events::{Event, EventKind, EventRing};
 use crate::sim::lineage::Lineage;
-use crate::sim::params::DiseaseParams;
+use crate::sim::params::{DiseaseParams, Roster};
 use crate::sim::time::Time;
 use crate::sim::world::World;
 use super::types::{DiseaseState, Infection, Pathogen, Stage};
@@ -42,6 +42,7 @@ pub(super) fn disease_death(
     world: &mut World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     tallies: &mut DeathTallies,
     lineage: &mut Lineage,
     state: &mut DiseaseState,
@@ -56,7 +57,7 @@ pub(super) fn disease_death(
     };
     if let Some(c) = store.get_mut(id) {
         c.died_infected = Some(inf.pathogen);
-        crate::sim::behavior::kill(c, Cause::Disease, world, events, time, tallies, lineage, None, 0, Some(path.name()));
+        crate::sim::behavior::kill(c, Cause::Disease, world, events, time, roster, tallies, lineage, None, 0, Some(path.name()));
     }
     let slot = crate::cast!(inf.pathogen.0 => usize);
     state.stats[slot].total_deaths += 1;
@@ -73,6 +74,7 @@ pub(super) fn recover(
     store: &mut CreatureStore,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     dp: &DiseaseParams,
     state: &mut DiseaseState,
     id: CreatureId,
@@ -86,7 +88,7 @@ pub(super) fn recover(
     c.infection = None;
     c.immune_until[slot] = until;
     c.infections_survived = c.infections_survived.saturating_add(1);
-    let (name, tag, x, y, species) = (c.name_str().to_string(), c.tag(), c.x, c.y, c.species);
+    let (who, x, y, species) = (c.label(roster), c.x, c.y, c.species);
     state.last_case_day[slot] = day;
     if let Some(o) = state.outbreak_mut(inf.outbreak) {
         o.recovered += 1;
@@ -99,7 +101,7 @@ pub(super) fn recover(
             kind: EventKind::Recovery,
             species: Some(species),
             subject: Some(id),
-            text: format!("{} {} recovered from {}", name, tag, path.name()),
+            text: format!("{} recovered from {}", who, path.name()),
             pos: Some((x, y)),
             detail: String::new(),
         });

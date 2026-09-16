@@ -285,7 +285,7 @@ fn region_counts(sim: &crate::sim::Sim, world: &World, ri: usize) -> (u32, u32, 
         if world.region_index(c.x, c.y) != ri {
             continue;
         }
-        if c.species.kind() == crate::sim::Kind::Prey {
+        if sim.roster().kind(c.species) == crate::sim::Kind::Prey {
             prey_n += 1;
         } else {
             pred_n += 1;
@@ -327,8 +327,8 @@ fn region_row(buf: &mut ratatui::buffer::Buffer, inner: Rect, y: u16, ri: usize,
     };
     let (label, color) = region_status_label(veg, sick_n, prey_configured, th);
     let pressure = region_pressure(world, r);
-    buf.set_stringn(inner.x + 86, y, format!("{prey_n:>5}"), 5, region_cell_style(selected, theme::HARE));
-    buf.set_stringn(inner.x + 91, y, format!("{pred_n:>5}"), 5, region_cell_style(selected, theme::WOLF));
+    buf.set_stringn(inner.x + 86, y, format!("{prey_n:>5}"), 5, region_cell_style(selected, theme::PREY));
+    buf.set_stringn(inner.x + 91, y, format!("{pred_n:>5}"), 5, region_cell_style(selected, theme::PRED));
     let sick_color = if sick_n > 0 { theme::SICK } else { theme::DIM };
     buf.set_stringn(inner.x + 96, y, format!("{sick_n:>5}"), 5, region_cell_style(selected, sick_color));
     buf.set_stringn(inner.x + 103, y, format!("{pressure:>4.2} "), 5, region_cell_style(selected, text));
@@ -389,7 +389,7 @@ fn regions(f: &mut Frame<'_>, area: Rect, app: &AppState, world: &World, time: &
     let inner = panel::draw_with_hint(f, area, "Regions", "sorted by name   [r] cycle sort", panel::Kind::Outer);
     let mut row = 0u16;
     let th = &app.params.ui.scarcity_thresholds;
-    let prey_configured = app.params.creatures.initial_counts.iter().filter(|(id, _)| id.kind() == crate::sim::Kind::Prey).map(|(_, n)| *n).sum::<u32>() > 0;
+    let prey_configured = app.params.species.initial_total(crate::sim::Kind::Prey) > 0;
 
     util::line(f, inner, row, Line::from(Span::styled(
         format!("{:<17}{:>6}{:>7}   {:<26}{:<26}{:>5}{:>5}{:>5}{:>10}   {}", " region", "cells", "water", " vegetation", " moisture", "prey", "pred", "sick", "pressure", "status"),

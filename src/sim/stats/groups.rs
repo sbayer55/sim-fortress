@@ -31,25 +31,36 @@ use crate::sim::params::SocialParams;
 /// `GROUP_HIST` fold into the last bucket.
 pub const GROUP_HIST: usize = 16;
 
-/// Group-size census over the living set, per species in `SpeciesId::ALL` order.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+/// Group-size census over the living set, per species in roster order.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct GroupCensus {
     /// Groups with two or more members.
-    pub groups: [u32; 6],
+    pub groups: Vec<u32>,
     /// Living creatures that belong to one of those groups.
-    pub members: [u32; 6],
+    pub members: Vec<u32>,
     /// Mean size of the multi-member groups (`0.0` when none forms).
-    pub mean: [f32; 6],
+    pub mean: Vec<f32>,
     /// Largest group size (`0` when no group forms).
-    pub max: [u16; 6],
+    pub max: Vec<u16>,
     /// Group-size distribution: `hist[species][k]` counts groups of `k + 1`
     /// members (index 0 = alone), with `GROUP_HIST` and above in the last bucket.
-    pub hist: [[u32; GROUP_HIST]; 6],
+    pub hist: Vec<[u32; GROUP_HIST]>,
 }
 
 impl GroupCensus {
+    /// An empty census for `n_species`.
+    pub fn new(n_species: usize) -> Self {
+        Self {
+            groups: vec![0; n_species],
+            members: vec![0; n_species],
+            mean: vec![0.0; n_species],
+            max: vec![0; n_species],
+            hist: vec![[0; GROUP_HIST]; n_species],
+        }
+    }
+
     /// Lone animals of a species (groups of one), from the histogram.
-    pub const fn solo(&self, i: usize) -> u32 {
+    pub fn solo(&self, i: usize) -> u32 {
         self.hist[i][0]
     }
 
@@ -99,10 +110,10 @@ impl Cluster {
 }
 
 /// Count the groups of every species from the living set's current positions.
-pub fn group_census(store: &CreatureStore, sp: &SocialParams) -> GroupCensus {
+pub fn group_census(store: &CreatureStore, sp: &SocialParams, n_species: usize) -> GroupCensus {
     // One cluster list per species, filled in `living()` (slot) order so the
     // greedy assignment is deterministic.
-    let mut clusters: [Vec<Cluster>; 6] = std::array::from_fn(|_| Vec::new());
+    let mut clusters: Vec<Vec<Cluster>> = (0..n_species).map(|_| Vec::new()).collect();
     for c in store.living() {
         let i = c.species.index();
         let list = &mut clusters[i];
@@ -145,8 +156,8 @@ fn nearest_group(x: usize, y: usize, sense: u16, kin_cap: f32, clusters: &[Clust
 
 /// Fold the per-species clusters into the census: histogram, group count, the
 /// member total and the mean/max over the multi-member groups.
-fn reduce(clusters: &[Vec<Cluster>; 6]) -> GroupCensus {
-    let mut out = GroupCensus::default();
+fn reduce(clusters: &[Vec<Cluster>]) -> GroupCensus {
+    let mut out = GroupCensus::new(clusters.len());
     for (i, list) in clusters.iter().enumerate() {
         let mut sum = 0u32;
         for cl in list {

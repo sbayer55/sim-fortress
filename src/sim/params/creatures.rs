@@ -1,14 +1,10 @@
 //! Creature, predation, genetics, social and ecology tunables.
 
-use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
-use crate::sim::species::SpeciesId;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct CreaturesParams {
-    pub initial_counts: BTreeMap<SpeciesId, u32>,
-    pub adult_age_days: BTreeMap<SpeciesId, u32>,
     pub hunger_base: f32,
     pub hunger_per_size: f32,
     pub hunger_metabolism_k: f32,
@@ -39,8 +35,6 @@ pub struct CreaturesParams {
 impl Default for CreaturesParams {
     fn default() -> Self {
         Self {
-            initial_counts: counts([240, 180, 90, 8, 6, 4]),
-            adult_age_days: counts([30, 60, 180, 90, 120, 120]),
             hunger_base: 0.004,
             hunger_per_size: 0.008,
             hunger_metabolism_k: 1.0,
@@ -70,25 +64,10 @@ impl Default for CreaturesParams {
     }
 }
 
-/// Build the per-species map (same `SpeciesId::ALL` order as everywhere else).
-pub(super) fn counts(vals: [u32; 6]) -> BTreeMap<SpeciesId, u32> {
-    SpeciesId::ALL.iter().copied().zip(vals).collect()
-}
-
-pub(super) fn per_species(vals: [f32; 6]) -> BTreeMap<SpeciesId, f32> {
-    SpeciesId::ALL.iter().copied().zip(vals).collect()
-}
-
 impl CreaturesParams {
     /// Hourly hunger accumulation, scaled by size, metabolism and season (FR1).
     pub fn hunger_per_hour(&self, size: f32, metabolism: f32, season_metabolism: f32) -> f32 {
         (self.hunger_base + self.hunger_per_size * size)
             * (0.5 + self.hunger_metabolism_k * metabolism)
             * season_metabolism
-    }
-
-    /// `adult = age_days >= adult_age_days[species]`.
-    pub fn adult_age(&self, id: SpeciesId) -> u32 {
-        self.adult_age_days.get(&id).copied().unwrap_or(0)
-    }
-}
+    }}

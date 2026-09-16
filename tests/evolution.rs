@@ -12,16 +12,16 @@
 
 use std::time::Instant;
 
-use sim_fortress::sim::{EventKind, Params, Rainfall, Sim, SpeciesId};
+use sim_fortress::sim::{EventKind, Params, Rainfall, Roster, Sim};
 
 const FIVE_YEARS: u64 = 5 * 360 * 24;
 
 /// C4 tests exercise prey evolution in isolation: predators are zeroed out
 /// (C5 introduces them; the C5 acceptance lives in tests/predators.rs).
 fn prey_only(mut p: Params) -> Params {
-    p.creatures.initial_counts.insert(SpeciesId::Fox, 0);
-    p.creatures.initial_counts.insert(SpeciesId::Wolf, 0);
-    p.creatures.initial_counts.insert(SpeciesId::Lynx, 0);
+    for name in ["fox", "wolf", "lynx"] {
+        p.species.set_initial_count(name, 0);
+    }
     p
 }
 
@@ -35,18 +35,19 @@ fn five_year_run(seed: u64, params: Params) -> Sim {
     sim
 }
 
-const fn prey_total(s: &sim_fortress::sim::Sample) -> u32 {
-    s.population[0] + s.population[1] + s.population[2]
+fn prey_total(s: &sim_fortress::sim::Sample) -> u32 {
+    let r = Roster::default();
+    r.prey_ids().map(|id| s.population[id.index()]).sum()
 }
 
 #[test]
 fn five_year_survival() {
     let sim = five_year_run(42, Params::default());
-    for id in [SpeciesId::Vole, SpeciesId::Hare, SpeciesId::Deer] {
+    for id in sim.roster().prey_ids() {
         let n = sim.species[id.index()].count;
-        assert!(n > 0, "{id:?} extinct at year 5");
+        assert!(n > 0, "{} extinct at year 5", sim.roster().name(id));
     }
-    let vole = &sim.species[SpeciesId::Vole.index()];
+    let vole = &sim.species[sim.roster().id("vole").unwrap().index()];
     assert!(vole.generation >= 12, "vole generation high-water mark {} < 12", vole.generation);
     let last = sim.series.last().unwrap();
     assert!(last.generation_mean[0] >= 8.0, "vole generation mean {} < 8", last.generation_mean[0]);

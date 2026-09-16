@@ -15,7 +15,7 @@
 
 use std::sync::OnceLock;
 
-use sim_fortress::sim::{EventKind, Params, Sim, SpeciesId};
+use sim_fortress::sim::{EventKind, Params, Roster, Sim, SpeciesId};
 
 const SEEDS: u64 = 10;
 const YEARS: u64 = 3;
@@ -36,8 +36,8 @@ struct Run {
 
 fn prey_only(seed: u64, enabled: bool) -> Run {
     let mut p = Params::default();
-    for id in [SpeciesId::Fox, SpeciesId::Wolf, SpeciesId::Lynx] {
-        p.creatures.initial_counts.insert(id, 0);
+    for name in ["fox", "wolf", "lynx"] {
+        p.species.set_initial_count(name, 0);
     }
     p.disease.enabled = enabled;
     let mut sim = Sim::new(seed, p);
@@ -52,12 +52,12 @@ fn prey_only(seed: u64, enabled: bool) -> Run {
         for _ in 0..24 {
             sim.step();
         }
-        let census = sim_fortress::sim::stats::census(&sim.creatures);
+        let census = sim_fortress::sim::stats::census(&sim.creatures, sim.roster().len());
         // Record the host population on each outbreak's start day.
         for (i, o) in sim.disease.outbreaks.iter().enumerate() {
             let idx = sim.disease.first_index + sim_fortress::cast!(i => u16);
             if o.started_day == day && !host_pop_at_start.iter().any(|(k, _)| *k == idx) {
-                let hosts: u32 = (0..6).filter(|&s| sim.disease.pathogen(o.pathogen).is_some_and(|p| p.host(SpeciesId::ALL[s]) > 0.0)).map(|s| census.population[s]).sum();
+                let hosts: u32 = sim.disease.hosts_living(o.pathogen, &census.population);
                 host_pop_at_start.push((idx, hosts));
             }
         }
@@ -79,7 +79,7 @@ fn prey_only(seed: u64, enabled: bool) -> Run {
             *was_alive = alive;
         }
         if (day + 1) % 360 == 0 {
-            prey_by_year.push(census.prey_total());
+            prey_by_year.push(census.prey_total(sim.roster()));
             vole_resist_by_year.push(census.genome_mean[0].resistance());
         }
     }
@@ -90,7 +90,7 @@ fn prey_only(seed: u64, enabled: bool) -> Run {
         .enumerate()
         .max_by_key(|(_, o)| o.deaths)
         .map(|(i, o)| {
-            let host = (0..6).max_by_key(|&s| o.species_cases[s]).unwrap_or(0);
+            let host = (0..o.species_cases.len()).max_by_key(|&s| o.species_cases[s]).unwrap_or(0);
             let idx = sim.disease.first_index + sim_fortress::cast!(i => u16);
             let pop = host_pop_at_start.iter().find(|(k, _)| *k == idx).map_or(0, |(_, p)| *p);
             (host, o.deaths, pop)
@@ -136,7 +136,7 @@ fn epidemic_mortality_band() {
     for (seed, _, on) in batch() {
         if let Some((host, dead, pop)) = on.biggest {
             let share = if pop > 0 { sim_fortress::cast!(dead => f32) / sim_fortress::cast!(pop => f32) } else { 0.0 };
-            report.push(format!("seed {seed}: {} {dead}/{pop} = {:.0}%", SpeciesId::ALL[host].name(), share * 100.0));
+            report.push(format!("seed {seed}: {} {dead}/{pop} = {:.0}%", Roster::default().name(SpeciesId::from_index(host)), share * 100.0));
             if (0.05..=0.60).contains(&share) {
                 ok += 1;
             }

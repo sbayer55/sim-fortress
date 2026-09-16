@@ -1,7 +1,6 @@
 //! S09: the functional world-generation form with a live preview.
 
 use std::cell::RefCell;
-use std::collections::BTreeMap;
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
@@ -9,8 +8,8 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
-use crate::sim::params::{CreaturesParams, Difficulty, EcologyParams, GeneticsParams, PredationParams, Rainfall, TimeParams, WorldParams};
-use crate::sim::{Params, Sim, SpeciesId, World, PRESETS};
+use crate::sim::params::{Difficulty, EcologyParams, GeneticsParams, PredationParams, Rainfall, Roster, TimeParams, WorldParams};
+use crate::sim::{Params, Sim, World, PRESETS};
 use crate::ui::app::AppState;
 use crate::ui::screens::s01_map::WorldMap;
 use crate::ui::screens::{Action, Screen};
@@ -31,16 +30,17 @@ const F_ROCK: usize = 6;
 const F_AGE: usize = 7;
 const F_RAINFALL: usize = 8;
 const F_SEASON: usize = 9;
-const F_SPECIES: usize = 10; // 10..=15, one row per species
-const F_MUTATION_RATE: usize = 16;
-const F_MUTATION_STRENGTH: usize = 17;
-const F_DIFFICULTY: usize = 18;
-const F_REGROWTH: usize = 19;
-const F_PRESETS: usize = 20; // 20..=24, five presets
-const F_GENERATE: usize = 25;
-const F_RANDOMIZE: usize = 26;
-const F_BACK: usize = 27;
-const FIELD_COUNT: usize = 28;
+const F_SPECIES: usize = 10; // one row per roster species, then the tail fields
+/// Tail fields sit after the species rows: `form.tail() + T_*`.
+const T_MUTATION_RATE: usize = 0;
+const T_MUTATION_STRENGTH: usize = 1;
+const T_DIFFICULTY: usize = 2;
+const T_REGROWTH: usize = 3;
+const T_PRESETS: usize = 4; // 4..=8, five presets
+const T_GENERATE: usize = 9;
+const T_RANDOMIZE: usize = 10;
+const T_BACK: usize = 11;
+const T_COUNT: usize = 12;
 const FORM_W: u16 = 66;
 
 #[derive(Debug)]
@@ -54,7 +54,9 @@ struct WorldGenForm {
     seed_text: String,
     world: WorldParams,
     season_days: u32,
-    counts: [u32; 6],
+    /// The roster the form was opened with; `counts` overrides its founders.
+    species: Roster,
+    counts: Vec<u32>,
     genetics: GeneticsParams,
     predation: PredationParams,
     regrowth_rate: f32,
@@ -68,6 +70,15 @@ struct WorldGenForm {
 }
 
 impl WorldGenForm {
+    /// Focus index of the first tail field (after the species rows).
+    fn tail(&self) -> usize {
+        F_SPECIES + self.counts.len()
+    }
+
+    fn field_count(&self) -> usize {
+        self.tail() + T_COUNT
+    }
+
     /// The focused text field: `name` at focus 0, `seed_text` at focus 1.
     const fn field_mut(&mut self, is_name: bool) -> &mut String {
         if is_name {
@@ -80,15 +91,13 @@ impl WorldGenForm {
     fn new(params: &Params) -> Self {
         let world = params.world.clone();
         let preview = World::generate(parse_seed("0xC0FFEE").unwrap_or(0), &world);
-        let mut counts = [0u32; 6];
-        for (i, id) in SpeciesId::ALL.iter().enumerate() {
-            counts[i] = params.creatures.initial_counts.get(id).copied().unwrap_or(0);
-        }
+        let counts = params.species.0.iter().map(|s| s.initial_count).collect();
         Self {
             name: "The Valley of Sunfall".to_string(),
             seed_text: "0xC0FFEE".to_string(),
             world,
             season_days: params.time.season_days,
+            species: params.species.clone(),
             counts,
             genetics: params.genetics.clone(),
             predation: params.predation.clone(),
@@ -111,13 +120,12 @@ impl WorldGenForm {
         Params {
             world: self.world.clone(),
             time: TimeParams { season_days: self.season_days, ..TimeParams::default() },
-            creatures: CreaturesParams {
-                initial_counts: SpeciesId::ALL
-                    .iter()
-                    .enumerate()
-                    .map(|(i, id)| (*id, self.counts[i]))
-                    .collect::<BTreeMap<_, _>>(),
-                ..CreaturesParams::default()
+            species: {
+                let mut species = self.species.clone();
+                for (s, &n) in species.0.iter_mut().zip(&self.counts) {
+                    s.initial_count = n;
+                }
+                species
             },
             genetics: self.genetics.clone(),
             ecology: EcologyParams { regrowth_rate: self.regrowth_rate, ..EcologyParams::default() },
@@ -188,7 +196,7 @@ impl Screen for WorldGen {
         }
 
         if code == KeyCode::Tab || code == KeyCode::BackTab {
-            form.focus = (form.focus + field_step(code)) % FIELD_COUNT;
+            form.focus = (form.focus + field_step(&form, code)) % form.field_count();
             form.text_edited = false;
             return Action::None;
         }
@@ -203,24 +211,25 @@ impl Screen for WorldGen {
             return handle_text_field(&mut form, focus, code);
         }
 
-        if (F_GENERATE..=F_BACK).contains(&focus) {
-            return match (focus, code) {
-                (F_GENERATE, KeyCode::Enter) => generate(&form, app),
-                (F_RANDOMIZE, KeyCode::Enter) => {
+        let tail = form.tail();
+        if focus >= tail + T_GENERATE {
+            return match (focus - tail, code) {
+                (T_GENERATE, KeyCode::Enter) => generate(&form, app),
+                (T_RANDOMIZE, KeyCode::Enter) => {
                     let s = rand_seed();
                     form.seed_text = format!("{s}");
                     form.text_edited = true;
                     form.dirty = true;
                     Action::None
                 }
-                (F_BACK, KeyCode::Enter) => Action::Pop,
+                (T_BACK, KeyCode::Enter) => Action::Pop,
                 _ => Action::None,
             };
         }
 
-        if (F_PRESETS..F_GENERATE).contains(&focus) {
+        if focus >= tail + T_PRESETS {
             if code == KeyCode::Enter {
-                apply_preset(&mut form, focus - F_PRESETS);
+                apply_preset(&mut form, focus - tail - T_PRESETS);
             }
             return Action::None;
         }
@@ -229,7 +238,7 @@ impl Screen for WorldGen {
             return Action::Pop;
         }
 
-        if code == KeyCode::Char(' ') && is_numeric_field(focus) {
+        if code == KeyCode::Char(' ') && is_numeric_field(&form, focus) {
             form.edit = Some(String::new());
             return Action::None;
         }
@@ -313,21 +322,24 @@ fn adjust(form: &mut WorldGenForm, focus: usize, dir: i32) {
         F_AGE => w.age = crate::cast!(clamp_i64(i64::from(w.age) + d, 0, 30) => u8),
         F_RAINFALL => cycle_rainfall(&mut w.rainfall, dir),
         F_SEASON => form.season_days = crate::cast!(clamp_i64(i64::from(form.season_days) + d * 10, 30, 180) => u32),
-        F_SPECIES..F_MUTATION_RATE => {
+        F_SPECIES.. if focus < form.tail() => {
             let i = focus - F_SPECIES;
             form.counts[i] = crate::cast!(clamp_i64(i64::from(form.counts[i]) + d * 10, 0, 999) => u32);
         }
-        F_MUTATION_RATE => form.genetics.mutation_rate = clamp_f32(form.genetics.mutation_rate + crate::cast!(dir => f32) * 0.01, 0.0, 0.2),
-        F_MUTATION_STRENGTH => form.genetics.mutation_strength = clamp_f32(form.genetics.mutation_strength + crate::cast!(dir => f32) * 0.01, 0.0, 0.2),
-        F_DIFFICULTY => cycle_difficulty(&mut form.predation.difficulty, dir),
-        F_REGROWTH => form.regrowth_rate = clamp_f32(form.regrowth_rate + crate::cast!(dir => f32) * 0.1, 0.2, 2.0),
-        _ => {}
+        _ => match focus - form.tail() {
+            T_MUTATION_RATE => form.genetics.mutation_rate = clamp_f32(form.genetics.mutation_rate + crate::cast!(dir => f32) * 0.01, 0.0, 0.2),
+            T_MUTATION_STRENGTH => form.genetics.mutation_strength = clamp_f32(form.genetics.mutation_strength + crate::cast!(dir => f32) * 0.01, 0.0, 0.2),
+            T_DIFFICULTY => cycle_difficulty(&mut form.predation.difficulty, dir),
+            T_REGROWTH => form.regrowth_rate = clamp_f32(form.regrowth_rate + crate::cast!(dir => f32) * 0.1, 0.2, 2.0),
+            _ => {}
+        },
     }
 }
 
 /// Fields whose value can be typed in directly (Space opens the entry).
-const fn is_numeric_field(focus: usize) -> bool {
-    matches!(focus, F_WIDTH..=F_AGE | F_SEASON..=F_MUTATION_STRENGTH | F_REGROWTH)
+fn is_numeric_field(form: &WorldGenForm, focus: usize) -> bool {
+    let tail = form.tail();
+    matches!(focus, F_WIDTH..=F_AGE) || (F_SEASON..=tail + T_MUTATION_STRENGTH).contains(&focus) || focus == tail + T_REGROWTH
 }
 
 /// Apply a typed value to a numeric field, clamped to the same range the
@@ -348,11 +360,13 @@ fn commit_edit(form: &mut WorldGenForm, focus: usize, text: &str) {
         F_ROCK => int(text).map(|v| w.rock_pct = crate::cast!(clamp_i64(v, 0, 30) => u8)).is_some(),
         F_AGE => int(text).map(|v| w.age = crate::cast!(clamp_i64(v, 0, 30) => u8)).is_some(),
         F_SEASON => int(text).map(|v| form.season_days = crate::cast!(clamp_i64(v, 30, 180) => u32)).is_some(),
-        F_SPECIES..F_MUTATION_RATE => int(text).map(|v| form.counts[focus - F_SPECIES] = crate::cast!(clamp_i64(v, 0, 999) => u32)).is_some(),
-        F_MUTATION_RATE => flt(text).map(|v| form.genetics.mutation_rate = clamp_f32(v, 0.0, 0.2)).is_some(),
-        F_MUTATION_STRENGTH => flt(text).map(|v| form.genetics.mutation_strength = clamp_f32(v, 0.0, 0.2)).is_some(),
-        F_REGROWTH => flt(text).map(|v| form.regrowth_rate = clamp_f32(v, 0.2, 2.0)).is_some(),
-        _ => false,
+        F_SPECIES.. if focus < form.tail() => int(text).map(|v| form.counts[focus - F_SPECIES] = crate::cast!(clamp_i64(v, 0, 999) => u32)).is_some(),
+        _ => match focus - form.tail() {
+            T_MUTATION_RATE => flt(text).map(|v| form.genetics.mutation_rate = clamp_f32(v, 0.0, 0.2)).is_some(),
+            T_MUTATION_STRENGTH => flt(text).map(|v| form.genetics.mutation_strength = clamp_f32(v, 0.0, 0.2)).is_some(),
+            T_REGROWTH => flt(text).map(|v| form.regrowth_rate = clamp_f32(v, 0.2, 2.0)).is_some(),
+            _ => false,
+        },
     };
     if changed {
         form.dirty = true;
@@ -433,7 +447,7 @@ fn draw_field(f: &mut Frame<'_>, area: Rect, row: u16, label: &str, value: &str,
 }
 
 fn form_panel(f: &mut Frame<'_>, area: Rect, form: &WorldGenForm) {
-    let hint = format!("field {} of {}", form.focus + 1, FIELD_COUNT);
+    let hint = format!("field {} of {}", form.focus + 1, form.field_count());
     let inner = panel::draw_with_hint(f, area, "New World", &hint, panel::Kind::Outer);
     let row = draw_world_section(f, inner, form, 0);
     let row = draw_species_section(f, inner, form, row);
@@ -480,7 +494,8 @@ fn draw_species_section(f: &mut Frame<'_>, inner: Rect, form: &WorldGenForm, row
     ]));
     row += 1;
     let total: u32 = form.counts.iter().sum();
-    for (i, id) in SpeciesId::ALL.iter().enumerate() {
+    for id in form.species.ids() {
+        let i = id.index();
         let focused = form.focus == F_SPECIES + i;
         let y = inner.y + row;
         let buf = f.buffer_mut();
@@ -493,21 +508,21 @@ fn draw_species_section(f: &mut Frame<'_>, inner: Rect, form: &WorldGenForm, row
             }
         }
         let base = if focused { theme::selected() } else { theme::text() };
-        buf.set_stringn(inner.x + 1, y, format!("{} ", id.glyph().to_ascii_uppercase()), 2, Style::default().fg(id.color()).bg(bg).add_modifier(Modifier::BOLD));
-        buf.set_stringn(inner.x + 3, y, format!("{:<10}", id.plural()), 10, base);
-        let kind = if id.kind() == crate::sim::Kind::Prey { "prey" } else { "predator" };
+        buf.set_stringn(inner.x + 1, y, format!("{} ", form.species.adult_glyph(id)), 2, Style::default().fg(form.species.color(id)).bg(bg).add_modifier(Modifier::BOLD));
+        buf.set_stringn(inner.x + 3, y, format!("{:<10}", form.species.plural(id)), 10, base);
+        let kind = if form.species.kind(id) == crate::sim::Kind::Prey { "prey" } else { "predator" };
         buf.set_stringn(inner.x + 13, y, format!("{kind:<9}"), 9, Style::default().fg(theme::DIM).bg(bg));
         let arrows = if focused { Style::default().fg(theme::KEY).bg(bg).add_modifier(Modifier::BOLD) } else { Style::default().fg(theme::DIM).bg(bg) };
         buf.set_stringn(inner.x + 22, y, glyphs::REWIND.to_string(), 1, arrows);
         buf.set_stringn(inner.x + 23, y, format!("{:>5} ", shown(form, F_SPECIES + i, form.counts[i].to_string())), 6, base);
         buf.set_stringn(inner.x + 29, y, glyphs::PLAY.to_string(), 1, arrows);
         let share = crate::cast!(form.counts[i] => f32) / crate::cast!(total.max(1) => f32);
-        bars::bar(buf, inner.x + 33, y, 22, share, id.color());
+        bars::bar(buf, inner.x + 33, y, 22, share, form.species.color(id));
         buf.set_stringn(inner.x + 56, y, format!("{:>3}%", crate::cast!((share * 100.0).round() => u32)), 4, Style::default().fg(theme::TEXT).bg(bg));
         row += 1;
     }
     util::line(f, inner, row, Line::from(vec![
-        Span::styled(format!("   total {}   prey {}   predators {}", total, prey_total(&form.counts), pred_total(&form.counts)), theme::dim_text()),
+        Span::styled(format!("   total {}   prey {}   predators {}", total, kind_total(form, crate::sim::Kind::Prey), kind_total(form, crate::sim::Kind::Predator)), theme::dim_text()),
     ]));
     row += 2;
     row
@@ -516,16 +531,17 @@ fn draw_species_section(f: &mut Frame<'_>, inner: Rect, form: &WorldGenForm, row
 /// The evolution-tuning fields.
 fn draw_evolution_section(f: &mut Frame<'_>, inner: Rect, form: &WorldGenForm, row: u16) -> u16 {
     let mut row = row;
+    let tail = form.tail();
     panel::section(f, inner, row, "Evolution");
     row += 1;
     let evo = [
-        field("Mutation rate", shown(form, F_MUTATION_RATE, format!("{:.2}", form.genetics.mutation_rate)), true, "per trait/birth"),
-        field("Mutation strength", shown(form, F_MUTATION_STRENGTH, format!("{:.2}", form.genetics.mutation_strength)), true, "mutation sd"),
+        field("Mutation rate", shown(form, tail + T_MUTATION_RATE, format!("{:.2}", form.genetics.mutation_rate)), true, "per trait/birth"),
+        field("Mutation strength", shown(form, tail + T_MUTATION_STRENGTH, format!("{:.2}", form.genetics.mutation_strength)), true, "mutation sd"),
         field("Predation difficulty", difficulty_name(form.predation.difficulty).to_string(), true, "easy/norm/hard"),
-        field("Regrowth rate", shown(form, F_REGROWTH, format!("{:.1}", form.regrowth_rate)), true, "veg multiplier"),
+        field("Regrowth rate", shown(form, tail + T_REGROWTH, format!("{:.1}", form.regrowth_rate)), true, "veg multiplier"),
     ];
     for (i, (label, value, adjustable, hint)) in evo.iter().enumerate() {
-        draw_field(f, inner, row, label.as_str(), value.as_str(), *adjustable, hint, form.focus == F_MUTATION_RATE + i);
+        draw_field(f, inner, row, label.as_str(), value.as_str(), *adjustable, hint, form.focus == tail + T_MUTATION_RATE + i);
         row += 1;
     }
     util::line(f, inner, row, Line::from(vec![
@@ -550,7 +566,7 @@ fn draw_presets_section(f: &mut Frame<'_>, inner: Rect, form: &WorldGenForm, row
         ("Fast evolution", "mutation rate 0.10, strength 0.12"),
     ];
     for (i, (name, desc)) in presets.iter().enumerate() {
-        let focused = form.focus == F_PRESETS + i;
+        let focused = form.focus == form.tail() + T_PRESETS + i;
         util::line(f, inner, row, Line::from(vec![
             Span::styled(format!(" {} ", glyphs::DOT), if focused { theme::label() } else { theme::dim_text() }),
             Span::styled(format!("{name:<16}"), if focused { theme::title() } else { theme::text() }),
@@ -566,7 +582,8 @@ fn draw_form_buttons(f: &mut Frame<'_>, inner: Rect, form: &WorldGenForm) {
     let brow = inner.height - 1;
     let y = inner.y + brow;
     let buf = f.buffer_mut();
-    let buttons: [(&str, bool, usize); 3] = [("[ Generate ]", true, F_GENERATE), ("[ Randomize seed ]", false, F_RANDOMIZE), ("[ Back ]", false, F_BACK)];
+    let tail = form.tail();
+    let buttons: [(&str, bool, usize); 3] = [("[ Generate ]", true, tail + T_GENERATE), ("[ Randomize seed ]", false, tail + T_RANDOMIZE), ("[ Back ]", false, tail + T_BACK)];
     let mut x = inner.x + 4;
     for (label, primary, fi) in buttons {
         let focused = form.focus == fi;
@@ -584,9 +601,9 @@ fn draw_form_buttons(f: &mut Frame<'_>, inner: Rect, form: &WorldGenForm) {
 
 
 /// How far Tab moves the focus (`BackTab` wraps backwards).
-fn field_step(code: KeyCode) -> usize {
+fn field_step(form: &WorldGenForm, code: KeyCode) -> usize {
     if code == KeyCode::BackTab {
-        FIELD_COUNT - 1
+        form.field_count() - 1
     } else {
         1
     }
@@ -616,7 +633,7 @@ fn handle_typed_entry(form: &mut WorldGenForm, code: KeyCode) {
             if let Some(text) = form.edit.take() {
                 commit_edit(form, focus, &text);
             }
-            form.focus = (form.focus + field_step(code)) % FIELD_COUNT;
+            form.focus = (form.focus + field_step(form, code)) % form.field_count();
         }
         KeyCode::Esc => form.edit = None,
         _ => {}
@@ -672,11 +689,8 @@ fn handle_adjust(form: &mut WorldGenForm, focus: usize, code: KeyCode, app: &mut
     }
 }
 
-const fn prey_total(c: &[u32; 6]) -> u32 {
-    c[0] + c[1] + c[2]
-}
-const fn pred_total(c: &[u32; 6]) -> u32 {
-    c[3] + c[4] + c[5]
+fn kind_total(form: &WorldGenForm, kind: crate::sim::Kind) -> u32 {
+    form.species.ids().filter(|&id| form.species.kind(id) == kind).map(|id| form.counts[id.index()]).sum()
 }
 
 const fn rainfall_name(r: Rainfall) -> &'static str {

@@ -7,7 +7,7 @@
 // library.
 #![allow(clippy::indexing_slicing)]
 
-use sim_fortress::sim::{Params, Sim, SpeciesId};
+use sim_fortress::sim::{Params, Sim};
 
 const TEN_YEARS: u64 = 10 * 360 * 24;
 
@@ -20,7 +20,7 @@ fn twenty_seed_survival() {
         for _ in 0..TEN_YEARS {
             sim.step();
         }
-        let alive = SpeciesId::ALL.iter().filter(|id| sim.species[id.index()].count > 0).count();
+        let alive = sim.species.iter().filter(|s| s.count > 0).count();
         eprintln!("seed {seed}: {alive} species alive at year 10");
         if alive >= 5 {
             alive_five += 1;

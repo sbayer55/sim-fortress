@@ -5,7 +5,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 use crate::sim::creatures::CreatureId;
-use crate::sim::{Sim, SpeciesId};
+use crate::sim::Sim;
 use crate::ui::app::AppState;
 use crate::ui::style::{EventKindStyle, SpeciesStyle};
 use crate::widgets::map::{self};
@@ -55,7 +55,6 @@ fn follow_condition(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState
     use crate::ui::screens::s03_inspector::{compass, local_forage};
 
     let sp = |s: String, st: Style| Span::styled(s, st);
-    let species_st = |s: SpeciesId| Style::default().fg(s.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD);
         // 3. Vitals, then condition.
         panel::section(f, inner, row, "Vitals");
         row += 1;
@@ -69,11 +68,11 @@ fn follow_condition(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState
         row += 2;
 
         // 4. Danger line for prey (FR12), hunt line for predators.
-        if c.species.kind() == Kind::Prey {
+        if sim.roster().kind(c.species) == Kind::Prey {
             panel::section(f, inner, row, "Danger");
             row += 1;
             let mut nearest: Option<(usize, &crate::sim::Creature)> = None;
-            for p in sim.creatures.living().filter(|p| p.species.kind() == Kind::Predator && p.hunt_target == Some(id)) {
+            for p in sim.creatures.living().filter(|p| sim.roster().kind(p.species) == Kind::Predator && p.hunt_target == Some(id)) {
                 let d = crate::sim::cheb(c.x, c.y, p.x, p.y);
                 if nearest.is_none_or(|n| d < n.0) {
                     nearest = Some((d, p));
@@ -83,8 +82,8 @@ fn follow_condition(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState
                 Some((d, p)) => {
                     let detected = crate::sim::predation::prey_detects_pred(c, p, &app.params.predation);
                     util::line(f, inner, row, Line::from(vec![
-                        sp(format!(" {} ", p.species.glyph().to_ascii_uppercase()), species_st(p.species)),
-                        sp(format!("{} {}", p.name_str(), p.tag()), Style::default().fg(theme::BAD).bg(theme::PANEL_BG)),
+                        sp(format!(" {} ", sim.roster().adult_glyph(p.species)), sim.roster().style(p.species)),
+                        sp(p.label(sim.roster()), Style::default().fg(theme::BAD).bg(theme::PANEL_BG)),
                         sp(format!("  {} cells {}", d, compass(c.x, c.y, p.x, p.y)), theme::text()),
                         sp(if detected { "  detected".into() } else { "  unseen".into() }, Style::default().fg(if detected { theme::WARN } else { theme::DIM }).bg(theme::PANEL_BG)),
                     ]));
@@ -109,8 +108,8 @@ fn follow_condition(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState
                 let seen = t.alive && crate::sim::predation::prey_detects_pred(t, c, &app.params.predation);
                 util::line(f, inner, row, Line::from(vec![
                     sp(format!(" {phase} "), theme::text()),
-                    sp(format!("{} ", if t.adult { t.species.glyph().to_ascii_uppercase() } else { t.species.glyph() }), species_st(t.species)),
-                    sp(format!("{} {}", t.name_str(), t.tag()), theme::title()),
+                    sp(format!("{} ", if t.adult { sim.roster().adult_glyph(t.species) } else { sim.roster().glyph(t.species) }), sim.roster().style(t.species)),
+                    sp(t.label(sim.roster()), theme::title()),
                     sp(format!("  {} cells {}", d, compass(c.x, c.y, t.x, t.y)), theme::text()),
                     sp(if !t.alive { String::new() } else if seen { "  seen".into() } else { "  unseen".into() }, Style::default().fg(if seen { theme::WARN } else { theme::GOOD }).bg(theme::PANEL_BG)),
                 ]));
@@ -132,7 +131,6 @@ fn follow_family(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, c: &cr
     use crate::ui::screens::s03_inspector::{clip, compass, kin_name};
 
     let sp = |s: String, st: Style| Span::styled(s, st);
-    let species_st = |s: SpeciesId| Style::default().fg(s.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD);
         // 5. Family: parents, breeding state, kin nearby.
         panel::section(f, inner, row, "Family");
         row += 1;
@@ -189,8 +187,8 @@ fn follow_family(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, c: &cr
         }
         for (d, o, rel) in kin.iter().take(3) {
             util::line(f, inner, row, Line::from(vec![
-                sp(format!(" {} ", if o.adult { o.species.glyph().to_ascii_uppercase() } else { o.species.glyph() }), species_st(o.species)),
-                sp(format!("{:<8}{:<6}", o.name_str(), o.tag()), theme::text()),
+                sp(format!(" {} ", if o.adult { sim.roster().adult_glyph(o.species) } else { sim.roster().glyph(o.species) }), sim.roster().style(o.species)),
+                sp(format!("{:<8}{:<6}", o.name_str(sim.roster()), o.tag(sim.roster())), theme::text()),
                 sp(format!("{:>3.0} cells {:<2} ", d, compass(c.x, c.y, o.x, o.y)), theme::dim_text()),
                 sp((*rel).to_string(), theme::label()),
             ]));
@@ -275,15 +273,14 @@ impl WorldMap {
             return;
         };
         let sp = |s: String, st: Style| Span::styled(s, st);
-        let species_st = |s: SpeciesId| Style::default().fg(s.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD);
 
         // 1. Identity: name, species, sex, stage, generation and age.
         util::line(f, inner, row, Line::from(vec![
             Span::styled(
-                format!(" {} ", if c.alive { c.species.glyph().to_ascii_uppercase() } else { glyphs::CARCASS }),
-                Style::default().fg(if c.alive { c.species.color() } else { theme::CARCASS }).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD),
+                format!(" {} ", if c.alive { sim.roster().adult_glyph(c.species) } else { glyphs::CARCASS }),
+                Style::default().fg(if c.alive { sim.roster().color(c.species) } else { theme::CARCASS }).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD),
             ),
-            sp(format!("{} {}", c.name_str(), c.tag()), theme::title()),
+            sp(c.label(sim.roster()), theme::title()),
             if c.alive { sp(String::new(), theme::text()) } else { sp("  carcass".into(), Style::default().fg(theme::BAD).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)) },
         ]));
         row += 1;
@@ -293,7 +290,7 @@ impl WorldMap {
         };
         util::line(f, inner, row, Line::from(vec![
             sp("   ".into(), theme::text()),
-            sp(c.species.name().to_string(), species_st(c.species)),
+            sp(sim.roster().display_name(c.species), sim.roster().style(c.species)),
             sp(format!("  {sex_g} {sex_name}"), theme::text()),
             sp(format!("  {}", if c.adult { "adult" } else { "juvenile" }), theme::text()),
             sp(format!("  gen {}", c.generation), theme::dim_text()),

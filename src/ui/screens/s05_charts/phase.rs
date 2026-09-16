@@ -133,8 +133,8 @@ fn phase_axes(buf: &mut Buffer, inner: Rect, px: u16, pw: u16, py: u16, ph: u16,
         let v = crate::cast!((max_prey * f32::from(k) / 4.0).round() => u32);
         buf.set_stringn(x, py + ph + 1, format!("{v:>4}"), 4, theme::dim_text());
     }
-    buf.set_stringn(inner.x, py, "pred", 4, Style::default().fg(theme::WOLF).bg(theme::PANEL_BG));
-    buf.set_stringn(px, py + ph + 1, "prey total", 10, Style::default().fg(theme::HARE).bg(theme::PANEL_BG));
+    buf.set_stringn(inner.x, py, "pred", 4, Style::default().fg(theme::PRED).bg(theme::PANEL_BG));
+    buf.set_stringn(px, py + ph + 1, "prey total", 10, Style::default().fg(theme::PREY).bg(theme::PANEL_BG));
 
     // Quadrant captions.
     buf.set_stringn(px + 1, py + 1, "II few prey, many predators", 27, theme::dim_text());
@@ -146,15 +146,15 @@ fn phase_axes(buf: &mut Buffer, inner: Rect, px: u16, pw: u16, py: u16, ph: u16,
 pub(super) fn phase_sidebar(f: &mut Frame<'_>, area: Rect, sim: &Sim, w: &Window<'_>) {
     let inner = panel::draw(f, area, "Phase", panel::Kind::Outer);
     let mut row = 0u16;
-    let prey_now = sim.species.iter().filter(|s| s.species.kind() == Kind::Prey).map(|s| s.count).sum::<u32>();
-    let pred_now = sim.species.iter().filter(|s| s.species.kind() == Kind::Predator).map(|s| s.count).sum::<u32>();
+    let prey_now = sim.species.iter().filter(|s| sim.roster().kind(s.species) == Kind::Prey).map(|s| s.count).sum::<u32>();
+    let pred_now = sim.species.iter().filter(|s| sim.roster().kind(s.species) == Kind::Predator).map(|s| s.count).sum::<u32>();
     panel::section(f, inner, row, "Now");
     row += 1;
     util::line(f, inner, row, Line::from(vec![
         sp(" prey      ", theme::dim_text()),
-        sp(format!("{prey_now:>5}"), Style::default().fg(theme::HARE).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+        sp(format!("{prey_now:>5}"), Style::default().fg(theme::PREY).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
         sp("  predators  ", theme::dim_text()),
-        sp(format!("{pred_now:>4}"), Style::default().fg(theme::WOLF).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+        sp(format!("{pred_now:>4}"), Style::default().fg(theme::PRED).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
     ]));
     row += 2;
 
@@ -173,9 +173,9 @@ pub(super) fn phase_sidebar(f: &mut Frame<'_>, area: Rect, sim: &Sim, w: &Window
     panel::section(f, inner, row, "Quadrants");
     row += 1;
     for (name, desc, color) in [
-        ("I", "many prey, many predators", theme::WOLF),
+        ("I", "many prey, many predators", theme::PRED),
         ("II", "few prey, many predators", theme::WARN),
-        ("III", "few of both", theme::HARE),
+        ("III", "few of both", theme::PREY),
         ("IV", "many prey, few predators", theme::GOOD),
     ] {
         util::line(f, inner, row, Line::from(vec![

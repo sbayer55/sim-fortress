@@ -121,7 +121,7 @@ impl Screen for LineageScreen {
         let ids = tree.node_ids();
         let pos = ids.iter().position(|&id| id == self.focus).map_or(0, |p| p + 1);
         let right = match focus {
-            Some(n) => format!("{} {}  {} of {} {}", n.name_str(), n.tag, pos, tree.node_count, n.species.plural().to_lowercase()),
+            Some(n) => format!("{} {}  {} of {} {}", n.name_str(sim.roster()), n.tag, pos, tree.node_count, sim.roster().plural(n.species).to_lowercase()),
             None => String::new(),
         };
         status::render(
@@ -142,10 +142,10 @@ fn draw_tree(f: &mut Frame<'_>, area: Rect, sim: &Sim, tree: &Tree) {
     let g0 = nodes.iter().map(|n| n.generation).min().unwrap_or(1);
     let g1 = nodes.iter().map(|n| n.generation).max().unwrap_or(g0);
     let title = match root {
-        Some(n) => format!("Lineage of {} {}", n.name_str(), n.tag),
+        Some(n) => format!("Lineage of {} {}", n.name_str(sim.roster()), n.tag),
         None => "Lineage".to_string(),
     };
-    let plural = species.map_or_else(|| "creatures".into(), |s| s.plural().to_lowercase());
+    let plural = species.map_or_else(|| "creatures".into(), |s| sim.roster().plural(s).to_lowercase());
     let inner = panel::draw_with_hint(f, area, &title, &format!("{} {}, {} generations", tree.node_count, plural, g1 - g0 + 1), panel::Kind::Outer);
     let season_days = sim.time.season_days;
 
@@ -174,7 +174,7 @@ fn draw_tree(f: &mut Frame<'_>, area: Rect, sim: &Sim, tree: &Tree) {
             TreeItem::More { prefix, count, .. } => draw_more_row(f, inner, y, prefix, *count),
             TreeItem::Node { id, prefix, .. } => {
                 let Some(n) = lin.get(*id) else { continue };
-                draw_node_row(f, inner, y, n, *id == tree.focus, season_days, prefix);
+                draw_node_row(f, inner, y, sim.roster(), n, *id == tree.focus, season_days, prefix);
             }
         }
         row += 1;
@@ -184,10 +184,10 @@ fn draw_tree(f: &mut Frame<'_>, area: Rect, sim: &Sim, tree: &Tree) {
     }
 
     // Per-generation summary.
-    draw_generation_table(f, inner, &nodes, g0, g1, species, &plural);
+    draw_generation_table(f, inner, sim.roster(), &nodes, g0, g1, species, &plural);
 
     // Legend + stats pinned to the bottom.
-    draw_tree_legend(f, inner, &nodes, tree, lin, g0, g1);
+    draw_tree_legend(f, inner, sim.roster(), &nodes, tree, lin, g0, g1);
 }
 
 /// The slice of tree items that fits, scrolled so the focus stays visible.
@@ -208,7 +208,7 @@ fn draw_more_row(f: &mut Frame<'_>, inner: Rect, y: u16, prefix: &str, count: us
 }
 
 /// One creature row: ancestry prefix, name, generation, years and mutations.
-fn draw_node_row(f: &mut Frame<'_>, inner: Rect, y: u16, n: &LineageNode, is_focus: bool, season_days: u32, prefix: &str) {
+fn draw_node_row(f: &mut Frame<'_>, inner: Rect, y: u16, roster: &crate::sim::Roster, n: &LineageNode, is_focus: bool, season_days: u32, prefix: &str) {
     let dead = !n.alive();
     let col = inner.x + 47;
     let name_style = node_name_style(n, is_focus, dead);
@@ -216,7 +216,7 @@ fn draw_node_row(f: &mut Frame<'_>, inner: Rect, y: u16, n: &LineageNode, is_foc
         let buf = f.buffer_mut();
         buf.set_stringn(inner.x + 1, y, prefix, 40, theme::border());
         let x = inner.x + 1 + crate::cast!(prefix.chars().count() => u16);
-        let label = format!(" {} {} ", n.name_str(), n.tag);
+        let label = format!(" {} {} ", n.name_str(roster), n.tag);
         let name_w = crate::cast!(label.chars().count() => u16);
         buf.set_stringn(x, y, &label, crate::cast!(name_w => usize), name_style);
         (x, name_w)
@@ -294,14 +294,14 @@ fn draw_mutation_columns(buf: &mut ratatui::buffer::Buffer, inner: Rect, y: u16,
 
 /// The by-generation summary table above the legend.
 #[allow(clippy::too_many_arguments)]
-fn draw_generation_table(f: &mut Frame<'_>, inner: Rect, nodes: &[&LineageNode], g0: u32, g1: u32, species: Option<crate::sim::SpeciesId>, plural: &str) {
+fn draw_generation_table(f: &mut Frame<'_>, inner: Rect, roster: &crate::sim::Roster, nodes: &[&LineageNode], g0: u32, g1: u32, species: Option<crate::sim::SpeciesId>, plural: &str) {
     let gen_rows = (crate::cast!((g1 - g0 + 1) => u16)).min(6) + 2;
     let mut row = inner.height.saturating_sub(gen_rows + LEGEND_ROWS + 1);
     panel::section(f, inner, row, "By generation");
     row += 1;
     util::line(f, inner, row, Line::from(sp(format!("  gen   {plural:<8}alive sick mutations  members"), theme::dim_text())));
     row += 1;
-    let color = species.map_or(theme::TEXT, |s| s.color());
+    let color = species.map_or(theme::TEXT, |s| roster.color(s));
     let mut shown = 0;
     for g in g0..=g1 {
         if shown >= 6 {
@@ -314,7 +314,7 @@ fn draw_generation_table(f: &mut Frame<'_>, inner: Rect, nodes: &[&LineageNode],
         let alive_g = members.iter().filter(|n| n.alive()).count();
         let muts_g: usize = members.iter().map(|n| n.mutations.len()).sum();
         let sick_g = members.iter().filter(|n| n.cause == Some(Cause::Disease)).count();
-        let names: Vec<String> = members.iter().take(12).map(|n| n.name_str().to_string()).collect();
+        let names: Vec<String> = members.iter().take(12).map(|n| n.name_str(roster).to_string()).collect();
         let y = inner.y + row;
         let buf = f.buffer_mut();
         buf.set_stringn(inner.x + 1, y, format!(" g{g:<4}"), 7, theme::text());
@@ -337,7 +337,7 @@ fn draw_generation_table(f: &mut Frame<'_>, inner: Rect, nodes: &[&LineageNode],
 }
 
 /// The legend and totals pinned to the bottom of the panel.
-fn draw_tree_legend(f: &mut Frame<'_>, inner: Rect, nodes: &[&LineageNode], tree: &Tree, lin: &crate::sim::Lineage, g0: u32, g1: u32) {
+fn draw_tree_legend(f: &mut Frame<'_>, inner: Rect, roster: &crate::sim::Roster, nodes: &[&LineageNode], tree: &Tree, lin: &crate::sim::Lineage, g0: u32, g1: u32) {
     let mut row;
     let alive = nodes.iter().filter(|n| n.alive()).count();
     let notable = nodes.iter().filter(|n| n.notable).count();
@@ -369,7 +369,7 @@ fn draw_tree_legend(f: &mut Frame<'_>, inner: Rect, nodes: &[&LineageNode], tree
     util::line(f, inner, row, Line::from(vec![
         sp(" fathers are not drawn; ", theme::dim_text()),
         sp(match (mother, father) {
-            (Some(m), Some(fa)) => format!("{} {} is the mother and {} {} the father of the focus.", m.name_str(), m.tag, fa.name_str(), fa.tag),
+            (Some(m), Some(fa)) => format!("{} {} is the mother and {} {} the father of the focus.", m.name_str(roster), m.tag, fa.name_str(roster), fa.tag),
             _ => "the focus is a founder.".to_string(),
         }, theme::text()),
     ]));
@@ -382,11 +382,11 @@ fn details(f: &mut Frame<'_>, area: Rect, sim: &Sim, focus: CreatureId) {
         return;
     };
     let live = sim.creatures.get(focus);
-    let inner = panel::draw(f, area, &format!("Focused {}", n.species.name().to_lowercase()), panel::Kind::Focus);
+    let inner = panel::draw(f, area, &format!("Focused {}", sim.roster().name(n.species)), panel::Kind::Focus);
     let mut row = 0u16;
     util::line(f, inner, row, Line::from(vec![
-        sp(format!(" {} ", n.species.glyph().to_ascii_uppercase()), Style::default().fg(n.species.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-        sp(n.name_str().to_string(), theme::title()),
+        sp(format!(" {} ", sim.roster().adult_glyph(n.species)), Style::default().fg(sim.roster().color(n.species)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+        sp(n.name_str(sim.roster()).to_string(), theme::title()),
         sp(format!("  {}", n.tag), theme::label()),
         sp(if n.alive() { "  alive" } else { "  dead" }, Style::default().fg(if n.alive() { theme::GOOD } else { theme::DIM }).bg(theme::PANEL_BG)),
     ]));
@@ -399,9 +399,9 @@ fn details(f: &mut Frame<'_>, area: Rect, sim: &Sim, focus: CreatureId) {
     }
     row = draw_mutations(f, inner, row + 1, n);
     row = draw_inheritance(f, inner, row + 1, n, lin, mother_of(n, lin), grand_of(n, lin), sim);
-    row = draw_children(f, inner, row + 2, n, lin, season_days);
+    row = draw_children(f, inner, row + 2, sim.roster(), n, lin, season_days);
     row = draw_direct_line(f, inner, row + 1, sim, lin, focus);
-    draw_siblings(f, inner, row + 1, focus, mother_of(n, lin), lin, season_days);
+    draw_siblings(f, inner, row + 1, sim.roster(), focus, mother_of(n, lin), lin, season_days);
 }
 
 /// The focus's mother, if the lineage still holds her.
@@ -419,14 +419,14 @@ fn details_facts(n: &LineageNode, live: Option<&crate::sim::Creature>, lin: &cra
     let mother = n.mother().and_then(|m| lin.get(m));
     let father = n.father().and_then(|m| lin.get(m));
     let grand = mother.and_then(LineageNode::mother).and_then(|g| lin.get(g));
-    let name_of = |x: Option<&LineageNode>| x.map_or_else(|| "unknown".into(), |p| format!("{} {}", p.name_str(), p.tag));
+    let name_of = |x: Option<&LineageNode>| x.map_or_else(|| "unknown".into(), |p| format!("{} {}", p.name_str(sim.roster()), p.tag));
     let living_kids = n.children.iter().filter(|c| lin.get(**c).is_some_and(LineageNode::alive)).count();
     let (living_desc, _) = lin.living_descendants(focus, 5000);
     let desc_total = lin.descendants(focus, u32::MAX, 5000).len();
     let age_days = (n.died_day.map_or(day, i64::from) - i64::from(n.born_day)).max(0);
-    let count_label = if n.species.kind() == Kind::Prey { "offspring" } else { "kills" };
+    let count_label = if sim.roster().kind(n.species) == Kind::Prey { "offspring" } else { "kills" };
     let count_value = match live {
-        Some(c) if n.species.kind() == Kind::Prey => c.offspring.to_string(),
+        Some(c) if sim.roster().kind(n.species) == Kind::Prey => c.offspring.to_string(),
         Some(c) => c.kills.to_string(),
         None => n.children.len().to_string(),
     };
@@ -540,7 +540,7 @@ fn draw_inheritance(
         let vals: Vec<f32> = [a, b, Some(c), d].iter().flatten().copied().collect();
         let lo = vals.iter().copied().fold(f32::MAX, f32::min);
         let hi = vals.iter().copied().fold(f32::MIN, f32::max);
-        bars::range(buf, inner.x + 12, y + 1, 26, lo, c, hi, n.species.color());
+        bars::range(buf, inner.x + 12, y + 1, 26, lo, c, hi, sim.roster().color(n.species));
         let first = a.or(b).unwrap_or(c);
         let last = d.unwrap_or(c);
         buf.set_stringn(inner.x + 1, y + 1, format!("{:+.2}", last - first), 5, Style::default().fg(if last >= first { theme::GOOD } else { theme::BAD }).bg(theme::PANEL_BG));
@@ -552,7 +552,7 @@ fn draw_inheritance(
 }
 
 /// The children section; returns the row after it.
-fn draw_children(f: &mut Frame<'_>, inner: Rect, row: u16, n: &LineageNode, lin: &crate::sim::Lineage, season_days: u32) -> u16 {
+fn draw_children(f: &mut Frame<'_>, inner: Rect, row: u16, roster: &crate::sim::Roster, n: &LineageNode, lin: &crate::sim::Lineage, season_days: u32) -> u16 {
     let mut row = row;
     row += 1;
     if n.children.is_empty() {
@@ -564,7 +564,7 @@ fn draw_children(f: &mut Frame<'_>, inner: Rect, row: u16, n: &LineageNode, lin:
         let dead = !k.alive();
         util::line(f, inner, row, Line::from(vec![
             sp(format!(" {} ", if dead { glyphs::DEATH } else { glyphs::BIRTH }), Style::default().fg(if dead { theme::DIM } else { theme::GOOD }).bg(theme::PANEL_BG)),
-            sp(format!("{:<8}{:<7}", k.name_str(), k.tag), if dead { theme::dim_text() } else { theme::text() }),
+            sp(format!("{:<8}{:<7}", k.name_str(roster), k.tag), if dead { theme::dim_text() } else { theme::text() }),
             sp(format!("g{} {}", k.generation, years(k, season_days)), theme::dim_text()),
             sp(format!("  {}", if k.children.is_empty() { "" } else { "+kids" }), theme::label()),
         ]));
@@ -599,7 +599,7 @@ fn draw_direct_line(f: &mut Frame<'_>, inner: Rect, row: u16, sim: &Sim, lin: &c
         let st = if *id == focus { theme::selected() } else if !x.alive() { theme::dim_text() } else { theme::text() };
         util::line(f, inner, row, Line::from(vec![
             sp(format!(" {}{} ", " ".repeat(i), if i == 0 { ' ' } else { glyphs::RIGHT }), theme::border()),
-            sp(format!("{} {}", x.name_str(), x.tag), st),
+            sp(format!("{} {}", x.name_str(sim.roster()), x.tag), st),
             sp(format!("  g{}", x.generation), theme::dim_text()),
         ]));
         row += 1;
@@ -609,7 +609,7 @@ fn draw_direct_line(f: &mut Frame<'_>, inner: Rect, row: u16, sim: &Sim, lin: &c
 }
 
 /// The siblings section.
-fn draw_siblings(f: &mut Frame<'_>, inner: Rect, mut row: u16, focus: CreatureId, mother: Option<&LineageNode>, lin: &crate::sim::Lineage, season_days: u32) {
+fn draw_siblings(f: &mut Frame<'_>, inner: Rect, mut row: u16, roster: &crate::sim::Roster, focus: CreatureId, mother: Option<&LineageNode>, lin: &crate::sim::Lineage, season_days: u32) {
     row += 1;
     let sibs: Vec<&LineageNode> = mother
         .map(|m| m.children.iter().filter(|c| **c != focus).filter_map(|c| lin.get(*c)).collect())
@@ -624,7 +624,7 @@ fn draw_siblings(f: &mut Frame<'_>, inner: Rect, mut row: u16, focus: CreatureId
         let dead = !k.alive();
         util::line(f, inner, row, Line::from(vec![
             sp(format!(" {} ", if dead { glyphs::DEATH } else { glyphs::BIRTH }), Style::default().fg(if dead { theme::DIM } else { theme::GOOD }).bg(theme::PANEL_BG)),
-            sp(format!("{:<8}{:<7}", k.name_str(), k.tag), if dead { theme::dim_text() } else { theme::text() }),
+            sp(format!("{:<8}{:<7}", k.name_str(roster), k.tag), if dead { theme::dim_text() } else { theme::text() }),
             sp(format!("g{} {}", k.generation, years(k, season_days)), theme::dim_text()),
         ]));
         row += 1;
@@ -657,7 +657,7 @@ mod tests {
         // An outbreak touched the species; the lineage node records the disease
         // death in it and two survived infections.
         let species = sim.creatures.get(id).unwrap().species;
-        let mut species_cases = [0u32; 6];
+        let mut species_cases = vec![0u32; 6];
         species_cases[species.index()] = 4;
         sim.disease.outbreaks.push(Outbreak {
             pathogen: PathogenId(0),
@@ -671,10 +671,10 @@ mod tests {
             peak_active: 2,
             peak_day: 0,
             species_cases,
-            species_deaths: [0; 6],
+            species_deaths: vec![0; 6],
             epidemic: false,
-            resist_at_start: [0.3; 6],
-            resist_at_end: [0.0; 6],
+            resist_at_start: vec![0.3; 6],
+            resist_at_end: vec![0.0; 6],
             active: 2,
             cases_today: 0,
         });

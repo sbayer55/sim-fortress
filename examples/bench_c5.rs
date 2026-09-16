@@ -18,7 +18,7 @@
 #![allow(clippy::indexing_slicing, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use sim_fortress::sim::stats::{local_maxima, peak_lag};
-use sim_fortress::sim::{Params, Rainfall, Sim, SpeciesId};
+use sim_fortress::sim::{Params, Rainfall, Sim};
 use std::fmt::Write as _;
 
 // One linear benchmark/diagnostic driver: splitting it would only scatter the
@@ -66,32 +66,24 @@ fn main() {
             "flee_distance" => p.flee_distance = v.parse().unwrap(),
             "flee_ticks" => p.flee_ticks = v.parse().unwrap(),
             "eat_hours_base" => p.eat_hours_base = v.parse().unwrap(),
-            "fox" => {
-                params.creatures.initial_counts.insert(SpeciesId::Fox, v.parse().unwrap());
-            }
-            "wolf" => {
-                params.creatures.initial_counts.insert(SpeciesId::Wolf, v.parse().unwrap());
-            }
-            "lynx" => {
-                params.creatures.initial_counts.insert(SpeciesId::Lynx, v.parse().unwrap());
-            }
+            "fox" | "wolf" | "lynx" => params.species.set_initial_count(k, v.parse().unwrap()),
             // Fallback levers outside the C5 balance table (predator reproduction).
             "pred_litter" => {
                 let v: f32 = v.parse().unwrap();
-                for id in [SpeciesId::Fox, SpeciesId::Wolf, SpeciesId::Lynx] {
-                    params.genetics.litter_max.insert(id, v);
+                for s in params.species.0.iter_mut().filter(|s| s.kind == sim_fortress::sim::Kind::Predator) {
+                    s.litter_max = v;
                 }
             }
-            "vole_litter" => {
-                params.genetics.litter_max.insert(SpeciesId::Vole, v.parse().unwrap());
-            }
-            "fox_litter" => {
-                params.genetics.litter_max.insert(SpeciesId::Fox, v.parse().unwrap());
+            "vole_litter" | "fox_litter" => {
+                let name = k.trim_end_matches("_litter");
+                if let Some(id) = params.species.id(name) {
+                    params.species.get_mut(id).litter_max = v.parse().unwrap();
+                }
             }
             "pred_cooldown" => {
                 let v: u32 = v.parse().unwrap();
-                for id in [SpeciesId::Fox, SpeciesId::Wolf, SpeciesId::Lynx] {
-                    params.genetics.mate_cooldown_days.insert(id, v);
+                for s in params.species.0.iter_mut().filter(|s| s.kind == sim_fortress::sim::Kind::Predator) {
+                    s.mate_cooldown_days = v;
                 }
             }
             "rain" => {
@@ -112,7 +104,7 @@ fn main() {
         for _ in 0..days * 24 {
             sim.step();
         }
-        for c in sim.creatures.living().filter(|c| c.species.kind() == sim_fortress::sim::Kind::Prey && c.thirst > 0.8).take(15) {
+        for c in sim.creatures.living().filter(|c| sim.roster().kind(c.species) == sim_fortress::sim::Kind::Prey && c.thirst > 0.8).take(15) {
             println!(
                 "{:?} {:?} at ({},{}) thirst {:.2} hunger {:.2} goal {:?} target {:?} threatened {:?} flee_until {} last_water {:?} replan_at {} tick {}",
                 c.id, c.species, c.x, c.y, c.thirst, c.hunger, c.goal, c.target, c.threatened_by, c.flee_until, c.last_water, c.replan_at, sim.time.tick
@@ -122,7 +114,7 @@ fn main() {
             use std::collections::BTreeMap;
             let mut goals: BTreeMap<String, u32> = BTreeMap::new();
             let (mut n, mut e, mut th, mut edge) = (0u32, 0.0f32, 0.0f32, 0u32);
-            for c in sim.creatures.living().filter(|c| c.species.kind() == sim_fortress::sim::Kind::Prey) {
+            for c in sim.creatures.living().filter(|c| sim.roster().kind(c.species) == sim_fortress::sim::Kind::Prey) {
                 *goals.entry(format!("{:?}", c.goal)).or_insert(0) += 1;
                 n += 1;
                 e += c.energy;
@@ -133,12 +125,12 @@ fn main() {
             }
             println!("prey n={n} mean energy {:.2} mean thirst {:.2} at-edge {edge} goals {:?}", e / sim_fortress::cast!(n.max(1) => f32), th / sim_fortress::cast!(n.max(1) => f32), goals);
             let mut pg: BTreeMap<String, u32> = BTreeMap::new();
-            for c in sim.creatures.living().filter(|c| c.species.kind() == sim_fortress::sim::Kind::Predator) {
+            for c in sim.creatures.living().filter(|c| sim.roster().kind(c.species) == sim_fortress::sim::Kind::Predator) {
                 *pg.entry(format!("{:?}", c.goal)).or_insert(0) += 1;
             }
             println!("predator goals {pg:?}");
         }
-        let worst = sim.creatures.living().filter(|c| c.species.kind() == sim_fortress::sim::Kind::Prey).max_by(|a, b| a.thirst.partial_cmp(&b.thirst).unwrap()).map(|c| c.id);
+        let worst = sim.creatures.living().filter(|c| sim.roster().kind(c.species) == sim_fortress::sim::Kind::Prey).max_by(|a, b| a.thirst.partial_cmp(&b.thirst).unwrap()).map(|c| c.id);
         if let Some(id) = worst {
             for _ in 0..8 {
                 sim.step();
@@ -151,7 +143,7 @@ fn main() {
                 }
             }
         }
-        for c in sim.creatures.living().filter(|c| c.species.kind() == sim_fortress::sim::Kind::Predator) {
+        for c in sim.creatures.living().filter(|c| sim.roster().kind(c.species) == sim_fortress::sim::Kind::Predator) {
             println!(
                 "{:?} {:?} hunger {:.2} thirst {:.2} energy {:.2} goal {:?} phase {:?} kills {} attempts {} cooldown_until {} tick {}",
                 c.id, c.species, c.hunger, c.thirst, c.energy, c.goal, c.hunt_phase, c.kills, c.attempts, c.hunt_cooldown_until, sim.time.tick
@@ -160,16 +152,13 @@ fn main() {
         return;
     }
     let ticks_per_year = 360 * 24;
-    let mut year_end: Vec<[u32; 6]> = Vec::new();
+    let n = sim.roster().len();
+    let mut year_end: Vec<Vec<u32>> = Vec::new();
     for _y in 0..years {
         for _ in 0..ticks_per_year {
             sim.step();
         }
-        let mut c = [0u32; 6];
-        for (i, s) in sim.species.iter().enumerate() {
-            c[i] = s.count;
-        }
-        year_end.push(c);
+        year_end.push(sim.species.iter().map(|s| s.count).collect());
         if year_end.last().unwrap().iter().all(|&n| n == 0) {
             break;
         }
@@ -200,34 +189,36 @@ fn main() {
     let alive_end = year_end.last().map_or(0, |c| c.iter().filter(|&&n| n > 0).count());
 
     let mut hunt = String::new();
-    for id in [SpeciesId::Fox, SpeciesId::Wolf, SpeciesId::Lynx] {
+    for id in sim.roster().predator_ids() {
         let k = sim.deaths.hunt_kills[id.index()];
         let a = sim.deaths.hunt_attempts[id.index()];
         let pct = if a > 0 { sim_fortress::cast!(k => f32) / sim_fortress::cast!(a => f32) * 100.0 } else { 0.0 };
-        let _ = write!(hunt, " {}:{}/{}={:.0}%", id.name(), k, a, pct);
+        let _ = write!(hunt, " {}:{}/{}={:.0}%", sim.roster().name(id), k, a, pct);
     }
 
     if !quiet {
-        println!("year   vole  hare  deer   fox  wolf  lynx | births/deaths per species");
+        let header: Vec<String> = sim.roster().ids().map(|id| format!("{:>5}", sim.roster().name(id))).collect();
+        println!("year {} | births/deaths per species", header.join(" "));
         for (y, c) in year_end.iter().enumerate() {
             let lo = y * 360;
             let hi = ((y + 1) * 360).min(samples.len());
-            let mut b = [0u32; 6];
-            let mut d = [0u32; 6];
+            let mut b = vec![0u32; n];
+            let mut d = vec![0u32; n];
             for s in &samples[lo.min(samples.len())..hi] {
-                for i in 0..6 {
+                for i in 0..n {
                     b[i] += s.births[i];
                     d[i] += s.deaths[i];
                 }
             }
-            let bd: Vec<String> = (0..6).map(|i| format!("{}/{}", b[i], d[i])).collect();
-            println!("{:4} {:6} {:5} {:5} {:5} {:5} {:5} | {}", y + 1, c[0], c[1], c[2], c[3], c[4], c[5], bd.join(" "));
+            let bd: Vec<String> = (0..n).map(|i| format!("{}/{}", b[i], d[i])).collect();
+            let counts: Vec<String> = c.iter().map(|v| format!("{v:>5}")).collect();
+            println!("{:4} {} | {}", y + 1, counts.join(" "), bd.join(" "));
         }
     }
     if !quiet {
         // Death causes per species from the (capacity-bounded) event ring.
         use sim_fortress::sim::EventKind;
-        let mut causes = [[0u32; 4]; 6];
+        let mut causes = vec![[0u32; 4]; n];
         for e in sim.events.iter() {
             let Some(sp) = e.species else { continue };
             let k = match e.kind {
@@ -239,13 +230,13 @@ fn main() {
             };
             causes[sp.index()][k] += 1;
         }
-        for id in SpeciesId::ALL {
+        for id in sim.roster().ids() {
             let c = causes[id.index()];
-            println!("{:5} deaths in ring: starved {} thirst {} age {} predation {}", id.name(), c[0], c[1], c[2], c[3]);
+            println!("{:5} deaths in ring: starved {} thirst {} age {} predation {}", sim.roster().name(id), c[0], c[1], c[2], c[3]);
         }
     }
     let ov: Vec<String> = overrides.iter().map(|(k, v)| format!("{k}={v}")).collect();
-    let last = year_end.last().copied().unwrap_or([0; 6]);
+    let last = year_end.last().cloned().unwrap_or_default();
     println!(
         "seed={seed} [{}] alive5={alive5} aliveEnd={alive_end} end={:?} maxima={prey_max}/{pred_max} lag={:?} hunt{hunt}",
         ov.join(" "),

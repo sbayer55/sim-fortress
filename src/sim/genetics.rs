@@ -10,11 +10,11 @@ use crate::sim::creatures::{
 use crate::sim::events::{Event, EventKind, EventRing};
 use crate::sim::geom;
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{CreaturesParams, GeneticsParams};
+use crate::sim::params::{GeneticsParams, Roster};
 use crate::sim::rng::Rng;
 use crate::sim::disease::{self, DiseaseState};
 use crate::sim::params::DiseaseParams;
-use crate::sim::species::{names, Genome, Kind, SpeciesId, TRAIT_NAMES};
+use crate::sim::species::{Genome, Kind, SpeciesId, TRAIT_NAMES};
 use crate::sim::time::Time;
 use crate::sim::world::World;
 
@@ -67,7 +67,7 @@ impl TickView {
         Self { peers: Vec::new(), total: 0, cap_ok: true, carcasses: Vec::new() }
     }
 
-    pub fn build(store: &CreatureStore, time: &Time, world: &World, gp: &GeneticsParams, dp: &DiseaseParams) -> Self {
+    pub fn build(store: &CreatureStore, time: &Time, world: &World, roster: &Roster, gp: &GeneticsParams, dp: &DiseaseParams) -> Self {
         let mut peers: Vec<Peer> = store
             .living()
             .map(|c| Peer {
@@ -77,7 +77,7 @@ impl TickView {
                 x: c.x,
                 y: c.y,
                 adult: c.adult,
-                mate_ready: eligible(c, time, world, gp, dp),
+                mate_ready: eligible(c, time, world, roster, gp, dp),
                 camouflage: c.genome.camouflage(),
                 goal: c.goal,
                 hunt_target: if c.goal == Goal::Hunt && c.hunt_phase != HuntPhase::Eat { c.hunt_target } else { None },
@@ -99,7 +99,7 @@ impl TickView {
 
 /// FR2 mate eligibility: adult, fed, watered, rested, off cooldown, in a
 /// breeding season and (prey only) standing on vegetation ≥ the minimum.
-pub fn eligible(c: &Creature, time: &Time, world: &World, gp: &GeneticsParams, dp: &DiseaseParams) -> bool {
+pub fn eligible(c: &Creature, time: &Time, world: &World, roster: &Roster, gp: &GeneticsParams, dp: &DiseaseParams) -> bool {
     if !c.alive || !c.adult || c.pregnant_due.is_some() {
         return false;
     }
@@ -116,7 +116,7 @@ pub fn eligible(c: &Creature, time: &Time, world: &World, gp: &GeneticsParams, d
     if !gp.breeding_seasons.contains(&time.season()) {
         return false;
     }
-    if c.species.kind() == Kind::Prey && world.cell(c.x, c.y).vegetation < gp.mate_cell_vegetation_min {
+    if roster.kind(c.species) == Kind::Prey && world.cell(c.x, c.y).vegetation < gp.mate_cell_vegetation_min {
         return false;
     }
     true
@@ -167,7 +167,7 @@ pub fn inherit(mother: &Genome, father: &Genome, generation: u32, gp: &GeneticsP
 /// Second pass of a tick: creatures seeking a mate that are adjacent to their
 /// chosen partner mate (FR2). Both get the cooldown; the female becomes
 /// pregnant and remembers the father in `mate_id`.
-pub fn consummate(store: &mut CreatureStore, time: &Time, gp: &GeneticsParams, events: &mut EventRing, view: &TickView, soft_cap_noted: &mut bool) {
+pub fn consummate(store: &mut CreatureStore, time: &Time, roster: &Roster, gp: &GeneticsParams, events: &mut EventRing, view: &TickView, soft_cap_noted: &mut bool) {
     let seekers: Vec<(CreatureId, CreatureId)> = store
         .living()
         .filter(|c| c.goal == Goal::Mate && c.pregnant_due.is_none())
@@ -207,8 +207,9 @@ pub fn consummate(store: &mut CreatureStore, time: &Time, gp: &GeneticsParams, e
         }
         let (mother_id, father_id) = if a.sex == Sex::Female { (a_id, b_id) } else { (b_id, a_id) };
         let species = a.species;
-        let cooldown = time.tick + u64::from(gp.cooldown(species)) * u64::from(time.ticks_per_day);
-        let due = time.tick + u64::from(gp.gestation(species)) * u64::from(time.ticks_per_day);
+        let sp = roster.get(species);
+        let cooldown = time.tick + u64::from(sp.mate_cooldown_days) * u64::from(time.ticks_per_day);
+        let due = time.tick + u64::from(sp.gestation_days) * u64::from(time.ticks_per_day);
 
         if let Some(m) = store.get_mut(mother_id) {
             m.cooldown_until = cooldown;
@@ -233,8 +234,9 @@ pub fn consummate(store: &mut CreatureStore, time: &Time, gp: &GeneticsParams, e
 #[allow(clippy::too_many_arguments)]
 /// Build one newborn creature (all per-birth state at its defaults).
 #[allow(clippy::too_many_arguments)]
-const fn newborn(
+fn newborn(
     species: SpeciesId,
+    n_species: usize,
     name: NameId,
     sex: Sex,
     pos: (usize, usize),
@@ -288,8 +290,8 @@ const fn newborn(
                 attempts: 0,
                 chased: 0,
                 escaped: 0,
-                threats_by_species: [0; 6],
-                kills_by_species: [0; 6],
+                threats_by_species: vec![0; n_species],
+                kills_by_species: vec![0; n_species],
                 last_kill: None,
                 chase_stats: (0, 0),
                 chase_longest_year: 0,
@@ -323,8 +325,8 @@ pub fn deliver(
     world: &World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     gp: &GeneticsParams,
-    cp: &CreaturesParams,
     dp: &DiseaseParams,
     rng: &mut Rng,
     tallies: &mut DeathTallies,
@@ -339,7 +341,7 @@ pub fn deliver(
         .collect();
     let mut born_total = 0;
     for mother_id in due {
-        born_total += deliver_litter(store, world, events, time, gp, cp, dp, rng, tallies, lineage, dstate, drng, mother_id);
+        born_total += deliver_litter(store, world, events, time, roster, gp, dp, rng, tallies, lineage, dstate, drng, mother_id);
     }
     born_total
 }
@@ -358,13 +360,14 @@ struct LitterCtx<'a> {
 
 /// Deliver one mother's litter and return how many pups survived to birth.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn deliver_litter(
     store: &mut CreatureStore,
     world: &World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     gp: &GeneticsParams,
-    cp: &CreaturesParams,
     dp: &DiseaseParams,
     rng: &mut Rng,
     tallies: &mut DeathTallies,
@@ -381,8 +384,8 @@ fn deliver_litter(
     let father_id = m.mate_id.unwrap_or(mother_id);
     // C7 FR6: parasites lower the effective fertility; C8 maturity scales the
     // litter (a slow life history has fewer, larger litters).
-    let litter = gp.litter_size(species, m.genome.fertility() * disease::effects(m, dp).fertility_factor, m.genome.maturity());
-    let mother_label = format!("{} {}", m.name_str(), m.tag());
+    let litter = gp.litter_size(roster.get(species).litter_max, m.genome.fertility() * disease::effects(m, dp).fertility_factor, m.genome.maturity());
+    let mother_label = m.label(roster);
     let mother_water = m.last_water;
     let mother_snapshot = m.clone();
 
@@ -404,13 +407,13 @@ fn deliver_litter(
     let mut notable: Vec<Event> = Vec::new();
     for i in 0..crate::cast!(litter => usize) {
         let pos = cells[i % cells.len()];
-        if bear_pup(store, lineage, rng, time, gp, cp, dp, dstate, drng, &ctx, pos, &mother_snapshot, &mut notable) {
+        if bear_pup(store, lineage, rng, time, roster, gp, dp, dstate, drng, &ctx, pos, &mother_snapshot, &mut notable) {
             born += 1;
         }
     }
 
     credit_parents(store, tallies, mother_id, father_id, born, species);
-    announce_litter(world, events, time, store, lineage, &ctx, born, (mx, my));
+    announce_litter(world, events, time, roster, store, lineage, &ctx, born, (mx, my));
     for e in notable {
         events.push(e);
     }
@@ -456,8 +459,8 @@ fn bear_pup(
     lineage: &mut Lineage,
     rng: &mut Rng,
     time: &Time,
+    roster: &Roster,
     gp: &GeneticsParams,
-    cp: &CreaturesParams,
     dp: &DiseaseParams,
     dstate: &DiseaseState,
     drng: &mut Rng,
@@ -469,17 +472,18 @@ fn bear_pup(
     let (x, y) = pos;
     let (genome, mutations) = inherit(&ctx.mother_genome, &ctx.father_genome, ctx.generation, gp, rng);
     let sex = if rng.chance(0.5) { Sex::Male } else { Sex::Female };
-    let pool = names(ctx.species).len();
+    let sp = roster.get(ctx.species);
+    let pool = sp.name_pool_len();
     let name = crate::cast!(rng.below(pool) => NameId);
-    let adult = adult_age_days(ctx.species, &genome, cp, gp) == 0;
+    let adult = adult_age_days(sp, &genome, gp) == 0;
     let mut child = newborn(
-        ctx.species, name, sex, (x, y), crate::cast!(time.day_index() => i32), ctx.generation,
+        ctx.species, roster.len(), name, sex, (x, y), crate::cast!(time.day_index() => i32), ctx.generation,
         (ctx.mother_id, ctx.father_id), ctx.mother_id, genome, mutations, ctx.mother_water, time.tick, gp.newborn_hp, adult,
     );
     disease::at_birth(&mut child, mother_snapshot, time, dp, dstate, drng);
     let id = store.insert(child);
     let Some(child) = store.get(id) else { return false };
-    lineage.record(child, gp.mutation_notable);
+    lineage.record(child, roster, gp.mutation_notable);
     for mu in &child.mutations {
         if mu.delta.abs() >= gp.mutation_notable {
             notable.push(Event {
@@ -490,9 +494,8 @@ fn bear_pup(
                 species: Some(ctx.species),
                 subject: Some(id),
                 text: format!(
-                    "{} {} was born with {} {:+.2} (gen {})",
-                    child.name_str(),
-                    child.tag(),
+                    "{} was born with {} {:+.2} (gen {})",
+                    child.label(roster),
                     TRAIT_NAMES[mu.trait_idx],
                     mu.delta,
                     mu.generation
@@ -531,10 +534,12 @@ fn credit_parents(
 
 /// Emit the birth event for the litter.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn announce_litter(
     world: &World,
     events: &mut EventRing,
     time: &Time,
+    roster: &Roster,
     store: &CreatureStore,
     lineage: &Lineage,
     ctx: &LitterCtx<'_>,
@@ -543,8 +548,8 @@ fn announce_litter(
 ) {
     let father_label = store
         .get(ctx.father_id)
-        .map(|f| format!("{} {}", f.name_str(), f.tag()))
-        .or_else(|| lineage.get(ctx.father_id).map(|n| format!("{} {}", n.name_str(), n.tag)))
+        .map(|f| f.label(roster))
+        .or_else(|| lineage.get(ctx.father_id).map(|n| format!("{} {}", n.name_str(roster), n.tag)))
         .unwrap_or_else(|| "unknown".to_string());
     events.push(Event {
         year: time.year(),

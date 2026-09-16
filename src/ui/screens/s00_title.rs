@@ -3,12 +3,12 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
 use crate::sim::save::{self, SaveHeader};
-use crate::sim::{Season, SpeciesId};
+use crate::sim::Season;
 use crate::ui::app::{AppState, ConfirmRequest, ConfirmYes};
 use crate::ui::screens::confirm::ConfirmModal;
 use crate::ui::screens::common::clip;
@@ -16,7 +16,7 @@ use crate::ui::screens::load_world::LoadWorld;
 use crate::ui::screens::s09_worldgen::WorldGen;
 use crate::ui::screens::s10_controls::Controls;
 use crate::ui::screens::{Action, Screen};
-use crate::ui::style::{SeasonStyle, SpeciesStyle};
+use crate::ui::style::SeasonStyle;
 use crate::widgets::map;
 use crate::widgets::{panel, status, util};
 use crate::{glyphs, theme};
@@ -60,8 +60,7 @@ fn last_world(f: &mut Frame<'_>, area: Rect, newest: Option<&SaveHeader>) {
         match &newest {
             Some(h) => {
                 let (y, season, doy, hour) = clock_parts(h);
-                let prey = h.counts[0] + h.counts[1] + h.counts[2];
-                let pred = h.counts[3] + h.counts[4] + h.counts[5];
+                let (prey, pred) = h.kind_totals();
                 center(
                     f,
                     area,
@@ -85,11 +84,11 @@ fn last_world(f: &mut Frame<'_>, area: Rect, newest: Option<&SaveHeader>) {
                 );
                 // species roll-call
                 let mut spans = vec![Span::styled("inhabitants  ", bg(theme::dim_text()))];
-                for (i, id) in SpeciesId::ALL.iter().enumerate() {
-                    let count = h.counts[i];
+                for (sp, &count) in h.species.iter().zip(&h.counts) {
                     let count_style = if count > 0 { bg(theme::text()) } else { bg(theme::dim_text()) };
-                    spans.push(Span::styled(id.glyph().to_ascii_uppercase().to_string(), Style::default().fg(id.color()).bg(theme::BG).add_modifier(Modifier::BOLD)));
-                    spans.push(Span::styled(format!(" {} {:<4}  ", id.plural(), count), count_style));
+                    let [r, g, b] = sp.color;
+                    spans.push(Span::styled(sp.glyph.to_ascii_uppercase().to_string(), Style::default().fg(Color::Rgb(r, g, b)).bg(theme::BG).add_modifier(Modifier::BOLD)));
+                    spans.push(Span::styled(format!(" {} {:<4}  ", sp.plural, count), count_style));
                 }
                 center(f, area, 30, Line::from(spans));
             }

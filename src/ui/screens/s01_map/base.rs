@@ -43,9 +43,9 @@ pub(super) fn population_section(f: &mut Frame<'_>, inner: Rect, mut row: u16, s
         let samples = sim.series.samples();
         let mut prey = 0u32;
         let mut pred = 0u32;
-        for (i, id) in SpeciesId::ALL.iter().enumerate() {
-            let count = crate::cast!(sim.creatures.living().filter(|c| c.species == *id).count() => u32);
-            if id.kind() == crate::sim::Kind::Prey {
+        for (i, id) in sim.roster().ids().map(|id| (id.index(), id)) {
+            let count = crate::cast!(sim.creatures.living().filter(|c| c.species == id).count() => u32);
+            if sim.roster().kind(id) == crate::sim::Kind::Prey {
                 prey += count;
             } else {
                 pred += count;
@@ -57,14 +57,14 @@ pub(super) fn population_section(f: &mut Frame<'_>, inner: Rect, mut row: u16, s
                 _ => theme::DIM,
             };
             util::line(f, inner, row, Line::from(vec![
-                Span::styled(format!(" {} ", id.glyph().to_ascii_uppercase()), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("{:<6}", id.name()), theme::text()),
+                Span::styled(format!(" {} ", sim.roster().adult_glyph(id)), Style::default().fg(sim.roster().color(id)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{:<6}", sim.roster().display_name(id)), theme::text()),
                 Span::styled(format!("{count:>5} "), theme::text()),
                 Span::styled(arrow.to_string(), Style::default().fg(arrow_color).bg(theme::PANEL_BG)),
                 Span::styled("  ", theme::text()),
             ]));
             let spark = sparkline(samples, i);
-            bars::sparkline(f.buffer_mut(), inner.x + 20, inner.y + row, 18, &spark, id.color());
+            bars::sparkline(f.buffer_mut(), inner.x + 20, inner.y + row, 18, &spark, sim.roster().color(id));
             row += 1;
         }
         let ratio = crate::cast!(prey => f32) / crate::cast!(pred.max(1) => f32);
@@ -108,7 +108,7 @@ pub(super) fn resources_section(f: &mut Frame<'_>, inner: Rect, mut row: u16, ap
 }
 
 /// Terrain and species legend.
-pub(super) fn legend_section(f: &mut Frame<'_>, inner: Rect, mut row: u16) {
+pub(super) fn legend_section(f: &mut Frame<'_>, inner: Rect, mut row: u16, roster: &crate::sim::Roster) {
         panel::section(f, inner, row, "Legend");
         row += 1;
         let legend = map::legend();
@@ -121,11 +121,12 @@ pub(super) fn legend_section(f: &mut Frame<'_>, inner: Rect, mut row: u16) {
             util::line(f, inner, row, Line::from(spans));
             row += 1;
         }
-        for chunk in SpeciesId::ALL.chunks(3) {
+        let ids: Vec<SpeciesId> = roster.ids().collect();
+        for chunk in ids.chunks(3) {
             let mut spans = vec![Span::styled(" ", theme::text())];
-            for id in chunk {
-                spans.push(Span::styled(format!("{}{}", id.glyph().to_ascii_uppercase(), id.glyph()), Style::default().fg(id.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)));
-                spans.push(Span::styled(format!(" {:<10}", id.name()), theme::dim_text()));
+            for &id in chunk {
+                spans.push(Span::styled(format!("{}{}", roster.adult_glyph(id), roster.glyph(id)), Style::default().fg(roster.color(id)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)));
+                spans.push(Span::styled(format!(" {:<10}", roster.display_name(id)), theme::dim_text()));
             }
             util::line(f, inner, row, Line::from(spans));
             row += 1;

@@ -178,7 +178,7 @@ impl Screen for Inspector {
             let (rect, inner) = match pane {
                 Pane::Identity => (left, panel::draw(f, left, identity_title(c), self.panel_kind(pane))),
                 Pane::Genome => {
-                    let hint = format!("vs {} mean", c.species.plural());
+                    let hint = format!("vs {} mean", sim.roster().plural(c.species));
                     (mid, panel::draw_with_hint(f, mid, "Genome", &hint, self.panel_kind(pane)))
                 }
                 Pane::Life => (right, panel::draw(f, right, "Life", self.panel_kind(pane))),
@@ -193,7 +193,7 @@ impl Screen for Inspector {
         }
         self.measured.set((content, visible));
 
-        let right_text = format!("{} {}  {}", c.name_str(), c.tag(), sim.time.clock_label());
+        let right_text = format!("{} {}  {}", c.name_str(sim.roster()), c.tag(sim.roster()), sim.time.clock_label());
         status::render(
             f,
             Rect::new(area.x, status_row, area.width, 1),
@@ -231,11 +231,11 @@ pub(crate) fn killer_and_scavengers(buf: &mut Buffer, inner: Rect, mut row: u16,
         let kname = sim
             .creatures
             .get(killer_id)
-            .map(|k| format!("{} {}", k.name_str(), k.tag()))
-            .or_else(|| sim.lineage.get(killer_id).map(|n| format!("{} {}", n.name_str(), n.tag)))
+            .map(|k| k.label(sim.roster()))
+            .or_else(|| sim.lineage.get(killer_id).map(|n| format!("{} {}", n.name_str(sim.roster()), n.tag)))
             .unwrap_or_else(|| format!("#{}", killer_id.0));
-        let kglyph = sim.creatures.get(killer_id).map_or('?', |k| k.species.glyph().to_ascii_uppercase());
-        let kcolor = sim.creatures.get(killer_id).map_or(theme::DIM, |k| k.species.color());
+        let kglyph = sim.creatures.get(killer_id).map_or('?', |k| sim.roster().adult_glyph(k.species));
+        let kcolor = sim.creatures.get(killer_id).map_or(theme::DIM, |k| sim.roster().color(k.species));
         let kills = sim.creatures.get(killer_id).map_or(0, |k| k.kills);
         let chase = c.death.map_or(0, |d| d.chase_ticks);
         util::line_in(buf, inner, row, Line::from(vec![
@@ -250,7 +250,7 @@ pub(crate) fn killer_and_scavengers(buf: &mut Buffer, inner: Rect, mut row: u16,
     let mut scav: Vec<(f32, &Creature)> = sim
         .creatures
         .living()
-        .filter(|o| o.species.kind() == Kind::Predator && o.goal == Goal::Scavenge)
+        .filter(|o| sim.roster().kind(o.species) == Kind::Predator && o.goal == Goal::Scavenge)
         .map(|o| (crate::sim::dist(c.x, c.y, o.x, o.y), o))
         .collect();
     scav.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.id.cmp(&b.1.id)));
@@ -260,8 +260,8 @@ pub(crate) fn killer_and_scavengers(buf: &mut Buffer, inner: Rect, mut row: u16,
     }
     for (d, o) in scav.iter().take(2) {
         util::line_in(buf, inner, row, Line::from(vec![
-            sp(format!(" {} ", o.species.glyph().to_ascii_uppercase()), Style::default().fg(o.species.color()).bg(theme::PANEL_BG)),
-            sp(format!("{:<9}{:<7} {:>3.0} cells {}  {}", o.name_str(), o.tag(), d, compass(c.x, c.y, o.x, o.y), o.goal.plain()), theme::text()),
+            sp(format!(" {} ", sim.roster().adult_glyph(o.species)), Style::default().fg(sim.roster().color(o.species)).bg(theme::PANEL_BG)),
+            sp(format!("{:<9}{:<7} {:>3.0} cells {}  {}", o.name_str(sim.roster()), o.tag(sim.roster()), d, compass(c.x, c.y, o.x, o.y), o.goal.plain()), theme::text()),
         ]));
         row += 1;
     }
@@ -270,10 +270,10 @@ pub(crate) fn killer_and_scavengers(buf: &mut Buffer, inner: Rect, mut row: u16,
 
 pub(crate) fn kin_name(sim: &crate::sim::Sim, id: CreatureId) -> String {
     if let Some(c) = sim.creatures.get(id) {
-        return format!("{} {}", c.name_str(), c.tag());
+        return c.label(sim.roster());
     }
     match sim.lineage.get(id) {
-        Some(n) => format!("{} {}", n.name_str(), n.tag),
+        Some(n) => format!("{} {}", n.name_str(sim.roster()), n.tag),
         None => format!("#{}", id.0),
     }
 }

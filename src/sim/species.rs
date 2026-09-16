@@ -1,4 +1,8 @@
 //! Species identity and the trait genome, as plain data (no presentation).
+//!
+//! Every per-species fact (name, glyph, colour, kind, base genome, life-history
+//! numbers) lives in the `[[species]]` roster (`sim::params::Roster`); a
+//! `SpeciesId` is only a position in it.
 
 use serde::{Deserialize, Serialize};
 
@@ -20,131 +24,42 @@ pub const TRAIT_NAMES: [&str; N_TRAITS] = [
 /// Headers are built from this, never hand-typed.
 pub const TRAIT_ABBR: [&str; N_TRAITS] = ["Spd", "Siz", "Sen", "Met", "Agg", "Cam", "Fer", "Lon", "Res", "Soc", "Mat"];
 
-/// Prey name pool (shared by Vole, Hare and Deer; a `NameId` indexes into it).
+/// Built-in prey name pool, used by prey species with an empty `names` list.
 pub const PREY_NAMES: &[&str] = &[
     "Clover", "Moss", "Fern", "Sorrel", "Rowan", "Willow", "Hazel", "Birch",
     "Tansy", "Yarrow", "Nettle", "Sedge", "Rush", "Burdock", "Mallow", "Vetch", "Cress", "Dill",
 ];
 
-/// Predator name pool (shared by Fox, Wolf and Lynx; a `NameId` indexes into it).
+/// Built-in predator name pool, used by predator species with an empty `names` list.
 pub const PRED_NAMES: &[&str] = &[
     "Greymaw", "Ember", "Sable", "Rook", "Cinder", "Fenrir", "Shade", "Talon", "Brindle",
     "Scorch", "Howl", "Umber", "Flint", "Gloam", "Rime", "Vex", "Snarl", "Dusk", "Kestrel",
 ];
 
-/// The name list for a species (prey share one pool, predators another).
-pub const fn names(id: SpeciesId) -> &'static [&'static str] {
-    match id.kind() {
-        Kind::Prey => PREY_NAMES,
-        Kind::Predator => PRED_NAMES,
-    }
-}
-
-/// Resolve a `NameId` against a species' name list.
-pub fn name_for(id: SpeciesId, name_id: u32) -> &'static str {
-    let list = names(id);
-    list[(crate::cast!(name_id => usize)) % list.len()]
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SpeciesId {
-    Vole,
-    Hare,
-    Deer,
-    Fox,
-    Wolf,
-    Lynx,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Kind {
-    Prey,
-    Predator,
-}
+/// A species: its position in the roster. Every per-species `Vec` in the
+/// simulation is indexed by it, so roster order is load-bearing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SpeciesId(pub u8);
 
 impl SpeciesId {
-    pub const ALL: [Self; 6] = [
-        Self::Vole,
-        Self::Hare,
-        Self::Deer,
-        Self::Fox,
-        Self::Wolf,
-        Self::Lynx,
-    ];
-
-    /// Position in `SpeciesId::ALL` (the index used by every per-species array).
+    /// Position in the roster (the index used by every per-species `Vec`).
     pub const fn index(self) -> usize {
-        crate::cast!(self => usize)
+        crate::cast!(self.0 => usize)
     }
 
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Vole => "Vole",
-            Self::Hare => "Hare",
-            Self::Deer => "Deer",
-            Self::Fox => "Fox",
-            Self::Wolf => "Wolf",
-            Self::Lynx => "Lynx",
-        }
+    /// The species at a roster position.
+    pub const fn from_index(i: usize) -> Self {
+        Self(crate::cast!(i => u8))
     }
+}
 
-    /// Lowercase species letter (adult/uppercase is a presentation concern).
-    pub const fn glyph(self) -> char {
-        match self {
-            Self::Vole => 'v',
-            Self::Hare => 'h',
-            Self::Deer => 'd',
-            Self::Fox => 'f',
-            Self::Wolf => 'w',
-            Self::Lynx => 'l',
-        }
-    }
-
-    pub const fn plural(self) -> &'static str {
-        match self {
-            Self::Vole => "Voles",
-            Self::Hare => "Hares",
-            Self::Deer => "Deer",
-            Self::Fox => "Foxes",
-            Self::Wolf => "Wolves",
-            Self::Lynx => "Lynxes",
-        }
-    }
-
-    pub const fn kind(self) -> Kind {
-        match self {
-            Self::Vole | Self::Hare | Self::Deer => Kind::Prey,
-            _ => Kind::Predator,
-        }
-    }
-
-    pub const fn diet(self) -> &'static str {
-        match self {
-            Self::Vole => "seeds, roots",
-            Self::Hare => "grass, bark",
-            Self::Deer => "grass, leaves",
-            Self::Fox => "voles, hares",
-            Self::Wolf => "deer, hares",
-            Self::Lynx => "hares, voles",
-        }
-    }
-
-    /// Baseline genome around which individuals vary.
-    ///
-    /// Order: speed, size, sense, metabolism, aggression, camouflage, fertility,
-    /// longevity, resistance, sociality, maturity. Maturity 0.5 everywhere keeps
-    /// the starting balance identical to the pre-maturity numbers.
-    pub const fn base_genome(self) -> Genome {
-        match self {
-            Self::Vole => Genome([0.45, 0.10, 0.40, 0.75, 0.05, 0.60, 0.90, 0.20, 0.30, 0.35, 0.5]),
-            Self::Hare => Genome([0.80, 0.25, 0.65, 0.60, 0.10, 0.55, 0.75, 0.35, 0.35, 0.25, 0.5]),
-            Self::Deer => Genome([0.65, 0.80, 0.55, 0.40, 0.20, 0.35, 0.35, 0.70, 0.45, 0.70, 0.5]),
-            Self::Fox => Genome([0.70, 0.35, 0.80, 0.55, 0.60, 0.50, 0.50, 0.45, 0.40, 0.15, 0.5]),
-            Self::Wolf => Genome([0.75, 0.70, 0.70, 0.50, 0.85, 0.25, 0.40, 0.60, 0.50, 0.70, 0.5]),
-            Self::Lynx => Genome([0.72, 0.50, 0.90, 0.45, 0.75, 0.70, 0.30, 0.55, 0.45, 0.10, 0.5]),
-        }
-    }
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Kind {
+    #[default]
+    Prey,
+    Predator,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
@@ -201,11 +116,49 @@ impl Genome {
     }
 }
 
+/// The default roster's species by name, for tests that build creatures by hand.
+#[cfg(test)]
+pub mod testing {
+    use super::{Genome, SpeciesId};
+    use crate::sim::params::Roster;
+
+    pub const VOLE: SpeciesId = SpeciesId(0);
+    pub const HARE: SpeciesId = SpeciesId(1);
+    pub const DEER: SpeciesId = SpeciesId(2);
+    pub const FOX: SpeciesId = SpeciesId(3);
+    pub const WOLF: SpeciesId = SpeciesId(4);
+    pub const LYNX: SpeciesId = SpeciesId(5);
+    /// Size of the default roster.
+    pub const N_SPECIES: usize = 6;
+
+    /// The default roster's base genome for `id`.
+    pub fn genome(id: SpeciesId) -> Genome {
+        roster().base_genome(id)
+    }
+
+    /// The default roster, shared by tests that build creatures by hand.
+    pub fn roster() -> &'static Roster {
+        static ROSTER: std::sync::OnceLock<Roster> = std::sync::OnceLock::new();
+        ROSTER.get_or_init(Roster::default)
+    }
+
+    #[test]
+    fn constants_match_default_roster() {
+        let r = Roster::default();
+        assert_eq!(r.len(), N_SPECIES);
+        for (id, name) in [(VOLE, "vole"), (HARE, "hare"), (DEER, "deer"), (FOX, "fox"), (WOLF, "wolf"), (LYNX, "lynx")] {
+            assert_eq!(r.name(id), name);
+            assert_eq!(r.id(name), Some(id));
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests {
 
     use super::*;
+    use crate::sim::params::Roster;
 
     #[test]
     fn trait_tables_agree() {
@@ -218,8 +171,9 @@ mod tests {
 
     #[test]
     fn base_genomes_are_clamped_and_named() {
-        for id in SpeciesId::ALL {
-            let g = id.base_genome();
+        let r = Roster::default();
+        for id in r.ids() {
+            let g = r.base_genome(id);
             for (t, &v) in g.0.iter().enumerate() {
                 assert!((0.02..=0.98).contains(&v), "{id:?} trait {t} = {v} out of range");
             }

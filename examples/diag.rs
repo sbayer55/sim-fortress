@@ -8,7 +8,7 @@
 // benchmark or diagnostic script is supposed to fail loudly.
 #![allow(clippy::indexing_slicing, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use sim_fortress::sim::{EventKind, Params, Sim, SpeciesId};
+use sim_fortress::sim::{EventKind, Params, Sim};
 
 // One linear benchmark/diagnostic driver: splitting it would only scatter the
 // reporting it exists to print.
@@ -41,7 +41,7 @@ fn main() {
             for e in sim.events.iter().rev().take(3000) {
                 let Some(sp) = e.species else { continue };
                 let i = sp.index();
-                if i >= 3 || u64::from(e.day) < day.saturating_sub(30) % 360 {
+                if sim.roster().kind(sp) != sim_fortress::sim::Kind::Prey || u64::from(e.day) < day.saturating_sub(30) % 360 {
                     continue;
                 }
                 match e.kind {
@@ -57,7 +57,7 @@ fn main() {
             let mut veg_at: Vec<f32> = Vec::new();
             for c in sim.creatures.carcasses() {
                 let Some(d) = c.death else { continue };
-                if d.cause != sim_fortress::sim::Cause::Starved || c.species.index() >= 3 {
+                if d.cause != sim_fortress::sim::Cause::Starved || sim.roster().kind(c.species) != sim_fortress::sim::Kind::Prey {
                     continue;
                 }
                 let age = sim_fortress::cast!((i64::from(d.day) - i64::from(c.born_day)).max(0) => u32);
@@ -80,7 +80,7 @@ fn main() {
                 .collect();
             for c in sim.creatures.carcasses() {
                 let Some(d) = c.death else { continue };
-                if d.cause != sim_fortress::sim::Cause::Thirst || c.species.index() >= 3 {
+                if d.cause != sim_fortress::sim::Cause::Thirst || sim.roster().kind(c.species) != sim_fortress::sim::Kind::Prey {
                     continue;
                 }
                 if let Some((wx, wy)) = c.last_water {
@@ -98,8 +98,9 @@ fn main() {
             let med = ages.get(ages.len().div_euclid(2)).copied().unwrap_or(0);
             let vmean = if veg_at.is_empty() { 0.0 } else { veg_at.iter().sum::<f32>() / sim_fortress::cast!(veg_at.len() => f32) };
             println!("     starved carcasses: juv {juv} adult {adult}; median age {med}d; ages {:?}; veg at carcass {vmean:.2}", &ages[..ages.len().min(20)]);
-            for (i, sp) in SpeciesId::ALL.iter().take(3).enumerate() {
-                let living: Vec<_> = sim.creatures.living().filter(|c| c.species == *sp).collect();
+            for sp in sim.roster().prey_ids() {
+                let i = sp.index();
+                let living: Vec<_> = sim.creatures.living().filter(|c| c.species == sp).collect();
                 let n = sim_fortress::cast!(living.len().max(1) => f32);
                 let adults = living.iter().filter(|c| c.adult).count();
                 let hunger: f32 = living.iter().map(|c| c.hunger).sum::<f32>() / n;
@@ -115,7 +116,7 @@ fn main() {
                 println!(
                     "{:4} {:<4} {:5} {:3} {:4}  {:6}  {:7} {:6} {:4}  | {:.2}   {:.2}   {:.2}   {:4.0}",
                     day,
-                    sp.name(),
+                    sim.roster().name(sp),
                     living.len(),
                     adults,
                     living.len() - adults,
@@ -138,7 +139,7 @@ fn main() {
                 let moved = c.trail.iter().filter(|&&p| p != (c.x, c.y)).count();
                 println!(
                     "     thirsty {} {} at ({},{}) {:?} goal={:?} energy={:.2} hp={:.2} target={:?} last_water={:?} trail_distinct={}",
-                    c.name_str(), c.tag(), c.x, c.y, sim.world.cell(c.x, c.y).terrain, c.goal, c.energy, c.hp, tgt, c.last_water, moved
+                    c.name_str(sim.roster()), c.tag(sim.roster()), c.x, c.y, sim.world.cell(c.x, c.y).terrain, c.goal, c.energy, c.hp, tgt, c.last_water, moved
                 );
             }
             let veg = sim.series.last().map_or(0.0, |s| s.veg_mean);

@@ -5,7 +5,7 @@
 // library, and `unwrap` is how this throwaway script reports a failed run.
 #![allow(clippy::indexing_slicing, clippy::unwrap_used)]
 
-use sim_fortress::sim::{save, Params, Sim, SpeciesId};
+use sim_fortress::sim::{save, Params, Sim};
 fn main() {
     let a: Vec<String> = std::env::args().skip(1).collect();
     let seed: u64 = a[0].parse().unwrap();
@@ -13,8 +13,8 @@ fn main() {
     let dir = std::path::PathBuf::from(&a[2]);
     let mut p = Params::default();
     if a.get(3).is_some_and(|s| s == "prey_only") {
-        for id in [SpeciesId::Fox, SpeciesId::Wolf, SpeciesId::Lynx] {
-            p.creatures.initial_counts.insert(id, 0);
+        for name in ["fox", "wolf", "lynx"] {
+            p.species.set_initial_count(name, 0);
         }
     }
     let mut sim = Sim::new(seed, p);

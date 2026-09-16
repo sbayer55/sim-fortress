@@ -60,7 +60,7 @@ impl SortCol {
 
 /// Species indices in display order for `sort`; ties keep species order.
 pub fn sorted_indices(sim: &Sim, sort: SortCol) -> Vec<usize> {
-    let mut idx: Vec<usize> = (0..6).collect();
+    let mut idx: Vec<usize> = (0..sim.roster().len()).collect();
     let key = |i: usize| -> (i64, usize) {
         let s = &sim.species[i];
         let v = match sort {
@@ -73,7 +73,7 @@ pub fn sorted_indices(sim: &Sim, sort: SortCol) -> Vec<usize> {
         (-v, i)
     };
     match sort {
-        SortCol::Name => idx.sort_by_key(|&i| (SpeciesId::ALL[i].name(), i)),
+        SortCol::Name => idx.sort_by_key(|&i| (sim.roster().name(SpeciesId::from_index(i)).to_string(), i)),
         _ => idx.sort_by_key(|&i| key(i)),
     }
     idx
@@ -122,7 +122,7 @@ impl SpeciesBrowser {
 
     fn selected_species(&self, sim: &Sim) -> SpeciesId {
         let order = sorted_indices(sim, self.sort);
-        SpeciesId::ALL[order[self.sel.min(5)]]
+        SpeciesId::from_index(order[self.sel.min(order.len().saturating_sub(1))])
     }
 
     /// Scroll the summary by `delta` rows, clamped to its measured content.
@@ -195,7 +195,7 @@ impl Screen for SpeciesBrowser {
                 self.sort = self.sort.next();
                 if let (Some(sim), Some(species)) = (app.sim.as_ref(), species) {
                     let order = sorted_indices(sim, self.sort);
-                    self.sel = order.iter().position(|&i| SpeciesId::ALL[i] == species).unwrap_or(0);
+                    self.sel = order.iter().position(|&i| i == species.index()).unwrap_or(0);
                 }
                 Action::None
             }
@@ -217,7 +217,7 @@ impl Screen for SpeciesBrowser {
         table(f, Rect::new(area.x, area.y, area.width, table_h), sim, self.sort, species, self.panel_kind(Pane::Table));
 
         let summary_area = Rect::new(area.x, area.y + table_h, area.width, body_h - table_h);
-        let inner = panel::draw_with_hint(f, summary_area, &format!("Selected: {}", species.name()), "Enter for full detail", self.panel_kind(Pane::Summary));
+        let inner = panel::draw_with_hint(f, summary_area, &format!("Selected: {}", sim.roster().display_name(species)), "Enter for full detail", self.panel_kind(Pane::Summary));
         let ov = scroll::draw(f, summary_area, inner, self.offset, |buf, canvas| summary_body(buf, canvas, sim, species));
         self.measured.set((ov.content, inner.height));
 
@@ -247,15 +247,16 @@ impl Screen for SpeciesDetail {
         true
     }
 
-    fn handle_key(&mut self, key: KeyEvent, _app: &mut AppState) -> Action {
+    fn handle_key(&mut self, key: KeyEvent, app: &mut AppState) -> Action {
+        let n = app.params.species.len().max(1);
         match key.code {
             KeyCode::Esc => Action::Pop,
             KeyCode::Left | KeyCode::Up => {
-                self.species = SpeciesId::ALL[(self.species.index() + 5) % 6];
+                self.species = SpeciesId::from_index((self.species.index() + n - 1) % n);
                 Action::None
             }
             KeyCode::Right | KeyCode::Down => {
-                self.species = SpeciesId::ALL[(self.species.index() + 1) % 6];
+                self.species = SpeciesId::from_index((self.species.index() + 1) % n);
                 Action::None
             }
             _ => Action::Unhandled,
@@ -273,7 +274,7 @@ impl Screen for SpeciesDetail {
             f,
             Rect::new(area.x, status_row, area.width, 1),
             &[("←→", "other species"), ("Esc", "back")],
-            &format!("{} detail  {}", self.species.name(), sim.time.clock_label()),
+            &format!("{} detail  {}", sim.roster().display_name(self.species), sim.time.clock_label()),
         );
     }
 }

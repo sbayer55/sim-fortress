@@ -15,7 +15,7 @@ use super::drift::selection_pressure;
 
 pub(super) fn histograms(f: &mut Frame<'_>, area: Rect, sim: &Sim, id: SpeciesId) {
     let s = &sim.species[id.index()];
-    let inner = panel::draw_with_hint(f, area, &format!("{}: trait distributions", id.name()), "12 buckets, living adults + juveniles", panel::Kind::Outer);
+    let inner = panel::draw_with_hint(f, area, &format!("{}: trait distributions", sim.roster().display_name(id)), "12 buckets, living adults + juveniles", panel::Kind::Outer);
     // C8: eleven traits in a 3 x 4 grid of 25-column blocks (23-wide histograms).
     // `block_h` is exactly the block height (name, hist, axis, labels) so the
     // former spacer row is gone and the grid still leaves room for the two
@@ -89,8 +89,8 @@ pub(super) fn histograms(f: &mut Frame<'_>, area: Rect, sim: &Sim, id: SpeciesId
         }
         let absent = other.count == 0;
         let mut spans = vec![
-            sp(format!(" {} ", other.species.glyph().to_ascii_uppercase()), Style::default().fg(if absent { theme::DIM } else { other.species.color() }).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-            sp(format!("{:<10}", other.species.name()), if other.species == id { theme::title() } else if absent { theme::dim_text() } else { theme::text() }),
+            sp(format!(" {} ", sim.roster().adult_glyph(other.species)), Style::default().fg(if absent { theme::DIM } else { sim.roster().color(other.species) }).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!("{:<10}", sim.roster().display_name(other.species)), if other.species == id { theme::title() } else if absent { theme::dim_text() } else { theme::text() }),
         ];
         for t in 0..Genome::LEN {
             spans.push(sp(format!(" {:>3}", two(other.mean.0[t])), Style::default().fg(if absent { theme::DIM } else { trait_color(t) }).bg(theme::PANEL_BG)));

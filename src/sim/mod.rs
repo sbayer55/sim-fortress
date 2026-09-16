@@ -23,7 +23,7 @@ pub use creatures::{Cause, Creature, CreatureId, Death, DeathTallies, Goal, Muta
 pub use disease::{DiseaseState, Infection, Outbreak, Pathogen, PathogenId, PathogenStats, Stage};
 pub use events::{Event, EventKind};
 pub use geom::{cheb, dist};
-pub use params::{Params, PredationParams, Rainfall};
+pub use params::{Params, PredationParams, Rainfall, Roster, SpeciesParams};
 pub use params::{Difficulty, Preset, PRESETS};
 pub use rng::Rng;
 pub use spatial::SpatialIndex;
@@ -101,8 +101,8 @@ pub struct Sim {
     pub deaths: DeathTallies,
     pub drought: [bool; 8],
     pub drought_days_below: [u32; 8],
-    /// Per-species live statistics (C4 FR5), `SpeciesId::ALL` order.
-    pub species: [SpeciesStats; 6],
+    /// Per-species live statistics (C4 FR5), roster order.
+    pub species: Vec<SpeciesStats>,
     /// Per-species group-size census (C8 follow-up): the herds and packs the
     /// cohesion rule currently holds together. Recomputed from positions at the
     /// day boundary and after a load, never serialised, so the file format and
@@ -118,21 +118,17 @@ pub struct Sim {
     soft_cap_counted: bool,
     // ---- C5 predation / extinction / migration state ----
     /// A species has been marked globally extinct (once each).
-    pub extinct: [bool; 6],
+    pub extinct: Vec<bool>,
     /// Retained death record of the last individual, per species.
-    pub last_extinct: [Option<ExtinctionRecord>; 6],
+    pub last_extinct: Vec<Option<ExtinctionRecord>>,
     /// Tick until which a (species × 8 + region) pair cannot migrate again.
-    #[serde(with = "serde_big_array::BigArray")]
-    pub migration_cooldown_until: [u64; 48],
+    pub migration_cooldown_until: Vec<u64>,
     /// Consecutive days the migration trigger has held, per (species, region).
-    #[serde(with = "serde_big_array::BigArray")]
-    pub migration_days_below: [u32; 48],
+    pub migration_days_below: Vec<u32>,
     /// Last day a (species, region) count was ≥ `local_extinction_min`.
-    #[serde(with = "serde_big_array::BigArray")]
-    pub local_min_day: [Option<u32>; 48],
+    pub local_min_day: Vec<Option<u32>>,
     /// A local-extinction Note has been emitted for this pair (until repopulated).
-    #[serde(with = "serde_big_array::BigArray")]
-    pub local_noted: [bool; 48],
+    pub local_noted: Vec<bool>,
     /// Per-system timings (C6 FR8); never serialised.
     #[serde(skip)]
     pub profile: Profile,
@@ -161,11 +157,12 @@ impl Sim {
         let rng = Rng::new(seed);
         let mut creature_rng = Rng::new(seed ^ 0x9E37_79B9_7F4A_7C15);
         let disease_rng = Rng::new(seed ^ 0x7F4A_7C15_9E37_79B9);
-        let disease = DiseaseState::new(&params.disease);
+        let disease = DiseaseState::new(&params.disease, &params.species);
+        let n = params.species.len();
 
         // Place founders (FR3), then build the spatial index over them.
         let mut creatures = CreatureStore::new();
-        for mut c in creatures::place_founders(&world, &params.creatures, &params.genetics, params.disease.resistance_founder_sd, &mut creature_rng) {
+        for mut c in creatures::place_founders(&world, &params.species, &params.creatures, &params.genetics, params.disease.resistance_founder_sd, &mut creature_rng) {
             if params.disease.enabled {
                 c.parasite_load = params.disease.parasite_baseline;
             }
@@ -175,10 +172,10 @@ impl Sim {
         spatial.rebuild(&creatures, &world);
         let mut lineage = Lineage::new();
         for c in creatures.living() {
-            lineage.record(c, params.genetics.mutation_notable);
+            lineage.record(c, &params.species, params.genetics.mutation_notable);
         }
-        let species = SpeciesStats::all(&census(&creatures), 0, params.genetics.drift_every_generations);
-        let group_stats = group_census(&creatures, &params.social);
+        let species = SpeciesStats::all(&census(&creatures, n), &params.species, 0, params.genetics.drift_every_generations);
+        let group_stats = group_census(&creatures, &params.social, n);
 
         Self {
             seed,
@@ -191,7 +188,7 @@ impl Sim {
             series,
             creatures,
             spatial,
-            deaths: DeathTallies::default(),
+            deaths: DeathTallies::new(n),
             drought: [false; 8],
             drought_days_below: [0; 8],
             species,
@@ -200,12 +197,12 @@ impl Sim {
             soft_cap_noted: false,
             soft_cap_crossings: 0,
             soft_cap_counted: false,
-            extinct: [false; 6],
-            last_extinct: [None, None, None, None, None, None],
-            migration_cooldown_until: [0; 48],
-            migration_days_below: [0; 48],
-            local_min_day: [None; 48],
-            local_noted: [false; 48],
+            extinct: vec![false; n],
+            last_extinct: vec![None; n],
+            migration_cooldown_until: vec![0; n * 8],
+            migration_days_below: vec![0; n * 8],
+            local_min_day: vec![None; n * 8],
+            local_noted: vec![false; n * 8],
             profile: Profile::default(),
             profile_enabled: false,
             disease_rng,
@@ -222,16 +219,26 @@ impl Sim {
     /// Recompute the group-size census from the living set's current positions
     /// (C8 follow-up). Draws no RNG, so it never perturbs a run.
     pub fn refresh_group_stats(&mut self) {
-        self.group_stats = group_census(&self.creatures, &self.params.social);
+        self.group_stats = group_census(&self.creatures, &self.params.social, self.params.species.len());
+    }
+
+    /// The species roster (`[[species]]`).
+    pub const fn roster(&self) -> &Roster {
+        &self.params.species
+    }
+
+    /// The roster record of a species.
+    pub fn species_params(&self, id: SpeciesId) -> &SpeciesParams {
+        self.params.species.get(id)
     }
 
     /// Births so far today for species index `i` (the live counter).
-    pub const fn births_today(&self, i: usize) -> u32 {
+    pub fn births_today(&self, i: usize) -> u32 {
         self.deaths.births[i]
     }
 
     /// Deaths so far today for species index `i` (the live counter).
-    pub const fn deaths_today(&self, i: usize) -> u32 {
+    pub fn deaths_today(&self, i: usize) -> u32 {
         self.deaths.deaths[i]
     }
 
@@ -276,6 +283,7 @@ impl Sim {
             &mut self.world,
             &mut self.events,
             &self.time,
+            &self.params.species,
             &self.params.creatures,
             &self.params.ecology,
             &self.params.genetics,
@@ -321,6 +329,7 @@ impl Sim {
             &mut self.world,
             &mut self.events,
             &self.time,
+            &self.params.species,
             &self.params.creatures,
             &self.params.genetics,
             &self.params.disease,
@@ -329,7 +338,7 @@ impl Sim {
             &mut self.disease,
             &mut self.disease_rng,
         );
-        let c = census(&self.creatures);
+        let c = census(&self.creatures, self.params.species.len());
         let day = crate::cast!(self.time.day_index() => u32);
         stats::update_species_daily(&mut self.species, &c, &self.deaths, day, self.params.genetics.drift_every_generations);
         if self.profile_enabled {
@@ -354,6 +363,7 @@ impl Sim {
             &self.world,
             &mut self.events,
             &self.time,
+            &self.params.species,
             &self.params.ecology,
             &self.params.predation,
             &mut self.migration_cooldown_until,
@@ -373,6 +383,7 @@ impl Sim {
             &self.world,
             &mut self.events,
             &self.time,
+            &self.params.species,
             &self.params.disease,
             &mut self.disease,
             &c.population,
@@ -408,7 +419,7 @@ impl Sim {
     /// C5 FR8: mark species `id` globally extinct and queue its alert. A no-op
     /// unless the species was introduced and its population just reached zero.
     fn record_global_extinction(&mut self, i: usize, id: SpeciesId, alerts: &mut Vec<Alert>) {
-        let initial = self.params.creatures.initial_counts.get(&id).copied().unwrap_or(0);
+        let initial = self.params.species.get(id).initial_count;
         let peak = self.species[i].peak;
         if initial == 0 || peak == 0 || self.species[i].count != 0 {
             return;
@@ -421,13 +432,13 @@ impl Sim {
         let text = match &record {
             Some(r) => format!(
                 "The {} are extinct; the last individual was {} {} ({} in {})",
-                id.plural(),
+                self.params.species.plural(id),
                 r.name,
                 r.tag,
                 r.cause.label(),
                 r.region
             ),
-            None => format!("The {} are extinct", id.plural()),
+            None => format!("The {} are extinct", self.params.species.plural(id)),
         };
         let pos = record.as_ref().map(|r| r.pos);
         self.events.push(Event {
@@ -452,16 +463,17 @@ impl Sim {
 
     /// C5 FR8: mark globally extinct species and queue one `Extinction` alert each.
     fn detect_extinctions(&mut self, alerts: &mut Vec<Alert>) {
-        let mut region_counts = [[0u32; 8]; 6];
+        let mut region_counts = vec![[0u32; 8]; self.params.species.len()];
         for c in self.creatures.living() {
             let ri = self.world.region_index(c.x, c.y).min(7);
             region_counts[c.species.index()][ri] += 1;
         }
 
-        for (i, id) in SpeciesId::ALL.iter().enumerate() {
+        for i in 0..self.params.species.len() {
+            let id = SpeciesId::from_index(i);
             // Global extinction (once per species).
             if !self.extinct[i] {
-                self.record_global_extinction(i, *id, alerts);
+                self.record_global_extinction(i, id, alerts);
             }
 
             // Local extinction (FR8): a region whose count drops to 0 after being
@@ -485,9 +497,9 @@ impl Sim {
                         day: self.time.day_of_year(),
                         hour: self.time.hour(),
                         kind: EventKind::Note,
-                        species: Some(*id),
+                        species: Some(id),
                         subject: None,
-                        text: format!("The {} line of {} is extinct", id.plural(), r.0),
+                        text: format!("The {} line of {} is extinct", self.params.species.plural(id), r.0),
                         pos: Some(((r.1 + r.3).div_euclid(2), (r.2 + r.4).div_euclid(2))),
                         detail: String::new(),
                     });
@@ -607,6 +619,7 @@ fn fnv1a64(bytes: &[u8]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sim::species::testing::{FOX, HARE, VOLE};
 
     #[test]
     fn fnv1a64_vectors() {
@@ -661,8 +674,8 @@ mod tests {
     /// first tick by zeroing hp, then stepped to the next midnight.
     fn extinction_sim(species: SpeciesId, n: u32) -> Sim {
         let mut p = Params::default();
-        p.creatures.initial_counts.clear();
-        p.creatures.initial_counts.insert(species, n);
+        p.species.clear_initial_counts();
+        p.species.get_mut(species).initial_count = n;
         let mut sim = Sim::new(7, p);
         for id in sim.creatures.living_ids() {
             let c = sim.creatures.get_mut(id).unwrap();
@@ -687,26 +700,26 @@ mod tests {
 
     #[test]
     fn extinction_once_and_not_for_absent_species() {
-        let mut sim = extinction_sim(SpeciesId::Hare, 3);
+        let mut sim = extinction_sim(HARE, 3);
         let alerts = step_to_midnight(&mut sim);
-        assert!(alerts.iter().any(|a| matches!(a, Alert::Extinction { species: SpeciesId::Hare, .. })), "hare extinction alert: {alerts:?}");
+        assert!(alerts.iter().any(|a| matches!(a, Alert::Extinction { species: HARE, .. })), "hare extinction alert: {alerts:?}");
         // Fox has initial_count == 0 and must never emit.
-        assert!(!alerts.iter().any(|a| matches!(a, Alert::Extinction { species: SpeciesId::Fox, .. })));
+        assert!(!alerts.iter().any(|a| matches!(a, Alert::Extinction { species: FOX, .. })));
         // A species emits at most once.
         let mut more = Vec::new();
         for _ in 0..200 {
             more.extend(sim.step().alerts);
         }
-        let hare = alerts.into_iter().chain(more).filter(|a| matches!(a, Alert::Extinction { species: SpeciesId::Hare, .. })).count();
+        let hare = alerts.into_iter().chain(more).filter(|a| matches!(a, Alert::Extinction { species: HARE, .. })).count();
         assert_eq!(hare, 1, "a species must emit at most once");
     }
 
     #[test]
     fn alert_queue_two_species_same_day() {
         let mut p = Params::default();
-        p.creatures.initial_counts.clear();
-        p.creatures.initial_counts.insert(SpeciesId::Vole, 2);
-        p.creatures.initial_counts.insert(SpeciesId::Hare, 2);
+        p.species.clear_initial_counts();
+        p.species.set_initial_count("vole", 2);
+        p.species.set_initial_count("hare", 2);
         let mut sim = Sim::new(7, p);
         for id in sim.creatures.living_ids() {
             let c = sim.creatures.get_mut(id).unwrap();
@@ -722,7 +735,7 @@ mod tests {
                 Alert::Epidemic { .. } => None,
             })
             .collect();
-        assert_eq!(species, vec![SpeciesId::Vole, SpeciesId::Hare], "species-table order on the same day");
+        assert_eq!(species, vec![VOLE, HARE], "species-table order on the same day");
     }
 
     #[test]

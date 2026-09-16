@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use crate::sim::creatures::CreatureId;
-use crate::sim::params::{DiseaseParams, PathogenParams};
+use crate::sim::params::{DiseaseParams, PathogenParams, Roster};
 use crate::sim::species::SpeciesId;
 
 /// Width of the per-creature immunity table: roster plus strains, at most 8.
@@ -38,6 +38,8 @@ pub struct Infection {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Pathogen {
     pub params: PathogenParams,
+    /// `params.hosts` resolved to roster order (read on every contact).
+    pub host_by_species: Vec<f32>,
     /// The pathogen this strain mutated from (`None` for the roster).
     pub parent: Option<PathogenId>,
     pub born_day: Option<u32>,
@@ -50,8 +52,14 @@ impl Pathogen {
         &self.params.name
     }
 
+    /// A roster pathogen with its hosts resolved against the species roster.
+    pub fn from_params(params: PathogenParams, roster: &Roster) -> Self {
+        let host_by_species = roster.ids().map(|id| params.hosts.get(roster.name(id)).copied().unwrap_or(0.0)).collect();
+        Self { params, host_by_species, parent: None, born_day: None, extinct: false }
+    }
+
     pub fn host(&self, s: SpeciesId) -> f32 {
-        self.params.hosts.get(&s).copied().unwrap_or(0.0)
+        self.host_by_species.get(s.index()).copied().unwrap_or(0.0)
     }
 
     pub const fn is_strain(&self) -> bool {
@@ -73,12 +81,12 @@ pub struct Outbreak {
     pub recovered: u32,
     pub peak_active: u32,
     pub peak_day: u32,
-    pub species_cases: [u32; 6],
-    pub species_deaths: [u32; 6],
+    pub species_cases: Vec<u32>,
+    pub species_deaths: Vec<u32>,
     pub epidemic: bool,
     /// Per-species mean Resistance on the start day and at burn-out.
-    pub resist_at_start: [f32; 6],
-    pub resist_at_end: [f32; 6],
+    pub resist_at_start: Vec<f32>,
+    pub resist_at_end: Vec<f32>,
     /// Daily active count, refreshed by `daily_update`.
     pub active: u32,
     /// New infectious cases today (for the sidebar's `+N` line).
@@ -92,13 +100,13 @@ impl Outbreak {
 }
 
 /// Per-pathogen running statistics, refreshed daily.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PathogenStats {
     pub outbreaks: u32,
     pub total_cases: u32,
     pub total_deaths: u32,
     pub active: u32,
-    pub active_by_species: [u32; 6],
+    pub active_by_species: Vec<u32>,
     pub peak_active: u32,
     pub immune: u32,
 }
@@ -121,17 +129,12 @@ pub struct DiseaseState {
 pub const OUTBREAKS_MAX: usize = 64;
 
 impl DiseaseState {
-    pub fn new(dp: &DiseaseParams) -> Self {
-        let pathogens = dp
-            .pathogens
-            .iter()
-            .take(dp.max_pathogens())
-            .map(|p| Pathogen { params: p.clone(), parent: None, born_day: None, extinct: false })
-            .collect();
+    pub fn new(dp: &DiseaseParams, roster: &Roster) -> Self {
+        let pathogens = dp.pathogens.iter().take(dp.max_pathogens()).map(|p| Pathogen::from_params(p.clone(), roster)).collect();
         Self {
             pathogens,
             last_case_day: [u32::MAX; MAX_PATHOGENS],
-            stats: [PathogenStats::default(); MAX_PATHOGENS],
+            stats: std::array::from_fn(|_| PathogenStats { active_by_species: vec![0; roster.len()], ..PathogenStats::default() }),
             outbreaks: Vec::new(),
             first_index: 0,
             failed_spillovers: 0,
@@ -189,8 +192,8 @@ impl DiseaseState {
     }
 
     /// Living hosts of a pathogen (host multiplier > 0), all species.
-    pub fn hosts_living(&self, id: PathogenId, population: &[u32; 6]) -> u32 {
+    pub fn hosts_living(&self, id: PathogenId, population: &[u32]) -> u32 {
         let Some(p) = self.pathogen(id) else { return 0 };
-        SpeciesId::ALL.iter().filter(|s| p.host(**s) > 0.0).map(|s| population[s.index()]).sum()
+        population.iter().enumerate().filter(|(i, _)| p.host(SpeciesId::from_index(*i)) > 0.0).map(|(_, n)| *n).sum()
     }
 }

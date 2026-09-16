@@ -6,7 +6,7 @@
 // justified by the same checked-loop pattern.
 #![allow(clippy::indexing_slicing)]
 
-use sim_fortress::sim::{EventKind, Params, Sim, SpeciesId};
+use sim_fortress::sim::{EventKind, Params, Sim};
 
 fn main() {
     let years: u64 = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(3);
@@ -17,7 +17,7 @@ fn main() {
         for _ in 0..ticks_per_year {
             sim.step();
         }
-        let mut deaths = [[0u64; 5]; 6]; // [species][cause]
+        let mut deaths = vec![[0u64; 5]; sim.roster().len()]; // [species][cause]
         for e in sim.events.iter().skip(sim_fortress::cast!(start_total => usize)) {
             let (sp, cause) = match (e.species, e.kind) {
                 (Some(s), EventKind::DeathStarved) => (s.index(), 0),
@@ -32,16 +32,17 @@ fn main() {
             deaths[sp][cause] += 1;
         }
         println!("year {}:", y + 1);
-        for (i, id) in SpeciesId::ALL.iter().enumerate() {
-            let (s, t, a, p) = (deaths[i][0], deaths[i][1], deaths[i][2], deaths[i][3]);
+        for id in sim.roster().ids() {
+            let row = deaths[id.index()];
+            let (s, t, a, p) = (row[0], row[1], row[2], row[3]);
             println!(
                 "  {:<6} count {:>4}  deaths total {:>4} (starved {s}, thirst {t}, age {a}, predated {p})",
-                id.name(),
-                sim.species[i].count,
-                deaths[i].iter().sum::<u64>(),
+                sim.roster().name(id),
+                sim.species[id.index()].count,
+                row.iter().sum::<u64>(),
             );
         }
-        let extinct: Vec<_> = SpeciesId::ALL.iter().filter(|id| sim.extinct[id.index()]).map(|id| id.name()).collect();
+        let extinct: Vec<_> = sim.roster().ids().filter(|id| sim.extinct[id.index()]).map(|id| sim.roster().name(id)).collect();
         println!("  extinct so far: {extinct:?}");
     }
 }

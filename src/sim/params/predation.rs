@@ -2,7 +2,6 @@
 
 use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
-use crate::sim::species::SpeciesId;
 use crate::sim::world::Terrain;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,9 +50,6 @@ pub struct PredationParams {
     pub scavenge_consumes_decay: f32,
     /// easy | normal | hard — stored here, given meaning in C6 (never mutates `kill_base`).
     pub difficulty: Difficulty,
-    /// Per-predator prey preference shares (preference 0 = never targeted).
-    pub prey_preference: BTreeMap<SpeciesId, BTreeMap<SpeciesId, f32>>,
-    pub nocturnal: Vec<SpeciesId>,
     pub flee_distance: f32,
     pub flee_ticks: u32,
     pub flee_energy_factor: f32,
@@ -81,7 +77,6 @@ pub struct PredationParams {
 impl Default for PredationParams {
     fn default() -> Self {
         use Terrain::{Forest, GrassDense, Grass, GrassSparse, Dirt, Sand, ShallowWater};
-        let prey = |vals: [(SpeciesId, f32); 3]| -> BTreeMap<SpeciesId, f32> { vals.into_iter().collect() };
         Self {
             detect_threshold: 0.8,
             cover_by_terrain: BTreeMap::from([
@@ -116,12 +111,6 @@ impl Default for PredationParams {
             scavenge_hours: 1,
             scavenge_consumes_decay: 0.2,
             difficulty: Difficulty::Normal,
-            prey_preference: BTreeMap::from([
-                (SpeciesId::Fox, prey([(SpeciesId::Vole, 0.6), (SpeciesId::Hare, 0.4), (SpeciesId::Deer, 0.0)])),
-                (SpeciesId::Wolf, prey([(SpeciesId::Deer, 0.5), (SpeciesId::Hare, 0.4), (SpeciesId::Vole, 0.1)])),
-                (SpeciesId::Lynx, prey([(SpeciesId::Hare, 0.6), (SpeciesId::Vole, 0.4), (SpeciesId::Deer, 0.0)])),
-            ]),
-            nocturnal: vec![SpeciesId::Fox, SpeciesId::Lynx],
             flee_distance: 8.0,
             flee_ticks: 10,
             flee_energy_factor: 2.0,
@@ -180,15 +169,5 @@ impl PredationParams {
     /// `hunger_per_kill_base + hunger_per_kill_per_size × prey.size`.
     pub fn hunger_per_kill(&self, prey_size: f32) -> f32 {
         self.hunger_per_kill_base + self.hunger_per_kill_per_size * prey_size
-    }
-
-    /// Preference share of `prey` for `pred` (0 = never targeted; absent = 0).
-    pub fn preference(&self, pred: SpeciesId, prey: SpeciesId) -> f32 {
-        self.prey_preference.get(&pred).and_then(|m| m.get(&prey)).copied().unwrap_or(0.0)
-    }
-
-    /// Whether a species is nocturnal (fox and lynx).
-    pub fn is_nocturnal(&self, id: SpeciesId) -> bool {
-        self.nocturnal.contains(&id)
     }
 }

@@ -13,7 +13,7 @@ use crate::widgets::map::{self};
 use crate::widgets::{bars, panel, util};
 use crate::{glyphs, theme};
 use super::{contagion_risk, killer_and_scavengers, kin_name, local_forage};
-use super::style::{sp, species_style};
+use super::style::sp;
 
 /// Panel title: the identity column changes name when the creature is dead.
 pub(super) const fn identity_title(c: &Creature) -> &'static str {
@@ -27,15 +27,15 @@ pub(super) fn identity(buf: &mut Buffer, inner: Rect, sim: &crate::sim::Sim, c: 
     // Name line.
     let state = if !c.alive {
         sp("  DEAD", Style::default().fg(theme::BAD).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD))
-    } else if c.species.kind() == Kind::Predator {
-        sp("  predator", Style::default().fg(c.species.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD))
+    } else if sim.roster().kind(c.species) == Kind::Predator {
+        sp("  predator", Style::default().fg(sim.roster().color(c.species)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD))
     } else {
         sp("  prey", Style::default().fg(theme::GOOD).bg(theme::PANEL_BG))
     };
     util::line_in(buf, inner, row, Line::from(vec![
-        sp(format!(" {} ", if c.alive { c.species.glyph().to_ascii_uppercase() } else { glyphs::CARCASS }), species_style(c.species)),
-        sp(c.name_str().to_string(), theme::title()),
-        sp(format!("  {}", c.tag()), theme::label()),
+        sp(format!(" {} ", if c.alive { sim.roster().adult_glyph(c.species) } else { glyphs::CARCASS }), sim.roster().style(c.species)),
+        sp(c.name_str(sim.roster()).to_string(), theme::title()),
+        sp(format!("  {}", c.tag(sim.roster())), theme::label()),
         state,
     ]));
     row += 1;
@@ -45,10 +45,10 @@ pub(super) fn identity(buf: &mut Buffer, inner: Rect, sim: &crate::sim::Sim, c: 
     };
     util::line_in(buf, inner, row, Line::from(vec![
         sp("   ", theme::text()),
-        sp(c.species.name(), species_style(c.species)),
+        sp(sim.roster().display_name(c.species), sim.roster().style(c.species)),
         sp(format!("  {sex_g} {sex_name}"), theme::text()),
         sp(format!("  {}", if c.adult { "adult" } else { "juvenile" }), theme::text()),
-        sp(format!("  diet: {}", c.species.diet()), theme::dim_text()),
+        sp(format!("  diet: {}", sim.species_params(c.species).diet), theme::dim_text()),
     ]));
     row += 2;
 
@@ -284,7 +284,7 @@ fn identity_timeline(buf: &mut Buffer, inner: Rect, mut row: u16, sim: &crate::s
         None => "placed as a founder".to_string(),
     };
     events.push((glyphs::BIRTH, theme::GOOD, i64::from(c.born_day), born_text));
-    let adult_day = i64::from(c.born_day) + i64::from(adult_age_days(c.species, &c.genome, &sim.params.creatures, &sim.params.genetics));
+    let adult_day = i64::from(c.born_day) + i64::from(adult_age_days(sim.species_params(c.species), &c.genome, &sim.params.genetics));
     if c.adult && adult_day >= 0 {
         events.push((glyphs::UP, theme::INFO, adult_day, "reached adulthood".to_string()));
     }

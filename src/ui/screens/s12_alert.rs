@@ -33,7 +33,7 @@ impl AlertModal {
     pub const fn new(alert: &Alert) -> Self {
         match alert {
             Alert::Extinction { species, last, .. } => Self { species: *species, last: *last, focus: 0, epidemic: None },
-            Alert::Epidemic { pathogen, outbreak, .. } => Self { species: SpeciesId::Vole, last: CreatureId(0), focus: 0, epidemic: Some((*pathogen, *outbreak)) },
+            Alert::Epidemic { pathogen, outbreak, .. } => Self { species: SpeciesId(0), last: CreatureId(0), focus: 0, epidemic: Some((*pathogen, *outbreak)) },
         }
     }
 }
@@ -101,7 +101,7 @@ impl Screen for AlertModal {
 
         // Headline.
         util::line(f, inner, row, Line::from(Span::styled(
-            center(&format!("The {} are extinct", self.species.plural())),
+            center(&format!("The {} are extinct", sim.roster().plural(self.species))),
             Style::default().fg(theme::MAGENTA).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD),
         )));
         row += 2;
@@ -112,7 +112,7 @@ impl Screen for AlertModal {
             Span::styled(format!("  Year {}, Day {} of {} ", sim.time.year(), sim.time.day_of_season(), sim.time.season().name()), theme::text()),
             Span::styled(sim.time.season().glyph().to_string(), Style::default().fg(sim.time.season().color()).bg(theme::PANEL_BG)),
             Span::styled("   last individual: ", theme::dim_text()),
-            Span::styled(last_label, Style::default().fg(self.species.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            Span::styled(last_label, Style::default().fg(sim.roster().color(self.species)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
         ]));
         row += 1;
 
@@ -260,9 +260,8 @@ impl AlertModal {
         let name = sim.disease.name(pathogen).to_string();
         // Host species = argmax of the outbreak's per-species case counts.
         let host: SpeciesId = ob
-            .and_then(|o| (0..6).max_by_key(|&i| (o.species_cases[i], usize::MAX - i)))
-            .and_then(|i| SpeciesId::ALL.get(i).copied())
-            .unwrap_or(SpeciesId::Vole);
+            .and_then(|o| (0..o.species_cases.len()).max_by_key(|&i| (o.species_cases[i], usize::MAX - i)))
+            .map_or_else(SpeciesId::default, SpeciesId::from_index);
 
         let mut row = 1u16;
 
@@ -270,7 +269,7 @@ impl AlertModal {
         let headline = if pth.is_some_and(crate::sim::disease::Pathogen::is_strain) {
             format!("A new strain: {name}")
         } else {
-            format!("{} is epidemic among the {}", name, host.plural())
+            format!("{} is epidemic among the {}", name, sim.roster().plural(host))
         };
         util::line(f, inner, row, Line::from(Span::styled(center(&headline), sick_bold)));
         row += 2;
@@ -284,7 +283,7 @@ impl AlertModal {
             Span::styled(format!("  Year {}, Day {} of {} ", sim.time.year(), sim.time.day_of_season(), sim.time.season().name()), theme::text()),
             Span::styled(sim.time.season().glyph().to_string(), Style::default().fg(sim.time.season().color()).bg(theme::PANEL_BG)),
             Span::styled("   index case: ", theme::dim_text()),
-            Span::styled(case_label, Style::default().fg(case_species.color()).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            Span::styled(case_label, Style::default().fg(sim.roster().color(case_species)).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
         ]));
         row += 1;
 
@@ -315,7 +314,7 @@ impl AlertModal {
         // Resistance summary for the host species.
         let hs = &sim.species[host.index()];
         let mean = hs.mean.resistance();
-        let base = host.base_genome().resistance();
+        let base = sim.roster().base_genome(host).resistance();
         let immune = sim.disease.stats.get(crate::cast!(pathogen.0 => usize)).map_or(0, |s| s.immune);
         let pct = if hs.count > 0 { crate::cast!((crate::cast!(immune => f32) * 100.0 / crate::cast!(hs.count => f32)).round() => u32) } else { 0 };
         util::line(f, inner, row, Line::from(vec![
@@ -386,12 +385,12 @@ fn draw_alert_status(f: &mut Frame<'_>, area: Rect, right: &str) {
 /// stored, else its lineage node, else a bare `#id` in the default colour.
 fn index_case_label(sim: &Sim, id: CreatureId) -> (String, SpeciesId) {
     if let Some(c) = sim.creatures.get(id) {
-        return (format!("{} {}", c.name_str(), c.tag()), c.species);
+        return (c.label(sim.roster()), c.species);
     }
     if let Some(n) = sim.lineage.get(id) {
-        return (format!("{} {}", crate::sim::species::name_for(n.species, n.name), n.tag), n.species);
+        return (format!("{} {}", n.name_str(sim.roster()), n.tag), n.species);
     }
-    (format!("#{:03}", id.0), SpeciesId::Vole)
+    (format!("#{:03}", id.0), SpeciesId::default())
 }
 
 const fn cause_kind(cause: Cause) -> EventKind {
@@ -429,11 +428,11 @@ mod tests {
             recovered: 5,
             peak_active: 30,
             peak_day: 20,
-            species_cases: [30, 10, 0, 0, 0, 0],
-            species_deaths: [5, 2, 0, 0, 0, 0],
+            species_cases: vec![30, 10, 0, 0, 0, 0],
+            species_deaths: vec![5, 2, 0, 0, 0, 0],
             epidemic: true,
-            resist_at_start: [0.3; 6],
-            resist_at_end: [0.0; 6],
+            resist_at_start: vec![0.3; 6],
+            resist_at_end: vec![0.0; 6],
             active: 28,
             cases_today: 3,
         });

@@ -151,8 +151,7 @@ impl Screen for LoadWorld {
                 }
                 let e = &saves[i];
                 let (y, d) = year_day(&e.header);
-                let prey = e.header.counts[0] + e.header.counts[1] + e.header.counts[2];
-                let pred = e.header.counts[3] + e.header.counts[4] + e.header.counts[5];
+                let (prey, pred) = e.header.kind_totals();
                 // Keep the line inside the modal's 66 columns: the wall-clock stamp
                 // never fitted, and the version marker has to be visible so an
                 // unloadable old save is obvious before Enter is pressed.

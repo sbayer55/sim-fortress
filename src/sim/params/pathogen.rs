@@ -2,7 +2,6 @@
 
 use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
-use crate::sim::species::SpeciesId;
 
 /// One contagious pathogen of the roster (C7 FR2). Runtime strains (`FR8b`) are
 /// copies of these records with a single host.
@@ -10,8 +9,9 @@ use crate::sim::species::SpeciesId;
 #[serde(default, deny_unknown_fields)]
 pub struct PathogenParams {
     pub name: String,
-    /// Host multiplier on transmissibility and lethality; an absent species is immune.
-    pub hosts: BTreeMap<SpeciesId, f32>,
+    /// Host multiplier on transmissibility and lethality, by species name; an
+    /// absent species is immune.
+    pub hosts: BTreeMap<String, f32>,
     /// Infection chance per contact per tick.
     pub transmissibility: f32,
     pub incubation_days: u32,
@@ -122,7 +122,7 @@ pub struct DiseaseParams {
 
 impl Default for DiseaseParams {
     fn default() -> Self {
-        let hosts = |vals: &[(SpeciesId, f32)]| -> BTreeMap<SpeciesId, f32> { vals.iter().copied().collect() };
+        let hosts = |vals: &[(&str, f32)]| -> BTreeMap<String, f32> { vals.iter().map(|(k, v)| ((*k).to_string(), *v)).collect() };
         Self {
             enabled: true,
             resist_hunger_cost: 0.10,
@@ -166,7 +166,7 @@ impl Default for DiseaseParams {
             pathogens: vec![
                 PathogenParams {
                     name: "Greyfever".into(),
-                    hosts: hosts(&[(SpeciesId::Vole, 1.0), (SpeciesId::Hare, 1.0), (SpeciesId::Deer, 0.6)]),
+                    hosts: hosts(&[("vole", 1.0), ("hare", 1.0), ("deer", 0.6)]),
                     transmissibility: 0.006,
                     incubation_days: 3,
                     infectious_days: 10,
@@ -178,7 +178,7 @@ impl Default for DiseaseParams {
                 },
                 PathogenParams {
                     name: "Redmange".into(),
-                    hosts: hosts(&[(SpeciesId::Fox, 1.0), (SpeciesId::Wolf, 0.8), (SpeciesId::Lynx, 0.6)]),
+                    hosts: hosts(&[("fox", 1.0), ("wolf", 0.8), ("lynx", 0.6)]),
                     transmissibility: 0.008,
                     incubation_days: 7,
                     infectious_days: 40,
@@ -190,7 +190,7 @@ impl Default for DiseaseParams {
                 },
                 PathogenParams {
                     name: "Hoofrot".into(),
-                    hosts: hosts(&[(SpeciesId::Deer, 1.0), (SpeciesId::Hare, 0.3)]),
+                    hosts: hosts(&[("deer", 1.0), ("hare", 0.3)]),
                     transmissibility: 0.002,
                     incubation_days: 5,
                     infectious_days: 20,

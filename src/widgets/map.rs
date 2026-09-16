@@ -690,35 +690,35 @@ mod tests {
     }
 
     fn creature(id: u32, x: usize, y: usize, species: SpeciesId) -> MapCreature<'static> {
-        MapCreature { id: CreatureId(id), x, y, alive: true, adult: true, species, glyph: 'v', color: theme::VOLE, sense_cells: 3, condition: 1.0, trail: &[], target: None }
+        MapCreature { id: CreatureId(id), x, y, alive: true, adult: true, species, glyph: 'v', color: theme::TAN, sense_cells: 3, condition: 1.0, trail: &[], target: None }
     }
 
     #[test]
     fn density_field_peaks_under_the_creature_and_clamps() {
         let world = two_region_world(20, 12);
-        let one = vec![creature(1, 10, 4, SpeciesId::Vole)];
-        let f = density_field(&world, &one, SpeciesId::Vole);
+        let one = vec![creature(1, 10, 4, SpeciesId(0))];
+        let f = density_field(&world, &one, SpeciesId(0));
         let at = |x: usize, y: usize| f[y * 20 + x];
         assert!((at(10, 4) - 1.0 / DENSITY_CAP).abs() < 1e-6, "peak is one creature-equivalent");
         assert!(at(10, 4) > at(12, 4) && at(12, 4) > at(14, 4), "linear falloff along the row");
         assert_eq!(at(10, 4 + crate::cast!(DENSITY_RADIUS => usize) + 1), 0.0, "outside the kernel");
         assert_eq!(at(0, 0), 0.0);
         // Another species contributes nothing.
-        assert!(density_field(&world, &one, SpeciesId::Hare).iter().all(|&v| v == 0.0));
+        assert!(density_field(&world, &one, SpeciesId(1)).iter().all(|&v| v == 0.0));
         // Many creatures on one cell clamp at the cap.
-        let herd: Vec<_> = (0..20).map(|i| creature(i, 10, 4, SpeciesId::Vole)).collect();
-        let f = density_field(&world, &herd, SpeciesId::Vole);
+        let herd: Vec<_> = (0..20).map(|i| creature(i, 10, 4, SpeciesId(0))).collect();
+        let f = density_field(&world, &herd, SpeciesId(0));
         assert_eq!(f[4 * 20 + 10], 1.0);
         // Edge of the world: no panic, kernel truncated.
-        let _ = density_field(&world, &[creature(1, 0, 0, SpeciesId::Vole)], SpeciesId::Vole);
+        let _ = density_field(&world, &[creature(1, 0, 0, SpeciesId(0))], SpeciesId(0));
     }
 
     #[test]
     fn species_overlay_shades_cells_and_keeps_own_species_bright() {
         let mut world = two_region_world(20, 8);
         world.cells[0].terrain = Terrain::DeepWater;
-        let creatures = vec![creature(1, 10, 4, SpeciesId::Vole), creature(2, 3, 4, SpeciesId::Hare)];
-        let opts = MapOptions { overlay: Overlay::Species(SpeciesId::Vole), fade_creatures: true, species_color: theme::VOLE, ..MapOptions::default() };
+        let creatures = vec![creature(1, 10, 4, SpeciesId(0)), creature(2, 3, 4, SpeciesId(1))];
+        let opts = MapOptions { overlay: Overlay::Species(SpeciesId(0)), fade_creatures: true, species_color: theme::TAN, ..MapOptions::default() };
         let backend = TestBackend::new(20, 8);
         let mut terminal = Terminal::new(backend).unwrap();
         let source = TestSource { world: &world, creatures };
@@ -730,18 +730,18 @@ mod tests {
         // Deep water keeps its glyph.
         assert_eq!(buf[(0, 0)].symbol(), glyphs::DEEP_WATER.to_string());
         // The shown species is drawn at full colour; the other one is faded.
-        assert_eq!(buf[(10, 4)].fg, theme::VOLE);
-        assert_eq!(buf[(3, 4)].fg, theme::dim(theme::VOLE, 0.55));
+        assert_eq!(buf[(10, 4)].fg, theme::TAN);
+        assert_eq!(buf[(3, 4)].fg, theme::dim(theme::TAN, 0.55));
     }
 
     #[test]
     fn health_overlay_colours_creatures_by_condition_and_dims_terrain() {
         let world = two_region_world(20, 8);
-        let mut fit = creature(1, 10, 4, SpeciesId::Vole);
+        let mut fit = creature(1, 10, 4, SpeciesId(0));
         fit.condition = 0.9;
-        let mut strained = creature(2, 3, 4, SpeciesId::Hare);
+        let mut strained = creature(2, 3, 4, SpeciesId(1));
         strained.condition = 0.45;
-        let mut critical = creature(3, 6, 2, SpeciesId::Deer);
+        let mut critical = creature(3, 6, 2, SpeciesId(2));
         critical.condition = 0.1;
         let creatures = vec![fit, strained, critical];
         let opts = MapOptions { overlay: Overlay::Health, fade_creatures: true, ..MapOptions::default() };

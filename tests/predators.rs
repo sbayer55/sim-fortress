@@ -35,10 +35,10 @@ fn run(seed: u64, params: Params, ticks: u64) -> Sim {
 #[ignore = "balance pass open (C6): voles extinct by year 2, predators by year 5 on seed 42"]
 fn six_species_five_years() {
     let sim = run(42, Params::default(), FIVE_YEARS);
-    for id in SpeciesId::ALL {
+    for id in sim.roster().ids() {
         let n = sim.species[id.index()].count;
-        eprintln!("{:?} year-5 count: {n} (peak {})", id, sim.species[id.index()].peak);
-        assert!(n > 0, "{id:?} extinct at year 5");
+        eprintln!("{} year-5 count: {n} (peak {})", sim.roster().name(id), sim.species[id.index()].peak);
+        assert!(n > 0, "{} extinct at year 5", sim.roster().name(id));
     }
 }
 
@@ -47,10 +47,11 @@ fn six_species_five_years() {
 #[ignore = "balance pass open (C6): the prey/predator totals collapse instead of orbiting"]
 fn oscillation_lag() {
     let sim = run(42, Params::default(), TEN_YEARS);
-    let alive = SpeciesId::ALL.iter().filter(|id| sim.species[id.index()].count > 0).count();
+    let alive = sim.species.iter().filter(|s| s.count > 0).count();
     assert!(alive >= 5, "only {alive} species alive at year 10");
-    let prey: Vec<f32> = sim.series.samples().iter().map(|s| sim_fortress::cast!((s.population[0] + s.population[1] + s.population[2]) => f32)).collect();
-    let pred: Vec<f32> = sim.series.samples().iter().map(|s| sim_fortress::cast!((s.population[3] + s.population[4] + s.population[5]) => f32)).collect();
+    let r = sim.roster();
+    let prey: Vec<f32> = sim.series.samples().iter().map(|s| sim_fortress::cast!(r.prey_ids().map(|id| s.population[id.index()]).sum::<u32>() => f32)).collect();
+    let pred: Vec<f32> = sim.series.samples().iter().map(|s| sim_fortress::cast!(r.predator_ids().map(|id| s.population[id.index()]).sum::<u32>() => f32)).collect();
     let lag = sim_fortress::sim::stats::peak_lag(&prey, &pred);
     eprintln!("peak_lag: {lag:?}");
     // ≥ 3 local maxima on both smoothed totals (30-day centred moving average, after year 1).
@@ -77,19 +78,21 @@ fn forced_extinction_7_of_10() {
     let mut hits = 0;
     for seed in 1..=10u64 {
         let mut p = Params::default();
-        p.creatures.initial_counts.insert(SpeciesId::Lynx, 4);
-        p.creatures.initial_counts.insert(SpeciesId::Deer, 0); // absent species never emits
+        p.species.set_initial_count("lynx", 4);
+        p.species.set_initial_count("deer", 0); // absent species never emits
         let sim = run(seed, p, THREE_YEARS);
-        let extinct = sim.extinct[SpeciesId::Lynx.index()];
+        let lynx = sim.roster().id("lynx").unwrap();
+        let deer = sim.roster().id("deer").unwrap();
+        let extinct = sim.extinct[lynx.index()];
         eprintln!("seed {seed}: lynx extinct {extinct}");
         if extinct {
             hits += 1;
         }
         let extinctions: Vec<_> = sim.events.iter().filter(|e| e.kind == EventKind::Extinction).collect();
-        assert!(!extinctions.iter().any(|e| e.species == Some(SpeciesId::Deer)), "a species with initial_count == 0 never emits");
-        for id in SpeciesId::ALL {
+        assert!(!extinctions.iter().any(|e| e.species == Some(deer)), "a species with initial_count == 0 never emits");
+        for id in sim.roster().ids() {
             let n = extinctions.iter().filter(|e| e.species == Some(id)).count();
-            assert!(n <= 1, "{id:?} emitted Extinction {n} times on seed {seed}");
+            assert!(n <= 1, "{} emitted Extinction {n} times on seed {seed}", sim.roster().name(id));
         }
     }
     assert!(hits >= 7, "lynx went extinct in only {hits}/10 seeds");
@@ -100,12 +103,13 @@ fn forced_extinction_7_of_10() {
 #[ignore = "balance pass open (C6): fox exceeds 60 % on most lever sets"]
 fn hunt_success_band() {
     let sim = run(42, Params::default(), 360 * 24);
-    for id in [SpeciesId::Fox, SpeciesId::Wolf, SpeciesId::Lynx] {
+    for id in sim.roster().predator_ids() {
+        let name = sim.roster().name(id);
         let kills = sim.deaths.hunt_kills[id.index()];
         let attempts = sim.deaths.hunt_attempts[id.index()];
         let pct = if attempts > 0 { sim_fortress::cast!(kills => f32) / sim_fortress::cast!(attempts => f32) * 100.0 } else { 0.0 };
-        eprintln!("{id:?}: kills {kills} attempts {attempts} success {pct:.0}%");
-        assert!((15.0..=60.0).contains(&pct), "{id:?} success {pct:.0}% outside 15–60%");
+        eprintln!("{name}: kills {kills} attempts {attempts} success {pct:.0}%");
+        assert!((15.0..=60.0).contains(&pct), "{name} success {pct:.0}% outside 15–60%");
     }
 }
 

@@ -4,10 +4,10 @@ use crate::sim::creatures::{
     CreatureStore, DeathTallies, Goal, RestReason,
 };
 use crate::sim::events::{EventRing};
+use crate::sim::species::testing::*;
 use crate::sim::lineage::Lineage;
 use crate::sim::params::{CreaturesParams, EcologyParams, GeneticsParams, PredationParams };
 use crate::sim::rng::Rng;
-use crate::sim::species::{SpeciesId};
 use crate::sim::disease::{DiseaseState};
 use crate::sim::params::DiseaseParams;
 use crate::sim::world::{Terrain };
@@ -146,7 +146,7 @@ fn den_creation_capped() {
     c.target = None;
     w.cell_mut(40, 5).terrain = Terrain::Dirt;
     w.cell_mut(40, 5).vegetation = 0.0;
-    maybe_make_den(&c, &mut w, &mut events, &t, &cp, &mut rng);
+    maybe_make_den(&c, &mut w, &mut events, &t, roster(), &cp, &mut rng);
     assert_eq!(w.dens.len(), 1);
 
     // Second resting creature in the same region: capped.
@@ -156,7 +156,7 @@ fn den_creation_capped() {
     c2.target = None;
     w.cell_mut(41, 5).terrain = Terrain::Dirt;
     w.cell_mut(41, 5).vegetation = 0.0;
-    maybe_make_den(&c2, &mut w, &mut events, &t, &cp, &mut rng);
+    maybe_make_den(&c2, &mut w, &mut events, &t, roster(), &cp, &mut rng);
     assert_eq!(w.dens.len(), 1, "region den cap should hold");
 }
 
@@ -219,7 +219,7 @@ fn movement_never_impassable() {
 #[test]
 fn founders_are_placed() {
     let sim = Sim::new(42, Params::default());
-    let total: u32 = sim.params.creatures.initial_counts.values().sum();
+    let total: u32 = sim.params.species.0.iter().map(|s| s.initial_count).sum();
     assert_eq!(sim.creatures.len_living(), crate::cast!(total => usize));
     let _ = place_founders;
 }
@@ -229,11 +229,11 @@ fn pressure_decay() {
     let mut w = test_world();
     let mut store = CreatureStore::new();
     let mut events = EventRing::new(10);
-    let mut tallies = DeathTallies::default();
+    let mut tallies = DeathTallies::new(N_SPECIES);
     w.cell_mut(50, 10).prey_pressure = 1.0;
     w.cell_mut(50, 10).pred_pressure = 0.0;
     let cp = CreaturesParams::default();
-    day_boundary(&mut store, &mut w, &mut events, &day_time(0), &cp, &GeneticsParams::default(), &DiseaseParams::default(), &mut tallies, &mut Lineage::new(), &mut DiseaseState::new(&DiseaseParams::default()), &mut Rng::new(1));
+    day_boundary(&mut store, &mut w, &mut events, &day_time(0), roster(), &cp, &GeneticsParams::default(), &DiseaseParams::default(), &mut tallies, &mut Lineage::new(), &mut DiseaseState::new(&DiseaseParams::default(), roster()), &mut Rng::new(1));
     assert!((w.cell(50, 10).prey_pressure - cp.pressure_decay_per_day).abs() < 1e-6);
 }
 
@@ -242,12 +242,12 @@ fn pressure_clamped() {
     let mut w = test_world();
     let cp = CreaturesParams { pressure_per_creature_tick: 1.0, ..CreaturesParams::default() };
     let mut wolf = test_creature(75, 20);
-    wolf.species = SpeciesId::Wolf;
-    pressure(&wolf, &mut w, &cp);
+    wolf.species = WOLF;
+    pressure(&wolf, &mut w, roster(), &cp);
     assert_eq!(w.cell(75, 20).pred_pressure, 1.0, "predator traffic clamps at 1.0");
     let mut vole = test_creature(75, 20);
-    vole.species = SpeciesId::Vole;
-    pressure(&vole, &mut w, &cp);
+    vole.species = VOLE;
+    pressure(&vole, &mut w, roster(), &cp);
     assert_eq!(w.cell(75, 20).prey_pressure, 1.0, "prey traffic clamps at 1.0");
 }
 
@@ -259,12 +259,12 @@ fn nocturnal_rest_by_day() {
     let cp = CreaturesParams::default();
     // Fox (nocturnal) rests during the day.
     let mut fox = test_creature(75, 20);
-    fox.species = SpeciesId::Fox;
+    fox.species = FOX;
     plan(&mut fox, &idx, &w, &day_time(12), &cp, &mut rng);
     assert_eq!(fox.goal, Goal::Rest, "nocturnal fox rests by day");
     // Wolf (diurnal) rests at night.
     let mut wolf = test_creature(75, 20);
-    wolf.species = SpeciesId::Wolf;
+    wolf.species = WOLF;
     plan(&mut wolf, &idx, &w, &day_time(22), &cp, &mut rng);
     assert_eq!(wolf.goal, Goal::Rest, "diurnal wolf rests at night");
 }

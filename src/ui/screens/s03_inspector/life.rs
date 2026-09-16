@@ -6,14 +6,14 @@ use ratatui::text::Line;
 use ratatui::buffer::Buffer;
 use crate::sim::creatures::{Creature, CreatureId};
 use crate::sim::disease::Stage;
-use crate::sim::{Kind, SpeciesId, TRAIT_NAMES};
+use crate::sim::{Kind, TRAIT_NAMES};
 use crate::ui::screens::common::day_stamp;
 use crate::ui::style::{EventKindStyle, SpeciesStyle};
 use crate::widgets::map::{self, MapOptions, Overlay};
 use crate::widgets::{bars, panel, util};
 use crate::{glyphs, theme};
 use super::{clip, compass};
-use super::style::{sp, species_style};
+use super::style::sp;
 
 /// Most kin rows shown (the panel scrolls, so this is a courtesy cap).
 const KIN_ROWS: usize = 10;
@@ -74,10 +74,10 @@ fn life_stats(buf: &mut Buffer, inner: Rect, row: u16, sim: &crate::sim::Sim, c:
     if !c.alive {
         return row;
     }
-    if c.species.kind() == Kind::Predator {
+    if sim.roster().kind(c.species) == Kind::Predator {
         hunt_stats(buf, inner, row, sim, c)
     } else {
-        survival_stats(buf, inner, row, c)
+        survival_stats(buf, inner, row, sim, c)
     }
 }
 
@@ -89,17 +89,17 @@ fn hunt_stats(buf: &mut Buffer, inner: Rect, mut row: u16, sim: &crate::sim::Sim
     let success = if c.attempts > 0 { crate::cast!(c.kills => f32) / crate::cast!(c.attempts => f32) * 100.0 } else { 0.0 };
     util::line_in(buf, inner, row, Line::from(sp(format!(" kills {}  attempts {}  success {:.0}%", c.kills, c.attempts, success), theme::text())));
     row += 1;
-    bars::labeled(buf, inner, row, " success rate", success / 100.0, c.species.color(), 16, 16);
+    bars::labeled(buf, inner, row, " success rate", success / 100.0, sim.roster().color(c.species), 16, 16);
     row += 1;
     panel::section_in(buf, inner, row, "Preferred prey");
     row += 1;
-    for prey_id in SpeciesId::ALL.iter().filter(|s| s.kind() == Kind::Prey) {
+    for prey_id in sim.roster().prey_ids() {
         let share = if c.kills >= 5 {
             crate::cast!(c.kills_by_species[prey_id.index()] => f32) / crate::cast!(c.kills.max(1) => f32)
         } else {
-            sim.params.predation.preference(c.species, *prey_id)
+            sim.roster().preference(c.species, prey_id)
         };
-        bars::labeled(buf, inner, row, &format!(" {}", prey_id.plural()), share, prey_id.color(), 16, 16);
+        bars::labeled(buf, inner, row, &format!(" {}", sim.roster().plural(prey_id)), share, sim.roster().color(prey_id), 16, 16);
         buf.set_stringn(
             inner.x + 40,
             inner.y + row,
@@ -114,8 +114,8 @@ fn hunt_stats(buf: &mut Buffer, inner: Rect, mut row: u16, sim: &crate::sim::Sim
             let vname = sim
                 .creatures
                 .get(victim)
-                .map(|v| format!("{} {}", v.name_str(), v.tag()))
-                .or_else(|| sim.lineage.get(victim).map(|n| format!("{} {}", n.name_str(), n.tag)))
+                .map(|v| v.label(sim.roster()))
+                .or_else(|| sim.lineage.get(victim).map(|n| format!("{} {}", n.name_str(sim.roster()), n.tag)))
                 .unwrap_or_else(|| format!("#{}", victim.0));
             let region_name = sim.world.regions.get(crate::cast!(region => usize)).map_or("?", |r| r.0.as_str());
             format!("{}  {}, {}", vname, day_stamp(i64::from(day), sim.time.season_days), region_name)
@@ -126,7 +126,7 @@ fn hunt_stats(buf: &mut Buffer, inner: Rect, mut row: u16, sim: &crate::sim::Sim
     row += 1;
     if let Some(o) = c.hunt_target.and_then(|t| sim.creatures.get(t)) {
         let d = crate::sim::dist(c.x, c.y, o.x, o.y);
-        let mut spans = vec![sp(" current target ", theme::dim_text()), sp(format!("{} {}, {:.0} cells", o.name_str(), o.tag(), d), theme::label())];
+        let mut spans = vec![sp(" current target ", theme::dim_text()), sp(format!("{} {}, {:.0} cells", o.name_str(sim.roster()), o.tag(sim.roster()), d), theme::label())];
         if let Some(i) = o.infection.filter(|i| i.stage == Stage::Infectious) {
             let bonus = sim.params.disease.kill_sick_bonus * i.severity;
             spans.push(sp(format!(" (+.{:02} sick prey)", crate::cast!((bonus * 100.0).round() => u32) % 100), Style::default().fg(theme::SICK).bg(theme::PANEL_BG)));
@@ -144,7 +144,7 @@ fn hunt_stats(buf: &mut Buffer, inner: Rect, mut row: u16, sim: &crate::sim::Sim
 }
 
 /// S03a: escape record and the predators this prey has seen.
-fn survival_stats(buf: &mut Buffer, inner: Rect, mut row: u16, c: &Creature) -> u16 {
+fn survival_stats(buf: &mut Buffer, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
     // S03a Survival.
     panel::section_in(buf, inner, row, "Survival");
     row += 1;
@@ -159,14 +159,14 @@ fn survival_stats(buf: &mut Buffer, inner: Rect, mut row: u16, c: &Creature) -> 
     row += 1;
     let mut any = false;
     let total_threats: u32 = c.threats_by_species.iter().sum();
-    for pred_id in SpeciesId::ALL.iter().filter(|s| s.kind() == Kind::Predator) {
+    for pred_id in sim.roster().predator_ids() {
         let n = c.threats_by_species[pred_id.index()];
         if n == 0 {
             continue;
         }
         any = true;
         let share = crate::cast!(n => f32) / crate::cast!(total_threats.max(1) => f32);
-        bars::labeled(buf, inner, row, &format!(" {}", pred_id.plural()), share, pred_id.color(), 16, 16);
+        bars::labeled(buf, inner, row, &format!(" {}", sim.roster().plural(pred_id)), share, sim.roster().color(pred_id), 16, 16);
         buf.set_stringn(inner.x + 40, inner.y + row, format!("{n} times"), 12, theme::dim_text());
         row += 1;
     }
@@ -195,7 +195,7 @@ fn life_legacy(buf: &mut Buffer, inner: Rect, mut row: u16, sim: &crate::sim::Si
             .descendants(id, u32::MAX, 500)
             .into_iter()
             .filter_map(|d| sim.lineage.get(d))
-            .find_map(|d| d.mutations.iter().find(|m| m.delta.abs() >= sim.params.genetics.mutation_notable).map(|m| (d.name_str(), d.tag.clone(), *m)));
+            .find_map(|d| d.mutations.iter().find(|m| m.delta.abs() >= sim.params.genetics.mutation_notable).map(|m| (d.name_str(sim.roster()), d.tag.clone(), *m)));
         match carried {
             Some((name, tag, m)) => {
                 util::line_in(buf, inner, row, Line::from(sp(format!(" {} {} {} carries {} {:+.2}", glyphs::MUTATION, name, tag, TRAIT_NAMES[m.trait_idx], m.delta), theme::dim_text())));
@@ -248,8 +248,8 @@ fn life_kin(buf: &mut Buffer, inner: Rect, mut row: u16, sim: &crate::sim::Sim, 
         }
         let dir = compass(c.x, c.y, o.x, o.y);
         util::line_in(buf, inner, row, Line::from(vec![
-            sp(format!(" {} ", if o.adult { o.species.glyph().to_ascii_uppercase() } else { o.species.glyph() }), species_style(o.species)),
-            sp(format!("{:<8}{:<7}", o.name_str(), o.tag()), theme::text()),
+            sp(format!(" {} ", if o.adult { sim.roster().adult_glyph(o.species) } else { sim.roster().glyph(o.species) }), sim.roster().style(o.species)),
+            sp(format!("{:<8}{:<7}", o.name_str(sim.roster()), o.tag(sim.roster())), theme::text()),
             sp(format!("{d:>3.0} cells {dir:<2} "), theme::dim_text()),
             sp((*rel).to_string(), theme::label()),
         ]));

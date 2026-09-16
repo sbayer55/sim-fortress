@@ -52,12 +52,13 @@ pub const SEED: Color = Color::Rgb(180, 220, 120);
 pub const TRAIL: Color = Color::Rgb(255, 210, 90);
 
 // ---------------------------------------------------------------- species
-pub const VOLE: Color = Color::Rgb(188, 156, 116);
-pub const HARE: Color = Color::Rgb(228, 220, 196);
-pub const DEER: Color = Color::Rgb(214, 160, 92);
-pub const FOX: Color = Color::Rgb(246, 128, 42);
-pub const WOLF: Color = Color::Rgb(224, 66, 66);
-pub const LYNX: Color = Color::Rgb(236, 110, 150);
+// Per-species colours live in the `[[species]]` roster (`color = [r, g, b]`);
+// these are the generic prey/predator tones used by the charts and palettes.
+pub const PREY: Color = Color::Rgb(228, 220, 196);
+pub const PRED: Color = Color::Rgb(224, 66, 66);
+pub const TAN: Color = Color::Rgb(214, 160, 92);
+pub const ROSE: Color = Color::Rgb(236, 110, 150);
+pub const CREAM: Color = PREY;
 pub const VEGETATION: Color = Color::Rgb(96, 196, 96);
 /// Disease / infection colour (C7): a sickly yellow-green.
 pub const SICK: Color = Color::Rgb(150, 205, 70);

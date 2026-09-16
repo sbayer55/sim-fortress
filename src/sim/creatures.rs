@@ -10,9 +10,9 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 use crate::sim::disease::{Infection, PathogenId};
-use crate::sim::params::{CreaturesParams, GeneticsParams};
+use crate::sim::params::{CreaturesParams, GeneticsParams, Roster, SpeciesParams};
 use crate::sim::rng::Rng;
-use crate::sim::species::{names, Genome, SpeciesId, IDX_RESISTANCE};
+use crate::sim::species::{Genome, SpeciesId, IDX_RESISTANCE};
 use crate::sim::world::World;
 
 /// Stable creature identifier, handed out monotonically and never reused.
@@ -93,17 +93,17 @@ pub struct DeathTallies {
     pub predation: u32,
     /// Disease deaths today (C7), total and per species.
     pub disease: u32,
-    pub disease_by_species: [u32; 6],
-    /// Births per species today (C4 FR5), `SpeciesId::ALL` order.
-    pub births: [u32; 6],
-    /// Deaths per species today (C4 FR5), `SpeciesId::ALL` order.
-    pub deaths: [u32; 6],
+    pub disease_by_species: Vec<u32>,
+    /// Births per species today (C4 FR5), roster order.
+    pub births: Vec<u32>,
+    /// Deaths per species today (C4 FR5), roster order.
+    pub deaths: Vec<u32>,
     /// Cumulative hunt attempts per predator species (C5; survives carcass freeing).
-    pub hunt_attempts: [u32; 6],
+    pub hunt_attempts: Vec<u32>,
     /// Cumulative kills per predator species (C5).
-    pub hunt_kills: [u32; 6],
+    pub hunt_kills: Vec<u32>,
     /// The most recent death per species (C5 FR8).
-    pub last_death: [Option<ExtinctionRecord>; 6],
+    pub last_death: Vec<Option<ExtinctionRecord>>,
     /// C5 `FR5b`: wary encounters today, keyed `(region index, prey species,
     /// predator species)`. Flushed into one Wary event per region at the day
     /// boundary and cleared by `next_day`.
@@ -111,14 +111,27 @@ pub struct DeathTallies {
 }
 
 impl DeathTallies {
+    /// Empty tallies for a roster of `n_species`.
+    pub fn new(n_species: usize) -> Self {
+        Self {
+            disease_by_species: vec![0; n_species],
+            births: vec![0; n_species],
+            deaths: vec![0; n_species],
+            hunt_attempts: vec![0; n_species],
+            hunt_kills: vec![0; n_species],
+            last_death: vec![None; n_species],
+            ..Self::default()
+        }
+    }
+
     /// A fresh daily tally that keeps the cumulative C5 fields.
     #[must_use]
     pub fn next_day(&self) -> Self {
         Self {
-            hunt_attempts: self.hunt_attempts,
-            hunt_kills: self.hunt_kills,
+            hunt_attempts: self.hunt_attempts.clone(),
+            hunt_kills: self.hunt_kills.clone(),
             last_death: self.last_death.clone(),
-            ..Self::default()
+            ..Self::new(self.births.len())
         }
     }
 }
@@ -247,8 +260,8 @@ pub struct Creature {
     pub attempts: u32,
     pub chased: u32,
     pub escaped: u32,
-    pub threats_by_species: [u32; 6],
-    pub kills_by_species: [u32; 6],
+    pub threats_by_species: Vec<u32>,
+    pub kills_by_species: Vec<u32>,
     /// Last kill: `(victim id, day index, region index)` (C5 FR4).
     pub last_kill: Option<(CreatureId, u32, u8)>,
     /// `(sum of chase ticks, longest chase ticks)`; longest year kept beside it.
@@ -295,13 +308,19 @@ pub struct Creature {
 }
 
 impl Creature {
-    pub fn tag(&self) -> String {
-        format!("{}#{:03}", self.species.glyph(), self.id.0)
+    /// `v#001`: the species glyph and the creature id.
+    pub fn tag(&self, roster: &Roster) -> String {
+        format!("{}#{:03}", roster.get(self.species).glyph, self.id.0)
     }
 
-    /// Display name, resolved from the species name list.
-    pub fn name_str(&self) -> &'static str {
-        crate::sim::species::name_for(self.species, self.name)
+    /// Display name, resolved from the species' name pool.
+    pub fn name_str<'r>(&self, roster: &'r Roster) -> &'r str {
+        roster.name_for(self.species, self.name)
+    }
+
+    /// `Clover v#001`: name and tag, as event text refers to a creature.
+    pub fn label(&self, roster: &Roster) -> String {
+        format!("{} {}", self.name_str(roster), self.tag(roster))
     }
 
     /// Current age in days (derived from `born_day` and the day index).
@@ -324,9 +343,9 @@ pub fn max_age_days(genome: &Genome, params: &CreaturesParams, gp: &GeneticsPara
 }
 
 /// Days to adulthood: the species' base age scaled by the individual's maturity
-/// trait, rounded to whole days. Maturity 0.5 reproduces `cp.adult_age` exactly.
-pub fn adult_age_days(species: SpeciesId, genome: &Genome, cp: &CreaturesParams, gp: &GeneticsParams) -> u32 {
-    let base = crate::cast!(cp.adult_age(species) => f32);
+/// trait, rounded to whole days. Maturity 0.5 reproduces `adult_age_days` exactly.
+pub fn adult_age_days(sp: &SpeciesParams, genome: &Genome, gp: &GeneticsParams) -> u32 {
+    let base = crate::cast!(sp.adult_age_days => f32);
     crate::cast!((base * GeneticsParams::maturity_factor(genome.maturity(), gp.maturity_age_span)).round() => u32)
 }
 
@@ -414,13 +433,9 @@ impl CreatureStore {
     }
 }
 
-/// Place founders per FR3. Deterministic: iterates `SpeciesId::ALL` order and
-///
-/// draws from `rng` in a fixed sequence. Adult age and lifespan are read from each
-/// founder's own genome, so a slow-maturing individual starts older.
 /// Build one founder creature (all per-founder state at its defaults).
 #[allow(clippy::too_many_arguments)]
-fn founder(species: SpeciesId, name: NameId, sex: Sex, pos: (usize, usize), age_days: u32, genome: Genome, adult_age: u32, rng: &mut Rng) -> Creature {
+fn founder(species: SpeciesId, n_species: usize, name: NameId, sex: Sex, pos: (usize, usize), age_days: u32, genome: Genome, adult_age: u32, rng: &mut Rng) -> Creature {
     let (x, y) = pos;
     Creature {
                 id: CreatureId(0),
@@ -459,8 +474,8 @@ fn founder(species: SpeciesId, name: NameId, sex: Sex, pos: (usize, usize), age_
                 attempts: 0,
                 chased: 0,
                 escaped: 0,
-                threats_by_species: [0; 6],
-                kills_by_species: [0; 6],
+                threats_by_species: vec![0; n_species],
+                kills_by_species: vec![0; n_species],
                 last_kill: None,
                 chase_stats: (0, 0),
                 chase_longest_year: 0,
@@ -489,15 +504,21 @@ fn founder(species: SpeciesId, name: NameId, sex: Sex, pos: (usize, usize), age_
             }
 }
 
-pub fn place_founders(world: &World, params: &CreaturesParams, gp: &GeneticsParams, resistance_sd: f32, rng: &mut Rng) -> Vec<Creature> {
+/// Place founders per FR3.
+///
+/// Deterministic: iterates the roster in order and draws from `rng` in a fixed
+/// sequence. Adult age and lifespan are read from each founder's own genome, so
+/// a slow-maturing individual starts older.
+pub fn place_founders(world: &World, roster: &Roster, params: &CreaturesParams, gp: &GeneticsParams, resistance_sd: f32, rng: &mut Rng) -> Vec<Creature> {
     let mut out = Vec::new();
-    for species in SpeciesId::ALL {
-        let n = params.initial_counts.get(&species).copied().unwrap_or(0);
+    for species in roster.ids() {
+        let sp = roster.get(species);
+        let n = sp.initial_count;
         if n == 0 {
             continue;
         }
-        let base = species.base_genome();
-        let name_pool_len = names(species).len();
+        let base = sp.base_genome.genome();
+        let name_pool_len = sp.name_pool_len();
         let mut placed = 0u32;
         let mut tries = 0u32;
         while placed < n && tries < 100_000 {
@@ -520,7 +541,7 @@ pub fn place_founders(world: &World, params: &CreaturesParams, gp: &GeneticsPara
                 *v = Genome::clamp_trait(*v + rng.gauss(0.0, sd));
             }
             // Maturity moves both ends of the life history for this individual.
-            let adult_age = adult_age_days(species, &genome, params, gp);
+            let adult_age = adult_age_days(sp, &genome, gp);
             let max_age = max_age_days(&genome, params, gp);
             let adult = rng.chance(0.7);
             let age_days = if adult {
@@ -532,7 +553,7 @@ pub fn place_founders(world: &World, params: &CreaturesParams, gp: &GeneticsPara
             let sex = if rng.chance(0.5) { Sex::Male } else { Sex::Female };
             let name = crate::cast!(rng.below(name_pool_len) => NameId);
 
-            out.push(founder(species, name, sex, (x, y), age_days, genome, adult_age, rng));
+            out.push(founder(species, roster.len(), name, sex, (x, y), age_days, genome, adult_age, rng));
             placed += 1;
         }
     }
@@ -542,7 +563,8 @@ pub fn place_founders(world: &World, params: &CreaturesParams, gp: &GeneticsPara
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::params::{CreaturesParams, GeneticsParams};
+    use crate::sim::species::testing::*;
+    use crate::sim::params::{CreaturesParams, GeneticsParams, Roster};
     use crate::sim::world::{Terrain, World};
 
     fn world() -> World {
@@ -554,16 +576,17 @@ mod tests {
         let w = world();
         let p = CreaturesParams::default();
         let mut rng = Rng::new(42);
-        let creatures = place_founders(&w, &p, &GeneticsParams::default(), 0.20, &mut rng);
+        let roster = Roster::default();
+        let creatures = place_founders(&w, &roster, &p, &GeneticsParams::default(), 0.20, &mut rng);
         assert!(!creatures.is_empty(), "expected founders to be placed");
         for c in &creatures {
             let cell = w.cell(c.x, c.y);
             assert!(cell.terrain.walkable(), "creature on impassable {:?}", cell.terrain);
             assert!(!cell.terrain.is_water(), "creature on water");
         }
-        // Counts match the requested initial_counts (within the retry budget).
-        for id in SpeciesId::ALL {
-            let want = p.initial_counts.get(&id).copied().unwrap_or(0);
+        // Counts match the requested initial_count (within the retry budget).
+        for id in roster.ids() {
+            let want = roster.get(id).initial_count;
             let got = crate::cast!(creatures.iter().filter(|c| c.species == id).count() => u32);
             assert_eq!(got, want, "{id:?}: placed {got}, want {want}");
         }
@@ -574,7 +597,7 @@ mod tests {
         let w = world();
         let p = CreaturesParams::default();
         let mut rng = Rng::new(42);
-        for c in place_founders(&w, &p, &GeneticsParams::default(), 0.20, &mut rng) {
+        for c in place_founders(&w, &Roster::default(), &p, &GeneticsParams::default(), 0.20, &mut rng) {
             let age = c.age_days(0);
             assert!(age < c.max_age_days(&p, &GeneticsParams::default()), "age {age} >= max {}", c.max_age_days(&p, &GeneticsParams::default()));
         }
@@ -583,7 +606,7 @@ mod tests {
     #[test]
     fn slot_storage_free_list_and_stable_ids() {
         let mut store = CreatureStore::new();
-        let mut c = place_founders(&world(), &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(1)).remove(0);
+        let mut c = place_founders(&world(), roster(), &CreaturesParams::default(), &GeneticsParams::default(), 0.20, &mut Rng::new(1)).remove(0);
         c.id = CreatureId(0);
         let a = store.insert(c.clone());
         let b = store.insert(c.clone());

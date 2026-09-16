@@ -6,8 +6,9 @@ replacement for it. Read this first, then the doc that matches your task.
 ## What this is
 
 `sim-fortress` is a Rust 2021 (pinned toolchain **1.90**) terminal predator/prey/
-evolution simulation with a Dwarf-Fortress-inspired ratatui 0.30 UI. Six species live
-on a procedurally generated map and evolve an eleven-trait genome. It is an internal
+evolution simulation with a Dwarf-Fortress-inspired ratatui 0.30 UI. A configurable
+roster of species (six by default: voles, hares, deer, foxes, wolves, lynxes) lives on
+a procedurally generated map and evolves an eleven-trait genome. It is an internal
 application (`publish = false`) with no real downstream users, so there is freedom to
 change internals — but determinism and save format are load-bearing.
 
@@ -56,6 +57,7 @@ cargo run -- --headless --seed 42 --ticks 4320
 cargo run -- --seeds 1-20 --years 10 --summary         # in-process sweep → summary.csv
 cargo run -- --dump-params                             # defaults with one comment per field
 cargo run -- --params params.toml                      # partial TOML deep-merged over defaults
+cargo run -- --params boar.toml --headless --seed 42 --years 2 --summary   # a [[species]] overlay: new animal, no rebuild
 cargo run --release -- --headless --seed 1 --ticks 100000 --profile   # per-system timings
 scripts/sweep.sh 1 20 10                               # parallel processes → summary.csv
 cargo run --release --example bench_c5 -- 42 5 quiet   # dev benches in examples/
@@ -101,9 +103,24 @@ Do not weaken these to make a change pass. Fix the change.
   `tests::all_glyphs_are_cp437` checks every glyph is CP437 and one cell wide). No
   braille, no eighth-blocks, no `❄ † ‖ ☾ ✓ ✗` extras. ratatui `Chart`/`Canvas` must
   use `Marker::HalfBlock`, `Marker::Block` or `Marker::Dot` — never `Marker::Braille`.
+  The one exception is a species' `glyph` in the `[[species]]` roster, which
+  `Params::validate` checks is an ASCII lowercase letter (adults are drawn uppercase).
 - **Colours come only from `src/theme.rs`** — the palette, the ramps (`heat`, `veg`,
   `water`, `parasite`, `species_ramp`), `lerp`/`dim`/`night`, and the styles
   (`text`, `dim_text`, `title`, `key`, `label`, `border`, `border_focus`, `selected`).
+  The one exception is a species' `color = [r, g, b]` in the `[[species]]` roster; the
+  UI turns it into a `Color` through `ui::style::SpeciesStyle` on `Roster`.
+- **Species are data, not code.** `Params.species` (`[[species]]`, `src/sim/params/species.rs`)
+  is the only place a species' name, plural, glyph, colour, kind, diet, founding count,
+  life-history numbers, prey preference and base genome live. A `SpeciesId` is just a
+  roster index; every per-species table in the sim is a `Vec` in roster order. Code
+  that needs a species fact takes `&Roster` (`sim.roster()`), never a match on a name.
+  Adding an animal is a TOML overlay: `[[species]] name = "boar" plural = "Boars"
+  glyph = "b" color = [120, 90, 60] initial_count = 40` plus `[species.base_genome]`
+  and, for predators, `[species.prey_preference]` keyed by prey name. Overlays merge
+  arrays of named tables (`[[species]]`, `[[disease.pathogens]]`) **by `name`**: a
+  known name edits that entry in place, a new name appends, and an entry cannot be
+  removed (set `initial_count = 0` instead), so existing indices never move.
 - **Parameters, not constants.** Every number that tunes behaviour lives in
   `sim::Params` with a documented default and **must** have a matching entry in
   `FIELD_DOCS` (`src/sim/params/docs.rs`); `params::tests::field_docs_complete` checks
