@@ -658,7 +658,10 @@ mod tests {
         // the first such encounter moves. Deliberate, not an accident.
         // Re-baselined for the erosion-based world generator: every cell's
         // terrain, elevation and moisture changed, so founders land elsewhere.
-        assert_eq!(a.checksum(), 0xfe19_543f_c5fd_7dbe);
+        // Re-baselined for climate physics: the wind and pole draws precede
+        // the tectonic noise and orographic rain replaces the free rain
+        // field, so every cell's moisture and terrain moved again.
+        assert_eq!(a.checksum(), 0x4a21_08fc_4589_0590);
     }
 
     #[test]

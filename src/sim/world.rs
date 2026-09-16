@@ -3,9 +3,10 @@
 //! Generation is a pipeline of sibling modules: `noise` supplies seeded
 //! fields, `relief` builds a tectonic surface and ages it with a
 //! landscape-evolution model (stream-power incision plus hillslope diffusion
-//! for `age` epochs), `flow` routes drainage over the result, and `classify`
-//! cuts water, rock, sand, forest and grass by quantile so the percentage
-//! targets hold on any seed.
+//! for `age` epochs), `climate` sweeps a prevailing wind over it for
+//! orographic rain and lays a temperature gradient, `flow` routes drainage
+//! over the result, and `classify` cuts water, rock, sand, forest and grass
+//! by quantile so the percentage targets hold on any seed.
 
 use serde::{Deserialize, Serialize};
 
@@ -13,11 +14,14 @@ use crate::sim::params::WorldParams;
 use crate::sim::rng::Rng;
 
 mod classify;
+mod climate;
 mod flow;
 mod noise;
 mod relief;
 #[cfg(test)]
 mod tests;
+
+pub use climate::Wind;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[repr(u8)]
@@ -79,6 +83,8 @@ pub struct Cell {
     pub terrain: Terrain,
     pub elevation: f32,
     pub moisture: f32,
+    /// Climate temperature 0 (cold) ..= 1 (hot): latitude minus altitude.
+    pub temperature: f32,
     /// Standing vegetation biomass 0..=1.
     pub vegetation: f32,
     /// Synthetic "how many prey pass through here" 0..=1 (fixture decoration only).
@@ -103,6 +109,8 @@ pub struct World {
     pub carcasses: Vec<(usize, usize)>,
     pub seeds: Vec<(usize, usize)>,
     pub regions: Vec<RegionRect>,
+    /// The prevailing wind that shaped the rain field.
+    pub wind: Wind,
     /// Number of water cells at generation, used as the water-level series baseline.
     pub water_cells_at_generation: usize,
     /// Per cell: 8-adjacent to water (a drinking spot). Refreshed by
@@ -199,6 +207,7 @@ impl World {
             carcasses: Vec::new(),
             seeds: Vec::new(),
             regions: build_regions(w, h),
+            wind: relief.wind,
             water_cells_at_generation,
             shore: Vec::new(),
         };

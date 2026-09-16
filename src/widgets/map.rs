@@ -164,6 +164,7 @@ pub const fn terrain_code_cell(code: u8) -> (char, Color, Color) {
         terrain: Terrain::from_code(code),
         elevation: 0.5,
         moisture: 0.5,
+        temperature: 0.5,
         vegetation: 0.0,
         prey_pressure: 0.0,
         pred_pressure: 0.0,
@@ -667,7 +668,7 @@ mod tests {
 
     /// A `w`×`h` all-dirt world split into two regions down the middle.
     fn two_region_world(w: usize, h: usize) -> World {
-        let cell = Cell { terrain: Terrain::Dirt, elevation: 0.5, moisture: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 };
+        let cell = Cell { terrain: Terrain::Dirt, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 };
         World {
             cells: vec![cell; w * h],
             width: w,
@@ -676,6 +677,7 @@ mod tests {
             carcasses: vec![],
             seeds: vec![],
             regions: vec![("Ab".to_string(), 0, 0, w.div_euclid(2), h), ("Cd".to_string(), w.div_euclid(2), 0, w, h)],
+            wind: crate::sim::world::Wind::Westerly,
             water_cells_at_generation: 0,
             shore: vec![],
         }

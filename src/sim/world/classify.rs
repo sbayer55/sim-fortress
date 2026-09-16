@@ -21,6 +21,8 @@ const RIVER_MIN_AREA: f32 = 6.0;
 const SAND_SHARE: f32 = 0.04;
 /// Chamfer distance (horizontal units) over which water dampens the land.
 const MOISTURE_REACH: f32 = 5.0;
+/// Contrast stretch on the rain field (0.5..=1.5) before it enters moisture.
+const RAIN_CONTRAST: f32 = 1.8;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Water {
@@ -44,6 +46,7 @@ pub(super) fn cells(rng: &mut Rng, grid: Grid, relief: &Relief, params: &WorldPa
                 terrain: terrain[i],
                 elevation: relief.height[i],
                 moisture: moisture[i],
+                temperature: relief.temperature[i],
                 vegetation: vegetation(terrain[i], veg.at(x, y)),
                 prey_pressure: 0.0,
                 pred_pressure: 0.0,
@@ -118,18 +121,20 @@ fn water_distance(grid: Grid, water: &[Water]) -> Vec<f32> {
     d
 }
 
-/// Moisture: the long-run rain field, nearness to water, altitude and the
-/// climate bias. Tuned so a normal world averages about 0.5 on land.
+/// Moisture: the long-run rain field, nearness to water and altitude. The
+/// climate setting already scaled the wind's moisture budget, so a dry world
+/// keeps a wet windward coast; the small bias here only widens the spread.
+/// Tuned so a normal world averages about 0.5 on land.
 fn moisture(relief: &Relief, water: &[Water], distance: &[f32], rainfall: Rainfall) -> Vec<f32> {
     let bias = match rainfall {
-        Rainfall::Dry => -0.07,
+        Rainfall::Dry => -0.03,
         Rainfall::Normal => 0.0,
-        Rainfall::Wet => 0.07,
+        Rainfall::Wet => 0.03,
     };
     (0..relief.height.len())
         .map(|i| {
             // Stretch the rain field's contrast so rain shadows leave bare dirt.
-            let rain = ((relief.rain[i] - 1.0) * 1.8 + 0.5).clamp(0.0, 1.0);
+            let rain = ((relief.rain[i] - 1.0) * RAIN_CONTRAST + 0.5).clamp(0.0, 1.0);
             let near = if water[i] == Water::Land { (-distance[i] / MOISTURE_REACH).exp() } else { 1.0 };
             (0.02 + 0.40 * rain + 0.28 * near + 0.28 * (1.0 - relief.height[i]) + bias).clamp(0.0, 1.0)
         })

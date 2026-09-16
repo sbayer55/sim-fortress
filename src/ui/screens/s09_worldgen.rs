@@ -714,7 +714,7 @@ fn preview_panel(f: &mut Frame<'_>, area: Rect, form: &WorldGenForm) {
     let world = &form.preview;
     // Smallest zoom-out (at least 1:2) at which the whole world fits 75x20.
     let scale = world.width().div_ceil(75).max(world.height().div_ceil(20)).max(2);
-    let hint = format!("seed {}, {}x{} at 1:{}", form.seed_text, world.width(), world.height(), scale);
+    let hint = format!("seed {}, {}x{} at 1:{}, {} wind", form.seed_text, world.width(), world.height(), scale, world.wind.name());
     let inner = panel::draw_with_hint(f, area, "Preview", &hint, panel::Kind::Outer);
 
     let iw = crate::cast!(world.width().div_ceil(scale) => u16);

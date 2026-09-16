@@ -21,7 +21,9 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// (erosion-based world generation) and made the species roster configurable:
 /// every per-species table became a `Vec` and the header carries the roster
 /// labels (a version-4 header still decodes so old files stay listable).
-pub const VERSION: u16 = 5;
+/// Version 6 added the per-cell temperature and the world's prevailing wind
+/// (climate physics).
+pub const VERSION: u16 = 6;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 

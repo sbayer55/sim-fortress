@@ -551,7 +551,9 @@ mod tests {
         }
         let before = sim.events.len();
         run_days(&mut sim, 1);
-        let notes: Vec<&Event> = sim.events.iter().skip(before).filter(|e| e.kind == EventKind::Note).collect();
+        // Only the regrowth notes: den discoveries are notes too and land on
+        // the same day on some worlds.
+        let notes: Vec<&Event> = sim.events.iter().skip(before).filter(|e| e.kind == EventKind::Note && e.text.contains("regrowth site")).collect();
         assert!(!notes.is_empty());
         assert!(notes.len() <= 8, "{} notes in one day", notes.len());
         let mut texts: Vec<&str> = notes.iter().map(|e| e.text.as_str()).collect();
@@ -563,9 +565,9 @@ mod tests {
     #[test]
     fn region_means_exclude_water() {
         let cells = vec![
-            Cell { terrain: Terrain::ShallowWater, elevation: 0.5, moisture: 0.5, vegetation: 0.9, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 },
-            Cell { terrain: Terrain::Grass, elevation: 0.5, moisture: 0.5, vegetation: 0.1, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 },
-            Cell { terrain: Terrain::Grass, elevation: 0.5, moisture: 0.5, vegetation: 0.3, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 },
+            Cell { terrain: Terrain::ShallowWater, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.9, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 },
+            Cell { terrain: Terrain::Grass, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.1, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 },
+            Cell { terrain: Terrain::Grass, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.3, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 },
         ];
         let world = World {
             cells,
@@ -575,6 +577,7 @@ mod tests {
             carcasses: vec![],
             seeds: vec![],
             regions: vec![("R".to_string(), 0, 0, 3, 1)],
+            wind: crate::sim::world::Wind::Westerly,
             water_cells_at_generation: 1,
             shore: vec![],
         };

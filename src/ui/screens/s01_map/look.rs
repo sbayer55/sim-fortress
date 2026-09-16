@@ -35,6 +35,8 @@ impl WorldMap {
         row += 1;
         util::line(f, inner, row, Line::from(Span::styled(format!(" {}  elev {:.2}  veg {:.2}", cell.terrain.name(), cell.elevation, cell.vegetation), theme::dim_text())));
         row += 1;
+        util::line(f, inner, row, Line::from(Span::styled(format!(" moisture {:.2}  temperature {:.2}", cell.moisture, cell.temperature), theme::dim_text())));
+        row += 1;
         util::line(f, inner, row, Line::from(Span::styled(" Enter opens the creature inspector", theme::dim_text())));
         row += 2;
         let here = sim.creatures.living().filter(|c| c.x == cx && c.y == cy).count();
