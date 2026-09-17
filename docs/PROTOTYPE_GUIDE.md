@@ -42,6 +42,11 @@ Rust, ratatui 0.30 (crossterm re-exported as `ratatui::crossterm`).
 
 ## Layout conventions
 
+Spec sheets for every reusable piece (panel, divider, bars, tables, inputs) live
+in [components/README.md](components/README.md); that folder is the planned
+first-class component system and records both today's helpers and the planned
+API. The helper list below is the *today* view.
+
 - Status bar (usually the last row): `widgets::status::render(f, rect, &[("k","label"),…], "right text")`.
 - Panels: `panel::draw(f, area, "Title", panel::Kind::Outer|Inner|Focus) -> Rect`
   returns the inner area (double border for `Outer`/`Focus`, single for `Inner`;

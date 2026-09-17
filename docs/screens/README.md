@@ -3,7 +3,9 @@
 This document lists every screen in the Sim Fortress UI, its sub-screens (variants), and
 how the screens connect. Each screen has its own requirements file, linked from the
 tables below. Conventions shared by all screens (frame size, glyph rules, widgets) are in
-[../PROTOTYPE_GUIDE.md](../PROTOTYPE_GUIDE.md); the plan that produced the prototypes is
+[../PROTOTYPE_GUIDE.md](../PROTOTYPE_GUIDE.md); the reusable pieces screens are built
+from (panels, dividers, bars, tables, inputs) are specified in
+[../components/README.md](../components/README.md); the plan that produced the prototypes is
 summarised in the repository [README](../../README.md).
 
 ## Screen map
