@@ -127,6 +127,7 @@ Modal::new(60, 21)                                  // size, clamped to the area
     .hint("Enter select   ←→ move   Esc continue")
     .render(buf, area) -> Rect                      // draws the box, returns the Body area
 Modal::new(60, 21).hint_with(KeyHint::row(&[("Space", "pause"), ..]).center())   // a Key Hint row as the Hint
+Modal::new(120, 38).foot(ov.foot().unwrap_or_default())                          // Scrolling: the Foot from the body's ScrollRegion
 ```
 `height` is `h`; `min_width` is the widest of the Button row, the Hint, and
 Title plus Info. The backdrop dim stays with `ui::screens::render_stack`,

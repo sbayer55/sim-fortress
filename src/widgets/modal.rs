@@ -23,6 +23,7 @@ pub struct Modal<'a> {
     title: Option<Cow<'a, str>>,
     info: Option<Cow<'a, str>>,
     banner: Option<(Cow<'a, str>, Color)>,
+    foot: Option<Cow<'a, str>>,
     buttons: Option<ButtonRow<'a>>,
     hint: Option<Box<dyn Component + 'a>>,
 }
@@ -35,7 +36,7 @@ impl fmt::Debug for Modal<'_> {
 
 impl<'a> Modal<'a> {
     pub const fn new(w: u16, h: u16) -> Self {
-        Self { w, h, title: None, info: None, banner: None, buttons: None, hint: None }
+        Self { w, h, title: None, info: None, banner: None, foot: None, buttons: None, hint: None }
     }
 
     #[must_use]
@@ -47,6 +48,13 @@ impl<'a> Modal<'a> {
     #[must_use]
     pub fn info(mut self, info: impl Into<Cow<'a, str>>) -> Self {
         self.info = Some(info.into());
+        self
+    }
+
+    /// The Panel Foot, normally `↑n ↓m` from a Scroll Region body.
+    #[must_use]
+    pub fn foot(mut self, foot: impl Into<Cow<'a, str>>) -> Self {
+        self.foot = Some(foot.into());
         self
     }
 
@@ -103,6 +111,9 @@ impl<'a> Modal<'a> {
         let mut panel = self.title.as_deref().map_or_else(Panel::untitled, Panel::new).kind(Kind::Focus);
         if let Some(info) = self.info.as_deref() {
             panel = panel.info(info);
+        }
+        if let Some(foot) = self.foot.as_deref() {
+            panel = panel.foot(foot);
         }
         let inner = panel.render(buf, frame);
         if let Some((text, color)) = &self.banner {
