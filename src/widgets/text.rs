@@ -16,25 +16,26 @@ use crate::theme;
 #[derive(Clone, Debug)]
 pub struct Text<'a> {
     spans: Vec<Span<'a>>,
-    align: Align,
+    /// `None` until set: a column block may then supply its default.
+    align: Option<Align>,
 }
 
 impl<'a> Text<'a> {
     /// Plain text in `theme::text()`.
     pub fn new(s: impl Into<Cow<'a, str>>) -> Self {
-        Self { spans: vec![Span::styled(s, theme::text())], align: Align::Left }
+        Self { spans: vec![Span::styled(s, theme::text())], align: None }
     }
 
     /// A row of pre-styled spans.
     pub const fn spans(spans: Vec<Span<'a>>) -> Self {
-        Self { spans, align: Align::Left }
+        Self { spans, align: None }
     }
 
     /// A ratatui `Line`; its line-level style becomes the base of every span.
     pub fn line(line: Line<'a>) -> Self {
         let base = line.style;
         let spans = line.spans.into_iter().map(|s| Span::styled(s.content, base.patch(s.style))).collect();
-        Self { spans, align: Align::Left }
+        Self { spans, align: None }
     }
 
     /// Replace the style of every span.
@@ -66,7 +67,16 @@ impl<'a> Text<'a> {
 
     #[must_use]
     pub const fn align(mut self, align: Align) -> Self {
-        self.align = align;
+        self.align = Some(align);
+        self
+    }
+
+    /// The alignment to use when none was set (a column's default).
+    #[must_use]
+    pub const fn or_align(mut self, align: Align) -> Self {
+        if self.align.is_none() {
+            self.align = Some(align);
+        }
         self
     }
 
@@ -99,7 +109,7 @@ impl Component for Text<'_> {
             return;
         }
         // Wider than the row: cut at the right edge whatever the alignment.
-        let align = if self.width() > usize::from(area.width) { Align::Left } else { self.align };
+        let align = if self.width() > usize::from(area.width) { Align::Left } else { self.align.unwrap_or(Align::Left) };
         let alignment = match align {
             Align::Left => Alignment::Left,
             Align::Right => Alignment::Right,

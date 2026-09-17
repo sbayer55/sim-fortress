@@ -4,15 +4,14 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::Style;
+use ratatui::style::{Color, Style};
 use ratatui::text::Span;
-use sim_fortress::{cast, theme};
-use sim_fortress::widgets::Constraint::{Fill, Fixed};
-use sim_fortress::glyphs;
+use sim_fortress::widgets::Constraint::{Fill, Fixed, Min};
 use sim_fortress::widgets::{
-    util, Bar, Component, Divider, HStack, Inverted, KeyHint, Kind, LabeledBar, Panel, RangeBar, Spacer, Sparkline, StatusBar, Text, Ticker,
-    TrendArrow, VStack,
+    util, Align, Bar, Block, Column, Columns, Component, Divider, HStack, Inverted, KeyHint, Kind, LabeledBar, Panel, RangeBar, Row, Spacer,
+    Sparkline, StatusBar, Table, TableCell, TableRow, Text, Ticker, TrendArrow, VStack,
 };
+use sim_fortress::{cast, glyphs, theme};
 
 use super::{Entry, Frame};
 
@@ -46,7 +45,7 @@ fn sidebar_head(buf: &mut Buffer, area: Rect) {
 }
 
 /// A population row: ` V Vole    267 `, the arrow, four blanks, an 18-cell strip.
-fn population_row(buf: &mut Buffer, area: Rect, head: &str, series: &[u16], color: ratatui::style::Color) {
+fn population_row(buf: &mut Buffer, area: Rect, head: &str, series: &[u16], color: Color) {
     let (t, arrow, gap, spark) = (Text::new(head), TrendArrow::new(series), Spacer::cols(4), Sparkline::new(series).color(color));
     HStack::new().child_with(Fixed(15), &t).child_with(Fixed(1), &arrow).child(&gap).child_with(Fixed(18), &spark).render(buf, area);
 }
@@ -235,6 +234,9 @@ fn trend_arrow() -> Vec<Entry> {
     ]
 }
 
+const TAIL_70: &str = "    prey 368  pred 24  ratio 15.3:1   births 0";
+const TAIL_155: &str = "    prey 368  pred 24  ratio 15.3:1   births 0  deaths 0   net +0 today     traits = species means x100;  /d = yesterday";
+
 const S00_KEYS: &[(&str, &str)] = &[("↑↓", "select"), ("Enter", "confirm"), ("q", "quit")];
 const S01_CLOCK: &str = "Year 12, Day 4 of Autumn  14:00  ☼ day";
 
@@ -341,6 +343,163 @@ fn ticker() -> Vec<Entry> {
     ]
 }
 
+/// The S01 Population columns: ` V `, name, count, gap, arrow, gap, strip, rest.
+fn population_columns() -> Columns {
+    Columns::new(&[Fixed(3), Fixed(6), Min(5), Fixed(1), Fixed(1), Fixed(4), Fixed(18), Fill(1)]).align(2, Align::Right)
+}
+
+fn population_cells(glyph: &'static str, name: &'static str, count: &'static str, series: &[u16], color: Color) -> Row<'static> {
+    Row::new()
+        .cell(Text::new(glyph).fg(color).bold())
+        .cell(Text::new(name))
+        .cell(Text::new(count))
+        .cell(Spacer::cols(1))
+        .cell(TrendArrow::new(series))
+        .cell(Spacer::cols(4))
+        .cell(Sparkline::new(series).color(color))
+        .cell(Spacer::cols(0))
+}
+
+/// Thirty days of deer: flat at 4133 (`↔`), the strip falling to it.
+fn deer_series() -> Vec<u16> {
+    let mut v = vec![4133u16; 12];
+    v.extend([4433, 4433, 4333, 4333, 4333, 4333]);
+    v.extend([4233; 9]);
+    v.extend([4133; 3]);
+    v
+}
+
+fn hare_series() -> Vec<u16> {
+    let mut v = vec![1u16; 26];
+    v.extend([0; 4]);
+    v
+}
+
+fn columns() -> Vec<Entry> {
+    vec![
+        rows("columns", "Fixed, the S01 Population rows (43 columns)", |b, a| {
+            let zeros = [0u16; 30];
+            let rows = [
+                Row::span(Divider::new("Population")),
+                population_cells(" V ", "Vole", "0", &zeros, theme::TAN),
+                population_cells(" H ", "Hare", "0", &hare_series(), theme::CREAM),
+                population_cells(" D ", "Deer", "4133", &deer_series(), theme::ROSE),
+                population_cells(" F ", "Fox", "0", &zeros, theme::WARN),
+                population_cells(" W ", "Wolf", "0", &zeros, theme::PRED),
+                population_cells(" L ", "Lynx", "0", &zeros, theme::MAGENTA),
+            ];
+            Block::new(population_columns()).rows(rows).render(b, a);
+        }),
+        rows("columns", "Measured, one count wider than the floor (43 columns)", |b, a| {
+            let zeros = [0u16; 30];
+            let rows = [population_cells(" V ", "Vole", "0", &zeros, theme::TAN), population_cells(" D ", "Deer", "413300", &deer_series(), theme::ROSE)];
+            Block::new(population_columns()).rows(rows).render(b, a);
+        }),
+        rows("columns", "Grid, two Legend columns (43 columns)", |b, a| {
+            let rows = [
+                Row::new().cell(Text::new(" ≈ deep water")).cell(Text::new("~ shallow water")),
+                Row::new().cell(Text::new(" · sand")).cell(Text::new(". bare dirt")),
+            ];
+            Block::new(Columns::new(&[Fixed(20), Fill(1)])).rows(rows).render(b, a);
+        }),
+    ]
+}
+
+/// The S04a species table columns, Marker excluded.
+const SPECIES_COLUMNS: [Column; 26] = [
+    Column::new(Fixed(2)),
+    Column::titled("Species", Fixed(8)),
+    Column::titled("Kind", Fixed(6)),
+    Column::titled("Count", Fixed(5)).right(),
+    Column::titled("Adults", Fixed(7)).right(),
+    Column::titled("Juv", Fixed(6)).right(),
+    Column::titled("Birth/d", Fixed(8)).right(),
+    Column::titled("Death/d", Fixed(8)).right(),
+    Column::titled("Sick", Fixed(6)).right(),
+    Column::titled("Peak", Fixed(6)).right(),
+    Column::titled("Gen", Fixed(5)).right(),
+    Column::new(Fixed(2)),
+    Column::titled("30-day trend", Fixed(15)),
+    Column::new(Fixed(1)),
+    Column::new(Fixed(1)),
+    Column::titled("Spd", Fixed(6)).right(),
+    Column::titled("Siz", Fixed(4)).right(),
+    Column::titled("Sen", Fixed(4)).right(),
+    Column::titled("Met", Fixed(4)).right(),
+    Column::titled("Agg", Fixed(4)).right(),
+    Column::titled("Cam", Fixed(4)).right(),
+    Column::titled("Fer", Fixed(4)).right(),
+    Column::titled("Lon", Fixed(4)).right(),
+    Column::titled("Res", Fixed(4)).right(),
+    Column::titled("Soc", Fixed(4)).right(),
+    Column::titled("Mat", Fixed(4)).right(),
+];
+
+/// A species row up to the Gen column.
+fn species_row(glyph: char, name: &'static str, kind: &'static str, nums: [&'static str; 8]) -> TableRow<'static> {
+    let mut cells = vec![TableCell::Glyph(glyph, theme::TAN), TableCell::text(name), TableCell::dim(kind)];
+    cells.extend(nums.into_iter().map(TableCell::text));
+    TableRow::new(cells)
+}
+
+fn species_totals(tail: &'static str) -> TableRow<'static> {
+    TableRow::new([TableCell::Blank, TableCell::text("totals"), TableCell::Blank, TableCell::text("392")]).tail(Text::new(tail))
+}
+
+fn species_rows() -> [TableRow<'static>; 6] {
+    [
+        species_row('H', "Hare", "prey", ["201", "201", "0", "0", "1", "0", "703", "4"]),
+        species_row('V', "Vole", "prey", ["154", "154", "0", "0", "2", "0", "544", "6"]),
+        species_row('D', "Deer", "prey", ["13", "11", "2", "0", "0", "0", "230", "2"]),
+        species_row('F', "Fox", "pred", ["10", "10", "0", "0", "0", "0", "11", "4"]),
+        species_row('W', "Wolf", "pred", ["8", "7", "1", "0", "0", "0", "18", "3"]),
+        species_row('L', "Lynx", "pred", ["6", "6", "0", "0", "0", "0", "7", "3"]),
+    ]
+}
+
+fn table() -> Vec<Entry> {
+    vec![
+        bare("table", "Species table cut after Gen, Spaced with totals (70 columns)", |b, a| {
+            let inner = Panel::new("Species").info(Table::sort_info("count")).render(b, a);
+            let rows = species_rows();
+            Table::new(&SPECIES_COLUMNS, &rows[..]).selected(Some(0)).totals(species_totals(TAIL_70)).spaced(true).render(b, inner);
+        }),
+        bare("table", "Full width, header, selected row and totals (155 columns)", |b, a| {
+            const STRIP: [u16; 14] = [3, 3, 3, 2, 2, 2, 2, 2, 2, 1, 1, 1, 0, 0];
+            let inner = Panel::new("Species").info(Table::sort_info("count")).render(b, a);
+            let (gap, spark) = (Spacer::cols(1), Sparkline::new(&STRIP).color(theme::TAN));
+            let trend = HStack::new().child(&gap).child_with(Fixed(14), &spark);
+            let mut cols = SPECIES_COLUMNS.to_vec();
+            cols.extend([Column::new(Fixed(3)), Column::titled(" Diet", Fill(1))]);
+            let [mut hare, ..] = species_rows();
+            hare.cells.extend([TableCell::Blank, TableCell::widget(trend), TableCell::Blank, TableCell::widget(TrendArrow::new(&STRIP).bold())]);
+            let traits = ["82", "24", "65", "61", "10", "56", "75", "35", "35", "26", "51"];
+            let colors = [theme::INFO, theme::TAN, theme::ACCENT, theme::WARN, theme::BAD, theme::VEGETATION, theme::MAGENTA, theme::ROSE, theme::SICK, theme::CREAM, theme::SEED];
+            hare.cells.extend(traits.iter().zip(colors).map(|(t, c)| TableCell::styled(*t, c)));
+            hare.cells.extend([TableCell::Blank, TableCell::dim("grass, bark")]);
+            let rows = [hare];
+            Table::new(&cols, &rows[..]).selected(Some(0)).totals(species_totals(TAIL_155)).spaced(true).render(b, inner);
+        }),
+        rows("table", "Marker and Bare bars, S06 regions (63 columns)", |b, a| {
+            const COLS: [Column; 5] = [
+                Column::titled("region", Fixed(18)),
+                Column::titled("cells", Fixed(5)).right(),
+                Column::titled("water", Fixed(8)).right(),
+                Column::new(Fixed(3)),
+                Column::titled("  vegetation", Fixed(26)),
+            ];
+            let (b1, t1, b2, t2) = (Bar::new(0.32).color(theme::VEGETATION), Text::new(" 0.32"), Bar::new(0.49).color(theme::VEGETATION), Text::new(" 0.49"));
+            let veg1 = HStack::new().child_with(Fixed(20), &b1).child_with(Fill(1), &t1);
+            let veg2 = HStack::new().child_with(Fixed(20), &b2).child_with(Fill(1), &t2);
+            let rows = [
+                TableRow::new([TableCell::text("Northmarch"), TableCell::text("700"), TableCell::text("18%"), TableCell::Blank, TableCell::widget(veg1)]),
+                TableRow::new([TableCell::text("Ashen Ridge"), TableCell::text("600"), TableCell::text("12%"), TableCell::Blank, TableCell::widget(veg2)]),
+            ];
+            Table::new(&COLS, &rows[..]).selected(Some(1)).render(b, a);
+        }),
+    ]
+}
+
 fn text() -> Vec<Entry> {
     vec![
         rows("text", "Plain (43 columns)", |b, a| Text::new(" Hello!").render(b, a)),
@@ -380,6 +539,8 @@ pub fn examples() -> Vec<Entry> {
     v.extend(key_hint());
     v.extend(status_bar());
     v.extend(ticker());
+    v.extend(columns());
+    v.extend(table());
     v.extend(text());
     v.sort_by_key(|e| (e.sheet, e.heading));
     v
