@@ -5,8 +5,6 @@
 //! the window at `offset` is then copied onto the frame and an overflow
 //! indicator (`↑n ↓m`) is written into the panel's bottom border.
 
-use std::fmt::Write as _;
-
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
@@ -55,26 +53,25 @@ pub fn draw(f: &mut Frame<'_>, panel_area: Rect, inner: Rect, offset: u16, body:
         }
     }
 
-    if content > inner.height {
-        indicator(target, panel_area, offset, max - offset);
+    if let Some(text) = foot(offset, content, inner.height) {
+        super::panel::draw_foot(target, panel_area, &text);
     }
     Overflow { content, offset }
 }
 
-/// ` ↑3 ↓12 ` right-aligned in the panel's bottom border.
-fn indicator(buf: &mut Buffer, panel_area: Rect, above: u16, below: u16) {
-    let mut text = String::from(" ");
-    if above > 0 {
-        let _ = write!(text, "{}{above} ", glyphs::UP);
+/// The Panel Foot for a window of `visible` rows at `offset` over `content`
+/// rows: `↑n ↓m`, a zero part omitted, `None` when everything fits.
+pub fn foot(offset: u16, content: u16, visible: u16) -> Option<String> {
+    if content <= visible {
+        return None;
+    }
+    let below = Overflow::max_offset(content, visible).saturating_sub(offset);
+    let mut parts = Vec::new();
+    if offset > 0 {
+        parts.push(format!("{}{offset}", glyphs::UP));
     }
     if below > 0 {
-        let _ = write!(text, "{}{below} ", glyphs::DOWN);
+        parts.push(format!("{}{below}", glyphs::DOWN));
     }
-    let w = crate::cast!(text.chars().count() => u16);
-    if panel_area.height < 2 || panel_area.width < w + 2 {
-        return;
-    }
-    let x = panel_area.right() - 1 - w;
-    let y = panel_area.bottom() - 1;
-    buf.set_stringn(x, y, &text, crate::cast!(w => usize), theme::dim_text());
+    Some(parts.join(" "))
 }

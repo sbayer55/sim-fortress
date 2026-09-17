@@ -4,9 +4,10 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::Line;
-use ratatui::widgets::{Paragraph, Widget};
 use ratatui::Frame;
 
+use super::component::Component;
+use super::text::Text;
 use crate::theme;
 
 /// Fill a rect with a background color.
@@ -31,8 +32,7 @@ pub fn line_in(buf: &mut Buffer, area: Rect, row: u16, l: Line<'_>) {
     if row >= area.height {
         return;
     }
-    let r = Rect::new(area.x, area.y + row, area.width, 1);
-    Paragraph::new(l).render(r, buf);
+    Text::line(l).render(buf, Rect::new(area.x, area.y + row, area.width, 1));
 }
 
 /// Dim every cell in the area toward the background (for modal backdrops).

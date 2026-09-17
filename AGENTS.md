@@ -17,7 +17,7 @@ src/lib.rs       crate root: modules + the `cast!` macro
 src/main.rs      hand-rolled CLI: --headless, --seeds, --summary, --profile, live app
 src/sim/         pure, deterministic core; no terminal code
 src/ui/          ratatui layer: App/AppState (ui/app.rs), screen stack, screens
-src/widgets/     shared drawing: panel, status, bars, util, map
+src/widgets/     shared drawing: the components (docs/components) and the helpers that wrap them
 src/theme.rs     truecolor palette, ramps and styles
 src/glyphs.rs    named CP437 glyph constants
 tests/           integration acceptance tests (one file per chunk)
@@ -55,6 +55,7 @@ bare `cargo test`, unfiltered `cargo test --lib`, and slow chunks run without
 |---|---|---|---|
 | gate | `just check` | seconds | always, before calling anything done |
 | unit | `just test-unit <module::path>` | seconds to tens of seconds | the module you edited (`sim::disease`, `ui`, `sim::params`) |
+| components | `cargo test --test components` | seconds | any edit under `src/widgets/` or `docs/components/`: every sheet example is rendered cell for cell |
 | chunk | `just test-chunk <name>` | 1–3 min in release | the chunk your change affects; **run in the background** |
 | affected | `just test-affected` | varies | when the diff spans modules; `just test-affected-plan` prints the plan first |
 | lib | `just test-unit-all` | ~95 s | **only when the user explicitly asks** |

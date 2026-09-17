@@ -89,8 +89,10 @@ VStack::new()
     .gap(0)                                           // default
     .render(buf, area)
 ```
-`height(width)` is the sum of the children plus gaps, or the area height when
-a `Fill` child is present. Children are `&dyn Component`.
+`height(width)` is the content height: the `Auto` and `Fixed` children plus
+gaps. A `Fill` child counts 0 there and takes what the area leaves at render
+time. Children are `&dyn Component`; `VStack::from_boxes(&rows)` takes a
+`Vec<Box<dyn Component>>` for sections that return their rows.
 
 ## Gaps today
 - Nothing shared; every screen threads its own row counter.
