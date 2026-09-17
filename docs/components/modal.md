@@ -51,6 +51,7 @@ is `(w − 2) × (h − 2)`. Sizes today:
 | S12 Alert               | 64 × 12  | untitled, Banner `‼ EXTINCTION ‼`         |
 | S11 Legend & Help       | 120 × 38 | `Legend & Help`, Info `? or Esc closes`   |
 | Load World              | 70 × 20  | titled, Info names the selected save      |
+| S14 Overlay Switcher    | 84 × 21  | `Overlay`, Info `o or Esc closes`; centred on the map panel, backdrop undimmed |
 
 Minimum is the Panel minimum, 3 × 3. A modal shorter than Body plus Buttons
 plus Hint loses rows from the bottom, Hint first.
@@ -131,8 +132,11 @@ Modal::new(120, 38).foot(ov.foot().unwrap_or_default())                         
 ```
 `height` is `h`; `min_width` is the widest of the Button row, the Hint, and
 Title plus Info. The backdrop dim stays with `ui::screens::render_stack`,
-which dims the whole screen before any non-opaque screen draws; a Modal
-never dims. `Modal::body(area)` gives the Body area without drawing.
+which dims the whole screen before any non-opaque screen draws whose
+`Screen::dims_backdrop()` is true (the default); S14 returns false so the map
+beneath it stays a live preview. A Modal never dims. `Modal::body(area)` gives
+the Body area without drawing; S14 passes the map panel's rect as `area`, so
+the box centres on the map rather than the screen.
 
 ## Gaps today
 - confirm puts Buttons and Hint on one left-aligned row. That row,
@@ -145,8 +149,8 @@ never dims. `Modal::body(area)` gives the Body area without drawing.
   `theme::selected()` as in S12.
 - S10's Hint is left-aligned with a leading space, not centred.
 - confirm does not repaint the Status Bar, so the bar stays dimmed under it.
-- The backdrop dim lives in `render_stack`; a modal cannot choose its own
-  amount.
+- The backdrop dim lives in `render_stack`; a screen can only switch it off
+  (`dims_backdrop`), not choose its own amount.
 - S12 and confirm each do their own button padding arithmetic; there is no
   shared [Button Row](button-row.md).
 - The S12a prototype render pads the button row with eight cells; the live

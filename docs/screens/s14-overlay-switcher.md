@@ -2,13 +2,15 @@
 
 Back to the [screen overview](README.md).
 
-Status: **specified, not yet built.** Mockup: variant 4 of the throwaway
-`overlay-switcher-mockup.html` (Sept 2026). The implementation plan is
-[../overlay-switcher-plan.md](../overlay-switcher-plan.md). Revalidated against the
-component system (`main` at 5494dc0): the layer rows are
-[Checkbox](../components/checkbox.md) rows with two new variants (Radio, Focused) and
-the sub-pick list is a [Table](../components/table.md); items 5 and 10 follow those
-sheets where the mockup differed.
+Status: **built** (Sept 2026, `src/ui/screens/s14_switcher.rs`; renders
+[S14a](renders/S14a.txt), [S14b](renders/S14b.txt), [S14c](renders/S14c.txt)). Mockup:
+variant 4 of the throwaway `overlay-switcher-mockup.html`. The implementation plan is
+[../overlay-switcher-plan.md](../overlay-switcher-plan.md). The layer rows are
+[Checkbox](../components/checkbox.md) rows (Radio, Focused, Disabled, Value and Cue
+variants) and the sub-pick list is a [Table](../components/table.md); items 5 and 10
+follow those sheets where the mockup differed. Two glyph deviations from this text, forced
+by the CP437 invariant: the row cue is drawn `»` (`glyphs::CUE`), not `›`, and a cut map
+title ends in `·` (`common::clip`), not `…`.
 
 ## Purpose
 One place to compose what the map shows. Today [S02](s02-map-overlay.md) is nine

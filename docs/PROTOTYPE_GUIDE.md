@@ -63,9 +63,10 @@ examples cell for cell. Screens draw through the components:
   `Checkbox`, `ButtonRow`, `Menu`, `FilterStrip`.
 - The free functions `panel::draw*`, `panel::section*`, `bars::*`,
   `scroll::draw` and `util::line*` remain as thin wrappers over the components
-  for the screens that have not moved yet (the S01 overlay sidebars, S08, S13,
-  S04b and the S04 summary, S05's stacked, phase and group charts). New code
-  uses the components.
+  for the screens that have not moved yet (the single-layer S01 overlay
+  sidebars, S08, S13, S04b and the S04 summary, S05's stacked, phase and group
+  charts; the S01 Stack section, the compact overlay sidebar and S14 are
+  components). New code uses the components.
 
 ## Map
 
@@ -73,16 +74,23 @@ examples cell for cell. Screens draw through the components:
 `Sim` implements `MapSource`, so screens pass `sim` directly.
 
 ```text
-MapOptions { overlay: Overlay, night, winter, cursor: Option<(usize, usize)>,
+MapOptions { stack: OverlayStack, night, winter, cursor: Option<(usize, usize)>,
              follow: Option<CreatureId>, origin: (usize, usize), creatures,
-             fade_creatures, selected_region: Option<usize>, … }
+             selected_region: Option<usize>, species_color, creature_tint }
 ```
 
-`Overlay` is `None | Vegetation | Pressure | Moisture | Sense(CreatureId) |
-Region | Species(SpeciesId) | Health | Disease(Option<PathogenId>) | Parasites`.
+`OverlayStack` (`widgets::map::stack`, S14) is one `Base` (`None | Vegetation |
+Pressure | Moisture | Species | Parasites`), the `sense`, `regions` and `health`
+marks, `Disease` (`Off | On(Option<PathogenId>)`) and the remembered `species`,
+`sense_subject` and `pathogen`. `stack.layers()` walks the active layers in
+composition order; `map::creature_color` is the creature-colour precedence.
 `map::terrain_cell(cell, winter) -> (char, fg, bg)` and `map::legend()` are public.
-`s01_map` keeps the shared map state (`WorldMap`, `map_options`, `map_hint`) in its
-root module; each overlay's sidebar lives in its own submodule.
+The stack lives on `AppState.overlay`; `s01_map` keeps `WorldMap` (`wide`,
+`region_sel`), `map_options`, `map_hint`, the S02f/S02d default rules,
+`pathogen_stops` and `live_stack` (the per-frame normalisation) in its root
+module; each overlay's sidebar lives in its own submodule and
+`stack_sidebar.rs` holds the Stack section, the compact sidebar and the legend
+rows S14 shares.
 
 ## Screens
 

@@ -61,6 +61,7 @@ looks the same on every screen.
 | Left / Right  | `[←→]`     | Up / Down      | `[↑↓]`     |
 | Page Up / Down| `[PgUp]` `[PgDn]` | Home / End | `[Home]` `[End]` |
 | More / Less   | `[-/=]`    | a range        | `[1-5]`    |
+| Backspace     | `[Bksp]`   |                |            |
 | a set         | `[a/b/c]`  | a letter       | `[k]`      |
 
 ## Deviations today
@@ -83,6 +84,7 @@ under the named sheet's Gaps today.
 | S09 Text Field           | `←` `→`   | nothing; there is no cursor                        | move the cursor                       | [Text Field](text-field.md) |
 | confirm dialog           | `n`       | answers no                                         | `Esc` is no; extra letters are allowed only when shown in a Key Hint | [Modal](modal.md) |
 | S10 Checkboxes           | `↑` `↓`   | nothing; rows are letter-driven only               | `↑` `↓` move focus, `Space` toggles   | [Checkbox](checkbox.md) |
+| S14 Overlay Switcher     | `Backspace` | clears the whole stack, modal stays open         | not in the table; shown in the Status Bar as `[Bksp]`, so rule 4 holds | [Modal](modal.md) |
 
 ## Open questions
 

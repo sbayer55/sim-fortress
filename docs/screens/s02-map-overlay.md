@@ -13,21 +13,27 @@ parasites.
 Overlays are a *state* of the
 [S01 World Map](s01-world-map.md), not a separate place: the map keeps scrolling, the clock
 keeps running, and the sidebar swaps from the status summary to an explanation of what the
-colours mean. The player uses overlays to answer ecological questions ("why are the hares
+colours mean. They are composed through the [S14 Overlay Switcher](s14-overlay-switcher.md):
+one base heatmap (S02a/b/c/f/i) plus any number of marks (S02d/e/g/h). This file describes
+each overlay on its own; S14 items 16–20 say how they combine. The player uses overlays to answer ecological questions ("why are the hares
 starving here?", "can that wolf see the hare yet?") that the plain map cannot show.
 
 ## Variants
 | Id   | Variant                            | When it is shown                                                        |
 |------|------------------------------------|-------------------------------------------------------------------------|
-| S02a | vegetation density                 | `1` from the map, or the first stop of the `o` cycle                     |
-| S02b | population pressure                | `2`, or the second stop of the `o` cycle                                 |
-| S02c | water & moisture                   | `3`, or the third stop of the `o` cycle                                  |
-| S02d | sense range of selected predator   | `4`, or the fourth stop of the `o` cycle; needs a selected living creature |
-| S02e | regions                            | `5`, or the fifth stop of the `o` cycle                                  |
-| S02f | species density                    | `6`, or the sixth stop of the `o` cycle; `Tab` cycles the species        |
-| S02g | health                             | `7`, or the seventh stop of the `o` cycle                                |
-| S02h | disease                            | `8`, or the eighth stop of the `o` cycle; `Tab` cycles the pathogen      |
-| S02i | parasites                          | `9`, or the ninth (last) stop of the `o` cycle before the plain map      |
+| S02a | vegetation density                 | the Vegetation base is on in the S14 stack                               |
+| S02b | population pressure                | the Pressure base is on                                                  |
+| S02c | water & moisture                   | the Moisture base is on                                                  |
+| S02d | sense range of selected predator   | the Sense mark is on; needs a living predator, `Tab` cycles the subject  |
+| S02e | regions                            | the Regions mark is on                                                   |
+| S02f | species density                    | the Species base is on; `Tab` cycles the species                         |
+| S02g | health                             | the Health mark is on                                                    |
+| S02h | disease                            | the Disease mark is on; `Tab` cycles the pathogen                        |
+| S02i | parasites                          | the Parasites base is on                                                 |
+
+Each variant is one layer on its own (the sidebars below are drawn with exactly one layer
+on). With two or more layers the map composes them (S14 item 16) and the sidebar is the
+compact form (S14 item 20).
 
 S02a–c are **heatmaps**: every land cell is shaded by a 0–1 value. S02d is a **ring**: the map
 keeps its normal terrain colours and one creature's perception radius is drawn on top. S02e is
@@ -193,13 +199,11 @@ Sections from the top, in order; all fit in the 40 inner rows without scrolling.
     14-column bar, percentage; bar colour is the ramp at 0.8. Then world statistics over all
     6 000 cells: `mean / min / max` percentages; the count and share of cells at or above
     60 %; the highest region (good colour) and the lowest region (warning colour) by mean.
-16. **Overlays selector** (5 rows): the four overlays as `‹key›  ‹name›` rows with a two-cell
-    swatch (`██`) in the overlay's characteristic colour — vegetation ramp, heat ramp, water
-    ramp, accent for sense. The active row is highlighted with the selection style and a `►`
-    marker.
-17. **Reading the map** (7 rows): dim notes that creatures and resources are faded and `Esc`
-    restores them; the shade-glyph thresholds `░ under 25%  ▒ under 50%  ▓ under 75%
-    █ 75% and above`; and that `k` look mode shows the exact value.
+16. **Reading the map** (4 rows): dim notes that creatures and resources are faded and `Esc`
+    restores them; the shade-glyph thresholds `░ <25%  ▒ <50%  ▓ <75%  █ ≥75%`.
+17. **Stack** (3 rows with one layer on, S14 item 20): `─ Stack ─`, `1. ‹Name›  (base)`, and
+    the dim hint `o edits the stack   Esc clears all`. Every overlay sidebar ends with it; the
+    former nine-row Overlays selector is gone.
 
 ### Sidebar — regions (S02e)
 - **Regions** (3 rows): two dim lines explaining that rain and drought are tracked per region
@@ -209,9 +213,9 @@ Sections from the top, in order; all fit in the 40 inner rows without scrolling.
   status word in its colour. The selected row is highlighted with a `►` marker.
 - **Selected** (5 rows): swatch and name, `x a–b  y c–d`, `N cells, M water`, `¡ drought` in
   the warning colour or `no drought` dim, and `Enter centres the map`.
-- The same **Overlays selector** as item 16 (now five rows, `5 regions` last).
 - **Reading the map** (3 rows): tint = region, bright = selected; labels clip at the edge;
   `Esc` restores the plain map.
+- The **Stack** section as item 17 (`1. Regions  (mark)`).
 
 ### Sidebar — species density (S02f)
 Sections from the top, in order; exactly 40 rows.
@@ -227,9 +231,9 @@ Sections from the top, in order; exactly 40 rows.
 - **Species** (9 rows): every species as `‹UPPER glyph› Name count`, glyph in the species
   colour, the shown row in the selection style with a `►` marker; `extinct` dim after a zero
   count; then the hint `Tab next  Shift+Tab previous`.
-- The same **Overlays selector** as item 16, now six rows, `6 species` active.
 - **Reading the map** (4 rows): shown species bright, others faded; `Esc` restores the plain
   map; the shade-glyph thresholds.
+- The **Stack** section as item 17 (`1. Species  (base)`).
 
 ### Sidebar — health (S02g)
 Sections from the top, in order; 39 of the 40 rows.
@@ -246,12 +250,12 @@ Sections from the top, in order; 39 of the 40 rows.
 - **Weakest vital** (6 rows): `of the N strained or critical:` then one row each for
   `health`, `hunger`, `thirst`, `energy` with a 12-column warning-coloured bar of the share
   of unwell animals whose lowest vital it is, the count and the percentage.
-- The same **Overlays selector** as item 16, now seven rows, `7 health` active.
 - **Reading the map** (4 rows): colour is the animal, not the ground; `k` look / `Enter`
   inspects one animal; `Esc` restores the plain map.
+- The **Stack** section as item 17 (`1. Health  (mark)`).
 
 ### Sidebar — disease (S02h)
-Sections from the top, in order. The fixed sections take 31 rows plus one per pathogen slot
+Sections from the top, in order. The fixed sections take 24 rows plus one per pathogen slot
 (at most 8); the rows left over separate the sections and lengthen the reading notes, so the
 sidebar never overflows even with every slot filled.
 
@@ -273,13 +277,13 @@ sidebar never overflows even with every slot filled.
   immune (`IMMUNE`), `mean resist .xx` with `↑`/`↓`/`↔` against the species base Resistance.
 - **Parasites** (3 rows): `mean load` per species as `‹glyph›.xx`, then `worst ground: ‹region›
   .xx` by mean cell load.
-- The same **Overlays selector** as item 16, now nine rows, `8 disease` active.
 - **Reading the map** (1–3 rows): `colour = animal · amber ground = fouled` and `Tab pathogen ·
   k look · Esc restores map`; with all eight slots filled only the second note is shown,
   without its rule.
+- The **Stack** section as item 17 (`1. Disease  (mark)`).
 
 ### Sidebar — parasites (S02i)
-Sections from the top, in order; exactly 40 rows.
+Sections from the top, in order; 35 of the 40 rows.
 
 - **Parasites** (3 rows): section rule, then `worms build up where animals graze, drink` /
   `and rest; carcasses pass them on.`
@@ -295,8 +299,8 @@ Sections from the top, in order; exactly 40 rows.
   `parasite_fertility_w × mean load`.
 - **Carriers** (4 rows): the three heaviest living carriers as `‹glyph› ‹tag› ‹name› .xx
   ‹region›`, the load in its band colour; `no carriers` when none.
-- The same **Overlays selector** as item 16, now nine rows, `9 parasites` active.
 - **Reading the map** (1 row, no rule): `k look = exact cell load · Esc restores`.
+- The **Stack** section as item 17 (`1. Parasites (base)`), after one blank row.
 
 ### Sidebar — sense ring (S02d)
 18. **Sense range** (3 rows): a two-line explanation that the ring is how far the selected
@@ -317,9 +321,9 @@ Sections from the top, in order; exactly 40 rows.
     decimals, and a status: **hidden** (dim) when the prey's camouflage exceeds 80 % of the
     selected creature's sense, **target** (accent) when it is the creature the predator is
     stalking, otherwise **seen** (good). When none, `no prey within range`.
-22. The same **Overlays selector** as items 16, with the sense row active.
-23. **Reading the map** (4 rows): `°` ring edge, `W` selected creature, tinted cells are
+22. **Reading the map** (4 rows): `°` ring edge, `W` selected creature, tinted cells are
     within sense range, `[Tab]` cycles through living predators.
+23. The **Stack** section as item 17 (`1. Sense  (mark)`).
 
 ### Ticker and status bar
 24. Ticker: glyph and colour of the newest event kind, its text, then dim `(e: full log)`.
@@ -349,19 +353,20 @@ Sections from the top, in order; exactly 40 rows.
 | accent-tinted background       | cells inside the sense ring (18 % blend)                           |
 | bright bold creature glyph    | the selected creature at the ring's centre                         |
 | `*` `Ω` `%`                    | regrowth, den, carcass (faded on heatmaps)                         |
-| `►`                            | active row in the overlay selector                                 |
+| `►`                            | selected row in the S02e region table and the S02f/S02h lists     |
 | `♂` `♀`                        | sex of the selected creature                                       |
 | good / warning colours        | highest / lowest region; prey / predator counts; seen / status     |
 | `☼`                            | daytime marker in the status bar                                   |
 
 ## Interaction
-Status-bar hints differ between the heatmaps and the sense ring.
+Layers are turned on and off in the [S14 Overlay Switcher](s14-overlay-switcher.md); the
+`1`–`9` keys are no longer bound on the map. The keys below are what the map itself keeps
+while a layer is on. Status-bar hints differ between the heatmaps and the sense ring.
 
 ### S02a–c
 | Key     | Action                                                  | Goes to |
 |---------|---------------------------------------------------------|---------|
-| `o`     | next overlay (vegetation → pressure → moisture → sense → regions → species → health → disease → parasites) | this screen, next variant |
-| `1`–`9` | pick an overlay directly                                | [S02a–i](s02-map-overlay.md) |
+| `o`     | open the overlay switcher                               | [S14](s14-overlay-switcher.md) |
 | `k`     | enter look mode with the overlay still active           | [S01c Look mode](s01-world-map.md) |
 | `Space` | pause / resume                                          | stays here |
 | `+` `-` | faster / slower                                         | stays here |
@@ -371,8 +376,7 @@ Status-bar hints differ between the heatmaps and the sense ring.
 ### S02e
 | Key     | Action                                          | Goes to |
 |---------|-------------------------------------------------|---------|
-| `o`     | next overlay (regions → plain map)              | [S01 World Map](s01-world-map.md) |
-| `1`–`6` | pick an overlay directly                        | [S02a–f](s02-map-overlay.md) |
+| `o`     | open the overlay switcher                       | [S14](s14-overlay-switcher.md) |
 | `↑` `↓` | select the previous / next region (wraps)       | stays here |
 | `Enter` | centre the viewport on the selected region      | stays here |
 | `←` `→` | scroll the map                                  | stays here |
@@ -381,8 +385,7 @@ Status-bar hints differ between the heatmaps and the sense ring.
 ### S02f
 | Key     | Action                                          | Goes to |
 |---------|-------------------------------------------------|---------|
-| `o`     | next overlay (species → health)                 | [S02g](s02-map-overlay.md) |
-| `1`–`7` | pick an overlay directly                        | [S02a–g](s02-map-overlay.md) |
+| `o`     | open the overlay switcher                       | [S14](s14-overlay-switcher.md) |
 | `Tab` / `Shift+Tab` | next / previous species, wrapping, extinct species included | stays here |
 | `←→↑↓`  | scroll the map                                  | stays here |
 | `Esc`   | close the overlay                               | [S01 World Map](s01-world-map.md) |
@@ -394,8 +397,7 @@ population. The species shown is remembered across `Esc` and reopening.
 ### S02g
 | Key     | Action                                          | Goes to |
 |---------|-------------------------------------------------|---------|
-| `o`     | next overlay (health → disease)                 | [S02h](s02-map-overlay.md) |
-| `1`–`9` | pick an overlay directly                        | [S02a–i](s02-map-overlay.md) |
+| `o`     | open the overlay switcher                       | [S14](s14-overlay-switcher.md) |
 | `←→↑↓`  | scroll the map                                  | stays here |
 | `k`     | look mode with the overlay still active         | [S01c Look mode](s01-world-map.md) |
 | `Tab`   | collapse / restore the sidebar                  | stays here |
@@ -407,8 +409,7 @@ three.
 ### S02h
 | Key     | Action                                          | Goes to |
 |---------|-------------------------------------------------|---------|
-| `o`     | next overlay (disease → parasites)              | [S02i](s02-map-overlay.md) |
-| `1`–`9` | pick an overlay directly                        | [S02a–i](s02-map-overlay.md) |
+| `o`     | open the overlay switcher                       | [S14](s14-overlay-switcher.md) |
 | `Tab` / `Shift+Tab` | next / previous pathogen: `all`, then each live slot, wrapping | stays here |
 | `←→↑↓`  | scroll the map                                  | stays here |
 | `k`     | look mode with the overlay still active         | [S01c Look mode](s01-world-map.md) |
@@ -419,8 +420,7 @@ three.
 ### S02i
 | Key     | Action                                          | Goes to |
 |---------|-------------------------------------------------|---------|
-| `o`     | next overlay (parasites → plain map)            | [S01 World Map](s01-world-map.md) |
-| `1`–`9` | pick an overlay directly                        | [S02a–i](s02-map-overlay.md) |
+| `o`     | open the overlay switcher                       | [S14](s14-overlay-switcher.md) |
 | `←→↑↓`  | scroll the map                                  | stays here |
 | `k`     | look mode with the overlay still active; the cursor tooltip shows the cell | [S01c Look mode](s01-world-map.md) |
 | `Esc`   | close the overlay                               | [S01 World Map](s01-world-map.md) |
@@ -428,8 +428,7 @@ three.
 ### S02d
 | Key     | Action                                          | Goes to |
 |---------|-------------------------------------------------|---------|
-| `o`     | next overlay                                    | this screen, next variant |
-| `1`–`6` | pick an overlay directly                        | [S02a–f](s02-map-overlay.md) |
+| `o`     | open the overlay switcher                       | [S14](s14-overlay-switcher.md) |
 | `Tab`   | select the next living predator, re-centre ring | stays here |
 | `i`     | inspect the selected creature                   | [S03 Creature Inspector](s03-creature-inspector.md) |
 | `f`     | follow the selected creature                    | [S01e Follow](s01-world-map.md) |
@@ -444,10 +443,10 @@ Global keys not listed in the bar (`s g y e w q`, `.`) keep their README meaning
 - **Ring at the world edge**: cells outside the world are skipped; the ring is drawn
   truncated. The "inside the ring" counts only consider in-bounds cells.
 - **No prey in range**: the detected-prey table shows a single dim placeholder row.
-- **Many prey in range**: the table caps at 8 rows plus an overflow line so the selector and
-  reading notes below it always stay on screen.
-- **Selected creature dies**: the sense overlay has no subject; expected behaviour is to
-  fall back to the plain map (see open questions).
+- **Many prey in range**: the table caps at 8 rows plus an overflow line so the reading notes
+  and the Stack section below it always stay on screen.
+- **Selected creature dies**: the Sense mark turns itself off at the next frame and its
+  subject is cleared; the other layers stay (S14 edge cases).
 - **Regions with no cells** in a value class produce a 0 % bar; the world min can be 0 % and
   max 100 %.
 - **Extinct species** (S02f): still selectable with `Tab`; the map shows no shading, the

@@ -73,7 +73,7 @@ pub(super) fn feature_labels(buf: &mut Buffer, area: Rect, world: &World, opts: 
 mod tests {
     use super::*;
     use crate::sim::params::WorldParams;
-    use crate::widgets::map::Overlay;
+    use crate::widgets::map::OverlayStack;
     use ratatui::backend::TestBackend;
     use ratatui::Terminal;
 
@@ -82,7 +82,7 @@ mod tests {
         let world = World::generate(1, &WorldParams::default());
         let (w, h) = (crate::cast!(world.width() => u16), crate::cast!(world.height() => u16));
         let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
-        let opts = MapOptions { overlay: Overlay::Region, ..MapOptions::default() };
+        let opts = MapOptions { stack: OverlayStack { regions: true, ..OverlayStack::PLAIN }, ..MapOptions::default() };
         terminal
             .draw(|f| {
                 let area = Rect::new(0, 0, w, h);

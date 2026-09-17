@@ -3,7 +3,6 @@
 
 use std::cell::Cell;
 
-use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
@@ -12,6 +11,7 @@ use ratatui::Frame;
 
 use crate::sim::{EventKind, Roster, Season};
 use crate::ui::app::AppState;
+use crate::ui::screens::common::Rule;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{EventKindStyle, SeasonStyle};
 use crate::widgets::scroll::Overflow;
@@ -85,26 +85,6 @@ impl Screen for Help {
 
         let status_row = area.y + area.height - 1;
         StatusBar::new(&[("?", "close help"), ("↑↓ PgDn", "scroll"), ("Esc", "close")]).right("help overlay").render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
-    }
-}
-
-/// A one-cell vertical rule between the columns, the full height of its area.
-#[derive(Debug)]
-struct Rule;
-
-impl Component for Rule {
-    fn height(&self, _width: u16) -> u16 {
-        0
-    }
-
-    fn min_width(&self) -> u16 {
-        1
-    }
-
-    fn render(&self, buf: &mut Buffer, area: Rect) {
-        for y in area.top()..area.bottom() {
-            buf.set_stringn(area.x, y, glyphs::V_LINE.to_string(), 1, theme::border());
-        }
     }
 }
 
@@ -205,14 +185,10 @@ const KEY_GROUPS: [(&str, &[(&str, &str)]); 5] = [
     (
         "Overlays",
         &[
-            ("o", "cycle overlays"),
-            ("1 2 3", "veg · pressure · moisture"),
-            ("4 5 6", "sense · regions · species"),
-            ("7", "health (weakest vital)"),
-            ("8 9", "disease · parasites"),
-            ("Tab", "next predator / species"),
-            ("Shift+Tab", "previous species"),
-            ("Esc", "clear overlay"),
+            ("o", "overlay switcher"),
+            ("Tab", "next predator / species / pathogen"),
+            ("Shift+Tab", "previous species / pathogen"),
+            ("Esc", "clear overlays"),
         ],
     ),
     ("Speed", &[("Space", "pause / resume"), ("+ / -", "faster / slower"), (".", "step one tick"), ("p", "controls, options, AI")]),

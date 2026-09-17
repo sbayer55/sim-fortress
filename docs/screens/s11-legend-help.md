@@ -91,9 +91,8 @@ flowchart TB
      the valley · `Tab` next notable creature · `c` center on selection.
    - **Look mode**: `k` enter look mode · arrows move the cursor · `Enter` inspect cell /
      creature · `f` follow creature · `z` local zoom view · `Esc` leave look mode.
-   - **Overlays**: `o` cycle overlays · `1` vegetation density · `2` population pressure ·
-     `3` water & moisture · `4` sense range · `5` regions · `6` species density · `7` health
-     (weakest vital) · `8` disease · `9` parasites · `Esc` clear overlay.
+   - **Overlays**: `o` overlay switcher · `Tab` next predator / species / pathogen ·
+     `Shift+Tab` previous species / pathogen · `Esc` clear overlays.
    - **Speed**: `Space` pause / resume · `+ / -` faster / slower · `.` step one tick · `p`
      controls, options, AI.
    - **Screens**: `s` species & traits · `g` graphs & charts · `y` ecology & regions · `e`
@@ -123,7 +122,7 @@ regrowth and the winter season glyph, and `☼` for both summer and daytime.
 | `↑` `↓`        | scroll the help content one row                   | stays here |
 | `PgUp` `PgDn`  | scroll the help content a page; `Home` / `End` jump to the top / bottom | stays here |
 | `k`            | close help and enter look mode                    | [S01c Look mode](s01-world-map.md) |
-| `o`            | close help and cycle to the first overlay         | [S02 Map Overlay](s02-map-overlay.md) |
+| `o`            | close help and open the overlay switcher          | [S14 Overlay Switcher](s14-overlay-switcher.md) |
 | `s`            | close help and open the species browser           | [S04 Species Browser](s04-species-browser.md) |
 
 Keys `k`, `o` and `s` are offered in the status bar as shortcuts *through* the help screen:

@@ -8,7 +8,7 @@ use crate::sim::disease::Stage;
 use crate::sim::{Kind, Sim, TRAIT_NAMES};
 use crate::ui::screens::common::day_stamp;
 use crate::ui::style::{EventKindStyle, SpeciesStyle};
-use crate::widgets::map::{self, MapOptions, Overlay};
+use crate::widgets::map::{self, MapOptions, OverlayStack};
 use crate::widgets::{Component, Kind as PanelKind, LabeledBar, Panel, Rows, Text};
 use crate::{glyphs, theme};
 use super::{clip, compass};
@@ -66,14 +66,13 @@ impl Component for Header<'_> {
         let ox = c.x.saturating_sub(10).min(sim.world.width().saturating_sub(crate::cast!(mm_inner.width => usize)));
         let oy = c.y.saturating_sub(3).min(sim.world.height().saturating_sub(crate::cast!(mm_inner.height => usize)));
         let opts = MapOptions {
-            overlay: Overlay::None,
+            stack: OverlayStack::default(),
             night: false,
             winter: false,
             cursor: Some((c.x, c.y)),
             follow: if c.alive { Some(self.id) } else { None },
             origin: (ox, oy),
             creatures: true,
-            fade_creatures: false,
             selected_region: None,
             species_color: theme::TEXT,
             creature_tint: None,

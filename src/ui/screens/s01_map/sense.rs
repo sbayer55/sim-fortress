@@ -8,6 +8,7 @@ use crate::sim::creatures::CreatureId;
 use crate::sim::Sim;
 use crate::ui::app::AppState;
 use crate::ui::style::{SpeciesStyle};
+use crate::widgets::map::OverlayStack;
 use crate::widgets::{bars, panel, util};
 use crate::{glyphs, theme};
 use super::WorldMap;
@@ -116,7 +117,8 @@ fn detected_table(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, c: &c
 
 impl WorldMap {
     /// S02d sidebar: the selected predator, the ring contents and the detected-prey table.
-    pub(super) fn sense_sidebar(&self, f: &mut Frame<'_>, area: Rect, app: &AppState, sim: &Sim, id: CreatureId) {
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn sense_sidebar(f: &mut Frame<'_>, area: Rect, app: &AppState, sim: &Sim, id: CreatureId, stack: &OverlayStack) {
         let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
         let mut row = 0u16;
         let pp = &app.params.predation;
@@ -197,14 +199,13 @@ impl WorldMap {
         let subject_is_prey = sim.roster().kind(c.species) == crate::sim::Kind::Prey;
         row = detected_table(f, inner, row, sim, c, pp, r_f, subject_is_prey);
 
-        row = self.overlays_selector(f, inner, row);
-        row += 1;
-
         panel::section(f, inner, row, "Reading the map");
         row += 1;
         for note in [" ° ring edge  W selected creature", " tinted cells are within sense range", " [Tab] cycles through living predators"] {
             util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
             row += 1;
         }
+        row += 1;
+        Self::stack_rows(f, inner, row, stack);
     }
 }

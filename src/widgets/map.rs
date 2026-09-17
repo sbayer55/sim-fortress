@@ -7,40 +7,22 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::sim::creatures::CreatureId;
-use crate::sim::disease::{PathogenId, Stage};
 use crate::sim::species::SpeciesId;
-use crate::sim::world::{Cell, Terrain, World};
+use crate::sim::world::World;
+
 use crate::{glyphs, theme};
 
 mod labels;
+mod overlay;
 mod palette;
+pub mod stack;
 
 pub use labels::region_label_origin;
+pub use overlay::{condition_color, density_cell, density_field, disease_tint, overlay_cell, parasite_cell, parasite_tint};
 pub use palette::{legend, terrain_base, terrain_cell, terrain_code_cell, world_cell};
+pub use stack::{Base, Disease, Layer, OverlayStack};
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Overlay {
-    None,
-    Vegetation,
-    Pressure,
-    Moisture,
-    /// Sense-range rings for a creature id.
-    Sense(CreatureId),
-    /// Named regions: tinted rectangles with centred labels.
-    Region,
-    /// Population density of one species (S02f).
-    Species(SpeciesId),
-    /// Health: every living creature coloured by its weakest vital (S02g).
-    Health,
-    /// Disease (S02h): every living creature coloured by its infection state
-    /// for one pathogen slot, or for every pathogen when `None`.
-    Disease(Option<PathogenId>),
-    /// Parasites (S02i): a heatmap of `cell.parasite_load`, creatures on top
-    /// coloured by their own load.
-    Parasites,
-}
-
-/// How far the terrain fades under `Overlay::Health` so the creature colours
+/// How far the terrain fades under the Health and Disease marks so the creature colours
 /// carry the picture.
 pub const HEALTH_TERRAIN_DIM: f32 = 0.6;
 
@@ -64,7 +46,8 @@ pub const DENSITY_CAP: f32 = 6.0;
 
 #[derive(Clone, Debug)]
 pub struct MapOptions {
-    pub overlay: Overlay,
+    /// The layers composed this frame (S14 item 16).
+    pub stack: OverlayStack,
     pub night: bool,
     pub winter: bool,
     pub cursor: Option<(usize, usize)>,
@@ -74,31 +57,28 @@ pub struct MapOptions {
     pub origin: (usize, usize),
     /// Draw creatures (false for pure terrain/overlay views).
     pub creatures: bool,
-    /// When an overlay is active, fade creatures so the overlay reads.
-    pub fade_creatures: bool,
-    /// Region index drawn brighter under `Overlay::Region`.
+    /// Region index drawn brighter under the Regions mark.
     pub selected_region: Option<usize>,
-    /// Ramp colour for `Overlay::Species` (the species' own colour; a UI concern,
+    /// Ramp colour for the Species base (the species' own colour; a UI concern,
     /// so the caller supplies it).
     pub species_color: Color,
-    /// Per-creature colour override (and forced bold) for the S02h disease and
-    /// S02i parasite overlays. The caller computes it from the sim (see
-    /// `disease_tint` / `parasite_tint`); a living creature with no entry draws
-    /// as usual.
+    /// Per-creature colour override (and forced bold) for the Disease mark
+    /// (S02h) or the Parasites base (S02i). The caller computes it from the
+    /// sim (see `disease_tint` / `parasite_tint`), Disease first when both are
+    /// on (S14 item 17); a living creature with no entry draws as usual.
     pub creature_tint: Option<HashMap<CreatureId, (Color, bool)>>,
 }
 
 impl Default for MapOptions {
     fn default() -> Self {
         Self {
-            overlay: Overlay::None,
+            stack: OverlayStack::PLAIN,
             night: false,
             winter: false,
             cursor: None,
             follow: None,
             origin: (0, 0),
             creatures: true,
-            fade_creatures: false,
             selected_region: None,
             species_color: theme::TEXT,
             creature_tint: None,
@@ -120,7 +100,7 @@ pub struct MapCreature<'a> {
     pub color: Color,
     pub sense_cells: u16,
     /// Weakest vital in 0..=1 (health, fullness, hydration or energy, whichever
-    /// is lowest); drives the colour under `Overlay::Health`.
+    /// is lowest); drives the colour under the Health mark.
     pub condition: f32,
     pub trail: &'a [(usize, usize)],
     pub target: Option<(usize, usize)>,
@@ -135,171 +115,31 @@ pub trait MapSource {
     fn creature(&self, id: CreatureId) -> Option<MapCreature<'_>>;
 }
 
-/// Glyph and colors for a cell under an overlay (before creatures are drawn).
-pub fn overlay_cell(cell: &Cell, overlay: Overlay) -> Option<(char, Color, Color)> {
-    let (t, color) = match overlay {
-        Overlay::Vegetation => (cell.vegetation, theme::veg(cell.vegetation)),
-        Overlay::Pressure => {
-            let t = (cell.pred_pressure * 0.7 + cell.prey_pressure * 0.5).min(1.0);
-            (t, theme::heat(t))
-        }
-        Overlay::Moisture => {
-            let t = if cell.terrain.is_water() { 1.0 } else { cell.moisture };
-            (t, theme::water(t))
-        }
-        Overlay::Parasites => return Some(parasite_cell(cell)),
-        _ => return None,
-    };
-    if cell.terrain == Terrain::DeepWater && overlay != Overlay::Moisture {
-        return Some((glyphs::DEEP_WATER, theme::dim(theme::DEEP_WATER_FG, 0.4), theme::dim(theme::DEEP_WATER_BG, 0.4)));
-    }
-    if cell.terrain == Terrain::Rock && overlay != Overlay::Moisture {
-        return Some((glyphs::ROCK, theme::dim(theme::ROCK_FG, 0.5), theme::dim(theme::ROCK_BG, 0.5)));
-    }
-    let g = glyphs::shade(t);
-    let g = if g == ' ' { glyphs::DIRT } else { g };
-    Some((g, color, theme::dim(color, 0.75)))
-}
-
-/// Species-density field (S02f): one value in 0..=1 per world cell. Every
-///
-/// living creature of `species` adds a kernel of radius `DENSITY_RADIUS` in
-/// the 2:1 ellipse metric with linear falloff (`1 − d / (r + 1)`), and the sum
-///
-/// is clamped against the fixed `DENSITY_CAP` so the picture is comparable
-/// across species and over time: a lone animal reads faint, a herd reads bright.
-pub fn density_field(world: &World, creatures: &[MapCreature<'_>], species: SpeciesId) -> Vec<f32> {
-    let (w, h) = (world.width(), world.height());
-    let mut field = vec![0.0f32; w * h];
-    let r = i32::from(DENSITY_RADIUS);
-    for c in creatures.iter().filter(|c| c.alive && c.species == species) {
-        for wy in (crate::cast!(c.y => i32) - r)..=(crate::cast!(c.y => i32) + r) {
-            for wx in (crate::cast!(c.x => i32) - 2 * r)..=(crate::cast!(c.x => i32) + 2 * r) {
-                if !world.in_bounds(wx, wy) {
-                    continue;
-                }
-                let dx = crate::cast!((wx - crate::cast!(c.x => i32)) => f32) / 2.0;
-                let dy = crate::cast!((wy - crate::cast!(c.y => i32)) => f32);
-                let d = (dx * dx + dy * dy).sqrt();
-                if d <= crate::cast!(r => f32) {
-                    field[crate::cast!(wy => usize) * w + crate::cast!(wx => usize)] += 1.0 - d / (crate::cast!(r => f32) + 1.0);
-                }
-            }
-        }
-    }
-    for v in &mut field {
-        *v = (*v / DENSITY_CAP).min(1.0);
-    }
-    field
-}
-
-/// Glyph and colors for a cell under the species-density overlay, given the
-/// field value `t` at that cell. Deep water and rock keep their dimmed glyphs
-/// as on the vegetation overlay.
-pub fn density_cell(cell: &Cell, t: f32, species: SpeciesId, color: Color) -> (char, Color, Color) {
-    let _ = species;
-    if cell.terrain == Terrain::DeepWater {
-        return (glyphs::DEEP_WATER, theme::dim(theme::DEEP_WATER_FG, 0.4), theme::dim(theme::DEEP_WATER_BG, 0.4));
-    }
-    if cell.terrain == Terrain::Rock {
-        return (glyphs::ROCK, theme::dim(theme::ROCK_FG, 0.5), theme::dim(theme::ROCK_BG, 0.5));
-    }
-    let c = theme::species_ramp(color, t);
-    let g = glyphs::shade(t);
-    let g = if g == ' ' { glyphs::DIRT } else { g };
-    (g, c, theme::dim(c, 0.75))
-}
-
-/// Colour of a creature under the health overlay: the same good / warning /
-/// bad bands the vital bars use (above 60 %, 30–60 %, below 30 %).
-pub fn condition_color(condition: f32) -> Color {
-    crate::widgets::bars::vital_color(condition, false)
-}
-
-/// Glyph and colours for a cell under the parasite heatmap (S02i): the
-///
-/// `theme::parasite` ramp at `cell.parasite_load`, deep water and rock keeping
-/// their dimmed glyphs, and any water cell carrying a load drawn as `~` in
-///
-/// `WARN` (shared drinking spots are the hot spots).
-pub fn parasite_cell(cell: &Cell) -> (char, Color, Color) {
-    let t = cell.parasite_load.clamp(0.0, 1.0);
-    if cell.terrain.is_water() {
-        if t > 0.0 {
-            return (glyphs::SHALLOW_WATER, theme::WARN, theme::dim(theme::parasite(t), 0.75));
-        }
-        return match cell.terrain {
-            Terrain::DeepWater => (glyphs::DEEP_WATER, theme::dim(theme::DEEP_WATER_FG, 0.4), theme::dim(theme::DEEP_WATER_BG, 0.4)),
-            _ => (glyphs::SHALLOW_WATER, theme::dim(theme::SHALLOW_FG, 0.4), theme::dim(theme::SHALLOW_BG, 0.4)),
-        };
-    }
-    if cell.terrain == Terrain::Rock {
-        return (glyphs::ROCK, theme::dim(theme::ROCK_FG, 0.5), theme::dim(theme::ROCK_BG, 0.5));
-    }
-    let color = theme::parasite(t);
-    let g = glyphs::shade(t);
-    let g = if g == ' ' { glyphs::DIRT } else { g };
-    (g, color, theme::dim(color, 0.75))
-}
-
-/// Colour (and forced bold) of a living creature under the disease overlay
-///
-/// (S02h). `infection` is the creature's current infection, `immune` whether
-/// it is immune to the shown pathogen (or to any, when all are shown), `load`
-///
-/// its parasite load. An infection with a pathogen other than the shown one
-/// counts as healthy for this picture.
-pub fn disease_tint(species: Color, shown: Option<PathogenId>, infection: Option<(PathogenId, Stage)>, immune: bool, load: f32) -> (Color, bool) {
-    match infection {
-        Some((p, stage)) if shown.is_none_or(|s| s == p) => match stage {
-            Stage::Infectious => (theme::SICK, true),
-            Stage::Incubating => (theme::dim(theme::SICK, 0.4), false),
-        },
-        _ if immune => (theme::IMMUNE, false),
-        _ if load >= PARASITE_HEAVY => (theme::WARN, false),
-        _ => (theme::dim(species, HEALTHY_FADE), false),
-    }
-}
-
-/// Colour (and forced bold) of a living creature under the parasite overlay
-/// (S02i), by its own load band.
-pub fn parasite_tint(species: Color, load: f32) -> (Color, bool) {
-    if load >= PARASITE_HEAVY {
-        (theme::BAD, true)
-    } else if load >= PARASITE_LIGHT {
-        (theme::WARN, false)
-    } else {
-        (theme::dim(species, HEALTHY_FADE), false)
-    }
-}
-
 pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOptions) {
     let world = source.world();
     let living = source.living_creatures();
+    let stack = &opts.stack;
 
     // Species-density field (S02f), computed once per frame from the living set.
-    let density = match opts.overlay {
-        Overlay::Species(sp) => Some((sp, opts.species_color, density_field(world, &living, sp))),
-        _ => None,
-    };
+    let density = (stack.base == Base::Species).then(|| (stack.species, opts.species_color, density_field(world, &living, stack.species)));
 
     draw_terrain(buf, area, world, opts, density.as_ref());
 
     // Region tint (under everything else).
-    if opts.overlay == Overlay::Region {
+    if stack.regions {
         region_tint(buf, area, world, opts);
     }
-    draw_resources(buf, area, world, opts);
-
-    // Sense rings (drawn under creatures).
+    // Sense ring: the interior tint applies over the region tint (S14 edge cases).
     draw_sense_ring(buf, area, source, world, opts);
+
+    draw_resources(buf, area, world, opts);
 
     // Trail for the followed creature.
     draw_trail(buf, area, source, opts);
 
     // Region and feature labels (under creatures so a passing creature
     // stays visible).
-    if opts.overlay == Overlay::Region {
+    if stack.regions {
         labels::feature_labels(buf, area, world, opts);
         labels::region_labels(buf, area, world, opts);
     }
@@ -338,9 +178,26 @@ fn put_cell(buf: &mut Buffer, area: Rect, ox: usize, oy: usize, wx: usize, wy: u
     }
 }
 
-/// The terrain / overlay layer under everything else.
+/// The glyph and colours of one cell before the marks: the base heatmap
+/// (S02a/b/c/f/i rules), or the terrain.
+fn base_cell(world: &World, wx: usize, wy: usize, opts: &MapOptions, density: Option<&(SpeciesId, Color, Vec<f32>)>) -> (char, Color, Color) {
+    let cell = world.cell(wx, wy);
+    match (density, opts.stack.base) {
+        (Some((sp, color, field)), _) => density_cell(cell, field[wy * world.width() + wx], *sp, *color),
+        (None, base @ (Base::Vegetation | Base::Pressure | Base::Moisture | Base::Parasites)) => overlay_cell(cell, base).unwrap_or_else(|| world_cell(world, wx, wy, opts.winter)),
+        // Health and Disease over plain terrain draw the terrain without the
+        // waterfall mark, as the single overlays did.
+        (None, Base::None | Base::Species) if opts.stack.health || opts.stack.disease.is_on() => terrain_cell(cell, opts.winter),
+        (None, Base::None | Base::Species) => world_cell(world, wx, wy, opts.winter),
+    }
+}
+
+/// The terrain / overlay layer under everything else: the base cell, then
+/// the Health dim (S02g item 19) and the Disease ground tint (S02h item 20).
 fn draw_terrain(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions, density: Option<&(SpeciesId, Color, Vec<f32>)>) {
     let (ox, oy) = opts.origin;
+    let dim = opts.stack.health || opts.stack.disease.is_on();
+    let ground_tint = opts.stack.disease.is_on();
     for sy in 0..area.height {
         for sx in 0..area.width {
             let (wx, wy) = (ox + crate::cast!(sx => usize), oy + crate::cast!(sy => usize));
@@ -350,25 +207,14 @@ fn draw_terrain(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions, 
                 c.set_style(Style::default().bg(theme::BG));
                 continue;
             }
-            let cell = world.cell(wx, wy);
-            let (g, fg, bg) = match &density {
-                Some((sp, color, field)) => density_cell(cell, field[wy * world.width() + wx], *sp, *color),
-                None if opts.overlay == Overlay::Health => {
-                    let (g, fg, bg) = terrain_cell(cell, opts.winter);
-                    (g, theme::dim(fg, HEALTH_TERRAIN_DIM), theme::dim(bg, HEALTH_TERRAIN_DIM))
-                }
-                // S02h: the health path's dimmed terrain, plus a warning tint
-                // on the background of fouled cells.
-                None if matches!(opts.overlay, Overlay::Disease(_)) => {
-                    let (g, fg, bg) = terrain_cell(cell, opts.winter);
-                    let mut bg = theme::dim(bg, HEALTH_TERRAIN_DIM);
-                    if cell.parasite_load >= PARASITE_TINT_THRESHOLD {
-                        bg = theme::lerp(bg, theme::WARN, PARASITE_TINT);
-                    }
-                    (g, theme::dim(fg, HEALTH_TERRAIN_DIM), bg)
-                }
-                None => overlay_cell(cell, opts.overlay).unwrap_or_else(|| world_cell(world, wx, wy, opts.winter)),
-            };
+            let (g, mut fg, mut bg) = base_cell(world, wx, wy, opts, density);
+            if dim {
+                fg = theme::dim(fg, HEALTH_TERRAIN_DIM);
+                bg = theme::dim(bg, HEALTH_TERRAIN_DIM);
+            }
+            if ground_tint && world.cell(wx, wy).parasite_load >= PARASITE_TINT_THRESHOLD {
+                bg = theme::lerp(bg, theme::WARN, PARASITE_TINT);
+            }
             c.set_char(g);
             c.set_style(Style::default().fg(tint_color(fg, opts.night)).bg(tint_color(bg, opts.night)));
         }
@@ -378,7 +224,7 @@ fn draw_terrain(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions, 
 /// Seeds, dens and carcasses.
 fn draw_resources(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions) {
     let (ox, oy) = opts.origin;
-    let res_fade = if opts.overlay != Overlay::None && opts.fade_creatures { 0.5 } else { 0.0 };
+    let res_fade = if opts.stack.fades_creatures() { 0.5 } else { 0.0 };
     for &(x, y) in &world.seeds {
         put_cell(buf, area, ox, oy, x, y, glyphs::SEED, tint_color(theme::dim(theme::SEED, res_fade), opts.night), false);
     }
@@ -391,14 +237,18 @@ fn draw_resources(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions
     }
 }
 
-/// The detection ellipse of the creature under the sense overlay.
+/// The sense subject drawn this frame, when the Sense mark is on and it lives.
+fn sense_subject<'a>(source: &'a dyn MapSource, opts: &MapOptions) -> Option<MapCreature<'a>> {
+    if !opts.stack.sense {
+        return None;
+    }
+    source.creature(opts.stack.sense_subject?)
+}
+
+/// The detection ellipse of the sense subject.
 fn draw_sense_ring(buf: &mut Buffer, area: Rect, source: &dyn MapSource, world: &World, opts: &MapOptions) {
     let (ox, oy) = opts.origin;
-    let sense = match opts.overlay {
-        Overlay::Sense(id) => source.creature(id),
-        _ => None,
-    };
-    if let Some(c) = sense {
+    if let Some(c) = sense_subject(source, opts) {
         let r = i32::from(c.sense_cells);
         for wy in (crate::cast!(c.y => i32) - r)..=(crate::cast!(c.y => i32) + r) {
             for wx in (crate::cast!(c.x => i32) - 2 * r)..=(crate::cast!(c.x => i32) + 2 * r) {
@@ -435,39 +285,43 @@ fn draw_trail(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
     }
 }
 
+/// A living creature's colour and whether it is forced bold (S14 item 17).
+///
+/// Precedence: Health band, then the caller's Disease / Parasites tint, then
+/// the Species base (own species full, others faded), then the plain fade
+/// under any base heatmap, then the species colour. The sense subject is
+/// bright under every combination.
+pub fn creature_color(stack: &OverlayStack, c: &MapCreature<'_>, tint: Option<&(Color, bool)>) -> (Color, bool) {
+    let (color, forced) = if stack.health {
+        (condition_color(c.condition), false)
+    } else if let Some(&(tc, force_bold)) = tint {
+        (tc, force_bold)
+    } else if stack.base == Base::Species && stack.species == c.species {
+        (c.color, false)
+    } else if stack.fades_creatures() {
+        (theme::dim(c.color, HEALTHY_FADE), false)
+    } else {
+        (c.color, false)
+    };
+    if stack.sense && stack.sense_subject == Some(c.id) {
+        return (theme::TEXT_BRIGHT, forced);
+    }
+    (color, forced)
+}
+
 /// Every living creature, plus the follow highlight.
 fn draw_creatures(buf: &mut Buffer, area: Rect, living: &[MapCreature<'_>], opts: &MapOptions) {
     let (ox, oy) = opts.origin;
     if opts.creatures {
-        let fade = if opts.overlay != Overlay::None && opts.fade_creatures { 0.55 } else { 0.0 };
         let mut followed_pos: Option<(usize, usize)> = None;
         for c in living {
             if !c.alive {
                 put_cell(buf, area, ox, oy, c.x, c.y, glyphs::CARCASS, tint_color(theme::CARCASS, opts.night), false);
                 continue;
             }
-            // Under the species overlay the shown species draws at full strength
-            // over its own density; every other species fades.
-            let own = matches!(opts.overlay, Overlay::Species(sp) if sp == c.species);
-            // Under the health overlay the species colour gives way to the
-            // creature's condition: green, amber or red at full strength.
-            let mut color = if opts.overlay == Overlay::Health {
-                tint_color(condition_color(c.condition), opts.night)
-            } else {
-                tint_color(theme::dim(c.color, if own { 0.0 } else { fade }), opts.night)
-            };
-            // S02h / S02i: the caller's per-creature tint wins outright.
-            let mut bold = c.adult;
-            if let Some((tc, force_bold)) = opts.creature_tint.as_ref().and_then(|m| m.get(&c.id)) {
-                color = tint_color(*tc, opts.night);
-                bold |= *force_bold;
-            }
-            if let Overlay::Sense(sid) = opts.overlay {
-                if sid == c.id {
-                    color = theme::TEXT_BRIGHT;
-                }
-            }
-            put_cell(buf, area, ox, oy, c.x, c.y, c.glyph, color, bold);
+            let tint = opts.creature_tint.as_ref().and_then(|m| m.get(&c.id));
+            let (color, force_bold) = creature_color(&opts.stack, c, tint);
+            put_cell(buf, area, ox, oy, c.x, c.y, c.glyph, tint_color(color, opts.night), c.adult || force_bold);
             if opts.follow == Some(c.id) {
                 followed_pos = Some((c.x, c.y));
             }
@@ -547,161 +401,4 @@ pub(super) fn cell_at<'a>(buf: &'a mut Buffer, area: Rect, opts: &MapOptions, wx
 }
 
 #[cfg(test)]
-#[allow(clippy::float_cmp)]
-mod tests {
-
-    use super::*;
-    use crate::sim::world::Cell;
-    use ratatui::backend::TestBackend;
-    use ratatui::Terminal;
-
-    struct TestSource<'a> {
-        world: &'a World,
-        creatures: Vec<MapCreature<'a>>,
-    }
-
-    impl MapSource for TestSource<'_> {
-        fn world(&self) -> &World {
-            self.world
-        }
-        fn living_creatures(&self) -> Vec<MapCreature<'_>> {
-            self.creatures.clone()
-        }
-        fn creature(&self, _id: CreatureId) -> Option<MapCreature<'_>> {
-            None
-        }
-    }
-
-    /// A `w`×`h` all-dirt world split into two regions down the middle.
-    fn two_region_world(w: usize, h: usize) -> World {
-        let cell = Cell { terrain: Terrain::Dirt, biome: crate::sim::world::Biome::Grassland, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 };
-        World {
-            cells: vec![cell; w * h],
-            width: w,
-            height: h,
-            dens: vec![],
-            carcasses: vec![],
-            seeds: vec![],
-            regions: vec![("Ab".to_string(), 0, 0, w.div_euclid(2), h), ("Cd".to_string(), w.div_euclid(2), 0, w, h)],
-            region_map: vec![],
-            wind: crate::sim::world::Wind::Westerly,
-            water_cells_at_generation: 0,
-            shore: vec![],
-            falls: vec![],
-            history: vec![],
-            names: crate::sim::world::Names::default(),
-        }
-    }
-
-    fn draw(world: &World, opts: &MapOptions, w: u16, h: u16) -> Buffer {
-        let backend = TestBackend::new(w, h);
-        let mut terminal = Terminal::new(backend).unwrap();
-        let source = TestSource { world, creatures: Vec::new() };
-        terminal.draw(|f| render(f.buffer_mut(), Rect::new(0, 0, w, h), &source, opts)).unwrap();
-        terminal.backend().buffer().clone()
-    }
-
-    fn creature(id: u32, x: usize, y: usize, species: SpeciesId) -> MapCreature<'static> {
-        MapCreature { id: CreatureId(id), x, y, alive: true, adult: true, species, glyph: 'v', color: theme::TAN, sense_cells: 3, condition: 1.0, trail: &[], target: None }
-    }
-
-    #[test]
-    fn density_field_peaks_under_the_creature_and_clamps() {
-        let world = two_region_world(20, 12);
-        let one = vec![creature(1, 10, 4, SpeciesId(0))];
-        let f = density_field(&world, &one, SpeciesId(0));
-        let at = |x: usize, y: usize| f[y * 20 + x];
-        assert!((at(10, 4) - 1.0 / DENSITY_CAP).abs() < 1e-6, "peak is one creature-equivalent");
-        assert!(at(10, 4) > at(12, 4) && at(12, 4) > at(14, 4), "linear falloff along the row");
-        assert_eq!(at(10, 4 + crate::cast!(DENSITY_RADIUS => usize) + 1), 0.0, "outside the kernel");
-        assert_eq!(at(0, 0), 0.0);
-        // Another species contributes nothing.
-        assert!(density_field(&world, &one, SpeciesId(1)).iter().all(|&v| v == 0.0));
-        // Many creatures on one cell clamp at the cap.
-        let herd: Vec<_> = (0..20).map(|i| creature(i, 10, 4, SpeciesId(0))).collect();
-        let f = density_field(&world, &herd, SpeciesId(0));
-        assert_eq!(f[4 * 20 + 10], 1.0);
-        // Edge of the world: no panic, kernel truncated.
-        let _ = density_field(&world, &[creature(1, 0, 0, SpeciesId(0))], SpeciesId(0));
-    }
-
-    #[test]
-    fn species_overlay_shades_cells_and_keeps_own_species_bright() {
-        let mut world = two_region_world(20, 8);
-        world.cells[0].terrain = Terrain::DeepWater;
-        let creatures = vec![creature(1, 10, 4, SpeciesId(0)), creature(2, 3, 4, SpeciesId(1))];
-        let opts = MapOptions { overlay: Overlay::Species(SpeciesId(0)), fade_creatures: true, species_color: theme::TAN, ..MapOptions::default() };
-        let backend = TestBackend::new(20, 8);
-        let mut terminal = Terminal::new(backend).unwrap();
-        let source = TestSource { world: &world, creatures };
-        terminal.draw(|f| render(f.buffer_mut(), Rect::new(0, 0, 20, 8), &source, &opts)).unwrap();
-        let buf = terminal.backend().buffer().clone();
-        // Far cells are the empty shade drawn as bare dirt; the vole cell has a shaded background.
-        assert_eq!(buf[(18, 0)].symbol(), glyphs::DIRT.to_string());
-        assert_eq!(buf[(11, 4)].symbol(), glyphs::shade(1.0 / DENSITY_CAP * (1.0 - 0.5 / 4.0)).to_string());
-        // Deep water keeps its glyph.
-        assert_eq!(buf[(0, 0)].symbol(), glyphs::DEEP_WATER.to_string());
-        // The shown species is drawn at full colour; the other one is faded.
-        assert_eq!(buf[(10, 4)].fg, theme::TAN);
-        assert_eq!(buf[(3, 4)].fg, theme::dim(theme::TAN, 0.55));
-    }
-
-    #[test]
-    fn health_overlay_colours_creatures_by_condition_and_dims_terrain() {
-        let world = two_region_world(20, 8);
-        let mut fit = creature(1, 10, 4, SpeciesId(0));
-        fit.condition = 0.9;
-        let mut strained = creature(2, 3, 4, SpeciesId(1));
-        strained.condition = 0.45;
-        let mut critical = creature(3, 6, 2, SpeciesId(2));
-        critical.condition = 0.1;
-        let creatures = vec![fit, strained, critical];
-        let opts = MapOptions { overlay: Overlay::Health, fade_creatures: true, ..MapOptions::default() };
-        let backend = TestBackend::new(20, 8);
-        let mut terminal = Terminal::new(backend).unwrap();
-        let source = TestSource { world: &world, creatures };
-        terminal.draw(|f| render(f.buffer_mut(), Rect::new(0, 0, 20, 8), &source, &opts)).unwrap();
-        let buf = terminal.backend().buffer().clone();
-        assert_eq!(buf[(10, 4)].fg, theme::GOOD, "healthy reads green");
-        assert_eq!(buf[(3, 4)].fg, theme::WARN, "strained reads amber");
-        assert_eq!(buf[(6, 2)].fg, theme::BAD, "critical reads red");
-        // Terrain keeps its glyph but is dimmed under the creatures.
-        let (g, fg, bg) = terrain_cell(world.cell(0, 0), false);
-        assert_eq!(buf[(0, 0)].symbol(), g.to_string());
-        assert_eq!(buf[(0, 0)].fg, theme::dim(fg, HEALTH_TERRAIN_DIM));
-        assert_eq!(buf[(0, 0)].bg, theme::dim(bg, HEALTH_TERRAIN_DIM));
-    }
-
-    #[test]
-    fn region_overlay_tints_bg() {
-        let world = two_region_world(8, 4);
-        let opts = MapOptions { overlay: Overlay::Region, selected_region: Some(1), ..MapOptions::default() };
-        let buf = draw(&world, &opts, 8, 4);
-        // Row 0 carries no label (labels sit on row 2), so its cells show the pure tint
-        // over the (biome-tinted) terrain background.
-        let base = terrain_cell(world.cell(0, 0), false).2;
-        assert_eq!(buf[(0, 0)].bg, theme::lerp(base, theme::region(0), REGION_TINT));
-        assert_eq!(buf[(7, 0)].bg, theme::lerp(base, theme::region(1), REGION_TINT_SELECTED));
-        // Terrain glyph is kept.
-        assert_eq!(buf[(0, 0)].symbol(), glyphs::DIRT.to_string());
-        // Label "Ab" is centred in the left region: x = (0+4)/2 - 1 = 1, y = (0+4)/2 = 2.
-        assert_eq!(buf[(1, 2)].symbol(), "A");
-        assert_eq!(buf[(2, 2)].symbol(), "b");
-        assert!(buf[(1, 2)].modifier.contains(Modifier::BOLD));
-    }
-
-    #[test]
-    fn region_labels_clip_at_viewport_edge() {
-        let world = two_region_world(8, 4);
-        // Origin x = 2 hides column 1 ("A"); the "b" must stay at world x = 2 → screen x = 0.
-        let opts = MapOptions { overlay: Overlay::Region, origin: (2, 0), ..MapOptions::default() };
-        let buf = draw(&world, &opts, 6, 4);
-        assert_eq!(buf[(0, 2)].symbol(), "b");
-        assert_eq!(buf[(1, 2)].symbol(), glyphs::DIRT.to_string());
-        // A label wider than its region is clamped inside the world, never past it.
-        let mut wide = two_region_world(8, 4);
-        wide.regions[1].0 = "Toolongname".to_string();
-        assert_eq!(region_label_origin(&wide, 1), (0, 2));
-        let _ = draw(&wide, &opts, 6, 4);
-    }
-}
+mod tests;

@@ -787,6 +787,23 @@ fn checkbox() -> Vec<Entry> {
             );
             VStack::new().child(&x).child(&y).child(&z).render(b, a);
         }),
+        Entry {
+            fg: &[(3, 3, theme::GOOD), (32, 4, theme::DIM)],
+            ..rows("checkbox", "Radio, the S14 Base heatmap tab (34 columns)", |b, a| {
+                let row = |label, on| Checkbox::new(label, on).radio(true).label_w(11).indent(1);
+                let (n, v, m, s) = (row("None", false), row("Vegetation", false), row("Moisture", true), row("Species", false).value("hare").cue());
+                VStack::new().child(&n).child(&v).child(&m).child(&s).render(b, a);
+            })
+        },
+        Entry {
+            fg: &[(3, 1, theme::DIM), (32, 3, theme::ACCENT)],
+            bg: &[(1, 3, theme::SELECT_BG), (32, 3, theme::SELECT_BG), (1, 2, theme::PANEL_BG)],
+            ..rows("checkbox", "Focused (34 columns)", |b, a| {
+                let row = |label, on| Checkbox::new(label, on).label_w(11).indent(1);
+                let (s, r, d) = (row("Sense", false).value("no predators").cue().disabled(true), row("Regions", true), row("Disease", true).value("All pathogens").cue().focused(true));
+                VStack::new().child(&s).child(&r).child(&d).render(b, a);
+            })
+        },
     ]
 }
 

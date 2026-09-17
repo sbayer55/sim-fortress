@@ -7,6 +7,7 @@ use ratatui::Frame;
 use crate::sim::{Sim, World};
 use crate::ui::screens::s06_ecology::region_status;
 use crate::ui::app::AppState;
+use crate::widgets::map::OverlayStack;
 use crate::widgets::{panel, util};
 use crate::{glyphs, theme};
 use super::WorldMap;
@@ -17,7 +18,7 @@ impl WorldMap {
     }
 
     /// S02e sidebar: the region table, the selected region and the selector.
-    pub(super) fn region_sidebar(&self, f: &mut Frame<'_>, area: Rect, app: &AppState, sim: &Sim) {
+    pub(super) fn region_sidebar(&self, f: &mut Frame<'_>, area: Rect, app: &AppState, sim: &Sim, stack: &OverlayStack) {
         let world = &sim.world;
         let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
         let mut row = 0u16;
@@ -89,15 +90,14 @@ impl WorldMap {
         }
         row += 1;
 
-        row = self.overlays_selector(f, inner, row);
-        row += 1;
-
         panel::section(f, inner, row, "Reading the map");
         row += 1;
         for note in [" tint = region, bright = selected", " labels are clipped at the edge", " Esc restores the plain map"] {
             util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
             row += 1;
         }
+        row += 1;
+        Self::stack_rows(f, inner, row, stack);
     }
 }
 

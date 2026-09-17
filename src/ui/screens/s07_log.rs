@@ -15,7 +15,7 @@ use crate::ui::app::AppState;
 use crate::ui::screens::s03_inspector::Inspector;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{EventKindStyle, SpeciesStyle};
-use crate::widgets::map::{self, MapOptions, Overlay};
+use crate::widgets::map::{self, MapOptions, OverlayStack};
 use crate::widgets::Constraint::{Fill, Fixed};
 use crate::widgets::{panel, util, Column, Component, FilterStrip, StatusBar, Table, TableCell, TableRow, Text};
 use crate::{glyphs, theme};
@@ -358,14 +358,13 @@ impl EventLog {
             let mini = Rect::new(inner.x + 1, inner.y + row, MINI_W + 2, MINI_H + 2);
             let mini_inner = panel::draw(f, mini, "", panel::Kind::Inner);
             let opts = MapOptions {
-                overlay: Overlay::None,
+                stack: OverlayStack::default(),
                 night: false,
                 winter: false,
                 cursor: Some((x, y)),
                 follow: None,
                 origin: (ox, oy),
                 creatures: true,
-                fade_creatures: false,
                 selected_region: None,
                 species_color: theme::TEXT,
                 creature_tint: None,

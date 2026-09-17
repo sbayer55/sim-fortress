@@ -29,7 +29,7 @@ letter is the variant. The prototype binary shows the id on row 0.
 | S11 | Legend & Help             | [s11-legend-help.md](s11-legend-help.md)       | a: overlay over the map                                         |
 | S12 | Alert Modal               | [s12-alert-modal.md](s12-alert-modal.md)       | a: extinction event · b: epidemic                                |
 | S13 | Local Zoom View           | [s13-local-zoom.md](s13-local-zoom.md)         | a: 3×3 tiles around the cursor                                  |
-| S14 | Overlay Switcher          | [s14-overlay-switcher.md](s14-overlay-switcher.md) | a: base heatmap tab · b: marks tab · c: sub-pick list — *specified, not yet built* |
+| S14 | Overlay Switcher          | [s14-overlay-switcher.md](s14-overlay-switcher.md) | a: base heatmap tab · b: marks tab · c: sub-pick list         |
 
 ## Screen families
 
@@ -38,7 +38,7 @@ letter is the variant. The prototype binary shows the id on row 0.
   Overlays, S13 Local Zoom. Overlays and look/follow modes are *states* of the map rather
   than separate places.
 - **Modals over the map** (map stays visible, dimmed): S10 Controls, S11 Help, S12 Alert;
-  S14 Overlay Switcher once built (map stays undimmed as a live preview).
+  S14 Overlay Switcher (map stays undimmed as a live preview).
 - **Data screens** (full-screen, replace the map): S03 Inspector, S04 Species, S05 Charts,
   S06 Ecology, S07 Event Log, S08 Lineage.
 
@@ -56,6 +56,7 @@ flowchart TD
     S10["S10 Simulation Controls"]
     S11["S11 Legend & Help"]
     S12["S12 Alert Modal"]
+    S14["S14 Overlay Switcher<br/>a base tab · b marks tab · c sub-pick"]
     S03["S03 Creature Inspector<br/>a prey · b predator · c corpse"]
     S04["S04 Species Browser<br/>a table · b detail"]
     S05["S05 Population Charts<br/>a time · b phase · c stacked · d infections · e group sizes"]
@@ -78,7 +79,10 @@ flowchart TD
     S01 -- "f / Tab" --> S01e
     S01e -- "Esc" --> S01
     S01e -- "i" --> S03
-    S01 -- "o / 1-7" --> S02
+    S01 -- "o" --> S14
+    S14 -- "Esc / Enter" --> S01
+    S14 -. "layers on" .-> S02
+    S02 -- "o" --> S14
     S02 -- "Esc" --> S01
     S02 -- "k" --> S01c
 
