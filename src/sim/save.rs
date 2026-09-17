@@ -30,8 +30,10 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// per-creature `sterile` flag; version 11 added the world's
 /// geological history and the ecology warm-up parameter; version 12 added the
 /// chronicle table (C9, decorative and optional: an empty table loads in any
-/// build) and the `[ai]` block inside the saved `UiParams`.
-pub const VERSION: u16 = 12;
+/// build) and the `[ai]` block inside the saved `UiParams`; version 13 added
+/// the world's named features (ocean, lakes, rivers, ranges) and their
+/// per-cell map.
+pub const VERSION: u16 = 13;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 

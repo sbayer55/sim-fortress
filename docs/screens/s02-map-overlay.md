@@ -119,7 +119,11 @@ collapsed.
     resources draw at full strength.
 11. **Labels**: the region name, bold and bright, centred on the rectangle and clamped inside
     it; the selected region's label uses the selection style. Labels are drawn under creatures
-    and are clipped, not shifted, at the viewport edge.
+    and are clipped, not shifted, at the viewport edge. Beneath them, every named feature
+    except the ocean (lakes, rivers, ranges; `World.names`) is labelled in plain text at its
+    anchor cell (a river's mid-stem, otherwise the member nearest the centroid); a feature
+    label that would overlap a region label's row within its span is skipped, so region
+    names always win.
 12. Night and winter palettes are suppressed as for the heatmaps.
 
 ### Map panel — species density (S02f)

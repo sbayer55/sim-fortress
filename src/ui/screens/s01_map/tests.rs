@@ -240,6 +240,37 @@ fn s02i_parasite_ramp_and_cells() {
 }
 
 #[test]
+fn s01c_look_sidebar_names_the_feature_under_the_cursor() {
+    let sim = full_roster_sim();
+    let lake = sim.world.features_of_kind(crate::sim::world::FeatureKind::Lake).next().expect("a named lake").clone();
+    let mut app = AppState::new(Params::default());
+    app.look_cursor = Some(lake.anchor);
+    app.sim = Some(sim);
+    let screen = WorldMap::new("Test".into());
+    let buf = draw(&screen, &app);
+    let side: Vec<String> = (1..41).map(|y| row_text(&buf, y).chars().skip(112).collect::<String>()).collect();
+    assert!(side.iter().any(|l| l.contains(&lake.name)), "the lake's name is in the look sidebar: {side:?}");
+    assert!(side.iter().any(|l| l.contains("lake ·") && l.contains("cells")), "its kind and size follow: {side:?}");
+}
+
+#[test]
+fn s02e_region_overlay_draws_feature_labels() {
+    let sim = full_roster_sim();
+    let lake = sim.world.features_of_kind(crate::sim::world::FeatureKind::Lake).next().expect("a named lake").clone();
+    let mut app = AppState::new(Params::default());
+    app.sim = Some(sim);
+    app.overlay.regions = true;
+    let screen = WorldMap::new("Test".into());
+    let buf = draw(&screen, &app);
+    let (ax, ay) = lake.anchor;
+    let row = row_text(&buf, crate::cast!(ay => u16) + 1);
+    let map_row: String = row.chars().take(112).collect();
+    if ax < 110 {
+        assert!(map_row.contains(&lake.name), "the lake's label is on its anchor row: {map_row:?}");
+    }
+}
+
+#[test]
 fn s02i_parasite_overlay_render() {
     // A full-screen render with a fouled land cell in view.
     let mut sim = full_roster_sim();

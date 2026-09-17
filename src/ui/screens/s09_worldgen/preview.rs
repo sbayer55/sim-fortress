@@ -84,6 +84,9 @@ pub(super) fn preview_panel(f: &mut Frame<'_>, area: Rect, form: &WorldGenForm) 
     }
     spans.push(Span::styled(format!(" regions {}", world.regions.len()), theme::dim_text()));
     util::line(f, inner, row, Line::from(spans));
+    row += 1;
+
+    super::chronicle::summary_and_chronicle(f, inner, row, world, form.world.age);
 }
 
 fn terrain_counts(world: &World) -> [usize; 10] {

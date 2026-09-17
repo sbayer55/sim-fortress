@@ -71,5 +71,11 @@ fn main() {
     for e in &world.history {
         eprintln!("{}", e.describe(age));
     }
+    for f in &world.names.features {
+        eprintln!("{:<10} {:<24} {:>4} cells at {:?}", f.kind.label(), f.name, f.cells, f.anchor);
+    }
+    for line in sim_fortress::sim::world::chronicle(&world, age) {
+        eprintln!("| {line}");
+    }
     eprintln!("generated {w}x{h} seed {seed} age {age} ({} land) in {took:?}", AgeRegime::for_age(age).name);
 }

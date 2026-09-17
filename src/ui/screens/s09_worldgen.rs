@@ -40,6 +40,7 @@ const T_DESIGN: usize = 12;
 const T_COUNT: usize = 13;
 const FORM_W: u16 = 66;
 
+mod chronicle;
 #[cfg(feature = "ai")]
 mod designer;
 mod form;

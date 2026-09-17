@@ -12,10 +12,12 @@ use crate::sim::world::World;
 
 use crate::{glyphs, theme};
 
+mod labels;
 mod overlay;
 mod palette;
 pub mod stack;
 
+pub use labels::region_label_origin;
 pub use overlay::{condition_color, density_cell, density_field, disease_tint, overlay_cell, parasite_cell, parasite_tint};
 pub use palette::{legend, terrain_base, terrain_cell, terrain_code_cell, world_cell};
 pub use stack::{Base, Disease, Layer, OverlayStack};
@@ -135,9 +137,11 @@ pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
     // Trail for the followed creature.
     draw_trail(buf, area, source, opts);
 
-    // Region labels (under creatures so a passing creature stays visible).
+    // Region and feature labels (under creatures so a passing creature
+    // stays visible).
     if stack.regions {
-        region_labels(buf, area, world, opts);
+        labels::feature_labels(buf, area, world, opts);
+        labels::region_labels(buf, area, world, opts);
     }
     if opts.creatures {
         draw_creatures(buf, area, &living, opts);
@@ -384,39 +388,7 @@ fn region_tint(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions) {
     }
 }
 
-/// Where region `ri`'s label starts in world coordinates: centred on the
-/// region's centre cell, clamped so the whole label stays inside its
-/// bounding box and the world.
-pub fn region_label_origin(world: &World, ri: usize) -> (usize, usize) {
-    let Some(r) = world.regions.get(ri) else { return (0, 0) };
-    let w = r.0.chars().count();
-    let (cx, cy) = world.region_centre(ri);
-    let x = cx.saturating_sub(w.div_euclid(2)).max(r.1);
-    let x = x.min(r.3.saturating_sub(w)).min(world.width().saturating_sub(w));
-    (x, cy)
-}
-
-/// Draw each region's name, bold and bright, clipped (never shifted) at the
-/// viewport edge.
-fn region_labels(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions) {
-    for (i, r) in world.regions.iter().enumerate() {
-        let (lx, ly) = region_label_origin(world, i);
-        let selected = opts.selected_region == Some(i);
-        for (k, ch) in r.0.chars().enumerate() {
-            if let Some(cell) = cell_at(buf, area, opts, lx + k, ly) {
-                cell.set_char(ch);
-                let st = if selected {
-                    theme::selected()
-                } else {
-                    Style::default().fg(theme::TEXT_BRIGHT).bg(cell.bg).add_modifier(Modifier::BOLD)
-                };
-                cell.set_style(st);
-            }
-        }
-    }
-}
-
-fn cell_at<'a>(buf: &'a mut Buffer, area: Rect, opts: &MapOptions, wx: usize, wy: usize) -> Option<&'a mut ratatui::buffer::Cell> {
+pub(super) fn cell_at<'a>(buf: &'a mut Buffer, area: Rect, opts: &MapOptions, wx: usize, wy: usize) -> Option<&'a mut ratatui::buffer::Cell> {
     let (ox, oy) = opts.origin;
     if wx < ox || wy < oy {
         return None;

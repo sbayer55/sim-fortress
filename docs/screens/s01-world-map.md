@@ -71,8 +71,13 @@ flowchart TB
 5. **Context section**:
    - default: "Notable" — the two notable creatures (letter, name, tag, short goal) and
      an at-risk species line prefixed `‼` in magenta.
-   - S01c: "Cursor" — coordinates, region, terrain, elevation, vegetation, and a hint that
-     `Enter` opens the inspector.
+   - S01c: "Cursor" — coordinates, region, terrain, biome, elevation, vegetation,
+     moisture and temperature, and a hint that `Enter` opens the inspector. When the cell
+     is on or beside a named feature (`World::feature_near`), a line names it in the
+     title style with its kind and size dim: `Lake Ulmar  lake · 14 cells`, `the
+     Kelderwater  river · 61 cells · to the Ulmar Sea`, `the Tavos Fells  range · 23 cells`.
+   - S01e: the goal line of a drinking creature names the water it heads for
+     (`drinking  · thirst 0.71, heading for Lake Ulmar`).
    - S01e: "Following" — name, tag, species, sex glyph, position and region, goal and
      target, four vital bars (health, hunger, thirst, energy; hunger/thirst inverted so
      high is red), and a danger line naming the stalking predator, its distance and

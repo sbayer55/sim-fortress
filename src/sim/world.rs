@@ -11,7 +11,8 @@
 //! fanning deltas where a trunk meets the sea), and `regions` merges the
 //! drainage basins into the eight named regions. `history` holds the
 //! geological events that struck between the epochs and are remembered on
-//! the world.
+//! the world. `names` gives the ocean, the larger lakes, the rivers and the
+//! rock ranges seeded names, and narrates the generation.
 
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +24,7 @@ mod classify;
 mod climate;
 mod flow;
 mod history;
+mod names;
 mod noise;
 mod regions;
 mod relief;
@@ -32,6 +34,7 @@ mod tests;
 pub use biome::{Biome, MIN_PATCH};
 pub use climate::Wind;
 pub use history::{HistoryEvent, HistoryKind};
+pub use names::{chronicle, summary, Feature, FeatureKind, Names, Summary, CHRONICLE_LINES, CHRONICLE_WIDTH, NAME_FULL_MAX, NO_FEATURE};
 pub use relief::AgeRegime;
 pub use regions::{NAME_MAX, REGION_COUNT};
 
@@ -148,6 +151,9 @@ pub struct World {
     pub falls: Vec<(usize, usize)>,
     /// The geological events that shaped the relief, in epoch order.
     pub history: Vec<HistoryEvent>,
+    /// The named features (ocean, lakes, rivers, ranges) and which cell
+    /// belongs to which.
+    pub names: Names,
 }
 
 impl World {
@@ -296,8 +302,9 @@ impl World {
         let grid = flow::Grid { w, h };
         let mut rng = Rng::new(seed);
         let relief = relief::build(&mut rng, grid, params);
-        let (cells, falls) = classify::cells(&mut rng, grid, &relief, params);
+        let (cells, falls, bodies) = classify::cells(&mut rng, grid, &relief, params);
         let (regions, region_map) = regions::build(grid, &relief.basin, &relief.sea, &cells);
+        let names = names::build(seed, &names::Source { grid, relief: &relief, bodies: &bodies, cells: &cells });
 
         let water_cells_at_generation = cells.iter().filter(|c| c.terrain.is_water()).count();
         let mut world = Self {
@@ -314,6 +321,7 @@ impl World {
             shore: Vec::new(),
             falls,
             history: relief.history,
+            names,
         };
         world.refresh_shore();
         world
