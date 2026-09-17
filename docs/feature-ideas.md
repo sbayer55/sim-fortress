@@ -27,7 +27,7 @@ If you want, I can write the burrows-and-dens idea up as a ninth chunk doc in th
 
 ---
 
-The current genome has eleven slots: speed, size, sense, metabolism, aggression, camouflage, fertility, longevity, resistance (C7), sociality and maturity (C8). The most interesting additions are ones that trade off against an existing slot or against a specific mechanic, so selection can pull them in different directions in different worlds.
+The current genome has twelve slots: speed, size, sense, metabolism, aggression, camouflage, fertility, longevity, resistance (C7), sociality and maturity (C8), and mutability. The most interesting additions are ones that trade off against an existing slot or against a specific mechanic, so selection can pull them in different directions in different worlds.
 
 **Traits that exploit the existing environment**
 
@@ -47,7 +47,6 @@ The current genome has eleven slots: speed, size, sense, metabolism, aggression,
 
 - **Parental care.** Offspring start with more reserves and the parent loses hunger for a period after birth. Litters get smaller but survive. Nice interaction with any future dens.
 - **Dispersal.** How far a newborn wanders from its parent before settling. Low values create local inbred pockets, high values spread genes and spark migrations. Very visible on the lineage tree.
-- **Mutation rate itself.** Evolvability as a trait. Stable worlds select it down, worlds with droughts and epidemics select it up. Cheap to add and a genuinely interesting experiment.
 
 **Traits that need one new mechanic**
 

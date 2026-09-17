@@ -25,8 +25,9 @@ pub(super) fn table(f: &mut Frame<'_>, area: Rect, sim: &Sim, sort: SortCol, sel
     let prey_n = sim.species.iter().filter(|s| s.count > 0 && sim.roster().kind(s.species) == Kind::Prey).count();
     let inner = panel::draw_with_hint(f, area, "Species", &format!("{} species, {} prey / {} predator", alive, prey_n, alive - prey_n), kind);
     let dim = theme::dim_text();
-    // C8: eleven genome columns, so the header is built from `TRAIT_ABBR` (never
-    // hand-typed) and the sparkline slot is trimmed to keep the row inside 153.
+    // Twelve genome columns (C8 made it eleven, Mutability twelve), so the
+    // header is built from `TRAIT_ABBR` (never hand-typed) and the trend slot
+    // is trimmed to 16 with no gap after the arrow to keep the row inside 153.
     let trait_header: String = std::iter::once("  ".to_string()).chain(TRAIT_ABBR.iter().map(|a| format!("{a:>3} "))).collect();
     let header = vec![
         sp("   ", dim),
@@ -40,8 +41,7 @@ pub(super) fn table(f: &mut Frame<'_>, area: Rect, sim: &Sim, sort: SortCol, sel
         sp(format!("{:>6}", "Sick"), dim),
         sp(format!("{:>6}", "Peak"), dim),
         sp(format!("{:>5}", "Gen"), dim),
-        sp(format!("{:<18}", "  30-day trend"), dim),
-        sp("  ", dim),
+        sp(format!("{:<16}", "  30-day trend"), dim),
         sp(trait_header, dim),
         sp("   Diet", dim),
     ];
@@ -85,9 +85,8 @@ fn table_row(f: &mut Frame<'_>, inner: Rect, row: u16, sim: &Sim, i: usize, sele
             sp(format!("{:>6}", s.sick), if s.sick > 0 { Style::default().fg(theme::SICK).bg(st.bg) } else { st.dimmed }),
             sp(format!("{:>6}", s.peak), st.base),
             sp(format!("{:>5}", s.generation), st.base),
-            sp(format!("{:<18}", ""), st.base), // sparkline slot
+            sp(format!("{:<16}", ""), st.base), // sparkline slot (2-cell gap, then 14)
             sp(format!("{arrow} "), Style::default().fg(arrow_color(arrow)).bg(st.bg).add_modifier(Modifier::BOLD)),
-            sp("  ", st.base),
         ];
     trait_spans(s, &st, &mut spans);
     spans.push(sp(format!("  {}", sim.roster().get(id).diet.as_str()), st.dimmed));
@@ -101,7 +100,7 @@ fn table_row(f: &mut Frame<'_>, inner: Rect, row: u16, sim: &Sim, i: usize, sele
         }
     }
     if !s.trend.is_empty() {
-        bars::sparkline(f.buffer_mut(), inner.x + 71, inner.y + row, 14, &s.trend, if absent { theme::DIM } else { sim.roster().color(id) });
+        bars::sparkline(f.buffer_mut(), inner.x + 70, inner.y + row, 14, &s.trend, if absent { theme::DIM } else { sim.roster().color(id) });
     }
 }
 

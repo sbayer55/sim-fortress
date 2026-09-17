@@ -669,7 +669,10 @@ mod tests {
         // Re-baselined for river morphology: rivers widen by tier, trunks
         // run deep, deltas fan, falls keep their rock and arid brooks start
         // as dry washes, so the water cells and everything near them moved.
-        assert_eq!(a.checksum(), 0xb6e9_09b8_a4c6_2f17);
+        // Re-baselined for Mutability: the genome grew to twelve traits, so
+        // every founder draws one more jitter gaussian and a sterility roll,
+        // and every birth draws a sterility roll after inheritance.
+        assert_eq!(a.checksum(), 0x9b4e_d39b_8baa_c6f5);
     }
 
     #[test]

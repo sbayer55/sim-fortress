@@ -159,6 +159,14 @@ fn summary_header(roster: &Roster) -> String {
     for id in roster.ids() {
         cols.push(format!("resistance_{}", roster.name(id)));
     }
+    // Mutability: the evolvability trait's mean and how many animals its
+    // sterility cost has taken out of the breeding pool.
+    for id in roster.ids() {
+        cols.push(format!("mutability_{}", roster.name(id)));
+    }
+    for id in roster.ids() {
+        cols.push(format!("sterile_{}", roster.name(id)));
+    }
     // C8 follow-up: the group sizes the cohesion rule actually produces.
     for id in roster.ids() {
         let n = roster.name(id);
@@ -202,6 +210,12 @@ fn summary_row(sim: &Sim, seed: u64, years: f64) -> String {
     cols.push(d.stats.iter().map(|s| s.total_deaths).sum::<u32>().to_string());
     for i in 0..n {
         cols.push(format!("{:.3}", census.genome_mean[i].resistance()));
+    }
+    for i in 0..n {
+        cols.push(format!("{:.3}", census.genome_mean[i].mutability()));
+    }
+    for i in 0..n {
+        cols.push(census.sterile[i].to_string());
     }
     for i in 0..n {
         cols.push(format!("{:.2}", sim.group_stats.mean[i]));

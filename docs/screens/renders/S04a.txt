@@ -1,45 +1,45 @@
  S04a  Species Browser - species table                                                                                                                     
-╔ Species ════════════════════════════════════════════════════════════════════════════════════════════════════════════════ 5 species, 3 prey / 2 predator ╗
-║   Species Kind  Count Adults   Juv Birth/d Death/d  Sick  Peak  Gen  30-day trend        Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat    Diet            ║
+╔ Species ════════════════════════════════════════════════════════════════════════════════════════════════════════════════ 6 species, 3 prey / 3 predator ╗
+║   Species Kind  Count Adults   Juv Birth/d Death/d  Sick  Peak  Gen  30-day trend    Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat Mut    Diet            ║
 ║                                                                                                                                                         ║
-║►H Hare    prey    176    176     0       0       1     0   348    5   ████████▓▓▒▒░░ ↓    82  25  65  60  11  55  76  35  35  24  49   grass, bark      ║
-║ D Deer    prey     64     53    11       0       0     0   176    2   ███░░░░░░░░░░░ ↓    64  82  54  39  18  36  33  70  45  70  51   grass, leaves    ║
-║ V Vole    prey     18     18     0       0       0     0   286    6   █▓▓▓▒▒▒▒▒▒░░░░ ↓    46   9  38  77   7  63  89  21  26  35  48   seeds, roots     ║
-║ F Fox     pred      9      6     3       0       0     0    16    4   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓ ↓    63  36  78  53  62  51  47  45  37  10  52   voles, hares     ║
-║ L Lynx    pred      1      1     0       0       0     0     4    2   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓ ↔    76  45  87  50  75  75  26  56  31  16  43   hares, voles     ║
-║ W Wolf    pred      0      0     0       0       0     0     6    2   ░░░░░░░░░░░░░░ ↓    79  62  69  57  82  21  40  58  64  76  48   deer, hares      ║
+║►H Hare    prey    172    172     0       0       0     0   693    4  █▓▓▓▓▓▒▒▒▒▒▒░░↓  80  25  65  59  10  56  75  35  35  25  50  51   grass, bark      ║
+║ V Vole    prey    140    140     0       0       1     0   491    6  █▓▓▓▓▒▒▒▒▒▒░░░↓  45  10  40  75   6  61  90  21  30  36  50  49   seeds, roots     ║
+║ D Deer    prey     37     33     4       0       1     0   308    2  █▓▒▒▒▒▒▒▒▒▒▒▒░↓  66  79  53  37  20  34  35  69  48  70  47  51   grass, leaves    ║
+║ F Fox     pred      4      4     0       0       0     0     8    1  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓↔  69  33  74  58  65  50  42  47  36  18  49  52   voles, hares     ║
+║ L Lynx    pred      3      3     0       0       0     0     5    2  ██████████░░░░↓  75  46  85  43  74  77  25  58  52  12  51  43   hares, voles     ║
+║ W Wolf    pred      2      2     0       0       0     0     8    2  ██████▓░░░░░░░↓  74  69  75  52  85  25  40  67  49  78  50  53   deer, hares      ║
 ║                                                                                                                                                         ║
-║   totals           268   prey 258  pred 10  ratio 25.8:1   births 0  deaths 1   net -1 today     traits = species means x100;  /d = yesterday           ║
+║   totals           358   prey 349  pred 9  ratio 38.8:1   births 0  deaths 0   net +0 today     traits = species means x100;  /d = yesterday            ║
 ║                                                                                                                                                         ║
 ╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 ╔ Selected: Hare ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ Enter for full detail ╗
 ║ H Hares   prey   diet: grass, bark                              ─ Population, last 240 days ────────────────────────────────────────────────────────────║
-║ 176 alive  176 adults  0 juveniles  generation 5  peak 348       346  ░░░░░░░░░░░░░░░░░░▄███████▄▄▄░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
-║ groups: 7 herds, mean 2.1, max 3, 9% grouped, 161 alone               ░░░░░░░░░░░░░░░▄▄███████████████▄▄▄▄▄░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
-║─ Base genome vs current mean ──────────────────────────────────       ▄▄▄░▄░░░░░░░░▄██████████████████████████▄▄▄░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
-║ trait        base   current            delta   spread                 ████████▄▄█████████████████████████████████████████████▄▄▄▄░░░░░░░░░░░░░░░░░░░░░░░║
-║ Speed       0.80   0.82 [█████████│░░]   +0.02  [░░░░░░░▒█▒▒]         ███████████████████████████████████████████████████████████▄▄▄▄▄▄░░░░░░░░░░░░░░░░░║
-║ Size        0.25   0.25 [███│░░░░░░░░]   -0.00  [░▒█▒▒░░░░░░]    177  ███████████████████████████████████████████████████████████████████████▄▄▄▄▄▄░░░░░║
+║ 172 alive  172 adults  0 juveniles  generation 4  peak 693  ste  693  ░░░░░░░░░░░░░░░░░░░▄▄██████▄▄░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+║ groups: 25 herds, mean 2.4, max 4, 35% grouped, 111 alone             ░░░░░░░░░░░░░░░▄▄████████████████▄▄▄▄░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+║─ Base genome vs current mean ──────────────────────────────────       ▄▄▄▄▄▄▄▄▄▄▄██████████████████████████████▄▄▄▄░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░║
+║ trait        base   current            delta   spread                 ███████████████████████████████████████████████████▄▄▄▄▄░░░░░░░░░░░░░░░░░░░░░░░░░░║
+║ Speed       0.80   0.80 [█████████│░░]   +0.00  [░░░░░░░▒█▒░]         █████████████████████████████████████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░║
+║ Size        0.25   0.25 [███│░░░░░░░░]   -0.00  [░▒█▒▒░░░░░░]    173  ████████████████████████████████████████████████████████████████▄▄▄▄▄▄▄▄▄░░░░░░░░░║
 ║ Sense       0.65   0.65 [███████│░░░░]   -0.00  [░░░░░▒█▒▒░░]         D-240                                                                        today║
-║ Metabolism  0.60   0.60 [███████│░░░░]   -0.00  [░░░░░▒█▒░░░]                                                                                           ║
-║ Aggression  0.10   0.11 [█│░░░░░░░░░░]   +0.01  [▒█▒▒░░░░░░░]    30-day trend ███████████▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒░░░░  ↓ declining                               ║
-║ Camouflage  0.55   0.55 [██████│░░░░░]   +0.00  [░░░░▒▒█▒░░░]                                                                                           ║
-║ Fertility   0.75   0.76 [████████│░░░]   +0.01  [░░░░░░▒▒█▒░]    240 days ago  273                                                                      ║
-║ Longevity   0.35   0.35 [████│░░░░░░░]   +0.00  [░░▒▒█▒░░░░░]    today         176                                                                      ║
-║ Resistance  0.35   0.35 [████│░░░░░░░]   +0.00  [░▒▒▒█▒▒░░░░]    change        -97 (-36%)                                                               ║
-║ Sociality   0.25   0.24 [███│░░░░░░░░]   -0.01  [░▒█▒▒░░░░░░]    low / high    176 / 348                                                                ║
-║ Maturity    0.50   0.49 [██████│░░░░░]   -0.01  [░░░░▒█▒░░░░]    births today  0  (yesterday 0)                                                         ║
-║ │ base marker   spread = min/mean/max across living Hares        deaths today  0  (yesterday 1)                                                         ║
-║                                                                  first birth   Y1 D008                                                                  ║
-║─ Interactions ─────────────────────────────────────────────────                                                                                         ║
-║ eaten by: F Fox 32% and W Wolf 0% and L Lynx 68%                 ¶ ↓ -10 % — deaths outpaced births over the last 30 days                               ║
-║ competes with V Vole and D Deer for grass                                                                                                               ║
-║ susceptible to: Greyfever, Hoofrot                              ─ Habitat (living individuals by region) ───────────────────────────────────────────────║
-║ ∩ worms: mean load .01                                           Southern Forest  [████████████]   78        Central Tundra   [███░░░░░░░░░]   22       ║
-║                                                                  Western Forest   [███░░░░░░░░░]   21        Northern Taiga   [███░░░░░░░░░]   18       ║
-║─ Notable individuals ──────────────────────────────────────────  Upper Forest     [██░░░░░░░░░░]   14        Eastern Tundra   [█░░░░░░░░░░░]    9       ║
-║ H Nettle   h#341    6 offspring  gen 1    436 days  Western For  Southern Savanna [█░░░░░░░░░░░]    8        Eastern Forest   [█░░░░░░░░░░░]    6       ║
-║ H Sedge    h#294    6 offspring  gen 1    420 days  Western For                                                                                         ║
-║ H Vetch    h#277    6 offspring  gen 1    406 days  Central Tun                                                                                         ║
-╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ ↓2 ╝
+║ Metabolism  0.60   0.59 [███████│░░░░]   -0.01  [░░░░░▒█▒░░░]                                                                                           ║
+║ Aggression  0.10   0.10 [█│░░░░░░░░░░]   +0.00  [▒█▒░░░░░░░░]    30-day trend ███▓▓▓▓▓▓▒▒▒▒▒▒▒▒▒▒▒▒▒░░░░░░░░  ↓ declining                               ║
+║ Camouflage  0.55   0.56 [██████│░░░░░]   +0.01  [░░░░▒▒█▒░░░]                                                                                           ║
+║ Fertility   0.75   0.75 [████████│░░░]   +0.00  [░░░░░░▒▒█▒░]    240 days ago  465                                                                      ║
+║ Longevity   0.35   0.35 [████│░░░░░░░]   +0.00  [░░▒▒█▒░░░░░]    today         172                                                                      ║
+║ Resistance  0.35   0.35 [████│░░░░░░░]   +0.00  [░▒▒▒█▒▒░░░░]    change        -293 (-63%)                                                              ║
+║ Sociality   0.25   0.25 [███│░░░░░░░░]   +0.00  [░▒▒█▒░░░░░░]    low / high    172 / 693                                                                ║
+║ Maturity    0.50   0.50 [██████│░░░░░]   +0.00  [░░░░▒█▒░░░░]    births today  0  (yesterday 0)                                                         ║
+║ Mutability  0.50   0.51 [██████│░░░░░]   +0.01  [░░░░▒█▒░░░░]    deaths today  0  (yesterday 0)                                                         ║
+║ │ base marker   spread = min/mean/max across living Hares        first birth   Y1 D008                                                                  ║
+║                                                                                                                                                         ║
+║─ Interactions ─────────────────────────────────────────────────  ¶ ↓ -13 % — deaths outpaced births over the last 30 days                               ║
+║ eaten by: F Fox 3% and W Wolf 16% and L Lynx 81%                                                                                                        ║
+║ competes with V Vole and D Deer for grass                       ─ Habitat (living individuals by region) ───────────────────────────────────────────────║
+║ susceptible to: Greyfever, Hoofrot                               Southern Forest  [████████████]   58        Northern Taiga   [███████░░░░░]   33       ║
+║ ∩ worms: mean load .04                                           Western Forest   [█████░░░░░░░]   26        Central Tundra   [████░░░░░░░░]   17       ║
+║                                                                  Eastern Tundra   [██░░░░░░░░░░]   11        Eastern Forest   [██░░░░░░░░░░]   11       ║
+║─ Notable individuals ──────────────────────────────────────────  Upper Forest     [██░░░░░░░░░░]    8        Southern Savanna [██░░░░░░░░░░]    8       ║
+║ H Nettle   h#279    6 offspring  gen 1    460 days  Northern Ta                                                                                         ║
+║ H Nettle   h#274    6 offspring  gen 1    440 days  Western For                                                                                         ║
+╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ ↓3 ╝
  [↑↓] select  [Tab] panel  [Enter] detail  [s] sort  [Esc] back                                          sorted by count ↓  Year 2, Day 1 of Spring  06:00 

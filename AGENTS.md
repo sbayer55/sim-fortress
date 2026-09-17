@@ -8,7 +8,7 @@ replacement for it. Read this first, then the doc that matches your task.
 `sim-fortress` is a Rust 2021 (pinned toolchain **1.90**) terminal predator/prey/
 evolution simulation with a Dwarf-Fortress-inspired ratatui 0.30 UI. A configurable
 roster of species (six by default: voles, hares, deer, foxes, wolves, lynxes) lives on
-a procedurally generated map and evolves an eleven-trait genome. It is an internal
+a procedurally generated map and evolves a twelve-trait genome. It is an internal
 application (`publish = false`) with no real downstream users, so there is freedom to
 change internals — but determinism and save format are load-bearing.
 
@@ -116,7 +116,7 @@ Do not weaken these to make a change pass. Fix the change.
   → ecology → migration/extinction. **Never reorder or merge RNG draws.** Three RNG
   streams exist (`rng`, `creature_rng`, `disease_rng`) so enabling one subsystem does
   not perturb another. `sim::tests::checksum_is_fnv_stable` pins the exact checksum
-  `0xfe19543fc5fd7dbe`; only re-baseline deliberately, with a comment saying why.
+  `0x9b4ed39b8baac6f5`; only re-baseline deliberately, with a comment saying why.
 - **Sim/UI separation.** `src/sim` is pure data and logic: **no `ratatui`, `HashMap`
   or `HashSet`** anywhere under it. `src/sim/mod.rs` guards this by scanning every
   `.rs` file there for those substrings — **comments and strings included** — skipping
@@ -252,5 +252,5 @@ git diff --stat                                 # only the files you meant to to
 ```
 
 If you touched `src/sim`, re-run `cargo test --lib sim::tests::checksum_is_fnv_stable`
-and confirm the value is still `0xfe19543fc5fd7dbe` unless the change deliberately
+and confirm the value is still `0x9b4ed39b8baac6f5` unless the change deliberately
 re-baselines it.

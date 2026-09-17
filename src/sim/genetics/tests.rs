@@ -6,7 +6,7 @@ use crate::sim::params::CreaturesParams;
 use crate::sim::params::Roster;
 use crate::sim::creatures::max_age_days;
 use crate::sim::params::{Params, WorldParams};
-use crate::sim::species::{IDX_MATURITY, N_TRAITS};
+use crate::sim::species::{IDX_MATURITY, IDX_MUTABILITY, N_TRAITS};
 use crate::sim::world::Terrain;
 use crate::sim::Sim;
 
@@ -60,6 +60,7 @@ fn adult(x: usize, y: usize, sex: Sex) -> Creature {
         thirst: 0.1,
         energy: 0.9,
         adult: true,
+        sterile: false,
         goal: Goal::Wander,
         target: None,
         replan_at: 0,
@@ -129,6 +130,9 @@ fn mate_eligibility() {
     c.cooldown_until = 0;
     // Winter: day index 270+ → tick 270*24.
     assert!(!eligible(&c, &time_at(270 * 24), &w, test_roster(), &gp, &DiseaseParams::default()), "not a breeding season");
+    c.sterile = true;
+    assert!(!eligible(&c, &t, &w, test_roster(), &gp, &DiseaseParams::default()), "sterile adults never mate");
+    c.sterile = false;
     let mut bare = world();
     bare.cell_mut(5, 5).vegetation = 0.0;
     assert!(!eligible(&c, &t, &bare, test_roster(), &gp, &DiseaseParams::default()), "prey need vegetation on the cell");
@@ -203,6 +207,129 @@ fn inherit_covers_every_slot() {
     assert_eq!(idx, (0..N_TRAITS).collect::<Vec<usize>>());
     assert_eq!(out.sociality(), g.sociality());
     assert_eq!(out.maturity(), g.maturity());
+    assert_eq!(out.mutability(), g.mutability());
+
+    // Parents at the bottom of the Mutability range scale the rate down, so
+    // the effective rate is a valid probability below 1 and some slots are
+    // inherited untouched; at the top it clamps to 1 without panicking.
+    let mut low = g;
+    low.0[IDX_MUTABILITY] = 0.02;
+    let (_, muts) = inherit(&low, &low, 4, &gp, &mut Rng::new(3));
+    assert!(muts.len() < N_TRAITS, "low mutability must scale a rate of 1 below 1");
+    let mut high = g;
+    high.0[IDX_MUTABILITY] = 0.98;
+    let (_, muts) = inherit(&high, &high, 4, &gp, &mut Rng::new(3));
+    assert_eq!(muts.len(), N_TRAITS, "rate clamps to 1 at high mutability");
+}
+
+#[test]
+fn mutability_is_neutral_at_half() {
+    let gp = GeneticsParams::default();
+    assert_eq!(gp.effective_mutation(0.5), (gp.mutation_rate, gp.mutation_strength));
+    // The base genomes all sit at 0.5, so a fresh world mutates exactly as before.
+    for id in test_roster().ids() {
+        assert_eq!(gp.effective_mutation(genome(id).mutability()), (gp.mutation_rate, gp.mutation_strength));
+    }
+    let (lo_rate, lo_sd) = gp.effective_mutation(0.02);
+    let (hi_rate, hi_sd) = gp.effective_mutation(0.98);
+    assert!(lo_rate < gp.mutation_rate && gp.mutation_rate < hi_rate);
+    assert!(lo_sd < gp.mutation_strength && gp.mutation_strength < hi_sd);
+    assert!(lo_rate > 0.0 && lo_sd > 0.0, "the low end must never freeze a lineage");
+}
+
+/// 10 000 births for parents at one Mutability: (mutations per slot, mean |delta|).
+fn mutation_profile(mutability: f32, gp: &GeneticsParams, seed: u64) -> (f32, f32) {
+    let mut rng = Rng::new(seed);
+    let mut g = genome(HARE);
+    g.0[IDX_MUTABILITY] = mutability;
+    let n = 10_000;
+    let mut count = 0usize;
+    let mut abs_sum = 0.0f64;
+    for _ in 0..n {
+        let (_, m) = inherit(&g, &g, 2, gp, &mut rng);
+        count += m.len();
+        abs_sum += m.iter().map(|mu| f64::from(mu.delta.abs())).sum::<f64>();
+    }
+    let freq = crate::cast!(count => f32) / (crate::cast!(n => f32) * crate::cast!(Genome::LEN => f32));
+    let mean_abs = crate::cast!((abs_sum / f64::from(crate::cast!(count.max(1) => u32))) => f32);
+    (freq, mean_abs)
+}
+
+#[test]
+fn mutability_scales_rate_and_strength() {
+    let gp = gp();
+    let (lo_freq, lo_abs) = mutation_profile(0.02, &gp, 21);
+    let (hi_freq, hi_abs) = mutation_profile(0.98, &gp, 22);
+    let (lo_rate, lo_sd) = gp.effective_mutation(0.02);
+    let (hi_rate, hi_sd) = gp.effective_mutation(0.98);
+    // Frequencies track the effective rates within 10 %.
+    assert!((lo_freq - lo_rate).abs() <= lo_rate * 0.10, "low freq {lo_freq} vs rate {lo_rate}");
+    assert!((hi_freq - hi_rate).abs() <= hi_rate * 0.10, "high freq {hi_freq} vs rate {hi_rate}");
+    // Mean |delta| scales with the sd (clamping at 0.02..0.98 barely bites for a
+    // hare genome, so the ratio is within 10 % of the sd ratio).
+    let want = hi_sd / lo_sd;
+    let got = hi_abs / lo_abs;
+    assert!((got - want).abs() <= want * 0.10, "|delta| ratio {got} vs sd ratio {want}");
+    assert!(lo_freq > 0.0, "the low end still mutates");
+}
+
+#[test]
+fn sterility_chance_ramps_to_the_cap() {
+    let gp = GeneticsParams::default();
+    assert_eq!(gp.sterility_chance(0.02), 0.0);
+    assert_eq!(gp.sterility_chance(0.5), 0.0);
+    assert_eq!(gp.sterility_chance(gp.sterility_onset), 0.0);
+    assert_eq!(gp.sterility_chance(0.98), gp.sterility_max);
+    let mut prev = 0.0f32;
+    for i in 0..=20 {
+        let m = gp.sterility_onset + (0.98 - gp.sterility_onset) * crate::cast!(i => f32) / 20.0;
+        let p = gp.sterility_chance(m);
+        assert!(p >= prev, "monotone at {m}");
+        prev = p;
+    }
+    // Quadratic: halfway up the ramp is a quarter of the max.
+    let mid = gp.sterility_chance((gp.sterility_onset + 0.98) / 2.0);
+    assert!((mid - gp.sterility_max / 4.0).abs() < 1e-5, "mid {mid}");
+    for id in test_roster().ids() {
+        assert_eq!(gp.sterility_chance(genome(id).mutability()), 0.0, "{id:?} base genome must carry no risk");
+    }
+    // A degenerate onset at (or above) the cap only bites at the cap itself.
+    let edge = GeneticsParams { sterility_onset: 0.98, ..GeneticsParams::default() };
+    assert_eq!(edge.sterility_chance(0.9), 0.0);
+    assert_eq!(edge.sterility_chance(0.98), edge.sterility_max);
+}
+
+/// Deliver one litter from parents at `mutability`; returns the pups' `sterile` flags.
+fn litter_sterility(mutability: f32, gp: &GeneticsParams) -> Vec<bool> {
+    let w = world();
+    let mut store = CreatureStore::new();
+    let mut mother = adult(5, 5, Sex::Female);
+    mother.genome.0[6] = 0.9; // litter 1 + round(0.9×3) = 4
+    mother.genome.0[IDX_MUTABILITY] = mutability;
+    let mut father = adult(6, 5, Sex::Male);
+    father.genome.0[IDX_MUTABILITY] = mutability;
+    let f = store.insert(mother);
+    let m = store.insert(father);
+    store.get_mut(f).unwrap().pregnant_due = Some(10);
+    store.get_mut(f).unwrap().mate_id = Some(m);
+    let mut events = EventRing::new(10);
+    let mut tallies = DeathTallies::new(N_SPECIES);
+    let mut lineage = Lineage::new();
+    let born = deliver(&mut store, &w, &mut events, &time_at(10), test_roster(), gp, &DiseaseParams::default(), &mut Rng::new(3), &mut tallies, &mut lineage, &DiseaseState::new(&DiseaseParams::default(), test_roster()), &mut Rng::new(4));
+    assert_eq!(born, 4);
+    store.living().filter(|c| c.parents.is_some()).map(|c| c.sterile).collect()
+}
+
+#[test]
+fn high_mutability_pups_can_be_born_sterile() {
+    // Mutations cannot move a 0.98 parent pair's pup past the cap, so with
+    // `sterility_max` 1 every pup is sterile; base genomes carry no risk.
+    let certain = GeneticsParams { sterility_max: 1.0, mutation_rate: 0.0, ..gp() };
+    assert!(litter_sterility(0.98, &certain).iter().all(|&s| s));
+    assert!(litter_sterility(0.5, &certain).iter().all(|&s| !s));
+    // At the default max the roll is real: the same seed yields a mix or all
+    // one way, but never a panic and never sterility below the onset.
+    assert!(litter_sterility(0.7, &gp()).iter().all(|&s| !s));
 }
 
 #[test]
@@ -264,8 +391,8 @@ fn birth_placement() {
 fn inheritance_mean() {
     let gp = gp();
     let mut rng = Rng::new(11);
-    let mother = Genome([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.5, 0.6, 0.4]);
-    let father = Genome([0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.4, 0.3, 0.3, 0.2, 0.6]);
+    let mother = Genome([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.5, 0.6, 0.4, 0.5]);
+    let father = Genome([0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.4, 0.3, 0.3, 0.2, 0.6, 0.5]);
     let mut sum = [0.0f64; Genome::LEN];
     let n = 10_000;
     for _ in 0..n {
