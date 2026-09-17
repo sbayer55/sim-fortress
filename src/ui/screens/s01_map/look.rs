@@ -4,10 +4,11 @@ use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
+use crate::sim::world::Feature;
 use crate::sim::{Sim, World};
 use crate::ui::app::AppState;
 use crate::widgets::{panel, util};
-use crate::theme;
+use crate::{glyphs, theme};
 use super::WorldMap;
 
 /// Arrow-key cursor movement in look mode (clamped to the world).
@@ -22,6 +23,16 @@ pub(super) fn move_look_cursor(cursor: &mut Option<(usize, usize)>, code: KeyCod
     });
 }
 
+/// "lake · 14 cells", "river · 61 cells · to the Ulmar Sea", "range · 23 cells".
+fn feature_detail(world: &World, feat: &Feature) -> String {
+    let head = format!("{} {} {} cells", feat.kind.label(), glyphs::DOT, feat.cells);
+    let (mx, my) = feat.mouth;
+    match world.feature_at(mx, my).filter(|t| feat.kind.is_river() && !t.kind.is_river()) {
+        Some(to) => format!("{head} {} to {}", glyphs::DOT, to.name),
+        None => head,
+    }
+}
+
 impl WorldMap {
     /// S01c sidebar: the cursor cell readout.
     pub(super) fn look_sidebar(f: &mut Frame<'_>, area: Rect, app: &AppState, sim: &Sim, world: &World) {
@@ -33,10 +44,18 @@ impl WorldMap {
         row += 1;
         util::line(f, inner, row, Line::from(Span::styled(format!(" ({}, {})  {}", cx, cy, world.region_name(cx, cy)), theme::text())));
         row += 1;
-        util::line(f, inner, row, Line::from(Span::styled(format!(" {}  elev {:.2}  veg {:.2}", world.terrain_name(cx, cy), cell.elevation, cell.vegetation), theme::dim_text())));
+        util::line(f, inner, row, Line::from(Span::styled(format!(" {}  {}  elev {:.2}  veg {:.2}", world.terrain_name(cx, cy), cell.biome.name(), cell.elevation, cell.vegetation), theme::dim_text())));
         row += 1;
         util::line(f, inner, row, Line::from(Span::styled(format!(" moisture {:.2}  temperature {:.2}", cell.moisture, cell.temperature), theme::dim_text())));
         row += 1;
+        if let Some(feat) = world.feature_near(cx, cy) {
+            util::line(f, inner, row, Line::from(vec![
+                Span::styled(" ", theme::text()),
+                Span::styled(feat.name.clone(), theme::title()),
+                Span::styled(format!("  {}", feature_detail(world, feat)), theme::dim_text()),
+            ]));
+            row += 1;
+        }
         util::line(f, inner, row, Line::from(Span::styled(" Enter opens the creature inspector", theme::dim_text())));
         row += 2;
         let here = sim.creatures.living().filter(|c| c.x == cx && c.y == cy).count();

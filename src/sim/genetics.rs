@@ -572,13 +572,7 @@ fn announce_litter(
         kind: EventKind::Birth,
         species: Some(ctx.species),
         subject: Some(ctx.mother_id),
-        text: format!(
-            "{} bore {} {} in {}",
-            ctx.mother_label,
-            born,
-            if born == 1 { "pup" } else { "pups" },
-            world.region_name(mx, my)
-        ),
+        text: format!("{} bore {} {} {}", ctx.mother_label, born, if born == 1 { "pup" } else { "pups" }, world.place_name(mx, my)),
         pos: Some((mx, my)),
         detail: format!("father {father_label}; generation {}", ctx.generation),
     });

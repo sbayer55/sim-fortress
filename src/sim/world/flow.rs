@@ -189,6 +189,45 @@ fn stack_order(recv: &[usize]) -> Vec<usize> {
     order
 }
 
+/// The donors of every cell (the cells whose receiver it is), packed the
+/// way `stack_order` packs them, so a drainage tree can be walked upstream.
+#[derive(Debug)]
+pub(super) struct Donors {
+    start: Vec<usize>,
+    list: Vec<usize>,
+}
+
+impl Donors {
+    pub(super) fn new(recv: &[usize]) -> Self {
+        let n = recv.len();
+        let mut start = vec![0usize; n + 1];
+        for i in 0..n {
+            if recv[i] != i {
+                start[recv[i] + 1] += 1;
+            }
+        }
+        for i in 0..n {
+            start[i + 1] += start[i];
+        }
+        let mut fill = start.clone();
+        let mut list = vec![0usize; n];
+        for i in 0..n {
+            let r = recv[i];
+            if r != i {
+                list[fill[r]] = i;
+                fill[r] += 1;
+            }
+        }
+        Self { start, list }
+    }
+
+    /// The cells draining directly into `i`, in index order.
+    pub(super) fn of(&self, i: usize) -> &[usize] {
+        let (a, b) = (self.start.get(i).copied().unwrap_or(0), self.start.get(i + 1).copied().unwrap_or(0));
+        self.list.get(a..b).unwrap_or(&[])
+    }
+}
+
 /// Drainage area: each cell's own `rain` plus everything upstream of it.
 pub(super) fn accumulate(flow: &Flow, rain: &[f32]) -> Vec<f32> {
     let mut acc = rain.to_vec();
