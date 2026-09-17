@@ -125,10 +125,13 @@ Modal::new(60, 21)                                  // size, clamped to the area
     .banner("‼ EXTINCTION ‼", theme::MAGENTA)       // Banner variant
     .buttons(&["[ Continue ]", "[ View lineage ]", "[ Pause ]"], focus)
     .hint("Enter select   ←→ move   Esc continue")
-    .render(buf, area) -> Rect                      // dims the backdrop, draws the box, returns the Body area
+    .render(buf, area) -> Rect                      // draws the box, returns the Body area
+Modal::new(60, 21).hint_with(KeyHint::row(&[("Space", "pause"), ..]).center())   // a Key Hint row as the Hint
 ```
 `height` is `h`; `min_width` is the widest of the Button row, the Hint, and
-Title plus Info.
+Title plus Info. The backdrop dim stays with `ui::screens::render_stack`,
+which dims the whole screen before any non-opaque screen draws; a Modal
+never dims. `Modal::body(area)` gives the Body area without drawing.
 
 ## Gaps today
 - confirm puts Buttons and Hint on one left-aligned row. That row,
@@ -161,7 +164,7 @@ Title plus Info.
 ╔ Greeting ═══════════════════════════════╗
 ║ Hello!                                  ║
 ║                                         ║
-║        [ OK ]    [ Cancel ]             ║
+║          [ OK ]    [ Cancel ]           ║
 ║        Enter select   Esc close         ║
 ╚═════════════════════════════════════════╝
 ```
@@ -174,13 +177,14 @@ dialog differs.
 ║                                                ║
 ║World has unsaved changes. Return to title?     ║
 ║                                                ║
-║             [ Yes ]    [ No ]                  ║
+║               [ Yes ]    [ No ]                ║
 ║         ←→ move  Enter select  Esc no          ║
 ╚════════════════════════════════════════════════╝
 ```
 
 ### Alert, Banner (64 columns)
-S12a rows 18 to 29, with the button row padded as the live code does.
+S12a rows 18 to 29, with the button row centred as the spec says (the live
+code sits it two cells left; see Gaps today).
 ```
 ╔═══════════════════════ ‼ EXTINCTION ‼ ═══════════════════════╗
 ║                                                              ║
@@ -191,14 +195,15 @@ S12a rows 18 to 29, with the button row padded as the live code does.
 ║                                                              ║
 ║  peak population 32   generations survived 19   years 12     ║
 ║                                                              ║
-║      [ Continue ]    [ View lineage ]    [ Pause ]           ║
+║        [ Continue ]    [ View lineage ]    [ Pause ]         ║
 ║            Enter select   ←→ move   Esc continue             ║
 ╚══════════════════════════════════════════════════════════════╝
 ```
 
 ### Controls, titled with Info and Hint only (60 columns)
-S10a rows 15 to 32. The prototype body is 18 rows; the live modal is 21 rows
-with two more toggles and an autosave row above the same Hint.
+S10a rows 15 to 32 with the Hint centred as the spec says. The prototype body
+is 18 rows; the live modal is 21 rows with two more toggles and an autosave
+row above the same Hint.
 ```
 ╔ Simulation Controls ═════════════════════════ Esc closes ╗
 ║ state   ► RUNNING      ►► x2  ││ Space toggles           ║
@@ -216,7 +221,7 @@ with two more toggles and an autosave row above the same Hint.
 ║ [x] pause when a followed creature dies [c]              ║
 ║                                                          ║
 ║                                                          ║
-║ [Space] pause  [+/-] speed  [.] step  [Esc] close        ║
+║    [Space] pause  [+/-] speed  [.] step  [Esc] close     ║
 ╚══════════════════════════════════════════════════════════╝
 ```
 

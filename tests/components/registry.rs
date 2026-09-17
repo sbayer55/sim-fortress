@@ -8,8 +8,9 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Span;
 use sim_fortress::widgets::Constraint::{Fill, Fixed, Min};
 use sim_fortress::widgets::{
-    util, Align, Bar, Block, Column, Columns, Component, Divider, HStack, Inverted, KeyHint, Kind, LabeledBar, Panel, RangeBar, Row, Spacer,
-    Legend, ScrollRegion, Sparkline, StatusBar, Table, TableCell, TableRow, Text, Ticker, TrendArrow, VStack,
+    util, Align, Bar, Block, ButtonRow, Checkbox, Column, Columns, Component, Divider, FilterStrip, HStack, Inverted, KeyHint, Kind, LabeledBar,
+    Legend, Menu, Modal, Panel, RangeBar, Row, ScrollRegion, Spacer, Sparkline, StatusBar, Stepper, Table, TableCell, TableRow, Text, TextField,
+    Ticker, TrendArrow, VStack,
 };
 use sim_fortress::sim::Params;
 use sim_fortress::{cast, glyphs, theme};
@@ -582,6 +583,247 @@ fn scroll_region() -> Vec<Entry> {
     ]
 }
 
+fn button_row() -> Vec<Entry> {
+    vec![
+        Entry {
+            bg: &[(9, 1, theme::SELECT_BG)],
+            ..rows("button-row", "Centred, the S12 extinction alert (64 columns)", |b, a| {
+                ButtonRow::new(&["[ Continue ]", "[ View lineage ]", "[ Pause ]"]).focused(Some(0)).render(b, a);
+            })
+        },
+        rows("button-row", "Centred, the confirm dialog (43 columns)", |b, a| ButtonRow::new(&["[ Yes ]", "[ No ]"]).focused(Some(0)).render(b, a)),
+        Entry {
+            bg: &[(5, 1, theme::WARN)],
+            ..rows("button-row", "Left with Primary, the S09 form foot (66 columns)", |b, a| {
+                ButtonRow::new(&["[ Generate ]", "[ Randomize seed ]", "[ Back ]"]).focused(None).primary(0).left(4).gap(3).render(b, a);
+            })
+        },
+    ]
+}
+
+/// Draw `lines` as text rows from the top of `body`.
+fn body_lines(buf: &mut Buffer, body: Rect, lines: &[&str]) {
+    for (i, l) in lines.iter().enumerate() {
+        if let Some(t) = l.strip_prefix('^') {
+            Text::new(t).center().render(buf, row(body, cast!(i => u16)));
+        } else {
+            Text::new(*l).render(buf, row(body, cast!(i => u16)));
+        }
+    }
+}
+
+fn modal() -> Vec<Entry> {
+    vec![
+        Entry {
+            fg: &[(0, 0, theme::BORDER_FOCUS)],
+            ..bare("modal", "Simple (43 columns)", |b, a| {
+                let modal = Modal::new(43, 6).title("Greeting").buttons(&["[ OK ]", "[ Cancel ]"], Some(0)).hint("Enter select   Esc close");
+                let body = modal.render(b, a);
+                body_lines(b, body, &[" Hello!"]);
+            })
+        },
+        bare("modal", "Confirm, untitled (50 columns)", |b, a| {
+            let modal = Modal::new(50, 7).buttons(&["[ Yes ]", "[ No ]"], Some(0)).hint("←→ move  Enter select  Esc no");
+            let body = modal.render(b, a);
+            body_lines(b, body, &["", "World has unsaved changes. Return to title?"]);
+        }),
+        Entry {
+            fg: &[(24, 0, theme::MAGENTA)],
+            ..bare("modal", "Alert, Banner (64 columns)", |b, a| {
+                let modal = Modal::new(64, 12)
+                    .banner(format!("{} EXTINCTION {}", glyphs::EXTINCTION, glyphs::EXTINCTION), theme::MAGENTA)
+                    .buttons(&["[ Continue ]", "[ View lineage ]", "[ Pause ]"], Some(0))
+                    .hint("Enter select   ←→ move   Esc continue");
+                let body = modal.render(b, a);
+                body_lines(
+                    b,
+                    body,
+                    &[
+                        "",
+                        "^The Lynx are extinct",
+                        "",
+                        "  Year 12, Day 4 of Autumn ♫   last individual: Gloam l#088",
+                        "  x starved in Sunfall Coast at (131, 9), age 412 days",
+                        "",
+                        "  peak population 32   generations survived 19   years 12",
+                    ],
+                );
+            })
+        },
+        bare("modal", "Controls, titled with Info and Hint only (60 columns)", |b, a| {
+            let hint = KeyHint::row(&[("Space", "pause"), ("+/-", "speed"), (".", "step"), ("Esc", "close")]).label_style(theme::dim_text()).center();
+            let modal = Modal::new(60, 18).title("Simulation Controls").info("Esc closes").hint_with(hint);
+            let body = modal.render(b, a);
+            let rows: Vec<Box<dyn Component>> = vec![
+                Box::new(Text::new(" state   ► RUNNING      ►► x2  ││ Space toggles")),
+                Box::new(Spacer::rows(1)),
+                Box::new(Text::new(" speed    x1   x2   x5   x10   x25     +/- or 1-5")),
+                Box::new(Text::new(" step     1 tick   6 hours   1 day     →│ . steps once")),
+                Box::new(Spacer::rows(1)),
+                Box::new(Divider::new("Clock")),
+                Box::new(Text::new(" tick 1,064,772    day 4 of Autumn ♫    year 12    14:00 ☼")),
+                Box::new(Text::new(" 1 tick = 1 hour   1 day = 24 ticks   x2 = 4 ticks/s")),
+                Box::new(Spacer::rows(1)),
+                Box::new(Divider::new("Options")),
+                Box::new(Checkbox::new("auto-pause on extinction", true).key("a")),
+                Box::new(Checkbox::new("log births to the event log", false).key("b")),
+                Box::new(Checkbox::new("pause when a followed creature dies", true).key("c")),
+            ];
+            VStack::from_boxes(&rows).render(b, body);
+        }),
+    ]
+}
+
+fn menu() -> Vec<Entry> {
+    vec![
+        Entry {
+            fg: &[(25, 2, theme::KEY)],
+            bg: &[(1, 2, theme::SELECT_BG), (32, 2, theme::SELECT_BG)],
+            ..bare("menu", "Marker, the S00 main menu (34 columns)", |b, a| {
+                let inner = Panel::new("Main Menu").kind(Kind::Focus).render(b, a);
+                let menu = Menu::new(&["New World", "Load World", "Options", "Quit"]).selected(0).hint("[Enter]");
+                menu.render(b, Rect::new(inner.x, inner.y + 1, inner.width, 4));
+            })
+        },
+        Entry {
+            fg: &[(6, 2, theme::DIM)],
+            ..bare("menu", "Marker with a disabled row (43 columns)", |b, a| {
+                let inner = Panel::new("Main Menu").kind(Kind::Focus).render(b, a);
+                Menu::new(&["New World", "Load World", "Options", "Quit"]).selected(0).disabled(&[1]).hint("[Enter]").note("(empty)").render(b, inner);
+            })
+        },
+        Entry {
+            bg: &[(1, 1, theme::SELECT_BG), (67, 1, theme::SELECT_BG)],
+            ..bare("menu", "Row highlight, the Load World list (70 columns)", |b, a| {
+                let inner = Panel::new("Load World").kind(Kind::Focus).info("3 saves  ·  saved 2026-09-14 21:12").render(b, a);
+                let rows = [
+                    "The Valley of Sunfall   Year 12, Day 4    587 prey / 79 pred",
+                    "Ashen Hollow            Year 3, Day 117  402 prey / 51 pred",
+                    "Reedwater               Year 1, Day 9    310 prey / 40 pred  v2",
+                ];
+                Menu::new(&rows).selected(0).marker(false).render(b, inner);
+            })
+        },
+    ]
+}
+
+/// The S09 species row: ` V Voles     prey     ◄  240 ►   [bar]  42%`.
+fn species_stepper_row(buf: &mut Buffer, area: Rect, head: &str, count: &str, share: f32, pct: &str) {
+    let (t, st, gap, gauge, v) = (Text::new(head), Stepper::compact(count), Spacer::cols(3), Bar::new(share), Text::new(pct).right());
+    HStack::new().child_with(Fixed(22), &t).child_with(Fixed(8), &st).child(&gap).child_with(Fixed(22), &gauge).child_with(Fixed(5), &v).render(buf, area);
+}
+
+fn stepper() -> Vec<Entry> {
+    vec![
+        rows("stepper", "Numeric, the S09 form (66 columns)", |b, a| {
+            let (w, s) = (Stepper::new("Water %", "20").hint("lakes + rivers"), Stepper::new("Season length", "90 days").hint("30 - 180 days"));
+            VStack::new().child(&w).child(&s).render(b, a);
+        }),
+        rows("stepper", "Choice (66 columns)", |b, a| Stepper::new("Rainfall", "normal").hint("dry/normal/wet").render(b, a)),
+        Entry {
+            fg: &[(2, 1, theme::ACCENT), (22, 1, theme::KEY)],
+            bg: &[(24, 1, theme::SELECT_BG)],
+            ..rows("stepper", "Focused (66 columns)", |b, a| Stepper::new("Map width", "150").hint("100 - 1000 cells").focused(true).render(b, a))
+        },
+        rows("stepper", "Typing (66 columns)", |b, a| Stepper::new("Water %", "20").hint("lakes + rivers").typing(Some("15")).render(b, a)),
+        rows("stepper", "Compact, inside the species table (66 columns)", |b, a| {
+            species_stepper_row(b, row(a, 0), " V Voles     prey     ", "240", 0.42, "42%");
+            species_stepper_row(b, row(a, 1), " F Foxes     predator ", "30", 0.05, "5%");
+        }),
+        rows("stepper", "Inline, the S10 autosave row (60 columns)", |b, a| {
+            let (gap, days, off) = (Spacer::cols(2), Stepper::inline("autosave every 7 days").key("[←→]"), Stepper::inline("autosave every off").key("[←→]"));
+            HStack::new().child(&gap).child_with(Fill(1), &days).render(b, row(a, 0));
+            HStack::new().child(&gap).child_with(Fill(1), &off).render(b, row(a, 1));
+        }),
+        rows("stepper", "Narrow, `label_w` 8 and `box_w` 14 (43 columns)", |b, a| {
+            Stepper::new("Water %", "20").hint("lakes + rivers").label_w(8).box_w(14).render(b, a);
+        }),
+    ]
+}
+
+fn text_field() -> Vec<Entry> {
+    vec![
+        Entry {
+            bg: &[(24, 1, theme::BG)],
+            ..rows("text-field", "Plain, the S09 form (66 columns)", |b, a| {
+                let (n, s) = (TextField::new("World name", "The Valley of Sunfall").hint("text"), TextField::new("Seed", "0xC0FFEE").hint("hex/decimal"));
+                VStack::new().child(&n).child(&s).render(b, a);
+            })
+        },
+        Entry {
+            fg: &[(22, 1, theme::KEY)],
+            bg: &[(24, 1, theme::SELECT_BG)],
+            ..rows("text-field", "Focused (66 columns)", |b, a| TextField::new("Seed", "0xC0FFEE").hint("hex/decimal").focused(true).render(b, a))
+        },
+        rows("text-field", "After the first key (66 columns)", |b, a| TextField::new("World name", "T").hint("text").focused(true).render(b, a)),
+        rows("text-field", "Narrow, `label_w` 8 and `box_w` 14 (43 columns)", |b, a| {
+            TextField::new("Seed", "0xC0FFEE").hint("hex/decimal").label_w(8).box_w(14).render(b, a);
+        }),
+    ]
+}
+
+fn checkbox() -> Vec<Entry> {
+    vec![
+        Entry {
+            fg: &[(2, 1, theme::GOOD), (42, 1, theme::KEY)],
+            ..rows("checkbox", "Toggle, the S10 Options section (60 columns)", |b, a| {
+                let (x, y, z) = (
+                    Checkbox::new("auto-pause on extinction", true).key("a"),
+                    Checkbox::new("log births to the event log", false).key("b"),
+                    Checkbox::new("pause when a followed creature dies", true).key("c"),
+                );
+                VStack::new().child(&x).child(&y).child(&z).render(b, a);
+            })
+        },
+        rows("checkbox", "Cycle (60 columns)", |b, a| {
+            let (t, d) = (Checkbox::new("day/night tint: map", true).key("t"), Checkbox::new("auto-pause on epidemic", true).key("d"));
+            VStack::new().child(&t).child(&d).render(b, a);
+        }),
+        rows("checkbox", "Narrow, `label_w` 32 (43 columns)", |b, a| {
+            let (x, y, z) = (
+                Checkbox::new("auto-pause on extinction", true).key("a").label_w(32),
+                Checkbox::new("log births to the event log", false).key("b").label_w(32),
+                Checkbox::new("day/night tint: map", true).key("t").label_w(32),
+            );
+            VStack::new().child(&x).child(&y).child(&z).render(b, a);
+        }),
+    ]
+}
+
+const CHIPS: [(char, &str); 9] = [
+    ('*', "all"),
+    (glyphs::BIRTH, "births"),
+    (glyphs::DEATH, "deaths"),
+    (glyphs::MUTATION, "mutations"),
+    (glyphs::MIGRATION, "migrations"),
+    (glyphs::EXTINCTION, "extinctions"),
+    (glyphs::DROUGHT, "droughts"),
+    (glyphs::DISEASE, "disease"),
+    (glyphs::ALERT, "wary"),
+];
+const CHIP_COLORS: [Color; 9] = [theme::KEY, theme::GOOD, theme::BAD, theme::INFO, theme::ACCENT, theme::MAGENTA, theme::WARN, theme::SICK, theme::WARN];
+const HINT: &str = "[f] cycles, [1-9] toggles";
+
+fn filter_strip() -> Vec<Entry> {
+    vec![
+        Entry {
+            bg: &[(3, 1, theme::SELECT_BG), (10, 1, theme::PANEL_BG)],
+            ..rows("filter-strip", "All (121 columns)", |b, a| {
+                FilterStrip::new(&CHIPS).active(&[true]).colors(&CHIP_COLORS).hint(HINT).render(b, a);
+            })
+        },
+        Entry {
+            bg: &[(3, 1, theme::PANEL_BG), (19, 1, theme::SELECT_BG), (53, 1, theme::SELECT_BG)],
+            ..rows("filter-strip", "Filtered (121 columns)", |b, a| {
+                FilterStrip::new(&CHIPS).active(&[false, false, true, false, false, true]).colors(&CHIP_COLORS).hint(HINT).render(b, a);
+            })
+        },
+        rows("filter-strip", "Hint dropped (95 columns)", |b, a| {
+            FilterStrip::new(&CHIPS).active(&[true]).colors(&CHIP_COLORS).hint(HINT).render(b, a);
+        }),
+    ]
+}
+
 fn text() -> Vec<Entry> {
     vec![
         rows("text", "Plain (43 columns)", |b, a| Text::new(" Hello!").render(b, a)),
@@ -625,6 +867,13 @@ pub fn examples() -> Vec<Entry> {
     v.extend(table());
     v.extend(legend());
     v.extend(scroll_region());
+    v.extend(button_row());
+    v.extend(modal());
+    v.extend(menu());
+    v.extend(stepper());
+    v.extend(text_field());
+    v.extend(checkbox());
+    v.extend(filter_strip());
     v.extend(text());
     v.sort_by_key(|e| (e.sheet, e.heading));
     v
