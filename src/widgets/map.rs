@@ -14,9 +14,11 @@ use crate::{glyphs, theme};
 
 mod overlay;
 mod palette;
+pub mod stack;
 
 pub use overlay::{condition_color, density_cell, density_field, disease_tint, overlay_cell, parasite_cell, parasite_tint};
 pub use palette::{legend, terrain_base, terrain_cell, terrain_code_cell, world_cell};
+pub use stack::{Base, Disease, Layer, OverlayStack};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Overlay {
