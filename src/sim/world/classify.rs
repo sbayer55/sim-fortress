@@ -102,8 +102,9 @@ pub(super) struct Bodies {
     pub(super) steep: f32,
 }
 
-/// The cells, plus the row-major `(x, y)` positions of the waterfalls.
-pub(super) fn cells(rng: &mut Rng, grid: Grid, relief: &Relief, params: &WorldParams) -> (Vec<Cell>, Vec<(usize, usize)>) {
+/// The cells, the row-major `(x, y)` positions of the waterfalls, and the
+/// water layout they were cut from (the naming pass reads it).
+pub(super) fn cells(rng: &mut Rng, grid: Grid, relief: &Relief, params: &WorldParams) -> (Vec<Cell>, Vec<(usize, usize)>, Bodies) {
     let bodies = water_bodies(grid, relief, params);
     // A dry wash waters nothing: its banks see the nearest real water.
     let wet: Vec<bool> = (0..grid.len()).map(|i| bodies.water[i] != Water::Land && bodies.channel[i] != Channel::Wash).collect();
@@ -131,7 +132,7 @@ pub(super) fn cells(rng: &mut Rng, grid: Grid, relief: &Relief, params: &WorldPa
             }
         })
         .collect();
-    (cells, falls.iter().map(|&i| (i % grid.w, i.div_euclid(grid.w))).collect())
+    (cells, falls.iter().map(|&i| (i % grid.w, i.div_euclid(grid.w))).collect(), bodies)
 }
 
 /// Is the brook at `i` a seasonal wash? Arid is judged by the climate the

@@ -208,7 +208,7 @@ fn print_biomes_and_regions() {
     let mut rng = Rng::new(3);
     let relief = relief::build(&mut rng, grid, &big);
     let t_relief = started.elapsed();
-    let (cells, _) = classify::cells(&mut rng, grid, &relief, &big);
+    let (cells, _, _) = classify::cells(&mut rng, grid, &relief, &big);
     let t_cells = started.elapsed();
     let moisture: Vec<f32> = cells.iter().map(|c| c.moisture).collect();
     let t0 = std::time::Instant::now();

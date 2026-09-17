@@ -242,19 +242,20 @@ pub(crate) fn kill(
         Cause::Injury => return, // no event until C5
     };
 
-    let region = world.region_name(c.x, c.y).to_string();
+    // "by Lake Ulmar" when the cell touches a named feature, else "in <region>".
+    let place = world.place_name(c.x, c.y);
     let who = c.label(roster);
     let text = match cause {
-        Cause::Starved => format!("{who} starved in {region}"),
-        Cause::Thirst => format!("{who} died of thirst in {region}"),
-        Cause::Age => format!("{who} died of old age at {} days in {region}", c.age_days(time.day_index())),
+        Cause::Starved => format!("{who} starved {place}"),
+        Cause::Thirst => format!("{who} died of thirst {place}"),
+        Cause::Age => format!("{who} died of old age at {} days {place}", c.age_days(time.day_index())),
         Cause::Predation => match killer_label {
-            Some(k) => format!("{who} was killed by {k} in {region}"),
-            None => format!("{who} was killed in {region}"),
+            Some(k) => format!("{who} was killed by {k} {place}"),
+            None => format!("{who} was killed {place}"),
         },
         Cause::Disease => match killer_label {
-            Some(p) => format!("{who} died of {p} in {region}"),
-            None => format!("{who} died of disease in {region}"),
+            Some(p) => format!("{who} died of {p} {place}"),
+            None => format!("{who} died of disease {place}"),
         },
         Cause::Injury => unreachable!(),
     };

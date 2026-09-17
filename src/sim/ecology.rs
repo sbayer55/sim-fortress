@@ -567,6 +567,7 @@ mod tests {
             shore: vec![],
             falls: vec![],
             history: vec![],
+            names: crate::sim::world::Names::default(),
         };
         let mean = region_land_veg_mean(&world, 0);
         assert!((mean - 0.2).abs() < 1e-6, "land veg mean {mean} should exclude the water cell");

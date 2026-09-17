@@ -38,7 +38,10 @@ const T_BACK: usize = 11;
 const T_COUNT: usize = 12;
 const FORM_W: u16 = 66;
 
+mod chronicle;
 mod form;
+#[cfg(test)]
+mod tests;
 mod input;
 mod preview;
 use form::form_panel;

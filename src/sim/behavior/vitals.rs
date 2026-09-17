@@ -62,7 +62,7 @@ pub(super) fn maybe_make_den(c: &Creature, world: &mut World, events: &mut Event
             kind: EventKind::Note,
             species: Some(c.species),
             subject: Some(c.id),
-            text: format!("{} discovered a new den site in {}", c.label(roster), world.region_name(c.x, c.y)),
+            text: format!("{} discovered a new den site {}", c.label(roster), world.place_name(c.x, c.y)),
             pos: Some((c.x, c.y)),
             detail: String::new(),
         });

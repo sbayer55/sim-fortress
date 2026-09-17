@@ -223,7 +223,10 @@ fn follow_location(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, c: &
             && c.mother.is_some_and(|m| sim.creatures.get(m).is_some_and(|m| m.alive))
             && age < sim.params.genetics.follow_mother_days;
         let reason = match c.goal {
-            Goal::Drink => format!("thirst {:.2}", c.thirst),
+            Goal::Drink => match c.target.and_then(|(tx, ty)| sim.world.feature_near(tx, ty)).filter(|f| f.kind.is_water()) {
+                Some(f) => format!("thirst {:.2}, heading for {}", c.thirst, f.name),
+                None => format!("thirst {:.2}", c.thirst),
+            },
             Goal::Graze | Goal::Hunt | Goal::Scavenge => format!("hunger {:.2}", c.hunger),
             Goal::Rest => match c.rest_reason {
                 Some(RestReason::Night) => "night".to_string(),

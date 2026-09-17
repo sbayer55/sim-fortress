@@ -318,6 +318,62 @@ unchanged.
 
 ## Phase 6 — Naming, generation log and world summary
 
+**Status: done (Sept 2026).** `src/sim/world/names.rs` (with `names/lexicon.rs`
+and `names/chronicle.rs`) names the ocean (one feature over every ocean cell),
+the 8-connected lakes of ≥ `LAKE_MIN_CELLS` (6) cells (largest first, at most
+`LAKE_CAP` 8), the rivers (from every trunk or river-tier mouth, the stem
+climbs the largest-drainage channel donor; river-tier donors that join a stem
+are tributaries, walked one level deep, largest first, up to `RIVER_CAP` 12
+named rivers in all; a trunk is always named, a river-tier stem or tributary
+needs `STEM_MIN_CELLS` 4; banks and fans borrow their channel's name) and the
+rock ranges (8-connected `Rock` clusters of ≥ `RANGE_MIN_CELLS` 8, at most
+`RANGE_CAP` 6; `Fells` when tundra/taiga hold a majority of the cluster,
+`Mountains` when its mean height is at or above the mean of all rock,
+`Hills` otherwise). `classify::cells` now returns the `Bodies` layout and
+`flow::Donors` inverts `recv` so the tree can be walked upstream. Names are
+drawn from their own stream (`seed ^ NAME_SALT`), so the checksum is unchanged
+(`0xd0e3_ee1a_c665_f531`) and names do not move when an earlier stage changes
+its draws: one of three syllable styles per world (hard northern, soft
+southern, western with double letters), stems of 2–3 syllables and 3–8 letters
+(after a coda the next onset is empty or simple), unique per world, templates
+`the <Stem> Sea` / `Lake <Stem>` / `River <Stem>` or `the <Stem>water` /
+`<Stem> Brook` or `<Stem> Water` / `the <Stem> Hills|Mountains|Fells`, every
+name ≤ `NAME_FULL_MAX` (22) chars. `World.names: Names { style, features,
+map }` carries each `Feature` (kind, name, cells, anchor, source, mouth,
+parent) and a per-cell feature index; save format version 12.
+`World::feature_at`, `feature_near` (the cell, else a water neighbour, else a
+range), `place_name` ("by Lake Ulmar" / "in the Tavos Fells" / "in Northern
+Taiga"). Region names are unchanged (compass + biome noun; the 16-cell
+sidebar columns keep working). `chronicle(world, age)` derives ≤ 7 lines of
+≤ 85 chars: wind and age regime, one per history event naming the range (for
+ice, also the lake) with the most cells in the event's window else the region,
+the largest river's course from its source region to the sea, lake or edge it
+reaches (or "winds through" when it sinks into a hollow too small to name), a
+delta line when ≥ 3 marsh cells lie within (4, 2) of that mouth, and the
+largest lake; `summary(world)` gives coast length (land 8-adjacent to the
+ocean), the longest named river, the highest cell and its range or region, and
+the feature counts. Both sit under the biome line on S09 (`World` and
+`Chronicle` sections, no scrolling). Positioned events use `place_name`
+(deaths, births, den sites); region-level events keep the region. The S01c
+look sidebar names the feature under or beside the cursor with its kind and
+size (and now shows the biome); the S01e goal line of a drinking creature names
+the water it heads for; the S02e region overlay draws feature labels in plain
+text under the region names (`widgets/map/labels.rs`), skipping any that would
+cross a region label. `examples/dump_world.rs` prints the features and the
+chronicle. Naming costs ~0.3 ms at 200×60; dev-profile generation measured
+~21 ms at age 8 (release 12 ms). Tests: `names_are_stable_per_seed`,
+`every_trunk_and_big_lake_is_named`, `names_fit_their_caps`,
+`chronicle_fits_the_layout`, `summary_is_consistent`,
+`place_names_prefer_water_beside_a_cell`, the lexicon unit checks, the
+ignored diagnostic `print_names`, an S09 render test, a look-sidebar test, an
+overlay-label test and `widgets::map::labels` tests. Deviations from the
+deliverables below: regions keep their descriptive names (the user's call, so
+every 16-wide column and the region tests stand); no drink event was added
+(drinking is silent and would flood the log), so "a fox drinks at Lake Ulmar"
+is carried by the follow sidebar and by the place names in the existing
+events; the log is narrated at the end of generation rather than stage by
+stage, because the preview regenerates whole in one frame.
+
 **Payoff.** Medium for realism, high for feel. DF's legends make the world feel
 inhabited before anything moves. Depends on Phases 3–5 for things to name.
 
@@ -367,6 +423,6 @@ ticker screens, `save.rs`.
 | 3 | Biomes as regions (done) | 1, 2 | `Cell.biome`, `World.region_map` | yes (v8) |
 | 4 | River morphology (done) | 2 | `World.falls` | yes (v9) |
 | 5 | Age regimes + events (done) | — (better after 3) | `World.history`, `ecology.warm_up_days` | yes (v11) |
-| 6 | Names, log, summary | 3, 4, 5 | `World.names` | yes |
+| 6 | Names, log, summary (done) | 3, 4, 5 | `World.names` | yes (v12) |
 
-Phase 6 is next; everything it names now exists.
+Every phase has shipped; what remains is the optional list above.

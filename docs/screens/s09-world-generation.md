@@ -48,7 +48,9 @@ flowchart LR
             P1["terrain preview 75×20 at 1:2, framed, region labels"]
             P2["Terrain summary: 6 bars in two columns + land/walkable line"]
             P3["Carrying capacity estimate + warning"]
-            P1 --> P2 --> P3
+            P4["World summary: coast, longest river, peak, named features"]
+            P5["Chronicle: up to 7 narrated lines"]
+            P1 --> P2 --> P3 --> P4 --> P5
         end
     end
 ```
@@ -132,6 +134,18 @@ unfocused values are bright text on the plain background.
 10a. **Biome shares.** `biomes  <name> <pct>%  …  regions <n>`: the five largest biomes
     by share of all cells, each name in its biome tint, then the region count. Source:
     `Cell.biome`.
+10b. **World summary.** A `World` section rule, then ` coast <n> cells on <the X Sea>
+    peak <0.00> in <range or region>` and ` longest river <name> <n> cells  · <n> lakes
+    · <n> rivers · <n> ranges`. Source: `sim::world::summary` over the preview world
+    (coast = land cells 8-adjacent to the ocean; the peak names its rock range when it
+    has one).
+10c. **Chronicle.** A `Chronicle` section rule, then up to seven `¶` lines from
+    `sim::world::chronicle`: the wind and age regime, one line per geological event
+    naming the range or region it struck ("Ice scours the Tistdith Fells"), the largest
+    river's course ("The Tukrawater runs from the Eastern Forest to the Ryrdoast Sea"), a
+    delta line when marsh lies at its mouth, and the largest lake. Every line is at most
+    85 cells, so the block fits the panel without scrolling. Names come from the seed
+    (`sim::world::names`), one syllable style per world.
 11. **Placement warning.** `! <region> has little forage; <species> placed there tend to
     starve early.` (warn colour) when a region's forage is low relative to the species
     assigned to it.
@@ -178,7 +192,8 @@ fields as characters, not as screen shortcuts.
   preview regenerates in about 14 ms in the dev profile, inside the 16 ms budget, so the
   preview stays live; larger maps or a higher age are slower in proportion. Climate
   physics took that to ~15.5 ms and biomes-as-regions to ~17.6 ms (biome labelling
-  ~1.1 ms, basin merging ~2 ms); the preview still reads as live.
+  ~1.1 ms, basin merging ~2 ms); the preview still reads as live. Naming (Phase 6)
+  adds ~0.3 ms; the summary and chronicle are derived at render time.
 - **Invalid seed text.** Non-hex/decimal input should be flagged in the field hint and
   block Generate rather than silently falling back.
 - **Map size changes.** A world larger than 150×40 cannot be shown at 1:2 in 75×20; the preview
