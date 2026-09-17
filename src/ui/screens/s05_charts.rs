@@ -212,14 +212,6 @@ impl<'a> Window<'a> {
         let (a, b) = self.bin(c, cols);
         self.drought[a..b].iter().any(|&d| d)
     }
-
-    fn epidemic_in(&self, c: usize, cols: usize) -> bool {
-        if self.len() == 0 {
-            return false;
-        }
-        let (a, b) = self.bin(c, cols);
-        self.epidemic[a..b].iter().any(|&d| d)
-    }
 }
 
 fn round_up(v: f32, step: f32) -> f32 {

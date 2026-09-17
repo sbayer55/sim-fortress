@@ -3,6 +3,7 @@ use ratatui::layout::Rect;
 
 use super::*;
 use crate::widgets::trend::{trend_arrow, TrendArrow};
+use crate::{glyphs, theme};
 
 fn draw(w: u16, c: &dyn Component) -> String {
     let area = Rect::new(0, 0, w, 1);

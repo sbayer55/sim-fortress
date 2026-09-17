@@ -29,8 +29,6 @@ pub mod registry;
 /// Sheets whose component has not shipped yet. Shrinks to empty by the end of
 /// the "builders beside helpers" migration step.
 const PENDING_SHEETS: &[&str] = &[
-    "chart",
-    "histogram",
 ];
 
 /// Examples no test can draw, with the reason. Each must still exist in its sheet.

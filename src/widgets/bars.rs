@@ -4,17 +4,18 @@
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::Color;
 
 use super::component::Component;
-use crate::{glyphs, theme};
 
+mod histogram;
 mod labeled;
 mod range;
 mod sparkline;
 #[cfg(test)]
 mod tests;
 
+pub use histogram::Histogram;
 pub use labeled::{vital_color, Bar, Inverted, LabeledBar};
 pub use range::RangeBar;
 pub use sparkline::Sparkline;
@@ -44,28 +45,7 @@ pub fn sparkline(buf: &mut Buffer, x: u16, y: u16, w: u16, values: &[u16], color
 }
 
 /// Vertical histogram in an area: `values` become columns of `▄`/`█` stacks.
+/// Thin wrapper over the Bare [`Histogram`]; the area height is the chart height.
 pub fn histogram(buf: &mut Buffer, area: Rect, values: &[u16], color: Color, col_w: u16) {
-    let max = f32::from(values.iter().copied().max().unwrap_or(1).max(1));
-    let h = area.height;
-    for (i, v) in values.iter().enumerate() {
-        let x = area.x + crate::cast!(i => u16) * col_w;
-        if x + col_w > area.right() {
-            break;
-        }
-        // Two half-cells per row.
-        let halves = crate::cast!(((f32::from(*v) / max) * (f32::from(h) * 2.0)).round() => u16);
-        for r in 0..h {
-            let y = area.bottom() - 1 - r;
-            let level = halves.saturating_sub(r * 2);
-            let ch = if level >= 2 {
-                glyphs::FULL_BLOCK
-            } else if level == 1 {
-                glyphs::HALF_LOWER
-            } else {
-                continue;
-            };
-            let s: String = std::iter::repeat_n(ch, crate::cast!(col_w.saturating_sub(1).max(1) => usize)).collect();
-            buf.set_stringn(x, y, &s, crate::cast!(col_w => usize), Style::default().fg(color).bg(theme::PANEL_BG));
-        }
-    }
+    Histogram::new(values).color(color).col_w(col_w).rows(area.height).render(buf, area);
 }

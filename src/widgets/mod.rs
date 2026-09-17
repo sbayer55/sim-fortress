@@ -3,6 +3,7 @@
 
 pub mod bars;
 pub mod button_row;
+pub mod chart;
 pub mod checkbox;
 pub mod columns;
 pub mod component;
@@ -38,8 +39,9 @@ pub use scroll::{Overflow, ScrollRegion};
 pub use stack::{HStack, Spacer, VStack};
 pub use status::StatusBar;
 pub use table::{RowSource, Table, TableCell, TableRow};
-pub use bars::{Bar, Inverted, LabeledBar, RangeBar, Sparkline};
+pub use bars::{Bar, Histogram, Inverted, LabeledBar, RangeBar, Sparkline};
 pub use button_row::ButtonRow;
+pub use chart::{Band, Chart, Series};
 pub use checkbox::Checkbox;
 pub use text::Text;
 pub use ticker::Ticker;

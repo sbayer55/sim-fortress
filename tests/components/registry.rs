@@ -8,9 +8,9 @@ use ratatui::style::{Color, Style};
 use ratatui::text::Span;
 use sim_fortress::widgets::Constraint::{Fill, Fixed, Min};
 use sim_fortress::widgets::{
-    util, Align, Bar, Block, ButtonRow, Checkbox, Column, Columns, Component, Divider, FilterStrip, HStack, Inverted, KeyHint, Kind, LabeledBar,
-    Legend, Menu, Modal, Panel, RangeBar, Row, ScrollRegion, Spacer, Sparkline, StatusBar, Stepper, Table, TableCell, TableRow, Text, TextField,
-    Ticker, TrendArrow, VStack,
+    util, Align, Bar, Block, ButtonRow, Chart, Checkbox, Column, Columns, Component, Divider, FilterStrip, HStack, Histogram, Inverted, KeyHint, Kind,
+    LabeledBar, Legend, Menu, Modal, Panel, RangeBar, Row, ScrollRegion, Series, Spacer, Sparkline, StatusBar, Stepper, Table, TableCell, TableRow,
+    Text, TextField, Ticker, TrendArrow, VStack,
 };
 use sim_fortress::sim::Params;
 use sim_fortress::{cast, glyphs, theme};
@@ -824,6 +824,30 @@ fn filter_strip() -> Vec<Entry> {
     ]
 }
 
+/// A 24-cell S04b trait block at one cell of left margin.
+fn trait_block(buf: &mut Buffer, area: Rect, buckets: &[u16], header: (&str, f32, f32, f32)) {
+    let (name, min, mean, max) = header;
+    Histogram::new(buckets).color(theme::INFO).header(name, min, mean, max).mark(mean).footer().render(buf, Rect::new(area.x + 1, area.y, 24, 7));
+}
+
+fn histogram() -> Vec<Entry> {
+    vec![
+        bare("histogram", "Trait, one bucket (43 columns)", |b, a| {
+            let inner = Panel::new("Speed").render(b, a);
+            trait_block(b, inner, &[0, 0, 0, 0, 0, 0, 0, 0, 10, 0, 0, 0], ("Speed", 0.67, 0.72, 0.73));
+        }),
+        rows("histogram", "Trait, half cells (43 columns)", |b, a| trait_block(b, a, &[0, 0, 0, 0, 0, 1, 5, 1, 3, 0, 0, 0], ("Metabolism", 0.45, 0.60, 0.68))),
+        rows("histogram", "Trait, two buckets (43 columns)", |b, a| trait_block(b, a, &[0, 0, 0, 4, 0, 6, 0, 0, 0, 0, 0, 0], ("Size", 0.31, 0.39, 0.50))),
+        bare("histogram", "Bare, `col_w` 4 (24 columns)", |b, a| Histogram::new(&[5, 3, 1, 0, 2, 1]).col_w(4).rows(3).color(theme::TAN).render(b, a)),
+    ]
+}
+
+fn chart() -> Vec<Entry> {
+    vec![rows("chart", "Empty, live axis rule (43 columns)", |b, a| {
+        Chart::new().series(Series::new(&[]).color(theme::PREY)).y_step(100.0).render(b, a);
+    })]
+}
+
 fn text() -> Vec<Entry> {
     vec![
         rows("text", "Plain (43 columns)", |b, a| Text::new(" Hello!").render(b, a)),
@@ -874,6 +898,8 @@ pub fn examples() -> Vec<Entry> {
     v.extend(text_field());
     v.extend(checkbox());
     v.extend(filter_strip());
+    v.extend(histogram());
+    v.extend(chart());
     v.extend(text());
     v.sort_by_key(|e| (e.sheet, e.heading));
     v

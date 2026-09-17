@@ -98,16 +98,16 @@ Histogram::new(&buckets)                 // &[u16]
     .footer()                            // 0  n=  mode  1
     .render(buf, area)
 
-Histogram::new(&sizes).col_w(4).ticks(&[(0, "1"), (3, "4"), (7, "8")])   // Group
+Histogram::new(&sizes).col_w(4).rows(h).ticks(&[(0, "1"), (3, "4"), (7, "8")])   // Group; ticks imply the Axis
 ```
 `height` is `rows` plus one for each of header, axis and footer; `min_width`
-is `buckets.len() × col_w`.
+is `buckets.len() × col_w`. The Footer mode is `(peak + 0.5) / buckets.len()`,
+so a twelve-bucket trait histogram reads as the sheet says and S05e's
+sixteen buckets map to their own scale.
 
 ## Gaps today
-- Only Columns are a helper; every other row is screen code, and S04b and
-  S05e draw their axes differently.
-- The area's height is the chart height, so the caller must subtract the
-  three extra rows itself.
+- S04b and S05e still draw their header, axis and footer rows by hand around
+  `bars::histogram` (now the Bare wrapper) until those screens move.
 - A bucket with a few members next to a large peak disappears (rounds to zero
   halves) with nothing to say it is non-empty.
 - `col_w` 1 columns touch, so neighbouring buckets are not separable.
