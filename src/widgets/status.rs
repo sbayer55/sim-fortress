@@ -5,7 +5,6 @@ use std::borrow::Cow;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
-use ratatui::Frame;
 
 use super::component::Component;
 use super::key_hint::KeyHint;
@@ -98,15 +97,4 @@ impl Component for StatusBar<'_> {
             buf.set_stringn(rx, area.y, self.right.as_ref(), crate::cast!(w - 1 => usize), bg.fg(self.right_fg));
         }
     }
-}
-
-/// Render `[key] label` pairs across the bar, with an optional right-side message
-/// in the accent colour.
-pub fn render(f: &mut Frame<'_>, area: Rect, keys: &[(&str, &str)], right: &str) {
-    render_colored(f, area, keys, right, theme::ACCENT);
-}
-
-/// `render` with the right-side message in `right_fg`. Thin wrapper over [`StatusBar`].
-pub fn render_colored(f: &mut Frame<'_>, area: Rect, keys: &[(&str, &str)], right: &str, right_fg: Color) {
-    StatusBar::new(keys).right(right).right_color(right_fg).render(f.buffer_mut(), area);
 }

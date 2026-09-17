@@ -11,7 +11,7 @@ use crate::ui::config;
 use crate::ui::screens::common::clip;
 use crate::ui::screens::confirm::ConfirmModal;
 use crate::ui::screens::{Action, Screen};
-use crate::widgets::{Component, Menu, Modal, Text};
+use crate::widgets::{Component, Menu, Modal, StatusBar, Text};
 use crate::theme;
 
 const VISIBLE: usize = 14;
@@ -152,12 +152,7 @@ impl Screen for LoadWorld {
             }
         }
         let status_row = area.y + area.height - 1;
-        crate::widgets::status::render(
-            f,
-            Rect::new(area.x, status_row, area.width, 1),
-            &[("↑↓", "select"), ("Enter", "load"), ("Del", "delete"), ("Esc", "back")],
-            "load world",
-        );
+        StatusBar::new(&[("↑↓", "select"), ("Enter", "load"), ("Del", "delete"), ("Esc", "back")]).right("load world").render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 

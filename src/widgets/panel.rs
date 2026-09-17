@@ -137,11 +137,6 @@ pub fn draw(f: &mut Frame<'_>, area: Rect, title: &str, kind: Kind) -> Rect {
     draw_with_hint_in(f.buffer_mut(), area, title, "", kind)
 }
 
-/// [`draw`] straight into a buffer (for off-screen canvases).
-pub fn draw_in(buf: &mut Buffer, area: Rect, title: &str, kind: Kind) -> Rect {
-    draw_with_hint_in(buf, area, title, "", kind)
-}
-
 /// Draw a titled panel with a right-aligned hint in the top border.
 pub fn draw_with_hint(f: &mut Frame<'_>, area: Rect, title: &str, hint: &str, kind: Kind) -> Rect {
     draw_with_hint_in(f.buffer_mut(), area, title, hint, kind)

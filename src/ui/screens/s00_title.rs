@@ -18,7 +18,7 @@ use crate::ui::screens::s10_controls::Controls;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::SeasonStyle;
 use crate::widgets::map;
-use crate::widgets::{status, util, Component, Kind, Menu, Panel};
+use crate::widgets::{util, Component, Kind, Menu, Panel, StatusBar};
 use crate::{glyphs, theme};
 
 const MENU: [&str; 4] = ["New World", "Load World", "Options", "Quit"];
@@ -203,12 +203,7 @@ impl Screen for Title {
 
         // ---- status bar -----------------------------------------------------
         let right = if app.sim.is_some() { "world loaded" } else { "no world loaded" };
-        status::render(
-            f,
-            Rect::new(area.x, status_row, area.width, 1),
-            &[("↑↓", "select"), ("Enter", "confirm"), ("q", "quit")],
-            right,
-        );
+        StatusBar::new(&[("↑↓", "select"), ("Enter", "confirm"), ("q", "quit")]).right(right).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 

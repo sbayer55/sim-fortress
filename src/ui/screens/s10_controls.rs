@@ -13,7 +13,7 @@ use crate::ui::screens::common::sp;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{clock_status, SeasonStyle};
 use crate::widgets::Constraint::Fill;
-use crate::widgets::{status, Checkbox, Component, Divider, HStack, KeyHint, Modal, Rows, Spacer, Stepper, Text, VStack};
+use crate::widgets::{Checkbox, Component, Divider, HStack, KeyHint, Modal, Rows, Spacer, StatusBar, Stepper, Text, VStack};
 use crate::{glyphs, theme};
 
 const SPEEDS: [u32; 5] = [1, 2, 5, 10, 25];
@@ -175,7 +175,7 @@ impl Screen for Controls {
             Some(sim) => clock_status(&sim.time, app.params.ui.day_night_tint),
             None => ("options".to_string(), theme::ACCENT),
         };
-        status::render_colored(f, Rect::new(area.x, status_row, area.width, 1), keys, &right, right_fg);
+        StatusBar::new(keys).right(&right).right_color(right_fg).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 

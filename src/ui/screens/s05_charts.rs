@@ -8,7 +8,7 @@ use crate::sim::{Sample, Sim};
 use crate::ui::app::AppState;
 use crate::ui::screens::common::day_stamp;
 use crate::ui::screens::{Action, Screen};
-use crate::widgets::status;
+use crate::widgets::{Component, StatusBar};
 
 use time::{time_chart, time_sidebar};
 use phase::{phase_chart, phase_sidebar};
@@ -143,7 +143,7 @@ impl Screen for Charts {
             Variant::Infections => "chart 4/5  infections",
             Variant::Groups => "chart 5/5  group sizes",
         };
-        status::render(f, Rect::new(area.x, status_row, area.width, 1), &[("g", "next chart"), ("1-5", "pick"), ("+/-", "zoom"), ("Esc", "back")], view);
+        StatusBar::new(&[("g", "next chart"), ("1-5", "pick"), ("+/-", "zoom"), ("Esc", "back")]).right(view).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 

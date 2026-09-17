@@ -13,7 +13,7 @@ use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{clock_status, EventKindStyle, SpeciesStyle};
 use crate::ui::viewport::{self, GUTTER_W, MAP_CHROME_ROWS, MIN_MAP_W, SIDEBAR_W};
 use crate::widgets::map::{self, MapOptions, Overlay};
-use crate::widgets::{panel, status, Component, Divider, Legend, Panel, Spacer, Text, Ticker, VStack};
+use crate::widgets::{panel, Component, Divider, Legend, Panel, Spacer, StatusBar, Text, Ticker, VStack};
 use crate::theme;
 
 use base::{clock_section, population_section, resources_section};
@@ -253,7 +253,7 @@ impl Screen for WorldMap {
         let status_row = area.y + area.height - 1;
         let keys = status_keys(app, self.overlay, overlay);
         let (right, right_fg) = clock_status(time, app.params.ui.day_night_tint);
-        status::render_colored(f, Rect::new(area.x, status_row, area.width, 1), keys, &right, right_fg);
+        StatusBar::new(keys).right(&right).right_color(right_fg).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 

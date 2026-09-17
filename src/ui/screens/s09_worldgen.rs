@@ -11,7 +11,7 @@ use crate::sim::{Params, Sim, World};
 use crate::ui::app::AppState;
 use crate::ui::screens::s01_map::WorldMap;
 use crate::ui::screens::{Action, Screen};
-use crate::widgets::status;
+use crate::widgets::{Component, StatusBar};
 
 // Focus indices in Tab order. The world-shape fields are plain adjustable
 // fields (Left/Right), so Map width and Map height each get their own row.
@@ -267,19 +267,9 @@ impl Screen for WorldGen {
                 F_HEIGHT => "type a height in cells",
                 _ => "type a number",
             };
-            status::render(
-                f,
-                Rect::new(area.x, status_row, area.width, 1),
-                &[("0-9", "type value"), ("Enter", "apply"), ("Esc", "cancel")],
-                hint,
-            );
+            StatusBar::new(&[("0-9", "type value"), ("Enter", "apply"), ("Esc", "cancel")]).right(hint).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
         } else {
-            status::render(
-                f,
-                Rect::new(area.x, status_row, area.width, 1),
-                &[("Tab", "next field"), ("←→", "adjust"), ("Space", "type value"), ("Enter", "generate"), ("Esc", "back")],
-                &seed_hint,
-            );
+            StatusBar::new(&[("Tab", "next field"), ("←→", "adjust"), ("Space", "type value"), ("Enter", "generate"), ("Esc", "back")]).right(&seed_hint).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
         }
     }
 }

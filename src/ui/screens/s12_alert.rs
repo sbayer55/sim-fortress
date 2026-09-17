@@ -13,7 +13,7 @@ use crate::ui::screens::common::sp;
 use crate::ui::screens::s08_lineage::LineageScreen;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{EventKindStyle, SeasonStyle, SpeciesStyle};
-use crate::widgets::{status, Component, Modal, Rows, Spacer, Text, VStack};
+use crate::widgets::{Component, Modal, Rows, Spacer, StatusBar, Text, VStack};
 use crate::{glyphs, theme};
 
 const BUTTONS: [&str; 3] = ["[ Continue ]", "[ View lineage ]", "[ Pause ]"];
@@ -309,7 +309,7 @@ fn regions_with_active_cases(sim: &Sim, outbreak: u16) -> usize {
 /// The alert status bar, repainted undimmed over the underlying screen.
 fn draw_alert_status(f: &mut Frame<'_>, area: Rect, keys: &[(&str, &str)], right: &str) {
     let status_row = area.y + area.height - 1;
-    status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, right);
+    StatusBar::new(keys).right(right).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
 }
 
 /// `Name tag` and species of the index case: the creature record when still

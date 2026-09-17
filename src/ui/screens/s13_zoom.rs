@@ -14,7 +14,7 @@ use crate::ui::app::AppState;
 use crate::ui::screens::s03_inspector::Inspector;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::SpeciesStyle;
-use crate::widgets::{bars, map, panel, status, util};
+use crate::widgets::{bars, map, panel, util, Component, StatusBar};
 use crate::{glyphs, theme};
 
 const TILE_W: u16 = 3;
@@ -142,12 +142,7 @@ impl Screen for Zoom {
         sidebar(f, side_area, sim, (x0, y0, ww, wh), (cx, cy));
 
         let right = format!("{}  {} day", sim.time.clock_label(), glyphs::SUN);
-        status::render(
-            f,
-            Rect::new(area.x, status_row, area.width, 1),
-            &[("z", "zoom out"), ("↑↓←→", "move"), ("Enter", "inspect"), ("f", "follow"), ("Tab", "next"), ("Esc", "back")],
-            &right,
-        );
+        StatusBar::new(&[("z", "zoom out"), ("↑↓←→", "move"), ("Enter", "inspect"), ("f", "follow"), ("Tab", "next"), ("Esc", "back")]).right(&right).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 

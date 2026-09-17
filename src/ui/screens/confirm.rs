@@ -8,7 +8,7 @@ use ratatui::Frame;
 use crate::ui::app::{AppState, ConfirmYes};
 use crate::ui::screens::common::clip;
 use crate::ui::screens::{Action, Screen};
-use crate::widgets::{status, Component, Modal, Text};
+use crate::widgets::{Component, Modal, StatusBar, Text};
 use crate::theme;
 
 #[derive(Debug)]
@@ -64,7 +64,7 @@ impl Screen for ConfirmModal {
 
         // Repaint the status bar undimmed, as every other modal does.
         let status_row = area.y + area.height - 1;
-        status::render(f, Rect::new(area.x, status_row, area.width, 1), &[("y", "yes"), ("n", "no"), ("←→", "move"), ("Enter", "select"), ("Esc", "no")], "confirm");
+        StatusBar::new(&[("y", "yes"), ("n", "no"), ("←→", "move"), ("Enter", "select"), ("Esc", "no")]).right("confirm").render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 

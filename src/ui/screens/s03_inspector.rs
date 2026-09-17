@@ -20,7 +20,7 @@ use crate::ui::screens::{Action, Screen};
 use crate::ui::style::SpeciesStyle;
 use crate::widgets::scroll::Overflow;
 use crate::widgets::Constraint::{Fill, Fixed};
-use crate::widgets::{panel, status, Component, HStack, Panel, Rows, ScrollRegion, Spacer, VStack};
+use crate::widgets::{panel, Component, HStack, Panel, Rows, ScrollRegion, Spacer, StatusBar, VStack};
 use crate::{glyphs, theme};
 
 use identity::identity_title;
@@ -195,12 +195,7 @@ impl Screen for Inspector {
         self.measured.set((content, visible));
 
         let right_text = format!("{} {}  {}", c.name_str(sim.roster()), c.tag(sim.roster()), sim.time.clock_label());
-        status::render(
-            f,
-            Rect::new(area.x, status_row, area.width, 1),
-            &[("f", "follow"), ("l", "lineage"), ("Tab", "next creature"), ("←→", "panel"), ("↑↓", "scroll"), ("Esc", "back")],
-            &right_text,
-        );
+        StatusBar::new(&[("f", "follow"), ("l", "lineage"), ("Tab", "next creature"), ("←→", "panel"), ("↑↓", "scroll"), ("Esc", "back")]).right(&right_text).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 

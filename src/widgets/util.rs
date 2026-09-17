@@ -55,8 +55,3 @@ pub fn centered(area: Rect, w: u16, h: u16) -> Rect {
     let h = h.min(area.height);
     Rect::new(area.x + (area.width - w).div_euclid(2), area.y + (area.height - h).div_euclid(2), w, h)
 }
-
-/// Format a 0..=1 value as a percentage string like " 82%".
-pub fn pct(v: f32) -> String {
-    format!("{:>3}%", crate::cast!((v.clamp(0.0, 1.0) * 100.0).round() => u32))
-}

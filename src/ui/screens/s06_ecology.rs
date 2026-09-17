@@ -13,7 +13,7 @@ use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{clock_status, SeasonStyle};
 use crate::widgets::map;
 use crate::widgets::Constraint::Fixed;
-use crate::widgets::{bars, panel, status, util, Bar, Column, Component, Panel, Table, TableCell, TableRow};
+use crate::widgets::{bars, panel, util, Bar, Column, Component, Panel, StatusBar, Table, TableCell, TableRow};
 use crate::{glyphs, theme};
 
 /// The S06 region status rule (FR7).
@@ -131,7 +131,7 @@ impl Screen for Ecology {
         regions(f, regions_area, app, world, self);
 
         let (right, right_fg) = clock_status(time, app.params.ui.day_night_tint);
-        status::render_colored(f, Rect::new(area.x, status_row, area.width, 1), &[("r", "sort regions"), ("↑↓", "select"), ("Enter", "jump"), ("Esc", "back")], &right, right_fg);
+        StatusBar::new(&[("r", "sort regions"), ("↑↓", "select"), ("Enter", "jump"), ("Esc", "back")]).right(&right).right_color(right_fg).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 

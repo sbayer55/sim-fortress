@@ -16,7 +16,7 @@ use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{EventKindStyle, SeasonStyle};
 use crate::widgets::scroll::Overflow;
 use crate::widgets::Constraint::{Fill, Fixed};
-use crate::widgets::{status, Component, Divider, HStack, Legend, Modal, Rows, ScrollRegion, Spacer, Text, VStack};
+use crate::widgets::{Component, Divider, HStack, Legend, Modal, Rows, ScrollRegion, Spacer, StatusBar, Text, VStack};
 use crate::{glyphs, theme};
 
 #[derive(Debug)]
@@ -84,7 +84,7 @@ impl Screen for Help {
         self.measured.set((ov.content, ov.visible));
 
         let status_row = area.y + area.height - 1;
-        status::render(f, Rect::new(area.x, status_row, area.width, 1), &[("?", "close help"), ("↑↓ PgDn", "scroll"), ("Esc", "close")], "help overlay");
+        StatusBar::new(&[("?", "close help"), ("↑↓ PgDn", "scroll"), ("Esc", "close")]).right("help overlay").render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 

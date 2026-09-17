@@ -16,7 +16,7 @@ use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{EventKindStyle, SpeciesStyle};
 use crate::widgets::map::{self, MapOptions, Overlay};
 use crate::widgets::Constraint::{Fill, Fixed};
-use crate::widgets::{panel, status, util, Column, Component, FilterStrip, Table, TableCell, TableRow, Text};
+use crate::widgets::{panel, util, Column, Component, FilterStrip, StatusBar, Table, TableCell, TableRow, Text};
 use crate::{glyphs, theme};
 
 const DETAIL_W: u16 = 55;
@@ -214,7 +214,7 @@ impl Screen for EventLog {
         } else {
             &[("↑↓", "select"), ("1-9", "chips"), ("f", "cycle"), ("Enter", "jump"), ("Esc", "back")]
         };
-        status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, &right);
+        StatusBar::new(keys).right(&right).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 
