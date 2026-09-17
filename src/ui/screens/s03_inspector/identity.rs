@@ -42,6 +42,7 @@ pub(super) fn rows(sim: &Sim, c: &Creature) -> Rows<'static> {
         sp(sim.roster().display_name(c.species), sim.roster().style(c.species)),
         sp(format!("  {sex_g} {sex_name}"), theme::text()),
         sp(format!("  {}", if c.adult { "adult" } else { "juvenile" }), theme::text()),
+        sp(if c.sterile { ", sterile" } else { "" }, Style::default().fg(theme::BAD).bg(theme::PANEL_BG)),
         sp(format!("  diet: {}", sim.species_params(c.species).diet), theme::dim_text()),
     ]));
     rows.push(blank(1));

@@ -156,8 +156,7 @@ fn draw_tiles(f: &mut Frame<'_>, inner: Rect, sim: &Sim, win: (usize, usize, usi
     for ty in 0..wh {
         for tx in 0..ww {
             let (wx, wy) = (x0 + tx, y0 + ty);
-            let cell = world.cell(wx, wy);
-            let (g, fg, bg) = map::terrain_cell(cell, false);
+            let (g, fg, bg) = map::world_cell(world, wx, wy, false);
             let tile = Rect::new(inner.x + crate::cast!(tx => u16) * TILE_W, inner.y + crate::cast!(ty => u16) * TILE_H, TILE_W, TILE_H).intersection(inner);
             util::fill(buf, tile, Style::default().bg(bg));
             let faint = Style::default().fg(theme::lerp(bg, fg, 0.35)).bg(bg);
@@ -267,11 +266,11 @@ fn sidebar(f: &mut Frame<'_>, area: Rect, sim: &Sim, win: (usize, usize, usize, 
 
     panel::section(f, inner, row, "Cursor cell");
     row += 1;
-    let (g, fg, bg) = map::terrain_cell(cell, false);
+    let (g, fg, bg) = map::world_cell(&sim.world, cx, cy, false);
     util::line(f, inner, row, Line::from(vec![
         Span::styled(" ", theme::text()),
         Span::styled(format!(" {g} "), Style::default().fg(fg).bg(bg)),
-        Span::styled(format!(" {}", cell.terrain.name()), theme::title()),
+        Span::styled(format!(" {}", sim.world.terrain_name(cx, cy)), theme::title()),
         Span::styled(format!("   ({cx}, {cy})"), theme::text()),
     ]));
     row += 1;

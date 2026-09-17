@@ -51,7 +51,7 @@ flowchart LR
         end
         subgraph M["Genome — 52 cols"]
             direction TB
-            M1["11 traits: bar, value, delta, species range"]
+            M1["12 traits: bar, value, delta, species range"]
             M2["Mutation history"]
             M3["Derived values"]
             M4["Offspring forecast"]
@@ -109,7 +109,7 @@ classDiagram
         kind()
     }
     class Genome {
-        traits : f32 x11
+        traits : f32 x12
         sense_cells()
     }
     class Species {
@@ -213,16 +213,19 @@ classDiagram
 
 ### Middle panel — Genome
 13. **Header row.** `trait  individual  delta  species`.
-14. **One row per trait (eleven since C8).** Trait name (in its trait colour), a 12-cell bar
+14. **One row per trait (twelve since Mutability).** Trait name (in its trait colour), a 12-cell bar
     of the individual's value, the value to two decimals, `±<delta>` versus the species mean
     coloured good/bad/dim (|delta| ≤ 0.005 counts as dim), and an 11-cell range bar showing
-    species min / mean / max. The C7/C8 traits are appended in slot order, so Resistance is
-    ninth (sick colour), Sociality tenth (hare colour) and Maturity eleventh (seed colour).
+    species min / mean / max. The later traits are appended in slot order, so Resistance is
+    ninth (sick colour), Sociality tenth (hare colour), Maturity eleventh (seed colour) and
+    Mutability twelfth (marsh teal). There is no spacer row before Mutation history: the twelfth
+    trait and its forecast row use the column's last two spare rows.
 15. **Summary lines.** `<n> traits above species mean, <8−n> below` and `most divergent:
     <trait> <±delta>`.
 16. **Mutation history section.** One `§ <text>` line per recorded mutation (for example
-    `Speed +0.06 (gen 44)`), or `none recorded`; then a dim `from <n> lines; rate 0.04 per
-    trait per birth` line.
+    `Speed +0.06 (gen 44)`), or `none recorded`; then a dim `from <n> lines; rate 0.042  sd
+    0.062  mut 0.56` line: this animal's *effective* mutation rate and sd with an average mate
+    (the pair's mean Mutability scales the world settings), and its own Mutability.
 17. **Derived section.** Nine label/value rows computed from the genome: `sense range
     <2+sense·10> cells`, `move speed <0.5+speed·2.5> cells/tick`, `daily food need
     <0.2+metabolism·0.8+size·0.4> biomass`, `max lifespan <max_age_days> days`, `litter
@@ -342,12 +345,13 @@ be disabled or centre the map on the carcass.
   +700) are derived from age, not recorded events. Do we keep a per-creature event history?
 - The kin relationship words are positional placeholders; real kinship needs the lineage
   graph and a definition of "cousin".
-- The mutation rate `0.04 per trait per birth` is the world-gen setting; should the
-  inspector read it from the world instead of hard-coding it?
+- ~~The mutation rate `0.04 per trait per birth` is the world-gen setting; should the
+  inspector read it from the world instead of hard-coding it?~~ Resolved: the line shows the
+  creature's effective rate and sd from the world settings and its Mutability.
 - `[e]` is offered in the Life panel but not in the status bar; decide whether the event
   log shortcut is a real binding here and, if so, add it to the status bar.
-- The offspring forecast assumes an "average mate" with a fixed ±0.06 spread; should it use
-  the world's mutation strength setting?
+- ~~The offspring forecast assumes an "average mate" with a fixed ±0.06 spread; should it use
+  the world's mutation strength setting?~~ Resolved: it uses the pair's effective sd.
 - How is the carcass "gone in ~N days" horizon computed by the simulation?
 
 Prototype reference: `src/prototypes/s03_inspector.rs`.

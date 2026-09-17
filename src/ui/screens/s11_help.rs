@@ -112,7 +112,8 @@ fn glyph_span(g: char, color: Color) -> Span<'static> {
     Span::styled(format!(" {g} "), Style::default().fg(color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD))
 }
 
-const TERRAIN_NOTES: [&str; 13] = [
+/// One note per `map::legend()` entry, in its order.
+const TERRAIN_NOTES: [&str; 14] = [
     "impassable, drinkable",
     "drinkable, slow",
     "no forage",
@@ -123,6 +124,7 @@ const TERRAIN_NOTES: [&str; 13] = [
     "cover for small prey",
     "impassable heights",
     "reeds, standing water",
+    "river over rock",
     "shelter, litters",
     "scavenger food",
     "regrowing this season",

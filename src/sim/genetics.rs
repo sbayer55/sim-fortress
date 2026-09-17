@@ -97,10 +97,14 @@ impl TickView {
     }
 }
 
-/// FR2 mate eligibility: adult, fed, watered, rested, off cooldown, in a
-/// breeding season and (prey only) standing on vegetation ≥ the minimum.
+/// FR2 mate eligibility: adult, fertile, fed, watered, rested, off cooldown, in
+/// a breeding season and (prey only) standing on vegetation ≥ the minimum.
 pub fn eligible(c: &Creature, time: &Time, world: &World, roster: &Roster, gp: &GeneticsParams, dp: &DiseaseParams) -> bool {
     if !c.alive || !c.adult || c.pregnant_due.is_some() {
+        return false;
+    }
+    // Mutability's cost: a sterile animal never mates.
+    if c.sterile {
         return false;
     }
     // C7 FR6: the infectious do not mate.
@@ -147,15 +151,21 @@ pub fn pick_mate(c: &Creature, candidates: &[CreatureId], view: &TickView) -> Op
 }
 
 /// FR3 inheritance: per trait a random parent's value, plus with probability
-/// `mutation_rate` a gaussian `N(0, mutation_strength)` delta, clamped.
+/// `rate` a gaussian `N(0, sd)` delta, clamped.
+///
+/// `rate` and `sd` are the global `mutation_rate`/`mutation_strength` scaled by
+/// the parents' mean Mutability (`GeneticsParams::effective_mutation`), computed
+/// once so the draw sequence is exactly one `chance` plus a conditional `gauss`
+/// per slot as before.
 pub fn inherit(mother: &Genome, father: &Genome, generation: u32, gp: &GeneticsParams, rng: &mut Rng) -> (Genome, Vec<Mutation>) {
     let mut g = [0.0f32; Genome::LEN];
     let mut mutations = Vec::new();
+    let (rate, sd) = gp.effective_mutation((mother.mutability() + father.mutability()) / 2.0);
     for t in 0..Genome::LEN {
         let base = if rng.chance(0.5) { mother.0[t] } else { father.0[t] };
         let mut v = base;
-        if rng.chance(gp.mutation_rate) {
-            let delta = rng.gauss(0.0, gp.mutation_strength);
+        if rng.chance(rate) {
+            let delta = rng.gauss(0.0, sd);
             v = Genome::clamp_trait(base + delta);
             mutations.push(Mutation { trait_idx: t, delta: v - base, generation });
         }
@@ -250,6 +260,7 @@ fn newborn(
     born_tick: u64,
     hp: f32,
     adult: bool,
+    sterile: bool,
 ) -> Creature {
     let (x, y) = pos;
     Creature {
@@ -268,6 +279,7 @@ fn newborn(
                 thirst: 0.3,
                 energy: 0.8,
                 adult,
+                sterile,
                 goal: Goal::Wander,
                 target: None,
                 replan_at: born_tick,
@@ -471,6 +483,8 @@ fn bear_pup(
 ) -> bool {
     let (x, y) = pos;
     let (genome, mutations) = inherit(&ctx.mother_genome, &ctx.father_genome, ctx.generation, gp, rng);
+    // Always one draw, so the sequence never depends on the chance's value.
+    let sterile = rng.chance(gp.sterility_chance(genome.mutability()));
     let sex = if rng.chance(0.5) { Sex::Male } else { Sex::Female };
     let sp = roster.get(ctx.species);
     let pool = sp.name_pool_len();
@@ -478,7 +492,7 @@ fn bear_pup(
     let adult = adult_age_days(sp, &genome, gp) == 0;
     let mut child = newborn(
         ctx.species, roster.len(), name, sex, (x, y), crate::cast!(time.day_index() => i32), ctx.generation,
-        (ctx.mother_id, ctx.father_id), ctx.mother_id, genome, mutations, ctx.mother_water, time.tick, gp.newborn_hp, adult,
+        (ctx.mother_id, ctx.father_id), ctx.mother_id, genome, mutations, ctx.mother_water, time.tick, gp.newborn_hp, adult, sterile,
     );
     disease::at_birth(&mut child, mother_snapshot, time, dp, dstate, drng);
     let id = store.insert(child);

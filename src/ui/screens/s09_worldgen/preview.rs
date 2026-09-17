@@ -91,7 +91,7 @@ fn preview_image(buf: &mut ratatui::buffer::Buffer, world: &World, scale: usize,
         for sx in 0..iw {
             let wx = (crate::cast!(sx => usize) * scale).min(world.width() - 1);
             let wy = (crate::cast!(sy => usize) * scale).min(world.height() - 1);
-            let (g, fg, bg) = map::terrain_cell(world.cell(wx, wy), false);
+            let (g, fg, bg) = map::world_cell(world, wx, wy, false);
             if let Some(c) = buf.cell_mut((px + sx, py + sy)) {
                 c.set_char(g);
                 c.set_style(Style::default().fg(fg).bg(bg));

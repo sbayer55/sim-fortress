@@ -57,6 +57,7 @@ fn summary_left(buf: &mut Buffer, left: Rect, sim: &Sim, id: SpeciesId, s: &Spec
     row += 1;
     util::line_in(buf, left, row, Line::from(vec![
         sp(format!(" {} alive  {} adults  {} juveniles  generation {}  peak {}", s.count, s.adults, s.juveniles, s.generation, s.peak), theme::dim_text()),
+        sp(format!("  sterile {}", s.sterile), if s.sterile > 0 { Style::default().fg(theme::BAD).bg(theme::PANEL_BG) } else { theme::dim_text() }),
     ]));
     row += 1;
     // C8 follow-up: the group sizes the cohesion rule holds together, on the

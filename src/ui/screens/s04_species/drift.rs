@@ -5,7 +5,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
 use ratatui::Frame;
 use crate::sim::stats::SpeciesStats;
-use crate::sim::species::IDX_MATURITY;
+use crate::sim::species::{IDX_MATURITY, IDX_MUTABILITY};
 use crate::sim::{Genome, Sim, SpeciesId, TRAIT_NAMES};
 use crate::ui::screens::common::{arrow_color, delta_style, sp, trait_color, trend_arrow, two};
 use crate::widgets::{bars, panel, util};
@@ -35,15 +35,19 @@ pub fn selection_pressure(s: &SpeciesStats) -> Vec<String> {
 }
 
 /// One selection-pressure sentence. C8: the maturity trait is the r/K dial, so
-/// its line names which way the life history moved.
+/// its line names which way the life history moved; Mutability's names which
+/// way evolvability moved.
 fn pressure_note(t: usize, d: f32, gens: u32) -> String {
     let dir = if d > 0.0 { "rising" } else { "falling" };
     let head = format!("{} {} {} ({:+.2} over {} generations)", glyphs::MUTATION, TRAIT_NAMES[t], dir, d, gens);
-    if t != IDX_MATURITY {
-        return head;
-    }
-    let rk = if d > 0.0 { "later, larger litters (K)" } else { "earlier, smaller litters (r)" };
-    format!("{head}: {rk}")
+    let tail = match t {
+        IDX_MATURITY if d > 0.0 => "later, larger litters (K)",
+        IDX_MATURITY => "earlier, smaller litters (r)",
+        IDX_MUTABILITY if d > 0.0 => "lineages loosening (more, larger mutations)",
+        IDX_MUTABILITY => "genes settling (fewer, smaller mutations)",
+        _ => return head,
+    };
+    format!("{head}: {tail}")
 }
 
 pub(super) fn drift(f: &mut Frame<'_>, area: Rect, sim: &Sim, id: SpeciesId) {

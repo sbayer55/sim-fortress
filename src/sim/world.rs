@@ -7,8 +7,9 @@
 //! orographic rain and lays a temperature gradient, `flow` routes drainage
 //! over the result, `classify` cuts water, rock, sand, forest and grass by
 //! quantile so the percentage targets hold on any seed (reading each cell's
-//! `biome` for what may grow there), and `regions` merges the drainage
-//! basins into the eight named regions.
+//! `biome` for what may grow there, widening rivers by drainage tier and
+//! fanning deltas where a trunk meets the sea), and `regions` merges the
+//! drainage basins into the eight named regions.
 
 use serde::{Deserialize, Serialize};
 
@@ -136,6 +137,10 @@ pub struct World {
     /// Per cell: 8-adjacent to water, or marsh (a drinking spot). Refreshed by
     /// `refresh_shore` whenever water terrain changes; empty means "compute".
     pub shore: Vec<bool>,
+    /// Waterfalls: rock cells a river drops over, sorted row-major `(x, y)`.
+    /// The terrain is `Rock`; the list only changes how the cell is drawn
+    /// and named.
+    pub falls: Vec<(usize, usize)>,
 }
 
 impl World {
@@ -179,6 +184,20 @@ impl World {
 
     pub fn cell(&self, x: usize, y: usize) -> &Cell {
         &self.cells[y * self.width + x]
+    }
+
+    /// Does a river fall over the rock at `(x, y)`?
+    pub fn is_fall(&self, x: usize, y: usize) -> bool {
+        self.falls.binary_search_by(|&(fx, fy)| (fy, fx).cmp(&(y, x))).is_ok()
+    }
+
+    /// The terrain name at `(x, y)`, naming a waterfall as such.
+    pub fn terrain_name(&self, x: usize, y: usize) -> &'static str {
+        if self.is_fall(x, y) {
+            "waterfall"
+        } else {
+            self.cell(x, y).terrain.name()
+        }
     }
 
     pub fn cell_mut(&mut self, x: usize, y: usize) -> &mut Cell {
@@ -270,7 +289,7 @@ impl World {
         let grid = flow::Grid { w, h };
         let mut rng = Rng::new(seed);
         let relief = relief::build(&mut rng, grid, params);
-        let cells = classify::cells(&mut rng, grid, &relief, params);
+        let (cells, falls) = classify::cells(&mut rng, grid, &relief, params);
         let (regions, region_map) = regions::build(grid, &relief.basin, &relief.sea, &cells);
 
         let water_cells_at_generation = cells.iter().filter(|c| c.terrain.is_water()).count();
@@ -286,6 +305,7 @@ impl World {
             wind: relief.wind,
             water_cells_at_generation,
             shore: Vec::new(),
+            falls,
         };
         world.refresh_shore();
         world

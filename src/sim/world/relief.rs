@@ -51,6 +51,9 @@ pub(super) struct Relief {
     /// Temperature 0 (cold) ..= 1 (hot).
     pub(super) temperature: Vec<f32>,
     pub(super) wind: Wind,
+    /// Steepest-descent receiver of each cell on the finished surface (a
+    /// root is its own receiver): the direction a river flows.
+    pub(super) recv: Vec<usize>,
     /// Root of each cell's drainage tree on the finished surface (an ocean
     /// cell, a map edge or a pit): cells sharing a root share a basin.
     pub(super) basin: Vec<usize>,
@@ -96,7 +99,7 @@ pub(super) fn build(rng: &mut Rng, grid: Grid, params: &WorldParams) -> Relief {
     }
     let rain = climate::rain_field(grid, &height, &source, wind, budget, &rain_noise);
     let temperature = climate::temperature(rng, grid, &height, pole_north);
-    Relief { height, depth, acc, slope, rain, temperature, wind, basin, sea }
+    Relief { height, depth, acc, slope, rain, temperature, wind, recv: routed.recv, basin, sea }
 }
 
 /// The root each cell drains to. `order` lists every root before the cells

@@ -1,6 +1,6 @@
 //! S03 text styling helpers and the row builders the columns share.
 
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::text::Span;
 use crate::theme;
 use crate::widgets::{Component, Divider, Spacer, Text};
@@ -29,19 +29,9 @@ pub(super) fn blank(n: u16) -> Box<dyn Component + 'static> {
     Box::new(Spacer::rows(n))
 }
 
-pub(super) const fn trait_color(t: usize) -> Color {
-    match t {
-        0 => theme::INFO,
-        1 => theme::TAN,
-        2 => theme::ACCENT,
-        3 => theme::WARN,
-        4 => theme::BAD,
-        5 => theme::VEGETATION,
-        6 => theme::MAGENTA,
-        7 => theme::ROSE,
-        _ => theme::SICK,
-    }
-}
+// One palette for every screen: the S03 copy used to diverge (Res/Soc/Mat all
+// in the sick colour), so the shared table is the only definition.
+pub(super) use crate::ui::screens::common::trait_color;
 
 pub(super) fn delta_style(d: f32) -> Style {
     let c = if d > 0.005 {

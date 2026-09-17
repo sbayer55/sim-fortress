@@ -214,8 +214,8 @@ column (S04a draws it one cell right; see Gaps today).
 
 ### Full width, header, selected row and totals (155 columns)
 The whole S04a row: a species glyph cell in the roster colour, a Sparkline in
-the 18-cell trend column (14 cells wide, starting at cell 71), a Trend Arrow,
-eleven trait cells via `trait_color`, and a dim Diet cell.
+the 16-cell trend column (14 cells wide, starting at cell 70), a Trend Arrow,
+twelve trait cells via `trait_color`, and a dim Diet cell.
 ```
 ╔ Species ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ sorted by count ↓ ╗
 ║   Species Kind  Count Adults   Juv Birth/d Death/d  Sick  Peak  Gen  30-day trend        Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat    Diet            ║

@@ -16,7 +16,7 @@ use super::drift::selection_pressure;
 pub(super) fn histograms(f: &mut Frame<'_>, area: Rect, sim: &Sim, id: SpeciesId) {
     let s = &sim.species[id.index()];
     let inner = panel::draw_with_hint(f, area, &format!("{}: trait distributions", sim.roster().display_name(id)), "12 buckets, living adults + juveniles", panel::Kind::Outer);
-    // C8: eleven traits in a 3 x 4 grid of 25-column blocks (23-wide histograms).
+    // Twelve traits fill a 3 x 4 grid of 25-column blocks (23-wide histograms).
     // `block_h` is exactly the block height (name, hist, axis, labels) so the
     // former spacer row is gone and the grid still leaves room for the two
     // comparison sections below it inside 42 rows.

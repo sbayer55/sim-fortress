@@ -1,6 +1,5 @@
 //! S04a — the species table: rows, sorting and the totals line.
 
-use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::Frame;
@@ -22,7 +21,7 @@ const fn kind_label(kind: Kind) -> &'static str {
 }
 
 /// The columns after the Marker: glyph, name, kind, the counts, the trend
-/// strip and arrow, the eleven trait means and the diet.
+/// strip and arrow, the twelve trait means and the diet.
 fn columns() -> Vec<Column> {
     let mut cols = vec![
         Column::new(Fixed(2)),
@@ -37,34 +36,17 @@ fn columns() -> Vec<Column> {
         Column::titled("Peak", Fixed(6)).right(),
         Column::titled("Gen", Fixed(5)).right(),
         Column::new(Fixed(2)),
-        Column::titled("30-day trend", Fixed(15)),
+        Column::titled("30-day trend", Fixed(14)),
         Column::new(Fixed(1)),
         Column::new(Fixed(1)),
     ];
-    // C8: eleven genome columns, so the header comes from `TRAIT_ABBR` (never hand-typed).
-    cols.extend(TRAIT_ABBR.iter().enumerate().map(|(i, a)| Column::titled(a, Fixed(if i == 0 { 6 } else { 4 })).right()));
+    // Twelve genome columns (C8 made it eleven, Mutability twelve), so the
+    // header comes from `TRAIT_ABBR` (never hand-typed) and the trend strip is
+    // trimmed to 14 cells to keep the row inside 153.
+    cols.extend(TRAIT_ABBR.iter().map(|a| Column::titled(a, Fixed(4)).right()));
     cols.push(Column::new(Fixed(3)));
     cols.push(Column::titled(" Diet", Fill(1)));
     cols
-}
-
-/// The 14-cell sparkline one cell into its 15-cell column.
-struct TrendCell(Sparkline);
-
-impl Component for TrendCell {
-    fn height(&self, _width: u16) -> u16 {
-        1
-    }
-
-    fn min_width(&self) -> u16 {
-        15
-    }
-
-    fn render(&self, buf: &mut Buffer, area: Rect) {
-        if area.width > 1 {
-            self.0.render(buf, Rect::new(area.x + 1, area.y, (area.width - 1).min(14), area.height));
-        }
-    }
 }
 
 pub(super) fn table(f: &mut Frame<'_>, area: Rect, sim: &Sim, sort: SortCol, selected: SpeciesId, kind: panel::Kind) {
@@ -97,9 +79,9 @@ fn table_row(sim: &Sim, i: usize) -> TableRow<'static> {
         TableCell::text(s.peak.to_string()),
         TableCell::text(s.generation.to_string()),
         TableCell::Blank,
-        if s.trend.is_empty() { TableCell::Blank } else { TableCell::widget(TrendCell(Sparkline::new(&s.trend).color(or_dim(sim.roster().color(id))))) },
-        TableCell::Blank,
+        if s.trend.is_empty() { TableCell::Blank } else { TableCell::widget(Sparkline::new(&s.trend).color(or_dim(sim.roster().color(id)))) },
         TableCell::widget(TrendArrow::new(&s.trend).bold()),
+        TableCell::Blank,
     ];
     cells.extend(trait_cells(s, absent));
     cells.push(TableCell::Blank);

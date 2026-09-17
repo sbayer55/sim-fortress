@@ -1,4 +1,5 @@
-//! Print a generated world as ASCII: terrain by default, elevation shading
+//! Print a generated world as ASCII: terrain by default (`F` a waterfall,
+//! `w` a dry wash), elevation shading
 //! with a fourth argument of `elev`, biomes with `biome`, or regions with
 //! `region` (one letter per region, names listed after the map).
 //!
@@ -41,6 +42,12 @@ fn main() {
                     }
                     let i = sim_fortress::cast!((cell.elevation * 9.99).floor() => usize).min(9);
                     return shades[i];
+                }
+                if world.is_fall(x, y) {
+                    return 'F';
+                }
+                if cell.dried_from.is_some() {
+                    return 'w';
                 }
                 match cell.terrain {
                     Terrain::DeepWater => '#',

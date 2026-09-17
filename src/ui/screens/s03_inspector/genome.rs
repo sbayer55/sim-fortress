@@ -12,7 +12,7 @@ pub(super) fn rows(sim: &Sim, c: &Creature) -> Rows<'static> {
     let stats = &sim.species[c.species.index()];
     let (mean, min, max) = (stats.mean, stats.min, stats.max);
     let mut rows = vec![one(format!(" {:<11}{:^12} {:<4} {:<6} {}", "trait", "individual", "own", "delta", "species range"), theme::dim_text())];
-    // One row per trait (C8 widened the genome to eleven): label, own bar, value,
+    // One row per trait (twelve since Mutability): label, own bar, value,
     // delta against the species mean, then the species min/mean/max range.
     let cols = Columns::new(&[Fixed(12), Fixed(12), Fixed(1), Fixed(4), Fixed(1), Fixed(6), Fixed(1), Fixed(11), Fill(1)]);
     let table: Vec<Row<'static>> = (0..Genome::LEN)
@@ -32,8 +32,8 @@ pub(super) fn rows(sim: &Sim, c: &Creature) -> Rows<'static> {
         })
         .collect();
     rows.push(Box::new(Block::new(cols).rows(table)));
-    rows.push(blank(1));
-
+    // No spacer here: the twelfth trait and its forecast row use the column's
+    // last two spare rows, and the section rule separates well enough.
     rows.push(section("Mutation history"));
     if c.mutations.is_empty() {
         rows.push(one(" none recorded", theme::dim_text()));
@@ -41,7 +41,10 @@ pub(super) fn rows(sim: &Sim, c: &Creature) -> Rows<'static> {
     for m in &c.mutations {
         rows.push(one(format!(" {} {} {:+.2} (gen {})", glyphs::MUTATION, TRAIT_NAMES[m.trait_idx], m.delta, m.generation), theme::text()));
     }
-    rows.push(one(format!(" from {} lines; rate {:.2} per trait per birth", c.generation, sim.params.genetics.mutation_rate), theme::dim_text()));
+    // This animal's own effective numbers (paired with an average mate), not
+    // the world setting: Mutability scales both.
+    let (rate, sd) = sim.params.genetics.effective_mutation((c.genome.mutability() + mean.mutability()) / 2.0);
+    rows.push(one(format!(" from {} lines; rate {rate:.3}  sd {sd:.3}  mut {:.2}", c.generation, c.genome.mutability()), theme::dim_text()));
     rows.push(blank(1));
 
     rows.extend(derived(sim, c));
@@ -77,12 +80,16 @@ fn derived(sim: &Sim, c: &Creature) -> Rows<'static> {
         ("max lifespan".into(), format!("{} days", c.max_age_days(&sim.params.creatures, &sim.params.genetics))),
         (
             "litter size".into(),
-            format!(
-                "{} (fert {:.2}, mat {:.2})",
-                sim.params.genetics.litter_size(sim.species_params(c.species).litter_max, g.fertility(), g.maturity()),
-                g.fertility(),
-                g.maturity()
-            ),
+            if c.sterile {
+                "sterile: never breeds".into()
+            } else {
+                format!(
+                    "{} (fert {:.2}, mat {:.2})",
+                    sim.params.genetics.litter_size(sim.species_params(c.species).litter_max, g.fertility(), g.maturity()),
+                    g.fertility(),
+                    g.maturity()
+                )
+            },
         ),
         ("mate cooldown".into(), format!("{} days", sim.species_params(c.species).mate_cooldown_days)),
         ("resistance cost".into(), format!("+{} % food", crate::cast!((100.0 * sim.params.disease.resist_hunger_cost * g.resistance()).round() => u32))),
@@ -99,8 +106,9 @@ fn derived(sim: &Sim, c: &Creature) -> Rows<'static> {
 /// The offspring-trait forecast against an average mate.
 fn forecast(sim: &Sim, c: &Creature, mean: &Genome) -> Rows<'static> {
     // Offspring forecast (C4 FR10): with an average mate, each trait is drawn
-    // from either parent and mutates with sd `mutation_strength`.
-    let sd = sim.params.genetics.mutation_strength;
+    // from either parent and mutates with the pair's effective sd (the
+    // parents' mean Mutability scales `mutation_strength`).
+    let (_, sd) = sim.params.genetics.effective_mutation((c.genome.mutability() + mean.mutability()) / 2.0);
     let table: Vec<Row<'static>> = (0..Genome::LEN)
         .map(|t| {
             let a = c.genome.0[t];
