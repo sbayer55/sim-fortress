@@ -208,7 +208,7 @@ fn print_biomes_and_regions() {
     let mut rng = Rng::new(3);
     let relief = relief::build(&mut rng, grid, &big);
     let t_relief = started.elapsed();
-    let cells = classify::cells(&mut rng, grid, &relief, &big);
+    let (cells, _) = classify::cells(&mut rng, grid, &relief, &big);
     let t_cells = started.elapsed();
     let moisture: Vec<f32> = cells.iter().map(|c| c.moisture).collect();
     let t0 = std::time::Instant::now();
@@ -403,7 +403,10 @@ fn marsh_lies_on_flat_wet_land() {
         // `generate` draws the relief first from a fresh rng, so rebuilding it
         // from the seed reproduces the slope field the cells were cut from.
         let relief = relief::build(&mut Rng::new(seed), grid, &params);
-        let mut land_slopes: Vec<f32> = world.cells.iter().enumerate().filter(|(_, c)| !c.terrain.is_water()).map(|(i, _)| relief.slope[i]).collect();
+        // Land here is what the marsh pass saw: not water, not a dry wash bed
+        // (a river cell that happens to be sand) and not a fall (rock in a river).
+        let is_land = |i: usize, c: &Cell| !c.terrain.is_water() && c.dried_from.is_none() && !world.is_fall(i % world.width, i.div_euclid(world.width));
+        let mut land_slopes: Vec<f32> = world.cells.iter().enumerate().filter(|(i, c)| is_land(*i, c)).map(|(i, _)| relief.slope[i]).collect();
         land_slopes.sort_by(f32::total_cmp);
         let quintile = land_slopes[land_slopes.len().div_euclid(5)];
         let marsh: Vec<usize> = world.cells.iter().enumerate().filter(|(_, c)| c.terrain == Terrain::Marsh).map(|(i, _)| i).collect();
@@ -481,4 +484,186 @@ fn rivers_carry_riparian_bands() {
         let (bank, away) = (mean_veg(1, 1), mean_veg(5, 7));
         assert!(bank > away * 1.1, "seed {seed}: bank vegetation {bank:.3} vs {away:.3} five cells out");
     }
+}
+
+#[test]
+#[ignore = "diagnostic: prints river tiers, deltas, falls and washes per seed"]
+fn print_river_morphology() {
+    use classify::{Channel, Delta, Water};
+    use flow::Tier;
+    for rainfall in [Rainfall::Dry, Rainfall::Normal] {
+        let params = WorldParams { rainfall, ..WorldParams::default() };
+        let grid = flow::Grid { w: params.width, h: params.height };
+        for seed in 1..=10u64 {
+            let relief = relief::build(&mut Rng::new(seed), grid, &params);
+            let bodies = classify::water_bodies(grid, &relief, &params);
+            let above = |a: f32| (0..grid.len()).filter(|&i| !relief.sea[i] && relief.depth[i] <= 0.004 && relief.acc[i] >= a).count();
+            println!("  acc>=6 {} >=24 {} >=50 {} >=100 {} >=200 {} >=400 {} >=800 {} max {:.0}", above(6.0), above(24.0), above(50.0), above(100.0), above(200.0), above(400.0), above(800.0), relief.acc.iter().copied().fold(0.0f32, f32::max));
+            let count = |f: &dyn Fn(usize) -> bool| (0..grid.len()).filter(|&i| f(i)).count();
+            let brook = count(&|i| bodies.channel[i] == Channel::Course(Tier::Brook));
+            let river = count(&|i| bodies.channel[i] == Channel::Course(Tier::River));
+            let trunk = count(&|i| bodies.channel[i] == Channel::Course(Tier::Trunk));
+            let bank = count(&|i| bodies.channel[i] == Channel::Bank);
+            let fan = count(&|i| bodies.channel[i] == Channel::Fan);
+            let bar = count(&|i| bodies.delta[i] == Delta::Bar);
+            let plain = count(&|i| bodies.delta[i] == Delta::Plain);
+            let rivers = count(&|i| bodies.water[i] == Water::River && bodies.channel[i] != Channel::Wash);
+            let course = |i: usize| matches!(bodies.channel[i], Channel::Course(_));
+            let steep = count(&|i| course(i) && relief.slope[i] >= bodies.steep);
+            let coast = count(&|i| bodies.channel[i] == Channel::Course(Tier::Trunk) && relief.recv[i] != i && bodies.water[relief.recv[i]] == Water::Ocean);
+            let mut acc_desc: Vec<f32> = (0..grid.len()).filter(|&i| bodies.water[i] == Water::River).map(|i| relief.acc[i]).collect();
+            acc_desc.sort_by(|a, b| b.total_cmp(a));
+            let tiers = flow::Tiers::new(grid.len(), &acc_desc);
+            println!("  tiers river {:.0} trunk {:.0}; steep channel cells {steep}; trunk at coast {coast}", tiers.river, tiers.trunk);
+            let started = std::time::Instant::now();
+            let world = World::generate(seed, &params);
+            let took = started.elapsed();
+            let wash = world.cells.iter().filter(|c| c.dried_from.is_some()).count();
+            let water = world.cells.iter().filter(|c| c.terrain.is_water()).count();
+            let c = counts(&world);
+            println!(
+                "{rainfall:?} seed {seed} ({took:?}): brook {brook} river {river} trunk {trunk} bank {bank} fan {fan} = {rivers}; bar {bar} plain {plain}; falls {}; wash {wash}; water {water} rock {} marsh {}",
+                world.falls.len(),
+                c[8],
+                c[9]
+            );
+        }
+    }
+}
+
+#[test]
+fn trunks_are_deep_banked_and_continuous() {
+    use classify::{Channel, Water};
+    use flow::Tier;
+    let params = WorldParams::default();
+    let grid = flow::Grid { w: params.width, h: params.height };
+    for seed in 1..=20u64 {
+        let relief = relief::build(&mut Rng::new(seed), grid, &params);
+        let bodies = classify::water_bodies(grid, &relief, &params);
+        let world = World::generate(seed, &params);
+        let trunk: Vec<usize> = (0..grid.len()).filter(|&i| bodies.channel[i] == Channel::Course(Tier::Trunk)).collect();
+        assert!(!trunk.is_empty(), "seed {seed}: no trunk river");
+        // The trunk runs deep, with shallow banks beside most of it.
+        for &i in &trunk {
+            let (x, y) = (i % grid.w, i.div_euclid(grid.w));
+            assert!(world.cells[i].terrain == Terrain::DeepWater || world.is_fall(x, y), "seed {seed}: trunk cell {i} is {:?}", world.cells[i].terrain);
+        }
+        let banked = trunk
+            .iter()
+            .filter(|&&i| {
+                let mut bank = false;
+                grid.for_neighbours(i, |j, _| bank |= bodies.channel[j] == Channel::Bank);
+                bank
+            })
+            .count();
+        assert!(banked * 10 >= trunk.len() * 6, "seed {seed}: {banked} of {} trunk cells have a bank", trunk.len());
+        // The trunk is continuous: every trunk cell drains into river water,
+        // a lake, the sea or off the map, never onto land.
+        for &i in &trunk {
+            let r = relief.recv[i];
+            assert!(r == i || bodies.water[r] != Water::Land, "seed {seed}: trunk cell {i} drains onto land");
+        }
+        // The trunk is the reach with the most drainage of any channel, and
+        // at least `TRUNK_MIN_CELLS` long.
+        let max_course = (0..grid.len()).filter(|&i| matches!(bodies.channel[i], Channel::Course(_))).map(|i| relief.acc[i]).fold(0.0f32, f32::max);
+        assert!(trunk.iter().any(|&i| relief.acc[i] == max_course), "seed {seed}: the largest channel is not trunk");
+        assert!(trunk.len() >= flow::TRUNK_MIN_CELLS, "seed {seed}: trunk of {} cells", trunk.len());
+    }
+}
+
+#[test]
+fn deltas_fan_where_trunks_meet_the_sea() {
+    use classify::{Channel, Delta};
+    let params = WorldParams::default();
+    let grid = flow::Grid { w: params.width, h: params.height };
+    let mut seeds_with_delta = 0;
+    for seed in 1..=20u64 {
+        let relief = relief::build(&mut Rng::new(seed), grid, &params);
+        let bodies = classify::water_bodies(grid, &relief, &params);
+        let world = World::generate(seed, &params);
+        let fans: Vec<usize> = (0..grid.len()).filter(|&i| bodies.channel[i] == Channel::Fan).collect();
+        seeds_with_delta += usize::from(!fans.is_empty());
+        for &i in &fans {
+            assert_eq!(world.cells[i].terrain, Terrain::ShallowWater, "seed {seed}: fan cell {i}");
+            let mut wet = false;
+            grid.for_neighbours(i, |j, _| wet |= world.cells[j].terrain.is_water());
+            assert!(wet, "seed {seed}: fan cell {i} touches no other water");
+        }
+        for i in (0..grid.len()).filter(|&i| bodies.delta[i] == Delta::Bar) {
+            assert!(matches!(world.cells[i].terrain, Terrain::Sand | Terrain::Marsh), "seed {seed}: bar {i} is {:?}", world.cells[i].terrain);
+        }
+    }
+    assert!(seeds_with_delta >= 5, "{seeds_with_delta} of 20 seeds have a delta");
+}
+
+#[test]
+fn falls_sit_on_the_steepest_channels() {
+    use classify::Channel;
+    let params = WorldParams::default();
+    let grid = flow::Grid { w: params.width, h: params.height };
+    for seed in 1..=20u64 {
+        let relief = relief::build(&mut Rng::new(seed), grid, &params);
+        let bodies = classify::water_bodies(grid, &relief, &params);
+        let world = World::generate(seed, &params);
+        assert!(!world.falls.is_empty(), "seed {seed}: no falls");
+        let mut sorted = world.falls.clone();
+        sorted.sort_by_key(|&(x, y)| (y, x));
+        assert_eq!(sorted, world.falls, "seed {seed}: falls are not row-major");
+        let course = (0..grid.len()).filter(|&i| matches!(bodies.channel[i], Channel::Course(_))).count();
+        assert!(world.falls.len() * 10 <= course, "seed {seed}: {} falls on {course} channel cells", world.falls.len());
+        for &(x, y) in &world.falls {
+            let i = y * grid.w + x;
+            assert!(world.is_fall(x, y));
+            assert_eq!(world.cell(x, y).terrain, Terrain::Rock, "seed {seed}: fall at ({x},{y})");
+            assert_eq!(world.terrain_name(x, y), "waterfall");
+            assert!(matches!(bodies.channel[i], Channel::Course(_)), "seed {seed}: fall at {i} is not on a channel");
+            assert!(relief.slope[i] >= bodies.steep, "seed {seed}: fall at {i} on slope {}", relief.slope[i]);
+            // The river continues past the fall: another river cell (water,
+            // a fall or a wash bed) or the sea it drops into.
+            let mut water = false;
+            grid.for_neighbours(i, |j, _| water |= bodies.water[j] != classify::Water::Land);
+            assert!(water, "seed {seed}: fall at {i} has no water beside it");
+        }
+    }
+}
+
+#[test]
+fn washes_are_dry_brooks_that_rewet_within_the_year() {
+    use crate::sim::{Params, Sim};
+    use classify::Channel;
+    // A dry world has brooks through arid country generated as sand that
+    // remembers its water.
+    let mut params = Params::default();
+    params.world.rainfall = Rainfall::Dry;
+    params.species.clear_initial_counts();
+    let grid = flow::Grid { w: params.world.width, h: params.world.height };
+    let relief = relief::build(&mut Rng::new(3), grid, &params.world);
+    let bodies = classify::water_bodies(grid, &relief, &params.world);
+    let mut sim = Sim::new(3, params);
+    let washes = |sim: &Sim| sim.world.cells.iter().filter(|c| c.dried_from == Some(Terrain::ShallowWater)).count();
+    let at_start = washes(&sim);
+    assert!(at_start > 0, "no washes on a dry seed");
+    for (i, c) in sim.world.cells.iter().enumerate() {
+        if c.dried_from.is_some() {
+            assert_eq!(c.terrain, Terrain::Sand, "wash at {i}");
+            assert_eq!(bodies.channel[i], Channel::Wash, "wash at {i} is not a brook");
+        }
+    }
+    assert_eq!(sim.world.water_cells_at_generation, sim.world.cells.iter().filter(|c| c.terrain.is_water()).count());
+    // The ecology's re-wet rule refills them as the regions' moisture recovers;
+    // every wash is running again before the year is out.
+    let mut refilled_on = None;
+    for day in 1..=360u32 {
+        for _ in 0..24 {
+            sim.step();
+        }
+        if washes(&sim) == 0 {
+            refilled_on = Some((day, sim.time.season()));
+            break;
+        }
+    }
+    let (day, season) = refilled_on.unwrap_or_else(|| panic!("{} of {at_start} washes still dry after a year", washes(&sim)));
+    assert!(day <= 180, "washes refilled on day {day} ({season:?})");
+    let wet_again = sim.world.cells.iter().filter(|c| c.terrain.is_water()).count();
+    assert!(wet_again >= sim.world.water_cells_at_generation + at_start.div_euclid(2), "{wet_again} water cells after refilling {at_start} washes");
 }

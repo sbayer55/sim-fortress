@@ -44,6 +44,9 @@ pub const ROCK_FG: Color = Color::Rgb(156, 156, 160);
 pub const ROCK_BG: Color = Color::Rgb(54, 54, 58);
 pub const MARSH_FG: Color = Color::Rgb(78, 160, 128);
 pub const MARSH_BG: Color = Color::Rgb(16, 46, 44);
+/// Waterfall: white water on the deep-water blue, on a rock cell.
+pub const FALLS_FG: Color = Color::Rgb(222, 236, 250);
+pub const FALLS_BG: Color = DEEP_WATER_BG;
 pub const SNOW_FG: Color = Color::Rgb(240, 244, 250);
 pub const SNOW_BG: Color = Color::Rgb(118, 124, 140);
 

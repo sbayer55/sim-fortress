@@ -142,6 +142,11 @@ impl Biome {
     pub const fn allows_forest(self) -> bool {
         !matches!(self, Self::Tundra | Self::Steppe | Self::Desert)
     }
+
+    /// Too dry for a brook to run all year: its bed is a seasonal wash.
+    pub const fn is_arid(self) -> bool {
+        matches!(self, Self::Steppe | Self::Desert)
+    }
 }
 
 /// Label every cell from the table, then smooth the labels into patches.

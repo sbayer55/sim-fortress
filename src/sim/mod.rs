@@ -666,7 +666,10 @@ mod tests {
         // Re-baselined for biomes as regions: the forest quantile skips the
         // treeless biomes, vegetation scales by biome, and regions are
         // drainage basins, so rain, drought and migration act on new areas.
-        assert_eq!(a.checksum(), 0xb4b5_fbec_d0ad_4ff3);
+        // Re-baselined for river morphology: rivers widen by tier, trunks
+        // run deep, deltas fan, falls keep their rock and arid brooks start
+        // as dry washes, so the water cells and everything near them moved.
+        assert_eq!(a.checksum(), 0xb6e9_09b8_a4c6_2f17);
     }
 
     #[test]

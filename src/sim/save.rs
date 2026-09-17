@@ -25,7 +25,7 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// (climate physics); version 7 added the `Marsh` terrain and the marsh step
 /// cost parameter (wetlands and riparian corridors); version 8 added the
 /// per-cell biome and the per-cell region map (biomes as regions).
-pub const VERSION: u16 = 8;
+pub const VERSION: u16 = 9;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 

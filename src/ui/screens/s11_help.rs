@@ -108,7 +108,7 @@ fn terrain_column(buf: &mut Buffer, col: Rect) -> u16 {
     let mut row = 0u16;
     panel::section_in(buf, col, row, "Terrain");
     row += 1;
-    let notes: [&str; 12] = [
+    let notes: [&str; 13] = [
         "impassable, drinkable",
         "drinkable, slow",
         "no forage",
@@ -119,6 +119,7 @@ fn terrain_column(buf: &mut Buffer, col: Rect) -> u16 {
         "cover for small prey",
         "impassable heights",
         "shelter, litters",
+        "river over rock",
         "scavenger food",
         "regrowing this season",
     ];

@@ -33,7 +33,7 @@ impl WorldMap {
         row += 1;
         util::line(f, inner, row, Line::from(Span::styled(format!(" ({}, {})  {}", cx, cy, world.region_name(cx, cy)), theme::text())));
         row += 1;
-        util::line(f, inner, row, Line::from(Span::styled(format!(" {}  elev {:.2}  veg {:.2}", cell.terrain.name(), cell.elevation, cell.vegetation), theme::dim_text())));
+        util::line(f, inner, row, Line::from(Span::styled(format!(" {}  elev {:.2}  veg {:.2}", world.terrain_name(cx, cy), cell.elevation, cell.vegetation), theme::dim_text())));
         row += 1;
         util::line(f, inner, row, Line::from(Span::styled(format!(" moisture {:.2}  temperature {:.2}", cell.moisture, cell.temperature), theme::dim_text())));
         row += 1;

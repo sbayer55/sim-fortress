@@ -53,6 +53,68 @@ impl Grid {
     }
 }
 
+/// River tiers by drainage area: a brook stays one shallow cell, a river is
+/// widened by a shallow bank, a trunk runs deep with a bank on each side.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum Tier {
+    Brook,
+    River,
+    Trunk,
+}
+
+/// Drainage area, as a share of the world's cells, at which a channel
+/// becomes a river, and at which a river becomes a trunk. Shares rather
+/// than cell counts so a bigger world has the same proportion of each.
+pub(super) const RIVER_FRACTION: f32 = 0.045;
+pub(super) const TRUNK_FRACTION: f32 = 0.09;
+/// A world whose largest river never reaches `TRUNK_FRACTION` still has a
+/// trunk at least this many channel cells long (the cells with the most
+/// drainage, whichever rivers they lie on).
+pub(super) const TRUNK_MIN_CELLS: usize = 8;
+/// The river tier always spans at least the reach above the trunk with
+/// half the trunk's drainage.
+pub(super) const RIVER_OF_TRUNK: f32 = 0.5;
+
+/// The drainage areas (cells) that cut the tiers for one world.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Tiers {
+    pub(super) river: f32,
+    pub(super) trunk: f32,
+}
+
+impl Tiers {
+    /// Cuts for a world of `cells` cells whose channel candidates drain
+    /// `acc_desc` cells each, largest first.
+    pub(super) fn new(cells: usize, acc_desc: &[f32]) -> Self {
+        let cells = crate::cast!(cells => f32);
+        let eighth = acc_desc.get(TRUNK_MIN_CELLS - 1).or_else(|| acc_desc.last()).copied().unwrap_or(0.0);
+        let trunk = (TRUNK_FRACTION * cells).min(eighth);
+        Self { river: (RIVER_FRACTION * cells).min(RIVER_OF_TRUNK * trunk), trunk }
+    }
+
+    pub(super) fn of(self, acc: f32) -> Tier {
+        if acc >= self.trunk {
+            Tier::Trunk
+        } else if acc >= self.river {
+            Tier::River
+        } else {
+            Tier::Brook
+        }
+    }
+}
+
+impl Tier {
+
+    /// Shallow cells added beside the channel.
+    pub(super) const fn banks(self) -> usize {
+        match self {
+            Self::Brook => 0,
+            Self::River => 1,
+            Self::Trunk => 2,
+        }
+    }
+}
+
 /// Where each cell drains to, and in what order to walk the drainage tree.
 #[derive(Debug)]
 pub(super) struct Flow {
