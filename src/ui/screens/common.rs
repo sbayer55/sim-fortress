@@ -9,31 +9,7 @@ pub fn sp(s: impl Into<String>, st: Style) -> Span<'static> {
     Span::styled(s.into(), st)
 }
 
-/// The C3 trend rule over a daily count series: > +3 % ↑, < −3 % ↓, else ↔,
-/// comparing the last value with the one up to 30 days earlier.
-pub fn trend_arrow(counts: &[u16]) -> char {
-    if counts.len() < 2 {
-        return glyphs::FLAT;
-    }
-    let a = f32::from(counts[counts.len().saturating_sub(30).min(counts.len() - 1)]);
-    let b = f32::from(counts.last().copied().unwrap_or(0));
-    let pct = if a > 0.0 { (b - a) / a * 100.0 } else if b > 0.0 { f32::INFINITY } else { 0.0 };
-    if pct > 3.0 {
-        glyphs::UP
-    } else if pct < -3.0 {
-        glyphs::DOWN
-    } else {
-        glyphs::FLAT
-    }
-}
-
-pub const fn arrow_color(a: char) -> Color {
-    match a {
-        glyphs::UP => theme::GOOD,
-        glyphs::DOWN => theme::BAD,
-        _ => theme::DIM,
-    }
-}
+pub use crate::widgets::trend::{arrow_color, trend_arrow};
 
 /// One colour per genome slot. Deliberately exhaustive (no catch-all): adding a
 /// trait must be a compile error here rather than a silently shared colour.

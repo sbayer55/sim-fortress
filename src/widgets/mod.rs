@@ -10,10 +10,13 @@ pub mod scroll;
 pub mod stack;
 pub mod status;
 pub mod text;
+pub mod trend;
 pub mod util;
 
 pub use component::{Align, Component, Constraint, Rows};
 pub use divider::Divider;
 pub use panel::{Kind, Panel};
 pub use stack::{HStack, Spacer, VStack};
+pub use bars::{Bar, Inverted, LabeledBar, RangeBar, Sparkline};
 pub use text::Text;
+pub use trend::TrendArrow;

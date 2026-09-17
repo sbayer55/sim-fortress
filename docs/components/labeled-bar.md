@@ -112,9 +112,9 @@ Hunger 0.41, `label_w` 9, `bar_w` 24. Inverted, so the fill is `theme::WARN`.
 ```
 
 ### Count (43 columns)
-8 carcasses against a maximum of 60.
+8 carcasses against a maximum of 60: `round(8 / 60 × 18) = 2` cells filled.
 ```
-║ carcasses  [███░░░░░░░░░░░░░░░]      8  ║
+║ carcasses  [██░░░░░░░░░░░░░░░░]      8  ║
 ```
 
 ### Suffix (43 columns)

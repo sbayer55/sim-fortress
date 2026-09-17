@@ -122,9 +122,10 @@ strip is left-aligned and the last eight cells are untouched.
 ### Wide, prototype S06 row (90 columns)
 `w` 44. Reproduced with the 44 values `2 2 3 3 3 3 3 2 2 1 1 1 1 1 1 1 2 2 3 3
 3 3 3 2 2 2 1 1 0 0 0 0 0 1 1 3 3 3 3 3 2 2 2 1` (min 0, max 3, so each value
-maps straight to a shade). The bar is a [Labeled Bar](labeled-bar.md).
+maps straight to a shade). The bar is a [Labeled Bar](labeled-bar.md) with
+`label_w` 13, then three blank cells before the strip.
 ```
-║ vegetation  [████████░░░░░░░░░░]     44%  ▓▓█████▓▓▒▒▒▒▒▒▒▓▓█████▓▓▓▒▒░░░░░▒▒█████▓▓▓▒ ║
+║ vegetation  [████████░░░░░░░░░░]    44%   ▓▓█████▓▓▒▒▒▒▒▒▒▓▓█████▓▓▓▒▒░░░░░▒▒█████▓▓▓▒ ║
 ```
 
 ## Open questions
