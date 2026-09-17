@@ -16,7 +16,7 @@ use crate::ui::screens::common::{day_stamp, sp};
 use crate::ui::screens::s03_inspector::Inspector;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::SpeciesStyle;
-use crate::widgets::{bars, panel, status, util};
+use crate::widgets::{bars, panel, util, Component, StatusBar};
 use crate::{glyphs, theme};
 use std::fmt::Write as _;
 
@@ -111,7 +111,7 @@ impl Screen for LineageScreen {
         let Some(tree) = self.tree(sim) else {
             let inner = panel::draw(f, tree_area, "Lineage", panel::Kind::Outer);
             util::line(f, inner, 1, Line::from(sp(" no lineage record for this creature", theme::dim_text())));
-            status::render(f, Rect::new(area.x, status_row, area.width, 1), &[("Esc", "back")], "");
+            StatusBar::new(&[("Esc", "back")]).right("").render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
             return;
         };
         draw_tree(f, tree_area, sim, &tree);
@@ -124,12 +124,7 @@ impl Screen for LineageScreen {
             Some(n) => format!("{} {}  {} of {} {}", n.name_str(sim.roster()), n.tag, pos, tree.node_count, sim.roster().plural(n.species).to_lowercase()),
             None => String::new(),
         };
-        status::render(
-            f,
-            Rect::new(area.x, status_row, area.width, 1),
-            &[("↑↓←→", "navigate"), ("Enter", "inspect"), ("Esc", "back")],
-            &right,
-        );
+        StatusBar::new(&[("↑↓←→", "navigate"), ("Enter", "inspect"), ("Esc", "back")]).right(&right).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 

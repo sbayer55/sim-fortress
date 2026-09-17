@@ -42,23 +42,30 @@ Rust, ratatui 0.30 (crossterm re-exported as `ratatui::crossterm`).
 
 ## Layout conventions
 
-Spec sheets for every reusable piece (panel, divider, bars, tables, inputs) live
-in [components/README.md](components/README.md); that folder is the planned
-first-class component system and records both today's helpers and the planned
-API. The helper list below is the *today* view.
+Spec sheets for every reusable piece live in
+[components/README.md](components/README.md); every sheet's component has
+shipped in `src/widgets`, and `tests/components.rs` renders each sheet's
+examples cell for cell. Screens draw through the components:
 
-- Status bar (usually the last row): `widgets::status::render(f, rect, &[("k","label"),…], "right text")`.
-- Panels: `panel::draw(f, area, "Title", panel::Kind::Outer|Inner|Focus) -> Rect`
-  returns the inner area (double border for `Outer`/`Focus`, single for `Inner`;
-  it clears the area first). `panel::draw_with_hint(…, "right hint", kind)` adds a
-  dim right-aligned title; `panel::section(f, inner, row, "Section")` draws a
-  `── Section ────` divider row.
-- Text: `util::line(f, area, row, Line::from(vec![Span::styled(..)]))`; also
-  `util::fill`, `util::centered(area, w, h)`, `util::dim_area(buf, area, 0.6)`
-  (modal backdrop), `util::pct(v)`.
-- Bars: `bars::labeled(buf, area, row, label, value01, color, label_w, bar_w)`,
-  `bars::bar`, `bars::range(min, mean, max)`, `bars::histogram(buf, area, &[u16], color, col_w)`,
-  `bars::sparkline(buf, x, y, w, &[u16], color)`, `bars::vital_color(v, inverted)`.
+- Every component implements `widgets::Component` (`height(width)`,
+  `min_width()`, `render(buf, area)`); layout is `VStack` / `HStack` with
+  `Constraint::{Auto, Fixed, Fill, Min}`, `Spacer` for gaps, and a `Columns`
+  `Block` (or a `Table`) for rows that must line up. Section builders return
+  `Rows` (`Vec<Box<dyn Component>>`) and the screen stacks them with
+  `VStack::from_boxes(&rows)`.
+- Chrome: `Panel::new("Title").kind(Kind::Outer).info(..).foot(..).render(buf, area) -> Rect`,
+  `Divider::new("Section")`, `Modal::new(w, h).title(..).buttons(..).hint(..).render(buf, area) -> Rect`
+  (the body area), `ScrollRegion::new(&stack).offset(n)` with `overflow()` for
+  the Foot, `StatusBar::new(&[("k", "label"), …]).right("text").render(buf, row)`,
+  `Ticker`, `KeyHint`.
+- Rows: `Text` (one styled row), `LabeledBar` / `Bar`, `RangeBar`, `Sparkline`,
+  `TrendArrow`, `Legend`, `Histogram`, `Chart`; inputs `Stepper`, `TextField`,
+  `Checkbox`, `ButtonRow`, `Menu`, `FilterStrip`.
+- The free functions `panel::draw*`, `panel::section*`, `bars::*`,
+  `scroll::draw` and `util::line*` remain as thin wrappers over the components
+  for the screens that have not moved yet (the S01 overlay sidebars, S08, S13,
+  S04b and the S04 summary, S05's stacked, phase and group charts). New code
+  uses the components.
 
 ## Map
 

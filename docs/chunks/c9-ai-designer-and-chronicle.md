@@ -45,7 +45,7 @@ unreachable or not compiled.
   `ureq` client, the worker thread, the headless bodies and the fake launcher behind
   `--features ai` (not in `default`).
 - The chronicle: `src/sim/chronicle.rs` (season slice, season census, template entry),
-  `Sim.chronicle` in the save (VERSION 11), the season trigger in `AppState::step_ticks`, the
+  `Sim.chronicle` in the save (VERSION 12), the season trigger in `AppState::step_ticks`, the
   reply pump in `src/ui/ai_bridge.rs`, S07c, `--chronicle`.
 - The designer: `src/ai/prompt/designer.rs` (schema, messages, JSON→TOML, `validated`,
   summary), S09b (`src/ui/screens/s09_worldgen/designer.rs`), the `[ Design species ]`
@@ -126,7 +126,7 @@ designer_fallbacks = []
   (`SpeciesStats.count`), births, deaths and the extinct flag; `template_entry` writes the
   tally line, the death causes and up to eight notable events (extinction, epidemic,
   outbreak, spillover, drought, migration, note).
-- Save VERSION 10 → 11 carries the field; an empty table loads in any build (R11).
+- Save VERSION 11 → 12 carries the field; an empty table loads in any build (R11).
 
 ### FR4 Chronicle in the live app (S07c)
 - `AppState::step_ticks` compares `time.season()` before and after a batch (≤ 200 ticks
@@ -212,7 +212,7 @@ Tests:    fixtures designer/{happy,invalid_then_valid,malformed,timeout};
   keeps its template entries, the status bar reads `AI: offline`. *pass*
   (`ui::tests::ai::ai_unreachable_reaches_map_and_steps`).
 - **The step never sees the model (R3).** `sim::tests::checksum_is_fnv_stable` is
-  `0x9b4ed39b8baac6f5` with and without `--features ai`; `src/sim` has no AI code. *pass*.
+  `0xd0e3ee1ac665f531` with and without `--features ai`; `src/sim` has no AI code. *pass*.
 - **One request per action, no retries (R5), stale replies dropped and timeouts are errors
   (R7).** *pass* (`ai::tests::gateway::*`).
 - **Model output is data (R8).** Invalid overlays are rejected by the real loader; exactly
@@ -283,7 +283,7 @@ Tests:    fixtures designer/{happy,invalid_then_valid,malformed,timeout};
 1. `AiConfig` on `UiParams`, FIELD_DOCS, `config::load_ai`, Cargo feature, justfile and
    `affected-tests.sh` mapping.
 2. `src/ai` types, client, worker, sanitiser; `scripts/fake-gateway.js`; fixtures; tests.
-3. `src/sim/chronicle.rs`, `Sim.chronicle`, save VERSION 11.
+3. `src/sim/chronicle.rs`, `Sim.chronicle`, save VERSION 12.
 4. Chronicle prompt, `ai_bridge`, `step_ticks` trigger, S07c.
 5. Designer prompt and schema, S09b modal, form hand-back, `common::edit_text`.
 6. S10 AI section and `m`, `status::render_noted`, S11.

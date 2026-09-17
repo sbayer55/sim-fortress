@@ -493,22 +493,34 @@ fn land_terrain(grid: Grid, relief: &Relief, bodies: &Bodies, moisture: &[f32], 
     let is_land = |i: usize| water[i] == Water::Land;
     let max_slope = relief.slope.iter().copied().fold(0.0f32, f32::max).max(1.0e-6);
     let rock_score: Vec<f32> = (0..n).map(|i| relief.height[i] + 0.6 * relief.slope[i] / max_slope).collect();
-    for &i in &highest((0..n).filter(|&i| is_land(i)), &rock_score, share(n, params.rock_pct)) {
+    // Bedrock an event bared (a dome's core, ice-scoured tops) is rock
+    // first, paid from the same budget; the quantile fills the rest.
+    let rock_budget = share(n, params.rock_pct);
+    let bedrock: Vec<usize> = (0..n).filter(|&i| is_land(i) && relief.bedrock[i]).take(rock_budget).collect();
+    for &i in &bedrock {
         terrain[i] = Terrain::Rock;
     }
-    // Falls: where a channel drops steepest it has not cut through the
-    // bedrock, so the cell stays rock under the white water.
-    let falls: Vec<usize> = (0..n).filter(|&i| matches!(bodies.channel[i], Channel::Course(_)) && relief.slope[i] >= bodies.steep).collect();
-    for &i in &falls {
+    for &i in &highest((0..n).filter(|&i| is_land(i) && !relief.bedrock[i]), &rock_score, rock_budget - bedrock.len()) {
         terrain[i] = Terrain::Rock;
     }
-
     let open = |i: usize, terrain: &[Terrain]| is_land(i) && terrain[i] == Terrain::Dirt;
     let touches = |i: usize, kind: Water| {
         let mut yes = false;
         grid.for_neighbours(i, |j, _| yes |= water[j] == kind);
         yes
     };
+    // Falls: where a channel drops steepest it has not cut through the
+    // bedrock, so the cell stays rock under the white water. A lone channel
+    // head on the map's edge has no river to fall from and stays water.
+    let wet_beside = |i: usize| {
+        let mut yes = false;
+        grid.for_neighbours(i, |j, _| yes |= water[j] != Water::Land);
+        yes
+    };
+    let falls: Vec<usize> = (0..n).filter(|&i| matches!(bodies.channel[i], Channel::Course(_)) && relief.slope[i] >= bodies.steep && wet_beside(i)).collect();
+    for &i in &falls {
+        terrain[i] = Terrain::Rock;
+    }
 
     // Marsh: the bottom slope quintile of the land and wet; delta
     // floodplains first, then cells fed by a catchment or rimming a lake.

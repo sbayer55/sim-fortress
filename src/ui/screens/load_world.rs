@@ -3,7 +3,6 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
 use ratatui::style::Style;
-use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
 use crate::sim::save::{self, SaveHeader};
@@ -12,7 +11,7 @@ use crate::ui::config;
 use crate::ui::screens::common::clip;
 use crate::ui::screens::confirm::ConfirmModal;
 use crate::ui::screens::{Action, Screen};
-use crate::widgets::{panel, util};
+use crate::widgets::{Component, Menu, Modal, StatusBar, Text};
 use crate::theme;
 
 const VISIBLE: usize = 14;
@@ -47,16 +46,6 @@ impl LoadWorld {
 impl Default for LoadWorld {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Tint the whole modal row at `y` with the selection background.
-fn highlight_row(f: &mut Frame<'_>, inner: Rect, y: u16) {
-    let buf = f.buffer_mut();
-    for x in inner.x..inner.right() {
-        if let Some(c) = buf.cell_mut((x, y)) {
-            c.set_bg(theme::SELECT_BG);
-        }
     }
 }
 
@@ -127,7 +116,6 @@ impl Screen for LoadWorld {
 
     fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let saves = save::list_saves(&app.saves_dir);
-        let modal = util::centered(area, 70.min(area.width.saturating_sub(2)), 20.min(area.height.saturating_sub(2)));
         // The per-row wall-clock stamp does not fit the 66-column list, so it lives
         // in the panel hint for the selected save instead.
         let hint = if saves.is_empty() {
@@ -139,65 +127,43 @@ impl Screen for LoadWorld {
                 None => format!("{} saves", saves.len()),
             }
         };
-        let inner = panel::draw_with_hint(f, modal, "Load World", &hint, panel::Kind::Focus);
+        let modal = Modal::new(70.min(area.width.saturating_sub(2)), 20.min(area.height.saturating_sub(2))).title("Load World").info(hint);
+        let buf = f.buffer_mut();
+        let body = modal.render(buf, area);
+        let list = Rect::new(body.x, body.y + 1, body.width, body.height.saturating_sub(1)).intersection(body);
 
         if saves.is_empty() {
-            util::line(f, inner, 1, Line::from(Span::styled(" no saved worlds yet", theme::dim_text())));
+            Text::new(" no saved worlds yet").style(theme::dim_text()).render(buf, list);
         } else {
-            for i in self.scroll..saves.len().min(self.scroll + VISIBLE) {
-                let row = crate::cast!((i - self.scroll) => u16) + 1;
-                if row >= inner.height {
-                    break;
-                }
-                let e = &saves[i];
-                let (y, d) = year_day(&e.header);
-                let (prey, pred) = e.header.kind_totals();
-                // Keep the line inside the modal's 66 columns: the wall-clock stamp
-                // never fitted, and the version marker has to be visible so an
-                // unloadable old save is obvious before Enter is pressed.
-                let mark = if e.version == save::VERSION { String::new() } else { format!("  v{}", e.version) };
-                let text = format!(
-                    "{:<22}  Year {}, Day {:<3}  {:>3} prey /{:>3} pred{}",
-                    clip(&e.header.world_name, 22),
-                    y,
-                    d,
-                    prey,
-                    pred,
-                    mark
-                );
-                let st = if i == self.sel { theme::selected() } else { theme::text() };
-                let y_pos = inner.y + row;
-                if i == self.sel {
-                    highlight_row(f, inner, y_pos);
-                }
-                util::line(f, inner, row, Line::from(Span::styled(text, st)));
-            }
+            let rows: Vec<String> = saves.iter().skip(self.scroll).take(VISIBLE).map(save_row).collect();
+            let items: Vec<&str> = rows.iter().map(String::as_str).collect();
+            Menu::new(&items).selected(self.sel.saturating_sub(self.scroll)).marker(false).render(buf, list);
         }
 
-        let status_row = area.y + area.height - 1;
         if let Some(err) = &self.error {
             // The message is longer than the 66-column modal, so wrap it rather
             // than clip: an older-version save must say why it will not load.
-            let lines = wrap(err, crate::cast!(inner.width => usize) - 2);
+            let lines = wrap(err, crate::cast!(body.width => usize) - 2);
             let shown = crate::cast!(lines.len().min(2) => u16);
-            let first = inner.height.saturating_sub(shown);
+            let first = body.y + body.height.saturating_sub(shown);
             for (i, line) in lines.iter().take(2).enumerate() {
-                util::line(
-                    f,
-                    inner,
-                    first + crate::cast!(i => u16),
-                    Line::from(Span::styled(format!(" {line}"), Style::default().fg(theme::BAD).bg(theme::PANEL_BG))),
-                );
+                let row = Rect::new(body.x, first + crate::cast!(i => u16), body.width, 1).intersection(body);
+                Text::new(format!(" {line}")).style(Style::default().fg(theme::BAD).bg(theme::PANEL_BG)).render(buf, row);
             }
         }
-        util::fill(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1), Style::default().bg(theme::STATUS_BG));
-        crate::widgets::status::render(
-            f,
-            Rect::new(area.x, status_row, area.width, 1),
-            &[("↑↓", "select"), ("Enter", "load"), ("Del", "delete"), ("Esc", "back")],
-            "load world",
-        );
+        let status_row = area.y + area.height - 1;
+        StatusBar::new(&[("↑↓", "select"), ("Enter", "load"), ("Del", "delete"), ("Esc", "back")]).right("load world").render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
+}
+
+/// One list row: name, year and day, prey and predator counts, and a version
+/// marker for a save the current format cannot load. Kept inside the modal's
+/// 66 columns: the wall-clock stamp never fitted.
+fn save_row(e: &save::SaveEntry) -> String {
+    let (y, d) = year_day(&e.header);
+    let (prey, pred) = e.header.kind_totals();
+    let mark = if e.version == save::VERSION { String::new() } else { format!("  v{}", e.version) };
+    format!("{:<22}  Year {}, Day {:<3}  {:>3} prey /{:>3} pred{}", clip(&e.header.world_name, 22), y, d, prey, pred, mark)
 }
 
 /// Split `text` into lines of at most `width` cells, breaking on spaces.

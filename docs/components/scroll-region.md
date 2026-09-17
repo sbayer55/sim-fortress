@@ -90,24 +90,26 @@ widgets::scroll::draw(f, panel_area: Rect, inner: Rect, offset: u16, body: impl 
 
 ### Planned
 ```rust
-ScrollRegion::new(&stack)                 // a VStack
-    .offset(self.offset)
-    .render(buf, inner) -> Overflow       // the container writes Panel::foot from it
+let region = ScrollRegion::new(&stack).offset(self.offset);   // any Component, normally a VStack
+let ov = region.overflow(Panel::inner(area));                  // content and clamped offset, before drawing
+let inner = Panel::new("Legend").foot(ov.foot().unwrap_or_default()).render(buf, area);
+let ov = region.render(buf, inner);                            // -> Overflow { content, offset, visible }
 ```
-`height` is the area height; `min_width` is the stack's widest `min_width`.
+The container writes the Foot: `Overflow::foot()` is `↑n ↓m` or `None`
+when everything fits. `height(width)` is the content height capped at
+`CANVAS_H` (give it less and it scrolls); `min_width` is the body's.
 
 ## Gaps today
-- Takes a closure that reports its rows after drawing, not a VStack, so the
-  height is not known before the blit and a stored offset is clamped one frame
-  late. S11 keeps a `measured` cell to work around this.
+- `scroll::draw` (the closure form) remains for S03, S04 and S11 until they
+  move to a stack; it still clamps the offset after drawing, so S11 keeps a
+  `measured` cell.
 - `CANVAS_H` silently drops rows past 160.
-- Frame entry point only; a region cannot nest inside another canvas.
-- Writes the Foot straight into the border; Panel has no Foot slot yet.
 - The event log in [S07](../screens/s07-event-log.md) pages by hand and does
   not use it.
 
 ## Examples
-The body is the nine-row S01 legend, shown in a panel with a two-row window.
+The body is the nine-row S01 legend (the twelve entries before Marsh was
+added, six species and the Footer), shown in a panel with a two-row window.
 
 ### Fits, no Foot (43 columns)
 Two rows of content in a two-row window.

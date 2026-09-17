@@ -17,7 +17,7 @@ use crate::sim::Params;
 use crate::ui::app::AppState;
 use crate::ui::screens::common::{clip, edit_text};
 use crate::ui::screens::{Action, Screen};
-use crate::widgets::{panel, status, util};
+use crate::widgets::{panel, util, Component, StatusBar};
 use crate::{glyphs, theme};
 
 const W: u16 = 78;
@@ -184,6 +184,6 @@ impl Screen for Designer {
         };
         let status_row = area.y + area.height - 1;
         util::fill(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1), Style::default().bg(theme::STATUS_BG));
-        status::render_noted(f, Rect::new(area.x, status_row, area.width, 1), hint, app.ai.status_note(), "species designer", theme::ACCENT);
+        StatusBar::new(hint).right("species designer").note(app.ai.status_note()).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }

@@ -61,7 +61,8 @@ for f in $changed; do
         src/ai/*|scripts/fake-gateway.js|tests/fixtures/ai/*)
             units[ai]=1; chunks[headless]=1; features="--features ai" ;;
         src/ui/*)                                 units[ui]=1 ;;
-        src/widgets/*)                            units[widgets]=1 ;;
+        src/widgets/*)                            units[widgets]=1; chunks[components]=1 ;;
+        docs/components/*)                        chunks[components]=1 ;;
         src/theme.rs)                             units[theme]=1; units[ui]=1 ;;
         src/glyphs.rs)                            units[glyphs]=1; units[ui]=1 ;;
         tests/*.rs)                               chunks[$(basename "$f" .rs)]=1 ;;

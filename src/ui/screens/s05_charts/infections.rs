@@ -1,6 +1,5 @@
 //! S05d — infections and resistance (C7 FR13).
 
-use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Line;
@@ -9,7 +8,8 @@ use crate::sim::{Outbreak, PathogenId};
 use crate::sim::{Sim, SpeciesId};
 use crate::ui::screens::common::{day_stamp, sp};
 use crate::ui::style::SpeciesStyle;
-use crate::widgets::{panel, util};
+use crate::widgets::chart::{Band, Chart, Series};
+use crate::widgets::{panel, util, Component};
 use crate::{glyphs, theme};
 use super::{Window, round_up};
 
@@ -50,121 +50,18 @@ fn outbreak_host(o: &Outbreak) -> Option<SpeciesId> {
 }
 
 /// Several half-block series over one y scale, with epidemic windows shaded;
-/// `reference` rows are drawn as dim dotted lines behind the series.
-#[allow(clippy::too_many_arguments)]
+/// `reference` rows are drawn as dim dotted lines behind the series. Thin
+/// adapter over [`Chart`].
 fn multi_line_chart(f: &mut Frame<'_>, area: Rect, w: &Window<'_>, series: &[(Vec<f32>, Color)], reference: &[(f32, Color)], y_max: f32, y_label: impl Fn(f32) -> String) {
-    if area.height < 4 || area.width < 12 {
-        return;
-    }
-    let label_w = 6u16;
-    let plot = Rect::new(area.x + label_w, area.y, area.width - label_w - 1, area.height - 2);
-    let axis_y = plot.bottom();
-    let cols = crate::cast!(plot.width => usize);
-    let rows = crate::cast!(plot.height => usize);
-    let buf = f.buffer_mut();
-    let band = theme::lerp(theme::PANEL_BG, theme::SICK, 0.22);
-    multi_line_columns(buf, w, plot, series, reference, y_max, cols, rows, band);
-    multi_line_axes(buf, area, plot, axis_y, w, y_max, cols, rows, y_label);
-}
-
-/// The multi-line columns: epidemic band, dotted reference rows and the series.
-#[allow(clippy::too_many_arguments)]
-fn multi_line_columns(buf: &mut Buffer, w: &Window<'_>, plot: Rect, series: &[(Vec<f32>, Color)], reference: &[(f32, Color)], y_max: f32, cols: usize, rows: usize, band: Color) {
-    let mut band_started: Option<u16> = None;
-    let y_of = |v: f32| -> usize { rows - 1 - (crate::cast!(((v / y_max).clamp(0.0, 1.0) * (crate::cast!(rows => f32) - 1.0)).round() => usize)).min(rows - 1) };
-    for c in 0..cols {
-        let x = plot.x + crate::cast!(c => u16);
-        if w.len() > 0 && w.epidemic_in(c, cols) {
-            paint_epidemic_band(buf, plot, x, rows, band);
-            if band_started.is_none() {
-                band_started = Some(x);
-            }
-        }
-        paint_reference_dots(buf, plot, x, reference, c, &y_of);
-        if w.len() == 0 {
-            continue;
-        }
-        paint_series_column(buf, plot, x, w, series, c, (cols, rows), y_max);
-    }
-    if let Some(bx) = band_started {
-        buf.set_stringn(bx + 1, plot.y, format!("{} epidemic", glyphs::DISEASE), 11, Style::default().fg(theme::SICK).bg(band));
-    }
-}
-
-/// Shade one whole column as an epidemic band.
-fn paint_epidemic_band(buf: &mut Buffer, plot: Rect, x: u16, rows: usize, band: Color) {
-    for r in 0..rows {
-        if let Some(cell) = buf.cell_mut((x, plot.y + crate::cast!(r => u16))) {
-            cell.set_char(' ');
-            cell.set_style(Style::default().bg(band));
-        }
-    }
-}
-
-/// Dotted reference markers on every other column.
-fn paint_reference_dots<F: Fn(f32) -> usize>(buf: &mut Buffer, plot: Rect, x: u16, reference: &[(f32, Color)], c: usize, y_of: &F) {
-    for &(v, color) in reference {
-        let r = y_of(v);
-        if let Some(cell) = buf.cell_mut((x, plot.y + crate::cast!(r => u16))) {
-            if c % 2 == 0 {
-                cell.set_char(glyphs::DOT);
-                cell.set_style(Style::default().fg(theme::dim(color, 0.55)).bg(cell.bg));
-            }
-        }
-    }
-}
-
-/// One column of half-block bars for every series.
-fn paint_series_column(buf: &mut Buffer, plot: Rect, x: u16, w: &Window<'_>, series: &[(Vec<f32>, Color)], c: usize, dims: (usize, usize), y_max: f32) {
-    let (cols, rows) = dims;
+    let labels = |i: usize| w.day_label(i);
+    let mut chart = Chart::new().y_max(y_max).y_label(&y_label).x_label(&labels);
     for (values, color) in series {
-        let v = w.mean_over(values, c, cols);
-        let halves = crate::cast!(((v / y_max).clamp(0.0, 1.0) * (crate::cast!(rows => f32) * 2.0)).round() => usize);
-        if halves == 0 {
-            if let Some(cell) = buf.cell_mut((x, plot.y + crate::cast!(rows => u16) - 1)) {
-                cell.set_char(glyphs::HALF_LOWER);
-                cell.set_style(Style::default().fg(*color).bg(cell.bg));
-            }
-            continue;
-        }
-        let r = rows - 1 - ((halves - 1).div_euclid(2)).min(rows - 1);
-        let ch = if halves % 2 == 1 { glyphs::HALF_LOWER } else { glyphs::HALF_UPPER };
-        if let Some(cell) = buf.cell_mut((x, plot.y + crate::cast!(r => u16))) {
-            cell.set_char(ch);
-            cell.set_style(Style::default().fg(*color).bg(cell.bg).add_modifier(Modifier::BOLD));
-        }
+        chart = chart.series(Series::new(values).color(*color));
     }
-}
-
-/// The multi-line chart's Y labels, box lines and X axis.
-#[allow(clippy::too_many_arguments)]
-fn multi_line_axes<F: Fn(f32) -> String>(buf: &mut Buffer, area: Rect, plot: Rect, axis_y: u16, w: &Window<'_>, y_max: f32, cols: usize, rows: usize, y_label: F) {
-    for k in 0..=4 {
-        let y = axis_y - 1 - crate::cast!((crate::cast!((rows - 1) => f32) * crate::cast!(k => f32) / 4.0).round() => u16);
-        buf.set_stringn(area.x, y, format!("{:>5}", y_label(y_max * crate::cast!(k => f32) / 4.0)), 5, theme::dim_text());
-        buf.set_stringn(plot.x - 1, y, glyphs::CROSS.to_string(), 1, theme::border());
+    for &(v, color) in reference {
+        chart = chart.reference(v, color);
     }
-    for r in 0..rows {
-        let y = plot.y + crate::cast!(r => u16);
-        if buf.cell((plot.x - 1, y)).is_some_and(|c| c.symbol() != "┼") {
-            buf.set_stringn(plot.x - 1, y, glyphs::V_LINE.to_string(), 1, theme::border());
-        }
-    }
-    let axis: String = std::iter::repeat_n(glyphs::H_LINE, cols + 1).collect();
-    buf.set_stringn(plot.x - 1, axis_y, &axis, cols + 1, theme::border());
-    let n = w.len().max(1);
-    for k in 0..=6 {
-        let i = ((k * (n - 1)).div_euclid(6)).min(n - 1);
-        let x = if k == 6 { plot.x + crate::cast!(cols => u16) - 1 } else { plot.x + crate::cast!(((i * cols).div_euclid(n)) => u16) };
-        buf.set_stringn(x, axis_y, glyphs::CROSS.to_string(), 1, theme::border());
-        let label = w.day_label(i);
-        if !label.is_empty() {
-            let lx = crate::cast!((i32::from(x) - crate::cast!(label.len() => i32).div_euclid(2)).max(i32::from(area.x)) => u16);
-            let lx = lx.min(area.right().saturating_sub(crate::cast!(label.len() => u16) + 1));
-            buf.set_stringn(lx, axis_y + 1, &label, label.len(), theme::dim_text());
-        }
-    }
-    buf.set_stringn(plot.right() - 3, axis_y, "now", 3, Style::default().fg(theme::ACCENT).bg(theme::PANEL_BG));
+    chart.band(Band::new(&w.epidemic).color(theme::SICK).label(glyphs::DISEASE, "epidemic")).render(f.buffer_mut(), area);
 }
 
 pub(super) fn infection_chart(f: &mut Frame<'_>, area: Rect, sim: &Sim, w: &Window<'_>) {

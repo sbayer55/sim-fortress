@@ -9,7 +9,9 @@
 //! quantile so the percentage targets hold on any seed (reading each cell's
 //! `biome` for what may grow there, widening rivers by drainage tier and
 //! fanning deltas where a trunk meets the sea), and `regions` merges the
-//! drainage basins into the eight named regions.
+//! drainage basins into the eight named regions. `history` holds the
+//! geological events that struck between the epochs and are remembered on
+//! the world.
 
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +22,7 @@ mod biome;
 mod classify;
 mod climate;
 mod flow;
+mod history;
 mod noise;
 mod regions;
 mod relief;
@@ -28,6 +31,8 @@ mod tests;
 
 pub use biome::{Biome, MIN_PATCH};
 pub use climate::Wind;
+pub use history::{HistoryEvent, HistoryKind};
+pub use relief::AgeRegime;
 pub use regions::{NAME_MAX, REGION_COUNT};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -141,6 +146,8 @@ pub struct World {
     /// The terrain is `Rock`; the list only changes how the cell is drawn
     /// and named.
     pub falls: Vec<(usize, usize)>,
+    /// The geological events that shaped the relief, in epoch order.
+    pub history: Vec<HistoryEvent>,
 }
 
 impl World {
@@ -306,6 +313,7 @@ impl World {
             water_cells_at_generation,
             shore: Vec::new(),
             falls,
+            history: relief.history,
         };
         world.refresh_shore();
         world

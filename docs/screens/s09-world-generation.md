@@ -23,7 +23,7 @@ Two panels over a status bar; body is 155×43.
 | Panel      | Columns  | Width | Rows | Border |
 |------------|----------|-------|------|--------|
 | New World  | 0–65     | 66    | 43   | Outer, right hint `field <n> of <total>` |
-| Preview    | 66–154   | 89    | 43   | Outer, right hint `seed <seed>, <w>x<h> at 1:2` |
+| Preview    | 66–154   | 89    | 43   | Outer, right hint `seed <seed>, <w>x<h> at 1:2, <wind> wind, <young/mature/old> land, <n> events` |
 | Status bar | 0–154    | 155   | 1    | — |
 
 Inside the Preview panel a 75×20 terrain image (with a single-line frame around it) is

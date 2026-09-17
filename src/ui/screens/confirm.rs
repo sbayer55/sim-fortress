@@ -2,14 +2,13 @@
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
-use ratatui::text::{Line, Span};
+use ratatui::style::Style;
 use ratatui::Frame;
 
 use crate::ui::app::{AppState, ConfirmYes};
 use crate::ui::screens::common::clip;
 use crate::ui::screens::{Action, Screen};
-use crate::widgets::{panel, util};
+use crate::widgets::{Component, Modal, StatusBar, Text};
 use crate::theme;
 
 #[derive(Debug)]
@@ -54,29 +53,18 @@ impl Screen for ConfirmModal {
     }
 
     fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
-        let modal = util::centered(area, 50.min(area.width.saturating_sub(2)), 7.min(area.height.saturating_sub(2)));
-        let inner = panel::draw(f, modal, "", panel::Kind::Focus);
+        let modal = Modal::new(50.min(area.width.saturating_sub(2)), 7.min(area.height.saturating_sub(2)))
+            .buttons(&["[ Yes ]", "[ No ]"], Some(self.focus))
+            .hint("←→ move  Enter select  Esc no");
         let question = app.confirm.as_ref().map(|r| r.question.clone()).unwrap_or_default();
+        let buf = f.buffer_mut();
+        let body = modal.render(buf, area);
+        let text = Text::new(clip(&question, crate::cast!(body.width => usize))).style(Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG));
+        text.render(buf, Rect::new(body.x, body.y + 1, body.width, 1).intersection(body));
 
-        util::line(f, inner, 1, Line::from(Span::styled(
-            clip(&question, crate::cast!(inner.width => usize)),
-            Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG),
-        )));
-
-        let row = inner.height - 2;
-        let buttons: [(&str, usize); 2] = [("[ Yes ]", 0), ("[ No ]", 1)];
-        let mut spans = vec![Span::styled("  ", theme::text())];
-        for (label, i) in buttons {
-            let st = if self.focus == i {
-                Style::default().fg(theme::CURSOR_FG).bg(theme::ACCENT).add_modifier(Modifier::BOLD)
-            } else {
-                theme::text()
-            };
-            spans.push(Span::styled(label, st));
-            spans.push(Span::styled("    ", theme::text()));
-        }
-        spans.push(Span::styled("←→ move  Enter select  Esc no", theme::dim_text()));
-        util::line(f, inner, row, Line::from(spans));
+        // Repaint the status bar undimmed, as every other modal does.
+        let status_row = area.y + area.height - 1;
+        StatusBar::new(&[("y", "yes"), ("n", "no"), ("←→", "move"), ("Enter", "select"), ("Esc", "no")]).right("confirm").render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 

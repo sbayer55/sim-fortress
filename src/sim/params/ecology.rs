@@ -22,6 +22,10 @@ pub struct EcologyParams {
     pub water_dry_region_moisture: f32,
     pub water_refill_region_moisture: f32,
     pub water_changes_per_region_per_day: usize,
+    /// Days of creature-free vegetation growth run once when a world is
+    /// made, so founders arrive on biomass at carrying capacity (0 = none;
+    /// the S09 live preview never runs it).
+    pub warm_up_days: u32,
     pub max_vegetation: BTreeMap<Terrain, f32>,
     pub season_cap: BTreeMap<Season, f32>,
     pub season_regrowth: BTreeMap<Season, f32>,
@@ -47,6 +51,7 @@ impl Default for EcologyParams {
             water_dry_region_moisture: 0.15,
             water_refill_region_moisture: 0.35,
             water_changes_per_region_per_day: 3,
+            warm_up_days: 60,
             max_vegetation: BTreeMap::from([
                 (Sand, 0.10),
                 (Dirt, 0.30),

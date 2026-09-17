@@ -1,6 +1,5 @@
 //! S05a — prey/predator population lines, with the drought band and census sidebar.
 
-use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Line;
@@ -8,9 +7,10 @@ use ratatui::Frame;
 use crate::sim::{Kind, Sim, SpeciesId};
 use crate::ui::screens::common::{arrow_color, sp, trend_arrow};
 use crate::ui::style::SpeciesStyle;
-use crate::widgets::{panel, util};
+use crate::widgets::chart::{Band, Chart, Series};
+use crate::widgets::{panel, util, Component};
 use crate::{glyphs, theme};
-use super::{Window, round_up, stats_of};
+use super::{Window, stats_of};
 
 pub(super) fn time_chart(f: &mut Frame<'_>, area: Rect, sim: &Sim, w: &Window<'_>) {
     let inner = panel::draw_with_hint(f, area, "Population — prey vs predators", &format!("last {} days, 1 point per day", w.len()), panel::Kind::Outer);
@@ -27,98 +27,15 @@ pub(super) fn time_chart(f: &mut Frame<'_>, area: Rect, sim: &Sim, w: &Window<'_
 }
 
 /// One series as a half-block line with a y axis on the left, x labels below.
+/// Thin adapter over [`Chart`]: the window supplies the labels and the drought band.
 fn line_chart(f: &mut Frame<'_>, area: Rect, w: &Window<'_>, series: &[f32], color: Color, step: f32) {
-    if area.height < 4 || area.width < 12 {
-        return;
-    }
-    let label_w = 6u16;
-    let plot = Rect::new(area.x + label_w, area.y, area.width - label_w - 1, area.height - 2);
-    let axis_y = plot.bottom();
-    let cols = crate::cast!(plot.width => usize);
-    let rows = crate::cast!(plot.height => usize);
-    let max = series.iter().copied().fold(0.0f32, f32::max);
-    let y_max = round_up(max, step);
-    let buf = f.buffer_mut();
-    let band = theme::lerp(theme::PANEL_BG, theme::WARN, 0.22);
-    plot_columns(buf, plot, w, series, color, y_max, cols, rows, band);
-    draw_axes(buf, area, plot, axis_y, w, y_max, cols, rows);
-}
-
-/// Draw the series columns, including the drought band and its label.
-#[allow(clippy::too_many_arguments)]
-fn plot_columns(buf: &mut Buffer, plot: Rect, w: &Window<'_>, series: &[f32], color: Color, y_max: f32, cols: usize, rows: usize, band: Color) {
-    let mut band_started: Option<u16> = None;
-    for c in 0..cols {
-        let x = plot.x + crate::cast!(c => u16);
-        let dry = w.len() > 0 && w.drought_in(c, cols);
-        if dry {
-            for r in 0..rows {
-                if let Some(cell) = buf.cell_mut((x, plot.y + crate::cast!(r => u16))) {
-                    cell.set_char(' ');
-                    cell.set_style(Style::default().bg(band));
-                }
-            }
-            if band_started.is_none() {
-                band_started = Some(x);
-            }
-        }
-        if w.len() == 0 {
-            continue;
-        }
-        let v = w.mean_over(series, c, cols);
-        let halves = crate::cast!(((v / y_max) * (crate::cast!(rows => f32) * 2.0)).round() => usize);
-        if halves == 0 {
-            // Flat zero: a lower half-block on the bottom row.
-            if let Some(cell) = buf.cell_mut((x, plot.y + crate::cast!(rows => u16) - 1)) {
-                cell.set_char(glyphs::HALF_LOWER);
-                cell.set_style(Style::default().fg(color).bg(cell.bg));
-            }
-            continue;
-        }
-        let r = rows - 1 - ((halves - 1).div_euclid(2)).min(rows - 1);
-        let ch = if halves % 2 == 1 { glyphs::HALF_LOWER } else { glyphs::HALF_UPPER };
-        if let Some(cell) = buf.cell_mut((x, plot.y + crate::cast!(r => u16))) {
-            cell.set_char(ch);
-            cell.set_style(Style::default().fg(color).bg(cell.bg).add_modifier(Modifier::BOLD));
-        }
-    }
-    if let Some(bx) = band_started {
-        buf.set_stringn(bx + 1, plot.y, format!("{} drought", glyphs::DROUGHT), 10, Style::default().fg(theme::WARN).bg(band));
-    }
-}
-
-/// Draw the Y labels, the box lines and the X axis with seven labels.
-#[allow(clippy::too_many_arguments)]
-fn draw_axes(buf: &mut Buffer, area: Rect, plot: Rect, axis_y: u16, w: &Window<'_>, y_max: f32, cols: usize, rows: usize) {
-    // Y labels: 0, ¼, ½, ¾, max.
-    for k in 0..=4 {
-        let y = axis_y - 1 - crate::cast!((crate::cast!((rows - 1) => f32) * crate::cast!(k => f32) / 4.0).round() => u16);
-        let v = crate::cast!((y_max * crate::cast!(k => f32) / 4.0).round() => u32);
-        buf.set_stringn(area.x, y, format!("{v:>5}"), 5, theme::dim_text());
-        buf.set_stringn(plot.x - 1, y, glyphs::CROSS.to_string(), 1, theme::border());
-    }
-    for r in 0..rows {
-        let y = plot.y + crate::cast!(r => u16);
-        if buf.cell((plot.x - 1, y)).is_some_and(|c| c.symbol() != "┼") {
-            buf.set_stringn(plot.x - 1, y, glyphs::V_LINE.to_string(), 1, theme::border());
-        }
-    }
-    // X axis with seven labels.
-    let axis: String = std::iter::repeat_n(glyphs::H_LINE, cols + 1).collect();
-    buf.set_stringn(plot.x - 1, axis_y, &axis, cols + 1, theme::border());
-    let n = w.len().max(1);
-    for k in 0..=6 {
-        let i = ((k * (n - 1)).div_euclid(6)).min(n - 1);
-        let x = if k == 6 { plot.x + crate::cast!(cols => u16) - 1 } else { plot.x + crate::cast!(((i * cols).div_euclid(n)) => u16) };
-        buf.set_stringn(x, axis_y, glyphs::CROSS.to_string(), 1, theme::border());
-        let label = w.day_label(i);
-        if !label.is_empty() {
-            let lx = crate::cast!((i32::from(x) - crate::cast!(label.len() => i32).div_euclid(2)).max(i32::from(area.x)) => u16);
-            let lx = lx.min(area.right().saturating_sub(crate::cast!(label.len() => u16) + 1));
-            buf.set_stringn(lx, axis_y + 1, &label, label.len(), theme::dim_text());
-        }
-    }
-    buf.set_stringn(plot.right() - 3, axis_y, "now", 3, Style::default().fg(theme::ACCENT).bg(theme::PANEL_BG));
+    let labels = |i: usize| w.day_label(i);
+    Chart::new()
+        .series(Series::new(series).color(color))
+        .y_step(step)
+        .x_label(&labels)
+        .band(Band::new(&w.drought).color(theme::WARN).label(glyphs::DROUGHT, "drought"))
+        .render(f.buffer_mut(), area);
 }
 
 fn pct_change(series: &[f32], days: usize) -> Option<f32> {

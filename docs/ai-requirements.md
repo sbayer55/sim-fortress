@@ -61,7 +61,7 @@ AI is off.
 
 **R3 — The step never sees the model.** No AI code under `src/sim`. `Sim::step` and everything
 it calls cannot observe whether AI is on. `sim::tests::checksum_is_fnv_stable` must produce
-`0x9b4ed39b8baac6f5` (the value `AGENTS.md` pins; an earlier draft quoted a stale one) with
+`0xd0e3ee1ac665f531` (the value `AGENTS.md` pins; an earlier draft quoted a stale one) with
 the `ai` Cargo feature on and off. The existing purity scan in
 `src/sim/mod.rs` keeps ratatui and hash maps out; the AI module lives beside `ui`, not under
 `sim`, so the scan never sees it. The `[ai]` **config struct** may live with `UiParams` in

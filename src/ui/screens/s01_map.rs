@@ -3,8 +3,6 @@
 
 use ratatui::crossterm::event::KeyEvent;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
-use ratatui::text::{Line, Span};
 use ratatui::Frame;
 use crate::sim::creatures::CreatureId;
 use crate::sim::disease::PathogenId;
@@ -15,10 +13,10 @@ use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{clock_status, EventKindStyle, SpeciesStyle};
 use crate::ui::viewport::{self, GUTTER_W, MAP_CHROME_ROWS, MIN_MAP_W, SIDEBAR_W};
 use crate::widgets::map::{self, MapOptions, Overlay};
-use crate::widgets::{panel, status, util};
+use crate::widgets::{panel, Component, Divider, Legend, Panel, Spacer, StatusBar, Text, Ticker, VStack};
 use crate::theme;
 
-use base::{clock_section, legend_section, population_section, resources_section};
+use base::{clock_section, population_section, resources_section};
 use disease_overlay::disease_tints;
 use parasites::parasite_tints;
 
@@ -255,7 +253,7 @@ impl Screen for WorldMap {
         let status_row = area.y + area.height - 1;
         let keys = status_keys(app, self.overlay, overlay);
         let (right, right_fg) = clock_status(time, app.params.ui.day_night_tint);
-        status::render_noted(f, Rect::new(area.x, status_row, area.width, 1), keys, app.ai.status_note(), &right, right_fg);
+        StatusBar::new(keys).right(&right).right_color(right_fg).note(app.ai.status_note()).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 
@@ -286,24 +284,11 @@ fn status_keys(app: &AppState, screen: Overlay, overlay: Overlay) -> &'static [(
 
 /// The one-line event ticker under the map.
 fn draw_ticker(f: &mut Frame<'_>, area: Rect, map_rows: u16, sim: &Sim, app: &AppState) {
-        let ticker_row = area.y + map_rows;
-        let ticker = Rect::new(area.x, ticker_row, area.width, 1);
-        util::fill(f.buffer_mut(), ticker, Style::default().bg(theme::BG));
-        // C4 FR11: births and mutations reach the ticker only when `log_births` is on.
-        let log_births = app.params.ui.log_births;
-        let last = sim.events.iter().rev().find(|e| log_births || !matches!(e.kind, crate::sim::EventKind::Birth | crate::sim::EventKind::Mutation));
-        if let Some(last) = last {
-            util::line(
-                f,
-                ticker,
-                0,
-                Line::from(vec![
-                    Span::styled(format!(" {} ", last.kind.glyph()), Style::default().fg(last.kind.color()).bg(theme::BG).add_modifier(Modifier::BOLD)),
-                    Span::styled(last.text.clone(), Style::default().fg(theme::TEXT).bg(theme::BG)),
-                    Span::styled("   (e: full log)", Style::default().fg(theme::DIM).bg(theme::BG)),
-                ]),
-            );
-        }
+    let ticker = Rect::new(area.x, area.y + map_rows, area.width, 1);
+    // C4 FR11: births and mutations reach the ticker only when `log_births` is on.
+    let log_births = app.params.ui.log_births;
+    let last = sim.events.iter().rev().find(|e| log_births || !matches!(e.kind, crate::sim::EventKind::Birth | crate::sim::EventKind::Mutation));
+    Ticker::new(last.map(|e| (e.kind.glyph(), e.kind.color(), e.text.as_str()))).render(f.buffer_mut(), ticker);
 }
 
 /// The `MapOptions` for the current frame.
@@ -383,17 +368,17 @@ pub fn group(n: u64) -> String {
 
 impl WorldMap {
     pub(super) fn sidebar(f: &mut Frame<'_>, area: Rect, app: &AppState, sim: &Sim, world: &World, time: &crate::sim::Time) {
-        let inner = panel::draw(f, area, "Status", panel::Kind::Outer);
-        let mut row = 0u16;
-
-        row = clock_section(f, inner, row, app, time);
-        row = population_section(f, inner, row, sim);
-        row = resources_section(f, inner, row, app, world, time);
-        panel::section(f, inner, row, "Notable");
-        row += 1;
-        util::line(f, inner, row, Line::from(Span::styled(" [k] look · [e] events · [g] charts", theme::dim_text())));
-        row += 2;
-        legend_section(f, inner, row, sim.roster());
+        let buf = f.buffer_mut();
+        let inner = Panel::new("Status").render(buf, area);
+        let mut rows = clock_section(app, time);
+        rows.extend(population_section(sim));
+        rows.extend(resources_section(app, world, time));
+        rows.push(Box::new(Divider::new("Notable")));
+        rows.push(Box::new(Text::new(" [k] look · [e] events · [g] charts").style(theme::dim_text())));
+        rows.push(Box::new(Spacer::rows(1)));
+        rows.push(Box::new(Divider::new("Legend")));
+        rows.push(Box::new(Legend::map().species(sim.roster())));
+        VStack::from_boxes(&rows).render(buf, inner);
     }
 }
 

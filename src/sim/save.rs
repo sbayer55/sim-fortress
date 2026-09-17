@@ -27,10 +27,11 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// per-cell biome and the per-cell region map (biomes as regions); version 9
 /// came with river morphology (width tiers, deltas, washes and falls); version
 /// 10 widened the genome to twelve traits (Mutability) and added the
-/// per-creature `sterile` flag; version 11 added the chronicle table (C9,
-/// decorative and optional: an empty table loads in any build) and the `[ai]`
-/// block inside the saved `UiParams`.
-pub const VERSION: u16 = 11;
+/// per-creature `sterile` flag; version 11 added the world's
+/// geological history and the ecology warm-up parameter; version 12 added the
+/// chronicle table (C9, decorative and optional: an empty table loads in any
+/// build) and the `[ai]` block inside the saved `UiParams`.
+pub const VERSION: u16 = 12;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 

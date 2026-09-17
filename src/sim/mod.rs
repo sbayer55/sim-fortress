@@ -22,21 +22,16 @@ pub mod world;
 
 pub use creatures::{Cause, Creature, CreatureId, Death, DeathTallies, Goal, Mutation, RestReason, Sex};
 pub use disease::{DiseaseState, Infection, Outbreak, Pathogen, PathogenId, PathogenStats, Stage};
-pub use chronicle::ChronicleEntry;
-pub use events::{Event, EventKind};
-pub use geom::{cheb, dist};
+pub use {chronicle::ChronicleEntry, events::{Event, EventKind}};
+pub use {geom::{cheb, dist}, time::{Season, Time}};
 pub use params::{Difficulty, GeneticsParams, Params, PredationParams, Preset, Rainfall, Roster, SpeciesParams, PRESETS};
-pub use rng::Rng;
-pub use spatial::SpatialIndex;
+pub use {rng::Rng, spatial::SpatialIndex};
 pub use species::{Genome, Kind, SpeciesId, TRAIT_NAMES};
 pub use lineage::{Lineage, LineageNode, Tree, TreeItem};
 pub use stats::{census, group_census, Census, GroupCensus, Sample, Series, SpeciesStats};
-pub use time::{Season, Time};
 pub use world::{Cell, RegionRect, Terrain, World};
 
-
-use creatures::CreatureStore;
-use events::EventRing;
+use {creatures::CreatureStore, events::EventRing};
 use serde::{Deserialize, Serialize};
 
 /// A notification the UI should surface (e.g. an extinction modal). C5 FR8.
@@ -140,15 +135,14 @@ pub struct Sim {
     /// creature streams untouched.
     pub disease_rng: Rng,
     pub disease: DiseaseState,
-    /// C9 season summaries: decorative, never read by the step (R11). Postcard
-    /// is not self-describing, so save VERSION 11 carries the field, not `default`.
+    /// C9 season summaries: decorative, never read by the step (R11); the save VERSION carries it.
     #[serde(default)]
     pub chronicle: Vec<ChronicleEntry>,
 }
 
 impl Sim {
     pub fn new(seed: u64, params: Params) -> Self {
-        let world = World::generate(seed, &params.world);
+        let mut world = World::generate(seed, &params.world);
         let time = Time::new(
             params.time.start_hour,
             params.time.season_days,
@@ -156,6 +150,7 @@ impl Sim {
             params.time.sunrise_hour,
             params.time.sunset_hour,
         );
+        ecology::warm_up(&mut world, &params.ecology, time.season(), params.ecology.warm_up_days);
         let events = EventRing::new(params.events.capacity);
         let series = Series::new(params.stats.series_days);
         let rng = Rng::new(seed);
@@ -677,7 +672,11 @@ mod tests {
         // Re-baselined for Mutability: the genome grew to twelve traits, so
         // every founder draws one more jitter gaussian and a sterility roll,
         // and every birth draws a sterility roll after inheritance.
-        assert_eq!(a.checksum(), 0x9b4e_d39b_8baa_c6f5);
+        // Re-baselined for history: the event draws precede the epochs, the
+        // events reshape the relief, the vegetation warm-up replaces the
+        // seeded biomass founders land on, and regions are split into
+        // 4-connected pieces.
+        assert_eq!(a.checksum(), 0xd0e3_ee1a_c665_f531);
     }
 
     #[test]

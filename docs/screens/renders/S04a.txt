@@ -1,15 +1,15 @@
  S04a  Species Browser - species table                                                                                                                     
-╔ Species ════════════════════════════════════════════════════════════════════════════════════════════════════════════════ 6 species, 3 prey / 3 predator ╗
-║   Species Kind  Count Adults   Juv Birth/d Death/d  Sick  Peak  Gen  30-day trend    Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat Mut    Diet            ║
+╔ Species ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ sorted by count ↓ ╗
+║   Species Kind  Count Adults   Juv Birth/d Death/d  Sick  Peak  Gen  30-day trend     Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat Mut    Diet           ║
 ║                                                                                                                                                         ║
-║►H Hare    prey    172    172     0       0       0     0   693    4  █▓▓▓▓▓▒▒▒▒▒▒░░↓  80  25  65  59  10  56  75  35  35  25  50  51   grass, bark      ║
-║ V Vole    prey    140    140     0       0       1     0   491    6  █▓▓▓▓▒▒▒▒▒▒░░░↓  45  10  40  75   6  61  90  21  30  36  50  49   seeds, roots     ║
-║ D Deer    prey     37     33     4       0       1     0   308    2  █▓▒▒▒▒▒▒▒▒▒▒▒░↓  66  79  53  37  20  34  35  69  48  70  47  51   grass, leaves    ║
-║ F Fox     pred      4      4     0       0       0     0     8    1  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓↔  69  33  74  58  65  50  42  47  36  18  49  52   voles, hares     ║
-║ L Lynx    pred      3      3     0       0       0     0     5    2  ██████████░░░░↓  75  46  85  43  74  77  25  58  52  12  51  43   hares, voles     ║
-║ W Wolf    pred      2      2     0       0       0     0     8    2  ██████▓░░░░░░░↓  74  69  75  52  85  25  40  67  49  78  50  53   deer, hares      ║
+║►H Hare    prey    172    172     0       0       0     0   693    4  █▓▓▓▓▓▒▒▒▒▒▒░░↓   80  25  65  59  10  56  75  35  35  25  50  51   grass, bark     ║
+║ V Vole    prey    140    140     0       0       1     0   491    6  █▓▓▓▓▒▒▒▒▒▒░░░↓   45  10  40  75   6  61  90  21  30  36  50  49   seeds, roots    ║
+║ D Deer    prey     37     33     4       0       1     0   308    2  █▓▒▒▒▒▒▒▒▒▒▒▒░↓   66  79  53  37  20  34  35  69  48  70  47  51   grass, leaves   ║
+║ F Fox     pred      4      4     0       0       0     0     8    1  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓↔   69  33  74  58  65  50  42  47  36  18  49  52   voles, hares    ║
+║ L Lynx    pred      3      3     0       0       0     0     5    2  ██████████░░░░↓   75  46  85  43  74  77  25  58  52  12  51  43   hares, voles    ║
+║ W Wolf    pred      2      2     0       0       0     0     8    2  ██████▓░░░░░░░↓   74  69  75  52  85  25  40  67  49  78  50  53   deer, hares     ║
 ║                                                                                                                                                         ║
-║   totals           358   prey 349  pred 9  ratio 38.8:1   births 0  deaths 0   net +0 today     traits = species means x100;  /d = yesterday            ║
+║   totals          358    prey 349  pred 9  ratio 38.8:1   births 0  deaths 0   net +0 today     traits = species means x100;  /d = yesterday            ║
 ║                                                                                                                                                         ║
 ╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 ╔ Selected: Hare ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ Enter for full detail ╗
@@ -42,4 +42,4 @@
 ║ H Nettle   h#279    6 offspring  gen 1    460 days  Northern Ta                                                                                         ║
 ║ H Nettle   h#274    6 offspring  gen 1    440 days  Western For                                                                                         ║
 ╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ ↓3 ╝
- [↑↓] select  [Tab] panel  [Enter] detail  [s] sort  [Esc] back                                          sorted by count ↓  Year 2, Day 1 of Spring  06:00 
+ [↑↓] select  [Tab] panel  [Enter] detail  [s] sort  [Esc] back                             6 species, 3 prey / 3 predator  Year 2, Day 1 of Spring  06:00 

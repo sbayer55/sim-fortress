@@ -107,7 +107,7 @@ Stepper::new("Water %", "20")
     .render(buf, row_area)
 
 Stepper::compact("240").value_w(5).focused(false)      // Compact
-Stepper::inline("autosave every 7 days").key("[←→]")   // Inline
+Stepper::inline("autosave every 7 days").key("[←→]")   // Inline; `.text_w(24)` pads the text inside the arrows
 ```
 `height` is 1; `min_width` is `label_w + box_w + 2`. The value is a
 pre-formatted string; ranges, steps and typed-entry parsing stay with the

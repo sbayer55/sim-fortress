@@ -22,7 +22,7 @@ src/ai/          C9 language-model layer (docs/ai-requirements.md): plain types,
                  only with `--features ai` (not default). Never imported from src/sim.
 src/ui/          ratatui layer: App/AppState (ui/app.rs), screen stack, screens;
                  ui/ai_bridge.rs is where replies meet the app
-src/widgets/     shared drawing: panel, status, bars, util, map
+src/widgets/     shared drawing: the components (docs/components) and the helpers that wrap them
 src/theme.rs     truecolor palette, ramps and styles
 src/glyphs.rs    named CP437 glyph constants
 tests/           integration acceptance tests (one file per chunk)
@@ -62,6 +62,7 @@ bare `cargo test`, unfiltered `cargo test --lib`, and slow chunks run without
 |---|---|---|---|
 | gate | `just check` | seconds | always, before calling anything done |
 | unit | `just test-unit <module::path>` | seconds to tens of seconds | the module you edited (`sim::disease`, `ui`, `sim::params`) |
+| components | `cargo test --test components` | seconds | any edit under `src/widgets/` or `docs/components/`: every sheet example is rendered cell for cell |
 | chunk | `just test-chunk <name>` | 1–3 min in release | the chunk your change affects; **run in the background** |
 | affected | `just test-affected` | varies | when the diff spans modules; `just test-affected-plan` prints the plan first |
 | lib | `just test-unit-all` | ~95 s | **only when the user explicitly asks** |
@@ -125,7 +126,7 @@ Do not weaken these to make a change pass. Fix the change.
   → ecology → migration/extinction. **Never reorder or merge RNG draws.** Three RNG
   streams exist (`rng`, `creature_rng`, `disease_rng`) so enabling one subsystem does
   not perturb another. `sim::tests::checksum_is_fnv_stable` pins the exact checksum
-  `0x9b4ed39b8baac6f5`; only re-baseline deliberately, with a comment saying why.
+  `0xd0e3_ee1a_c665_f531`; only re-baseline deliberately, with a comment saying why.
 - **Sim/UI separation.** `src/sim` is pure data and logic: **no `ratatui`, `HashMap`
   or `HashSet`** anywhere under it. `src/sim/mod.rs` guards this by scanning every
   `.rs` file there for those substrings — **comments and strings included** — skipping
@@ -171,7 +172,7 @@ Do not weaken these to make a change pass. Fix the change.
 - **All numeric casts go through `cast!(expr => Ty)`** (defined in `src/lib.rs`).
   Bare `as` is denied; the macro is the one reviewed place that preserves `as`
   semantics and works in `const` context.
-- **Save format is versioned and never migrated.** Binary `SIMF` files, `VERSION = 11`
+- **Save format is versioned and never migrated.** Binary `SIMF` files, `VERSION = 12`
   in `src/sim/save.rs`. A version mismatch is rejected (`SaveError`), never half-read;
   old files stay listable so they can be deleted. `Params`/`Sim` serde field order and
   attributes are load-bearing — changing them means bumping `VERSION` and accepting
@@ -204,7 +205,7 @@ Do not weaken these to make a change pass. Fix the change.
   implement `Screen` (`opaque`, `handle_key`, `render`). The **top screen sees every
   key first** and returns `Action::Unhandled` for keys it does not consume; only then
   does the global table in `src/ui/screens/mod.rs` apply. Register the module there,
-  keep the status bar (`widgets::status`) and `?` help honest, and refresh the affected
+  keep the status bar (`widgets::StatusBar`) and `?` help honest, and refresh the affected
   renders. Modals return `opaque() == false` so the stack dims what is beneath them.
 - **Tests.** Acceptance criteria live in `tests/` (one file per chunk); unit tests live
   in `src/**/tests.rs`. Prefer extending the existing acceptance test over inventing a
@@ -262,7 +263,7 @@ git diff --stat                                 # only the files you meant to to
 ```
 
 If you touched `src/sim`, re-run `cargo test --lib sim::tests::checksum_is_fnv_stable`
-and confirm the value is still `0x9b4ed39b8baac6f5` unless the change deliberately
+and confirm the value is still `0xd0e3_ee1a_c665_f531` unless the change deliberately
 re-baselines it. If you touched `src/ai`, `src/ui/ai_bridge.rs` or the AI screens, also run
 `just test-unit-ai ai`, `just test-unit-ai ui` and `cargo test --features ai --test headless`
 (they launch `scripts/fake-gateway.js`, so `node` must be on PATH).

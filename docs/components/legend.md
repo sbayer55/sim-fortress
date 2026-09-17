@@ -97,29 +97,31 @@ and the Footer. The S11 functions are private.
 ```rust
 Legend::map()                            // entries from map::legend()
     .columns(2).label_w(17)              // Sidebar defaults
-    .species(roster)                     // adds the Pair Name rows and Footer
+    .species(&roster)                    // adds the Pair Name rows and Footer
     .render(buf, area)
 
-Legend::map().columns(1).label_w(14).notes(&TERRAIN_NOTES)   // Help
-Legend::new(&[(glyphs::BIRTH, theme::GOOD, "birth / litter")])   // any list
+Legend::map().columns(1).label_w(14).notes(&TERRAIN_NOTES)   // Help: notes imply the Help style
+Legend::new(&[(glyphs::BIRTH, theme::GOOD, "birth / litter")]).help()   // any list, Help style
+Legend::creatures(&roster)               // the S11 Creatures table with its header and Footer
 ```
-`height` is the row count for the given width; `min_width` is
-`1 + 2 + label_w` for one column.
+`height` is the row count; `min_width` is `1 + columns × (2 + label_w)`.
 
 ## Gaps today
-- `legend_section` draws its own [Divider](divider.md); the planned component
-  is the grid only.
-- S11 rebuilds the glyph cell and column layout by hand
-  (`glyph_span`, `terrain_column`) instead of sharing S01's loop.
+- `legend_section` (S01) and `terrain_column`/`creature_column` (S11) still
+  draw by hand until those screens move.
 - The species rows and the Footer are fixed at three per row and one line; a
   roster of more than nine species pushes the Footer out of the sidebar.
 - `glyphs::SEED` `*` is also `glyphs::SNOW` and `glyphs::WINTER`, so the
   `regrowth` entry is ambiguous in winter.
+- `map::legend()` now has thirteen entries (Marsh); the examples below use
+  the twelve the S01a render was drawn with, so the live sidebar is one row
+  taller than they show.
 
 ## Examples
 
 ### Sidebar, S01 rows (43 columns)
-The nine rows of the S01a `Legend` section, cell for cell.
+The nine rows of the S01a `Legend` section, cell for cell (twelve entries,
+see Gaps today).
 ```
 ║ ≈ deep water       ~ shallow water      ║
 ║ · sand             . bare dirt          ║

@@ -93,36 +93,38 @@ cell right on that row only.
 
 ### Planned
 ```rust
-let cols = Columns::new([
+let cols = Columns::new(&[
     Fixed(3),                 // " V "
     Fixed(6),                 // name, left
-    Min(5).right(),           // count; grows for every row if one needs it
+    Min(5),                   // count; grows for every row if one needs it
     Fixed(1),                 // gap
     Fixed(1),                 // trend arrow
     Fixed(4),                 // gap
     Fixed(18),                // sparkline
     Fill(1),                  // the rest
-]);
-let rows = species.iter().map(|s| Row::new([
-    Text::new(format!(" {} ", s.glyph)).color(s.color).bold(),
-    Text::new(s.name),
-    Text::new(s.count.to_string()),
-    Spacer::cols(1),
-    TrendArrow::new(&s.series),
-    Spacer::cols(4),
-    Sparkline::new(&s.series).color(s.color),
-    Spacer::cols(0),
-]));
-Block::new(&cols).rows(rows).render(buf, area)   // measures Min columns, then draws
+])
+.align(2, Align::Right);      // or build `Column::titled("Count", Min(5)).right()` entries
+let rows = species.iter().map(|s| Row::new()
+    .cell(Text::new(format!(" {} ", s.glyph)).fg(s.color).bold())
+    .cell(Text::new(s.name))
+    .cell(Text::new(s.count.to_string()))
+    .cell(Spacer::cols(1))
+    .cell(TrendArrow::new(&s.series))
+    .cell(Spacer::cols(4))
+    .cell(Sparkline::new(&s.series).color(s.color))
+    .cell(Spacer::cols(0)));
+Block::new(cols).rows(rows).selected(None).render(buf, area)   // measures Min columns, then draws
 ```
-A `Table` is `Block` with a header row, a Marker column and a selected row.
-`Row::span(component)` makes a row that ignores the columns.
+A cell is a `Text` (taking the column's alignment unless it sets its own),
+any component (`Cell::Widget`, with `From` impls for Bar, Range Bar,
+Sparkline, Trend Arrow, Spacer and HStack), or `Cell::Blank`.
+`Row::span(component)` makes a row that ignores the columns, such as a
+Divider. A `Table` is `Block` with a header row, a Marker column and a
+selected row.
 
 ## Gaps today
-- Nothing measures before drawing; alignment is by matching literals.
-- The sparkline offset (20) is a literal that must agree with the four span
-  widths before it; changing the name width silently overlaps them.
-- Numeric cells overflow rather than widen their column.
+- The S01 Population rows still align by matching literals; they move to a
+  `Block` when the sidebar becomes a VStack.
 
 ## Examples
 

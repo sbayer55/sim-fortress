@@ -13,7 +13,7 @@ use crate::sim::Sim;
 use crate::ui::app::AppState;
 use crate::ui::style::SeasonStyle;
 use crate::widgets::scroll::{self, Overflow};
-use crate::widgets::{panel, status, util};
+use crate::widgets::{panel, util, Component, StatusBar};
 use crate::{glyphs, theme};
 
 /// Draw the view; returns what the scroll blit measured (for clamping).
@@ -28,7 +28,7 @@ pub(super) fn render(f: &mut Frame<'_>, area: Rect, app: &AppState, sim: &Sim, o
 
     let right = format!("{}  {} {}", sim.time.clock_label(), glyphs::SUN, "day");
     let keys: &[(&str, &str)] = &[("↑↓", "scroll"), ("c", "event log"), ("Esc", "back")];
-    status::render_noted(f, Rect::new(area.x, status_row, area.width, 1), keys, app.ai.status_note(), &right, theme::ACCENT);
+    StatusBar::new(keys).right(&right).note(app.ai.status_note()).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     measured
 }
 

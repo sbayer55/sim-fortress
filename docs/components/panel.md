@@ -85,14 +85,13 @@ Panel::new("Status")                 // Title; Panel::untitled() for none
     .foot("↑3 ↓12")                  // optional, normally set by ScrollRegion
     .render(buf, area) -> Rect       // returns the inner area
 ```
-`Component::height` returns the area height; `min_width` is 3.
+`Component::height` returns 2, the two border rows: a panel is sized by its
+container (`Fixed` or `Fill`), never by its content. `min_width` is 3.
+`Panel::inner(area)` gives the inner rectangle without drawing.
 
 ## Gaps today
-- Title and Info are both ratatui block titles. When they collide the
-  right-aligned Info overwrites the Title instead of being dropped.
-- Frame and Buffer entry points are duplicated (`draw` / `draw_in`). Planned
-  API is buffer-only.
-- Foot is only reachable through Scroll Region.
+- `draw*` and `section*` remain as thin wrappers over `Panel` and
+  [Divider](divider.md) until every screen has moved.
 
 ## Examples
 
