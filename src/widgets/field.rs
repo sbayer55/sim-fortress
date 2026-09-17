@@ -67,25 +67,25 @@ enum Shape<'a> {
 /// ranges, steps and typed entry stay with the screen.
 #[derive(Clone, Debug)]
 pub struct Stepper<'a> {
-    value: &'a str,
+    value: Cow<'a, str>,
     shape: Shape<'a>,
     focused: bool,
 }
 
 impl<'a> Stepper<'a> {
     /// The full S09 row: `label_w` 20, `box_w` 26.
-    pub const fn new(label: &'a str, value: &'a str) -> Self {
-        Self { value, shape: Shape::Full { label, hint: "", typing: None, label_w: 20, box_w: 26 }, focused: false }
+    pub fn new(label: &'a str, value: impl Into<Cow<'a, str>>) -> Self {
+        Self { value: value.into(), shape: Shape::Full { label, hint: "", typing: None, label_w: 20, box_w: 26 }, focused: false }
     }
 
     /// Compact: no Label or Hint, value right-aligned in 5.
-    pub const fn compact(value: &'a str) -> Self {
-        Self { value, shape: Shape::Compact { value_w: 5 }, focused: false }
+    pub fn compact(value: impl Into<Cow<'a, str>>) -> Self {
+        Self { value: value.into(), shape: Shape::Compact { value_w: 5 }, focused: false }
     }
 
     /// Inline: the arrows bracket the whole text, then a key token.
-    pub const fn inline(text: &'a str) -> Self {
-        Self { value: text, shape: Shape::Inline { text_w: 24, key: "" }, focused: false }
+    pub fn inline(text: impl Into<Cow<'a, str>>) -> Self {
+        Self { value: text.into(), shape: Shape::Inline { text_w: 24, key: "" }, focused: false }
     }
 
     #[must_use]
@@ -175,12 +175,13 @@ impl Component for Stepper<'_> {
         let w = crate::cast!(area.width => usize);
         match self.shape {
             Shape::Full { label, hint, typing, label_w, box_w } => {
-                let value = typing.map_or(Cow::Borrowed(self.value), |t| Cow::Owned(format!("{t}_")));
+                let value = typing.map_or_else(|| Cow::Borrowed(self.value.as_ref()), |t| Cow::Owned(format!("{t}_")));
                 Boxed { label, open: glyphs::REWIND, close: glyphs::PLAY, value, hint, focused: self.focused, label_w, box_w }.render(buf, area);
             }
             Shape::Compact { value_w } => {
                 let vw = crate::cast!(value_w => usize);
-                let arrows = if self.focused { theme::key() } else { theme::dim_text() };
+                // The row around a focused Compact field is a selection bar; the arrows keep its background.
+                let arrows = if self.focused { theme::key().bg(theme::SELECT_BG) } else { theme::dim_text() };
                 let value = if self.focused { theme::selected() } else { theme::text() };
                 buf.set_stringn(area.x, area.y, glyphs::REWIND.to_string(), w, arrows);
                 buf.set_stringn(area.x + 1, area.y, format!("{:>vw$} ", self.value), w.saturating_sub(1), value);
@@ -200,7 +201,7 @@ impl Component for Stepper<'_> {
 #[derive(Clone, Debug)]
 pub struct TextField<'a> {
     label: &'a str,
-    text: &'a str,
+    text: Cow<'a, str>,
     hint: &'a str,
     focused: bool,
     label_w: u16,
@@ -208,8 +209,8 @@ pub struct TextField<'a> {
 }
 
 impl<'a> TextField<'a> {
-    pub const fn new(label: &'a str, text: &'a str) -> Self {
-        Self { label, text, hint: "", focused: false, label_w: 20, box_w: 26 }
+    pub fn new(label: &'a str, text: impl Into<Cow<'a, str>>) -> Self {
+        Self { label, text: text.into(), hint: "", focused: false, label_w: 20, box_w: 26 }
     }
 
     #[must_use]
@@ -251,7 +252,7 @@ impl Component for TextField<'_> {
             label: self.label,
             open: glyphs::BAR_L,
             close: glyphs::BAR_R,
-            value: Cow::Borrowed(self.text),
+            value: Cow::Borrowed(self.text.as_ref()),
             hint: self.hint,
             focused: self.focused,
             label_w: self.label_w,

@@ -175,10 +175,15 @@ macro_rules! widget_cells {
 widget_cells!(
     super::stack::Spacer,
     super::bars::Bar,
+    super::bars::LabeledBar<'a>,
     super::bars::RangeBar,
     super::bars::Sparkline,
     super::trend::TrendArrow,
     super::stack::HStack<'a>,
+    super::field::Stepper<'a>,
+    super::field::TextField<'a>,
+    super::checkbox::Checkbox<'a>,
+    super::key_hint::KeyHint<'a>,
 );
 
 /// A row of cells, or one component spanning the width.
