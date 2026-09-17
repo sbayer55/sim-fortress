@@ -30,6 +30,15 @@ pub struct GeneticsParams {
     pub maturity_litter_span: f32,
     /// Maximum lifespan × the same maturity factor.
     pub maturity_lifespan_span: f32,
+    /// Mutation rate × `1 + (mutability − 0.5) × 2 × span` (the parents' mean
+    /// Mutability), clamped to `0..=1`.
+    pub mutability_rate_span: f32,
+    /// Mutation strength × the same mutability factor.
+    pub mutability_strength_span: f32,
+    /// Mutability at or below which a newborn has no sterility risk.
+    pub sterility_onset: f32,
+    /// Sterility chance at the 0.98 trait cap; quadratic ramp from the onset.
+    pub sterility_max: f32,
     pub drift_every_generations: u32,
     pub lineage_keep_generations: u32,
     pub lineage_up: u32,
@@ -54,6 +63,10 @@ impl Default for GeneticsParams {
             maturity_age_span: 0.5,
             maturity_litter_span: 0.5,
             maturity_lifespan_span: 0.25,
+            mutability_rate_span: 0.8,
+            mutability_strength_span: 0.6,
+            sterility_onset: 0.75,
+            sterility_max: 0.6,
             drift_every_generations: 2,
             lineage_keep_generations: 8,
             lineage_up: 3,
@@ -74,6 +87,35 @@ impl GeneticsParams {
     /// The shared maturity multiplier `1 + (maturity − 0.5) × 2 × span`:
     /// 1.0 at maturity 0.5, so the trait is balance-neutral where it starts.
     pub fn maturity_factor(maturity: f32, span: f32) -> f32 {
-        1.0 + (maturity - 0.5) * 2.0 * span
+        Self::trait_factor(maturity, span)
+    }
+
+    /// The neutral-at-0.5 multiplier every scaling trait shares:
+    /// `1 + (v − 0.5) × 2 × span`, so a trait at 0.5 changes nothing.
+    pub fn trait_factor(v: f32, span: f32) -> f32 {
+        1.0 + (v - 0.5) * 2.0 * span
+    }
+
+    /// The `(rate, sd)` a birth mutates with, given the parents' mean
+    /// Mutability: the global numbers scaled by `trait_factor` with the two
+    /// mutability spans. Neutral at 0.5; the rate is clamped to a probability
+    /// and the sd floored at zero.
+    pub fn effective_mutation(&self, mutability: f32) -> (f32, f32) {
+        let rate = (self.mutation_rate * Self::trait_factor(mutability, self.mutability_rate_span)).clamp(0.0, 1.0);
+        let sd = (self.mutation_strength * Self::trait_factor(mutability, self.mutability_strength_span)).max(0.0);
+        (rate, sd)
+    }
+
+    /// Chance a newborn with this Mutability is sterile: zero at or below
+    /// `sterility_onset`, rising quadratically to `sterility_max` at the 0.98
+    /// trait cap. The cost that stops evolvability ratcheting up for free.
+    pub fn sterility_chance(&self, mutability: f32) -> f32 {
+        let cap = crate::sim::species::TRAIT_MAX;
+        let span = cap - self.sterility_onset;
+        if span <= 0.0 {
+            return if mutability >= cap { self.sterility_max } else { 0.0 };
+        }
+        let t = ((mutability - self.sterility_onset) / span).clamp(0.0, 1.0);
+        self.sterility_max * t * t
     }
 }

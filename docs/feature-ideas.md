@@ -30,7 +30,7 @@ If you want, I can write the burrows-and-dens idea up as a seventh chunk doc in 
 
 ---
 
-The current genome has eleven slots: speed, size, sense, metabolism, aggression, camouflage, fertility, longevity, resistance (C7), sociality and maturity (C8). The most interesting additions are ones that trade off against an existing slot or against a specific mechanic, so selection can pull them in different directions in different worlds.
+The current genome has twelve slots: speed, size, sense, metabolism, aggression, camouflage, fertility, longevity, resistance (C7), sociality and maturity (C8), and mutability. The most interesting additions are ones that trade off against an existing slot or against a specific mechanic, so selection can pull them in different directions in different worlds.
 
 **Traits that exploit the existing environment**
 
@@ -52,7 +52,7 @@ The current genome has eleven slots: speed, size, sense, metabolism, aggression,
 - ~~**Maturity age.** Breed early with small litters or late with large ones, paired against longevity. This gives r-versus-K strategy shifts you could see in the species browser.~~ **Shipped: genome slot 11 — one trait scales adult age, litter size and max lifespan, and S04b names the r/K direction in Selection pressure.**
 - **Parental care.** Offspring start with more reserves and the parent loses hunger for a period after birth. Litters get smaller but survive. Nice interaction with any future dens.
 - **Dispersal.** How far a newborn wanders from its parent before settling. Low values create local inbred pockets, high values spread genes and spark migrations. Very visible on the lineage tree.
-- **Mutation rate itself.** Evolvability as a trait. Stable worlds select it down, worlds with droughts and epidemics select it up. Cheap to add and a genuinely interesting experiment.
+- ~~**Mutation rate itself.** Evolvability as a trait. Stable worlds select it down, worlds with droughts and epidemics select it up. Cheap to add and a genuinely interesting experiment.~~ **Shipped: genome slot 11 (Mutability) — the parents' mean scales each birth's mutation rate and sd (neutral at 0.5), and a newborn near the 0.98 cap risks being born sterile, so evolvability has a price at the top of its range.**
 
 **Traits that need one new mechanic**
 

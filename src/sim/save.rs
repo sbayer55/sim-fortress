@@ -24,8 +24,10 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// Version 6 added the per-cell temperature and the world's prevailing wind
 /// (climate physics); version 7 added the `Marsh` terrain and the marsh step
 /// cost parameter (wetlands and riparian corridors); version 8 added the
-/// per-cell biome and the per-cell region map (biomes as regions).
-pub const VERSION: u16 = 8;
+/// per-cell biome and the per-cell region map (biomes as regions); version 9
+/// widened the genome to twelve traits (Mutability) and added the per-creature
+/// `sterile` flag.
+pub const VERSION: u16 = 9;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 

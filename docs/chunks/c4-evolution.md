@@ -60,6 +60,12 @@ max_population_soft_cap = 4000   # safety: no new pregnancies above this; Note l
 maturity_age_span = 0.5          # adult age   x factor
 maturity_litter_span = 0.5       # litter size x factor
 maturity_lifespan_span = 0.25    # max lifespan x factor
+# mutability (slot 11): the parents' mean Mutability scales the birth's mutation
+# rate and sd with the same neutral-at-0.5 factor; near the cap the newborn risks sterility.
+mutability_rate_span = 0.8       # mutation_rate x factor (0.2x .. 1.8x), clamped to a probability
+mutability_strength_span = 0.6   # mutation_strength x factor (0.4x .. 1.6x)
+sterility_onset = 0.75           # no sterility risk at or below this Mutability
+sterility_max = 0.6              # sterility chance at the 0.98 cap; quadratic ramp from the onset
 drift_every_generations = 2
 lineage_keep_generations = 8
 lineage_up = 3
@@ -106,12 +112,29 @@ Newborns feed themselves (no nursing). One `Birth` event per litter with `subjec
 mother.
 
 ### FR3 Inheritance
-Per trait: `child = (rand < 0.5 ? mother : father) + (rand < mutation_rate ? N(0, mutation_strength) : 0)`,
-clamped 0.02..0.98. (Random-parent inheritance preserves population variance; averaging the
+Per trait: `child = (rand < 0.5 ? mother : father) + (rand < rate ? N(0, sd) : 0)`,
+clamped 0.02..0.98, where `(rate, sd)` are `mutation_rate` and `mutation_strength` scaled by
+the parents' mean **Mutability** (slot 11): `rate = clamp(mutation_rate × (1 + (m − 0.5) × 2 ×
+mutability_rate_span), 0, 1)` and `sd = mutation_strength × (1 + (m − 0.5) × 2 ×
+mutability_strength_span)`, computed once per birth so the RNG draw sequence is still one
+`chance` plus a conditional `gauss` per slot. Mutability 0.5 (every base genome) reproduces the
+global numbers exactly; Mutability mutates like any other slot, including itself. (Random-parent
+inheritance preserves population variance; averaging the
 parents would halve the variance every generation and collapse the S04b histograms.) Each mutation appends `Mutation { trait_idx, delta, generation }`
 (displayed `"<Trait> {:+.2} (gen N)"`); `|delta| ≥ mutation_notable` emits a `Mutation`
 event with `subject` = child. Species drift is under selection because metabolism scales
 hunger (C3 FR1), speed scales movement, longevity scales max age, fertility scales litter.
+
+**Sterility (Mutability's cost).** Right after inheritance every newborn rolls
+`sterile = rand < sterility_chance(own Mutability)` with `sterility_chance(m) = sterility_max ×
+t²`, `t = clamp((m − sterility_onset) / (0.98 − sterility_onset), 0, 1)`; founders roll the same
+at placement. A sterile animal lives, herds and is hunted normally but `eligible` (FR2) never
+lets it mate, so its genes are a dead end. The roll is always drawn, so the sequence never
+depends on the chance's value. S03 shows `sterile` on the identity line and in the `litter
+size` row, S04 summary counts `sterile N`, and `--summary` writes `mutability_*` and
+`sterile_*` columns. Evolvability therefore has a selective price only at the top of its range:
+stable worlds should settle Mutability down, volatile ones raise it, and lineages that push it
+to the cap breed themselves out.
 
 ### FR4 Maturity and following
 At the individual's adult age the glyph switches to uppercase and movement speed becomes
@@ -188,6 +211,11 @@ Adds `births_<species>`, `<species>_generation_mean`, `<species>_generation_max`
   ≥ 0.03 in at least 7 seeds.
 - Inheritance unit tests: mean of children equals the parental mean within 0.005 over
   10 000 births; mutation frequency within ±10 % of `mutation_rate`.
+- Mutability unit tests (`sim::genetics::tests`): `effective_mutation(0.5)` is exactly the
+  global pair; parents at 0.02 vs 0.98 mutate at frequencies within ±10 % of their effective
+  rates and with a mean |Δ| ratio within ±10 % of the sd ratio; `sterility_chance` is 0 at and
+  below the onset, `sterility_max` at the cap and monotone between; a 0.98 pair with
+  `sterility_max = 1` bears only sterile pups; sterile adults fail `eligible`.
 - Lineage: every living creature's parents resolve (or are `None` for founders); pruning
   never removes an ancestor of a living creature; the S08 tree never exceeds
   `lineage_rows_max` nodes.
@@ -206,6 +234,7 @@ Adds `births_<species>`, `<species>_generation_mean`, `<species>_generation_max`
 | Target: vole generation mean ≥ 20 | **miss** — 17.8 (a vole generation takes ~100 days with a 60-day cooldown) |
 | Selection, dry seeds 1..=10 | **6 of 10** (needs 7) — voles survive in all ten dry worlds but only at 2–23 individuals, so the mean-metabolism change is noisy: −0.089, −0.019, −0.045, −0.118, −0.002, −0.015, −0.033, −0.005, −0.073, −0.053. `tests/evolution.rs::dry_world_selection_7_of_10` is `#[ignore]`d for this reason and reports the per-seed values when run. |
 | Performance | 5 years headless ≈ 60–70 s on the reference machine (< 120 s) at ~500–900 prey |
+| Mutability (slot 11), seeds 1..=6, 5 years, `--summary` | **weak selection at defaults** — surviving species' Mutability means stay within 0.45–0.54 (deer 0.49/0.54/0.54/0.50/0.45, hare 0.50/0.48); with the Plague years overlay deer 0.48–0.53, wolves 0.43; `sterile_*` is 0 everywhere at the default onset 0.75. With `sterility_onset = 0.5` the cost bites (deer 1/1/2 sterile, hare 1) and means stay 0.48–0.57. Five years is a handful of generations for the large species; a longer run is needed to see the trait move under selection. |
 
 ## Checkpoint demo script
 1. Generate the default world, `p`, enable `[b] log births`, `Esc`, x25, two years.
