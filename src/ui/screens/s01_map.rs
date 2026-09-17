@@ -3,7 +3,6 @@
 
 use ratatui::crossterm::event::KeyEvent;
 use ratatui::layout::Rect;
-use ratatui::text::{Line, Span};
 use ratatui::Frame;
 use crate::sim::creatures::CreatureId;
 use crate::sim::disease::PathogenId;
@@ -14,10 +13,10 @@ use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{clock_status, EventKindStyle, SpeciesStyle};
 use crate::ui::viewport::{self, GUTTER_W, MAP_CHROME_ROWS, MIN_MAP_W, SIDEBAR_W};
 use crate::widgets::map::{self, MapOptions, Overlay};
-use crate::widgets::{panel, status, util, Component, Ticker};
+use crate::widgets::{panel, status, Component, Divider, Legend, Panel, Spacer, Text, Ticker, VStack};
 use crate::theme;
 
-use base::{clock_section, legend_section, population_section, resources_section};
+use base::{clock_section, population_section, resources_section};
 use disease_overlay::disease_tints;
 use parasites::parasite_tints;
 
@@ -369,17 +368,17 @@ pub fn group(n: u64) -> String {
 
 impl WorldMap {
     pub(super) fn sidebar(f: &mut Frame<'_>, area: Rect, app: &AppState, sim: &Sim, world: &World, time: &crate::sim::Time) {
-        let inner = panel::draw(f, area, "Status", panel::Kind::Outer);
-        let mut row = 0u16;
-
-        row = clock_section(f, inner, row, app, time);
-        row = population_section(f, inner, row, sim);
-        row = resources_section(f, inner, row, app, world, time);
-        panel::section(f, inner, row, "Notable");
-        row += 1;
-        util::line(f, inner, row, Line::from(Span::styled(" [k] look · [e] events · [g] charts", theme::dim_text())));
-        row += 2;
-        legend_section(f, inner, row, sim.roster());
+        let buf = f.buffer_mut();
+        let inner = Panel::new("Status").render(buf, area);
+        let mut rows = clock_section(app, time);
+        rows.extend(population_section(sim));
+        rows.extend(resources_section(app, world, time));
+        rows.push(Box::new(Divider::new("Notable")));
+        rows.push(Box::new(Text::new(" [k] look · [e] events · [g] charts").style(theme::dim_text())));
+        rows.push(Box::new(Spacer::rows(1)));
+        rows.push(Box::new(Divider::new("Legend")));
+        rows.push(Box::new(Legend::map().species(sim.roster())));
+        VStack::from_boxes(&rows).render(buf, inner);
     }
 }
 
