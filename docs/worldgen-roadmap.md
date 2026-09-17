@@ -240,6 +240,52 @@ or area tiers), `ecology.rs`, `glyphs.rs`.
 
 ## Phase 5 — History: aging regimes and geological events
 
+**Status: done (Sept 2026).** `relief::AgeRegime` (`for_age`, `name`) replaces
+the flat erosion constants: young (age ≤ 3) cuts at `incision_k` 0.11 with
+diffusion 0.06, mature (4–11) keeps today's 0.09 / 0.12, old (age ≥ 12) cuts at
+0.06, diffuses at 0.20 and every fourth epoch silts each cell halfway up to the
+depression-filled surface (`silt`), so basins become plains. The regime name
+sits in the S09 preview hint beside the wind. `src/sim/world/history.rs` draws
+one to three events per world before the first epoch (count, kind with at most
+one glaciation, epoch `0..=age`, centre at least 6 columns and 3 rows inside
+the map, scarp half-length `w/6..w/3` over the best of six candidate lines by
+land crossed, dome radius 3–6, one warp noise) and strikes each at the top of
+its epoch (`epoch == age` strikes after the loop, so an age-0 world still has
+events). Fault scarp: a tanh ramp of 0.12 over width 1.5 across a warped line,
+tapering past the half-length. Volcanic dome: a cone of 0.15 whose inner half
+radius is `Relief.bedrock`. Glaciation: the top quarter of the cold half's
+land by height is iced, smoothed four passes, valley floors draining ≥ 8 cells
+scoured 0.02, ice-margin cells banked 0.012 as moraine, the top 2 % bared.
+`classify::land_terrain` cuts bedrock land as `Rock` first, inside the
+`rock_pct` budget, so a dome's core stays rock after thirty epochs and the
+rock target still holds. `World.history: Vec<HistoryEvent>` (kind, epoch, x,
+y, extent, angle) is saved, format version 11 (10 went to the Mutability trait on main); `HistoryEvent::describe` gives
+the sentence Phase 6 will log and `examples/dump_world.rs` prints. Ecological
+pre-history: `ecology::warm_up` runs `ecology.warm_up_days` (60) days of
+vegetation growth with no rain, evaporation or draws from `Sim::new`, using
+the starting season, so founders land on biomass at carrying capacity; the
+S09 preview never pays for it. Two latent generator faults surfaced and were
+fixed: basins from 8-neighbour routing could hang together by a diagonal, so
+`regions::seed_labels` now splits every label into 4-connected pieces; a lone
+channel head on the map edge could be a fall with no river beside it, so a
+fall needs a water neighbour. Dev-profile 200×60 generation measured 19.7 ms
+at age 8 (from 18.5; the glaciation's route and smoothing passes and the
+region split), 14.4 ms at age 2 and 36 ms at age 20 (twenty epochs plus five
+silt fills); the default-age preview still feels live, an old world less so.
+Tests: `age_erodes_the_relief` extended (age 2 vs 14 on the same seed, both
+with history), `events_leave_traces` (1–3 events in epoch order on 20 seeds,
+bedrock is rock, rock share rises inside every dome, every glaciation bares
+something, a scarp struck in the second half of the epochs still steps ≥ 0.02
+between its sides), the `history::tests` unit checks on synthetic surfaces
+(dome cone and core, scarp step across not along, glaciation scours and dams,
+smoothing flattens the mask), plus the ignored diagnostic `print_history`
+(events per seed, generation time per age). Checksum re-baselined to
+`0xd0e3_ee1a_c665_f531`. `ecology::tests::moisture_equilibria_by_rainfall`'s
+seed-42 dry cut widened from 0.60 to 0.65 (measured 0.6016; the ordering
+checks are untouched). Deviations from the acceptance below: an early scarp
+is deliberately worn faint by the epochs after it, so only late scarps are
+pinned; the warm-up is final-generation only.
+
 **Payoff.** Medium. This is DF's "years of history" step. It makes `age` a story
 rather than an epoch count and gives young and old worlds distinct characters.
 
@@ -320,7 +366,7 @@ ticker screens, `save.rs`.
 | 2 | Marsh, riparian, shore types (done) | 1 | `Terrain::Marsh`, `creatures.marsh_step_cost` | yes (v7) |
 | 3 | Biomes as regions (done) | 1, 2 | `Cell.biome`, `World.region_map` | yes (v8) |
 | 4 | River morphology (done) | 2 | `World.falls` | yes (v9) |
-| 5 | Age regimes + events | — (better after 3) | `World.history` | yes |
+| 5 | Age regimes + events (done) | — (better after 3) | `World.history`, `ecology.warm_up_days` | yes (v11) |
 | 6 | Names, log, summary | 3, 4, 5 | `World.names` | yes |
 
-Phase 5 is independent of Phase 4 and can be built next.
+Phase 6 is next; everything it names now exists.

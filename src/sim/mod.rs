@@ -144,7 +144,7 @@ pub struct Sim {
 
 impl Sim {
     pub fn new(seed: u64, params: Params) -> Self {
-        let world = World::generate(seed, &params.world);
+        let mut world = World::generate(seed, &params.world);
         let time = Time::new(
             params.time.start_hour,
             params.time.season_days,
@@ -152,6 +152,7 @@ impl Sim {
             params.time.sunrise_hour,
             params.time.sunset_hour,
         );
+        ecology::warm_up(&mut world, &params.ecology, time.season(), params.ecology.warm_up_days);
         let events = EventRing::new(params.events.capacity);
         let series = Series::new(params.stats.series_days);
         let rng = Rng::new(seed);
@@ -672,7 +673,11 @@ mod tests {
         // Re-baselined for Mutability: the genome grew to twelve traits, so
         // every founder draws one more jitter gaussian and a sterility roll,
         // and every birth draws a sterility roll after inheritance.
-        assert_eq!(a.checksum(), 0x9b4e_d39b_8baa_c6f5);
+        // Re-baselined for history: the event draws precede the epochs, the
+        // events reshape the relief, the vegetation warm-up replaces the
+        // seeded biomass founders land on, and regions are split into
+        // 4-connected pieces.
+        assert_eq!(a.checksum(), 0xd0e3_ee1a_c665_f531);
     }
 
     #[test]

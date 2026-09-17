@@ -4,23 +4,22 @@
 //! epoch length is stable) and relaxes hillslopes by diffusion. Long-run rain
 //! comes from the orographic sweep in `climate`, and a fresh seeded storm
 //! field modulates it every epoch, so where the valleys cut is a mix of the
-//! wind, the seed's noise and its accumulated history.
+//! wind, the seed's noise and its accumulated history. The `AgeRegime` sets
+//! how hard each epoch cuts and smooths, so a young world keeps sharp ridges
+//! and an old one wears down to broad valleys; the `history` events strike
+//! between epochs and are eroded by the ones that follow.
 
 use crate::sim::params::WorldParams;
 use crate::sim::rng::Rng;
 
 use super::climate::{self, Wind};
 use super::flow::{self, lowest, Flow, Grid};
+use super::history::{Draft, HistoryEvent};
 use super::noise::{Fbm, Noise};
 
-/// Stream-power coefficient per epoch, for a drainage area of one reference
-/// cell at unit distance.
-const INCISION_K: f32 = 0.09;
 /// Reference cell count the drainage area is normalised to, so a bigger map
 /// erodes at the same rate per cell rather than dramatically faster.
 const REFERENCE_CELLS: f32 = 6000.0;
-/// Hillslope diffusion per epoch (explicit; stable below 0.4 on this grid).
-const DIFFUSION: f32 = 0.12;
 /// Fine seeded microrelief laid down before every epoch's routing (slumps,
 /// fans, fallen timber): the raw and diffused surfaces are otherwise so
 /// smooth that channels lock into dead-straight rows and columns.
@@ -35,6 +34,42 @@ const BASE_LEVEL_SHARE: f32 = 0.6;
 const LAKE_SOURCE_DEPTH: f32 = 0.004;
 /// Odds that the cold edge of the world is the north.
 const POLE_NORTH_CHANCE: f32 = 0.7;
+
+/// How one epoch of geological time treats the land.
+///
+/// The stream-power coefficient (per epoch, for a drainage area of one
+/// reference cell at unit distance), the explicit hillslope diffusion
+/// (stable below 0.4 on this grid), and how much sediment fills the
+/// depressions every `fill_every` epochs (0 never fills).
+#[derive(Debug)]
+pub struct AgeRegime {
+    pub name: &'static str,
+    incision_k: f32,
+    diffusion: f32,
+    fill_share: f32,
+    fill_every: u8,
+}
+
+/// Young worlds cut fast and diffuse little, so ridges stay sharp; old
+/// worlds cut slowly, diffuse hard and silt their hollows into peneplains.
+const YOUNG: AgeRegime = AgeRegime { name: "young", incision_k: 0.11, diffusion: 0.06, fill_share: 0.0, fill_every: 0 };
+const MATURE: AgeRegime = AgeRegime { name: "mature", incision_k: 0.09, diffusion: 0.12, fill_share: 0.0, fill_every: 0 };
+const OLD: AgeRegime = AgeRegime { name: "old", incision_k: 0.06, diffusion: 0.2, fill_share: 0.5, fill_every: 4 };
+/// Ages at or below this are young; at or above `OLD_AGE` are old.
+const YOUNG_AGE: u8 = 3;
+const OLD_AGE: u8 = 12;
+
+impl AgeRegime {
+    pub const fn for_age(age: u8) -> &'static Self {
+        if age <= YOUNG_AGE {
+            &YOUNG
+        } else if age >= OLD_AGE {
+            &OLD
+        } else {
+            &MATURE
+        }
+    }
+}
 
 /// The finished relief, normalised to 0..=1.
 #[derive(Debug)]
@@ -59,6 +94,10 @@ pub(super) struct Relief {
     pub(super) basin: Vec<usize>,
     /// Ocean base level on the finished surface.
     pub(super) sea: Vec<bool>,
+    /// Cells an event left as bare rock (a dome's core, ice-scoured tops).
+    pub(super) bedrock: Vec<bool>,
+    /// The events that struck during the epochs, in epoch order.
+    pub(super) history: Vec<HistoryEvent>,
 }
 
 /// Build the relief for `params` from the generation `rng`.
@@ -73,10 +112,18 @@ pub(super) fn build(rng: &mut Rng, grid: Grid, params: &WorldParams) -> Relief {
     // The wind sweeps the raw uplands, so erosion cuts hardest on the
     // windward flanks and the lee stays dry and gentle.
     let rain = climate::rain_field(grid, &height, &fixed, wind, budget, &rain_noise);
-    for _ in 0..params.age {
+    let regime = AgeRegime::for_age(params.age);
+    let mut draft = Draft::draw(rng, grid, params.age, &fixed, pole_north);
+    let mut bedrock = vec![false; grid.len()];
+    for e in 0..params.age {
+        draft.strike(e, grid, &mut height, &fixed, &mut bedrock);
         roughen(rng, grid, &mut height, &fixed);
-        epoch(rng, grid, &mut height, &fixed, &rain);
+        epoch(rng, grid, &mut height, &fixed, &rain, regime);
+        if regime.fill_every > 0 && (e + 1) % regime.fill_every == 0 {
+            silt(grid, &mut height, &fixed, regime.fill_share);
+        }
     }
+    draft.strike(params.age, grid, &mut height, &fixed, &mut bedrock);
     roughen(rng, grid, &mut height, &fixed);
     normalise(&mut height);
     // The finished surface drains to the ocean and off the map's edges: the
@@ -99,7 +146,7 @@ pub(super) fn build(rng: &mut Rng, grid: Grid, params: &WorldParams) -> Relief {
     }
     let rain = climate::rain_field(grid, &height, &source, wind, budget, &rain_noise);
     let temperature = climate::temperature(rng, grid, &height, pole_north);
-    Relief { height, depth, acc, slope, rain, temperature, wind, recv: routed.recv, basin, sea }
+    Relief { height, depth, acc, slope, rain, temperature, wind, recv: routed.recv, basin, sea, bedrock, history: draft.events }
 }
 
 /// The root each cell drains to. `order` lists every root before the cells
@@ -145,7 +192,7 @@ fn tectonics(rng: &mut Rng, grid: Grid) -> (Vec<f32>, Vec<f32>) {
 }
 
 /// One epoch of geological time: seeded storms, drainage, incision, diffusion.
-fn epoch(rng: &mut Rng, grid: Grid, height: &mut [f32], fixed: &[bool], rain: &[f32]) {
+fn epoch(rng: &mut Rng, grid: Grid, height: &mut [f32], fixed: &[bool], rain: &[f32], regime: &AgeRegime) {
     let (sw, sh) = (crate::cast!(grid.w => f32), crate::cast!(grid.h => f32) * 2.0);
     let storms = Noise::new(rng, (sw.max(sh) / 6.0).max(12.0), sw, sh);
     let mut weights = Vec::with_capacity(grid.len());
@@ -155,9 +202,18 @@ fn epoch(rng: &mut Rng, grid: Grid, height: &mut [f32], fixed: &[bool], rain: &[
     }
     let routed = flow::route(grid, height, fixed);
     let acc = flow::accumulate(&routed, &weights);
-    let k = INCISION_K * (REFERENCE_CELLS / crate::cast!(grid.len() => f32)).sqrt();
+    let k = regime.incision_k * (REFERENCE_CELLS / crate::cast!(grid.len() => f32)).sqrt();
     incise(height, &routed, &acc, k);
-    diffuse(grid, height, fixed);
+    diffuse(grid, height, fixed, regime.diffusion);
+}
+
+/// Sediment settles in the hollows: every cell rises `share` of the way to
+/// the depression-filled surface, so an old world's basins become plains.
+fn silt(grid: Grid, height: &mut [f32], fixed: &[bool], share: f32) {
+    let filled = flow::fill_depressions(grid, height, fixed, FILL_EPS);
+    for (h, f) in height.iter_mut().zip(&filled) {
+        *h += share * (f - *h);
+    }
 }
 
 /// Lay a fresh seeded microrelief over the land.
@@ -186,7 +242,7 @@ fn incise(height: &mut [f32], routed: &Flow, acc: &[f32], k: f32) {
 }
 
 /// Explicit hillslope diffusion with no-flux edges; base-level cells hold.
-fn diffuse(grid: Grid, height: &mut [f32], fixed: &[bool]) {
+fn diffuse(grid: Grid, height: &mut [f32], fixed: &[bool], diffusion: f32) {
     let (w, h) = (grid.w, grid.h);
     let src = height.to_vec();
     let at = |x: usize, y: usize| src[y * w + x];
@@ -198,7 +254,7 @@ fn diffuse(grid: Grid, height: &mut [f32], fixed: &[bool]) {
             }
             let hx = at(x.saturating_sub(1), y) + at((x + 1).min(w - 1), y) - 2.0 * src[i];
             let hy = at(x, y.saturating_sub(1)) + at(x, (y + 1).min(h - 1)) - 2.0 * src[i];
-            height[i] = src[i] + DIFFUSION * (hx + hy * 0.25);
+            height[i] = src[i] + diffusion * (hx + hy * 0.25);
         }
     }
 }
