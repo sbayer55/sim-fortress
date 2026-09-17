@@ -147,19 +147,22 @@ Chart::new()
     .series(Series::new(&prey).color(theme::PREY))            // one or more
     .series(Series::new(&pred).color(theme::PRED))
     .y_step(100.0)                                            // y max = max rounded up to step
-    .y_label(|v| format!("{v:.0}"))                           // default; "{v:.2}" for resistance
-    .x_labels(&window)                                        // seven Y## D### labels
+    .y_label(&|v| format!("{v:.0}"))                          // default; "{v:.2}" for resistance
+    .y_max(1.0)                                               // or a fixed maximum
+    .x_label(&|i| window.day_label(i))                        // the label for sample i; seven are placed
     .band(Band::new(&drought).color(theme::WARN).label(glyphs::DROUGHT, "drought"))
     .reference(0.35, color)                                   // dotted row, variant d
-    .legend(" Prey (voles + hares + deer)")                   // optional row 0
+    .legend(Text::new(" Prey (voles + hares + deer)"))       // optional row 0
     .render(buf, area)
 ```
 Series are drawn with `glyphs::HALF_UPPER` / `glyphs::HALF_LOWER` as
 `line_chart` does today; both axes take `theme::border()` with
 `theme::dim_text()` labels. Bands, Annotations, reference rows and Now are
-painted after the series pass. `height` is the area height; `min_width` is 12. Stacked (c) and
+painted after the series pass. `height` is the minimum, 4 (a chart takes
+what its container gives; use `Fill`); `min_width` is 12. Stacked (c) and
 Groups (e) do not fit a `Dataset`; they keep their own structs, `StackedChart`
-and [Histogram](histogram.md).
+and [Histogram](histogram.md). `line_chart` and `multi_line_chart` in S05
+are thin adapters over `Chart` now.
 
 ## Gaps today
 - Every variant is a private function in S05; nothing is shared with the

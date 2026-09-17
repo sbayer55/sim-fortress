@@ -80,13 +80,13 @@ epidemic set swaps the middle one for `[ Show outbreak ]`.
 ### Planned
 ```rust
 ButtonRow::new(&["[ Continue ]", "[ View lineage ]", "[ Pause ]"])
-    .focused(0)                          // caller-owned state
+    .focused(Some(0))                    // caller-owned state; None when focus is elsewhere
     .gap(4)                              // default shown
     .render(buf, row_area)
 
 ButtonRow::new(&["[ Generate ]", "[ Randomize seed ]", "[ Back ]"])
-    .focused(9).primary(0).left(4).gap(3)                  // Left + Primary
-ButtonRow::new(&["[ Yes ]", "[ No ]"]).focused(0).left(2)
+    .focused(None).primary(0).left(4).gap(3)               // Left + Primary
+ButtonRow::new(&["[ Yes ]", "[ No ]"]).focused(Some(0)).left(2)
     .hint("←→ move  Enter select  Esc no")                 // Trailing hint
 ```
 `height` is 1; `min_width` as in Sizing. `focused` is an index into the

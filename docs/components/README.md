@@ -6,11 +6,15 @@ component, all in the format of [_template.md](_template.md). The
 sheets say *how* the shared pieces look and behave, so a screen file can say
 "a Labeled Bar" and stop there.
 
-**Status: planning.** Nothing here has been implemented as a first-class
-component yet. Each sheet records the helper that draws the thing *today*
-(`src/widgets/*.rs`, or an ad-hoc loop inside a screen) and the *planned*
-first-class API. Where today's behaviour differs from the spec, the sheet says so
-under **Gaps today**. The spec wins; the code moves toward it.
+**Status: shipped, screens moving.** Every sheet's component lives in
+`src/widgets` and `tests/components.rs` pins every example. The S01 status
+sidebar, S03, S04's table, S06's regions, S07, S09, S10, S11, S12, the confirm
+dialog, the title menu and Load World draw through the components; the S01
+overlay sidebars, S08, S13, S04b, the S04 summary and S05's stacked, phase and
+group charts still call the thin free-function wrappers and move next. Each
+sheet's *Today* section names the helper that wrapped the component; where
+live behaviour still differs from the sheet, **Gaps today** says so. The spec
+wins; the code moves toward it.
 
 ## Index
 
@@ -36,6 +40,7 @@ Widths in the *Shape* column are the canonical example width (see conventions).
 | Sparkline | [sparkline.md](sparkline.md) | row | `bars::sparkline` | `Sparkline` |
 | Trend Arrow | [trend-arrow.md](trend-arrow.md) | cell | `ui::screens::common::trend_arrow`, `arrow_color` | `TrendArrow` |
 | Key Hint | [key-hint.md](key-hint.md) | inline | inline spans in `status::render` and screens | `KeyHint` |
+| Text | [text.md](text.md) | row | `util::line`, `set_stringn` | `Text` |
 | **Chrome** | | | | |
 | Status Bar | [status-bar.md](status-bar.md) | row | `status::render`, `render_colored` | `StatusBar` |
 | Ticker | [ticker.md](ticker.md) | row | `s01_map::draw_ticker` | `Ticker` |
@@ -140,10 +145,13 @@ pub trait Component {
 
 ### Testing
 
-- `tests/components.rs` (planned) renders every example in every sheet at its
-  stated width into a `TestBackend` and compares cell for cell. The example
-  blocks are the fixtures. The test names the sheet and example heading on
-  failure.
+- `tests/components.rs` renders every example in every sheet at its stated
+  width into a `Buffer` and compares cell for cell. The example blocks are the
+  fixtures; `tests/components/registry.rs` maps each heading to the builder
+  calls that draw it. The test names the sheet and example heading on failure,
+  checks that nothing is written outside the area, and fails when a heading
+  is neither registered nor listed as unreproducible (`PENDING_SHEETS` covers
+  components that have not shipped yet).
 - The CP437 and file-size invariants in `tests/` already cover glyphs and
   module size; no change.
 

@@ -1,118 +1,51 @@
-//! Labeled horizontal bars for vitals and traits.
+//! Bars: labeled gauges, range bars, sparklines and histograms. The free
+//! functions are thin wrappers over the components; screens move to the
+//! structs section by section.
 
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::Color;
 
-use crate::{glyphs, theme};
+use super::component::Component;
+
+mod histogram;
+mod labeled;
+mod range;
+mod sparkline;
+#[cfg(test)]
+mod tests;
+
+pub use histogram::Histogram;
+pub use labeled::{vital_color, Bar, Inverted, LabeledBar};
+pub use range::RangeBar;
+pub use sparkline::Sparkline;
 
 /// `label [████░░░░]  82%` on one row. `area.width` bounds the whole thing.
 pub fn labeled(buf: &mut Buffer, area: Rect, row: u16, label: &str, value: f32, color: Color, label_w: u16, bar_w: u16) {
     if row >= area.height {
         return;
     }
-    let y = area.y + row;
-    let x = area.x;
-    buf.set_stringn(x, y, format!("{:<w$}", label, w = crate::cast!(label_w => usize)), crate::cast!(label_w => usize), theme::text());
-    let bx = x + label_w;
-    bar(buf, bx, y, bar_w, value, color);
-    let px = bx + bar_w + 2;
-    let pct = format!("{:>3}%", crate::cast!((value.clamp(0.0, 1.0) * 100.0).round() => u32));
-    buf.set_stringn(px + 1, y, &pct, 4, theme::text());
+    LabeledBar::new(label, value).color(color).label_and_bar(label_w, bar_w).render(buf, Rect::new(area.x, area.y + row, area.width, 1));
 }
 
 /// Just the `[████░░░░]` part, `w` cells wide including brackets.
 pub fn bar(buf: &mut Buffer, x: u16, y: u16, w: u16, value: f32, color: Color) {
-    let inner = crate::cast!(w.saturating_sub(2) => usize);
-    let filled = crate::cast!((value.clamp(0.0, 1.0) * crate::cast!(inner => f32)).round() => usize);
-    let mut s = String::with_capacity(crate::cast!(w => usize));
-    s.push(glyphs::BAR_L);
-    for i in 0..inner {
-        s.push(if i < filled { glyphs::BAR_FILL } else { glyphs::BAR_EMPTY });
-    }
-    s.push(glyphs::BAR_R);
-    buf.set_stringn(x, y, &s, crate::cast!(w => usize), Style::default().fg(theme::DIM).bg(theme::PANEL_BG));
-    // Recolor the filled part.
-    let fill: String = std::iter::repeat_n(glyphs::BAR_FILL, filled).collect();
-    buf.set_stringn(x + 1, y, &fill, filled, Style::default().fg(color).bg(theme::PANEL_BG));
+    Bar::new(value).color(color).render(buf, Rect::new(x, y, w, 1));
 }
 
 /// A range bar showing min..max as a shaded span with a marker at `mean`.
 /// Used for trait distributions: `[░░░▒▒▒█▒▒░░░░]`.
 pub fn range(buf: &mut Buffer, x: u16, y: u16, w: u16, min: f32, mean: f32, max: f32, color: Color) {
-    let inner = crate::cast!(w.saturating_sub(2) => usize);
-    let cell = |v: f32| (crate::cast!((v.clamp(0.0, 1.0) * (crate::cast!(inner => f32) - 1.0)).round() => usize)).min(inner.saturating_sub(1));
-    let (a, m, b) = (cell(min), cell(mean), cell(max));
-    let mut s = String::new();
-    s.push(glyphs::BAR_L);
-    for i in 0..inner {
-        s.push(if i == m {
-            glyphs::SHADE_4
-        } else if i >= a && i <= b {
-            glyphs::SHADE_2
-        } else {
-            glyphs::SHADE_1
-        });
-    }
-    s.push(glyphs::BAR_R);
-    buf.set_stringn(x, y, &s, crate::cast!(w => usize), Style::default().fg(theme::DIM).bg(theme::PANEL_BG));
-    let span: String = (a..=b).map(|i| if i == m { glyphs::SHADE_4 } else { glyphs::SHADE_2 }).collect();
-    buf.set_stringn(x + 1 + crate::cast!(a => u16), y, &span, b - a + 1, Style::default().fg(color).bg(theme::PANEL_BG));
-}
-
-/// Color for a vital: green when healthy, red when critical.
-/// `inverted` = true for hunger/thirst where high is bad.
-pub fn vital_color(value: f32, inverted: bool) -> Color {
-    let t = if inverted { 1.0 - value } else { value };
-    if t > 0.6 {
-        theme::GOOD
-    } else if t > 0.3 {
-        theme::WARN
-    } else {
-        theme::BAD
-    }
-}
-
-/// Vertical histogram in an area: `values` become columns of `▄`/`█` stacks.
-pub fn histogram(buf: &mut Buffer, area: Rect, values: &[u16], color: Color, col_w: u16) {
-    let max = f32::from(values.iter().copied().max().unwrap_or(1).max(1));
-    let h = area.height;
-    for (i, v) in values.iter().enumerate() {
-        let x = area.x + crate::cast!(i => u16) * col_w;
-        if x + col_w > area.right() {
-            break;
-        }
-        // Two half-cells per row.
-        let halves = crate::cast!(((f32::from(*v) / max) * (f32::from(h) * 2.0)).round() => u16);
-        for r in 0..h {
-            let y = area.bottom() - 1 - r;
-            let level = halves.saturating_sub(r * 2);
-            let ch = if level >= 2 {
-                glyphs::FULL_BLOCK
-            } else if level == 1 {
-                glyphs::HALF_LOWER
-            } else {
-                continue;
-            };
-            let s: String = std::iter::repeat_n(ch, crate::cast!(col_w.saturating_sub(1).max(1) => usize)).collect();
-            buf.set_stringn(x, y, &s, crate::cast!(col_w => usize), Style::default().fg(color).bg(theme::PANEL_BG));
-        }
-    }
+    RangeBar::new(min, mean, max).color(color).width(w).render(buf, Rect::new(x, y, w, 1));
 }
 
 /// One-row sparkline using `░▒▓█` intensity (CP437-safe).
 pub fn sparkline(buf: &mut Buffer, x: u16, y: u16, w: u16, values: &[u16], color: Color) {
-    let n = values.len().min(crate::cast!(w => usize));
-    let slice = &values[values.len() - n..];
-    let max = f32::from(slice.iter().copied().max().unwrap_or(1).max(1));
-    let min = f32::from(slice.iter().copied().min().unwrap_or(0));
-    let s: String = slice
-        .iter()
-        .map(|&v| {
-            let t = if max > min { (f32::from(v) - min) / (max - min) } else { 0.5 };
-            let i = crate::cast!((t * 3.0).round() => usize) + 1;
-            glyphs::SHADES[i.min(4)]
-        })
-        .collect();
-    buf.set_stringn(x, y, &s, n, Style::default().fg(color).bg(theme::PANEL_BG));
+    Sparkline::new(values).color(color).render(buf, Rect::new(x, y, w, 1));
+}
+
+/// Vertical histogram in an area: `values` become columns of `▄`/`█` stacks.
+/// Thin wrapper over the Bare [`Histogram`]; the area height is the chart height.
+pub fn histogram(buf: &mut Buffer, area: Rect, values: &[u16], color: Color, col_w: u16) {
+    Histogram::new(values).color(color).col_w(col_w).rows(area.height).render(buf, area);
 }

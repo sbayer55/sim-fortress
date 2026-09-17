@@ -12,7 +12,8 @@ use crate::ui::app::AppState;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{clock_status, SeasonStyle};
 use crate::widgets::map;
-use crate::widgets::{bars, panel, status, util};
+use crate::widgets::Constraint::Fixed;
+use crate::widgets::{bars, panel, util, Bar, Column, Component, Panel, StatusBar, Table, TableCell, TableRow};
 use crate::{glyphs, theme};
 
 /// The S06 region status rule (FR7).
@@ -127,10 +128,10 @@ impl Screen for Ecology {
 
         totals(f, totals_area, sim, world);
         season(f, season_area, sim, time, ecology);
-        regions(f, regions_area, app, world, time, self);
+        regions(f, regions_area, app, world, self);
 
         let (right, right_fg) = clock_status(time, app.params.ui.day_night_tint);
-        status::render_colored(f, Rect::new(area.x, status_row, area.width, 1), &[("r", "sort regions"), ("↑↓", "select"), ("Enter", "jump"), ("Esc", "back")], &right, right_fg);
+        StatusBar::new(&[("r", "sort regions"), ("↑↓", "select"), ("Enter", "jump"), ("Esc", "back")]).right(&right).right_color(right_fg).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 
@@ -296,47 +297,59 @@ fn region_counts(sim: &crate::sim::Sim, world: &World, ri: usize) -> (u32, u32, 
     (prey_n, pred_n, sick_n)
 }
 
+/// The region columns after the Marker: name, cells, water, the two bars
+/// with their values, the three counts, pressure and status.
+const REGION_COLUMNS: [Column; 17] = [
+    Column::titled("region", Fixed(17)),
+    Column::titled("cells", Fixed(6)).right(),
+    Column::titled("water", Fixed(7)).right(),
+    Column::new(Fixed(1)),
+    Column::titled(" vegetation", Fixed(20)),
+    Column::new(Fixed(1)),
+    Column::new(Fixed(4)),
+    Column::new(Fixed(1)),
+    Column::titled(" moisture", Fixed(20)),
+    Column::new(Fixed(1)),
+    Column::new(Fixed(4)),
+    Column::new(Fixed(3)),
+    Column::titled("prey", Fixed(5)).right(),
+    Column::titled("pred", Fixed(5)).right(),
+    Column::titled("sick", Fixed(5)).right(),
+    Column::titled("pressure", Fixed(10)).right(),
+    Column::titled("   status", Fixed(12)),
+];
+
 /// One region row: counts, bars and status.
-#[allow(clippy::too_many_arguments)]
-fn region_row(buf: &mut ratatui::buffer::Buffer, inner: Rect, y: u16, ri: usize, r: &(String, usize, usize, usize, usize), world: &World, app: &AppState, selected: bool, th: &ScarcityThresholds, prey_configured: bool) {
+fn region_row(ri: usize, r: &(String, usize, usize, usize, usize), world: &World, app: &AppState, th: &ScarcityThresholds, prey_configured: bool) -> TableRow<'static> {
     let veg = crate::sim::ecology::region_land_veg_mean(world, ri);
     let moist = crate::sim::ecology::region_display_moisture_mean(world, ri);
     let cells = world.region_size(ri);
     let water = region_water_cells(world, ri);
-    if selected {
-        for x in inner.x..inner.right() {
-            if let Some(c) = buf.cell_mut((x, y)) {
-                c.set_bg(theme::SELECT_BG);
-            }
-        }
-    }
-    let text = if selected { theme::TEXT_BRIGHT } else { theme::TEXT };
-    buf.set_stringn(inner.x, y, format!("{}{:<16}", if selected { glyphs::PLAY } else { ' ' }, r.0), 18, region_cell_style(selected, text));
-    buf.set_stringn(inner.x + 18, y, format!("{cells:>6}"), 6, region_cell_style(selected, text));
-    buf.set_stringn(inner.x + 24, y, format!("{:>6.0}%", crate::cast!(water => f32) / crate::cast!(cells.max(1) => f32) * 100.0), 7, region_cell_style(selected, theme::SHALLOW_FG));
-    let mut x = inner.x + 32;
-    for (v, ramp) in [(veg, theme::veg(veg)), (moist, theme::water(moist))] {
-        bars::bar(buf, x, y, 20, v, ramp);
-        buf.set_stringn(x + 21, y, format!("{v:.2}"), 4, region_cell_style(selected, text));
-        x += 26;
-    }
     let (prey_n, pred_n, sick_n) = match &app.sim {
         Some(sim) => region_counts(sim, world, ri),
         None => (0, 0, 0),
     };
     let (label, color) = region_status_label(veg, sick_n, prey_configured, th);
     let pressure = region_pressure(world, ri);
-    buf.set_stringn(inner.x + 86, y, format!("{prey_n:>5}"), 5, region_cell_style(selected, theme::PREY));
-    buf.set_stringn(inner.x + 91, y, format!("{pred_n:>5}"), 5, region_cell_style(selected, theme::PRED));
-    let sick_color = if sick_n > 0 { theme::SICK } else { theme::DIM };
-    buf.set_stringn(inner.x + 96, y, format!("{sick_n:>5}"), 5, region_cell_style(selected, sick_color));
-    buf.set_stringn(inner.x + 103, y, format!("{pressure:>4.2} "), 5, region_cell_style(selected, text));
-    buf.set_stringn(inner.x + 109, y, format!("{label:<9}"), 9, region_cell_style(selected, color).add_modifier(Modifier::BOLD));
-}
-
-/// The panel background style for one cell of a region row.
-fn region_cell_style(selected: bool, fg: ratatui::style::Color) -> Style {
-    Style::default().fg(fg).bg(if selected { theme::SELECT_BG } else { theme::PANEL_BG })
+    TableRow::new([
+        TableCell::text(r.0.clone()),
+        TableCell::text(cells.to_string()),
+        TableCell::styled(format!("{:.0}%", crate::cast!(water => f32) / crate::cast!(cells.max(1) => f32) * 100.0), theme::SHALLOW_FG),
+        TableCell::Blank,
+        TableCell::widget(Bar::new(veg).color(theme::veg(veg))),
+        TableCell::Blank,
+        TableCell::text(format!("{veg:.2}")),
+        TableCell::Blank,
+        TableCell::widget(Bar::new(moist).color(theme::water(moist))),
+        TableCell::Blank,
+        TableCell::text(format!("{moist:.2}")),
+        TableCell::Blank,
+        TableCell::styled(prey_n.to_string(), theme::PREY),
+        TableCell::styled(pred_n.to_string(), theme::PRED),
+        TableCell::styled(sick_n.to_string(), if sick_n > 0 { theme::SICK } else { theme::DIM }),
+        TableCell::text(format!("{pressure:.2}")),
+        TableCell::styled(format!("   {label}"), color),
+    ])
 }
 
 /// Water cells inside a region rectangle.
@@ -374,25 +387,15 @@ fn region_status_label(veg: f32, sick_n: u32, prey_configured: bool, th: &Scarci
     }
 }
 
-fn regions(f: &mut Frame<'_>, area: Rect, app: &AppState, world: &World, time: &crate::sim::Time, screen: &Ecology) {
-    let inner = panel::draw_with_hint(f, area, "Regions", "sorted by name   [r] cycle sort", panel::Kind::Outer);
-    let mut row = 0u16;
+const SORT_NAMES: [&str; 4] = ["name", "vegetation", "moisture", "status"];
+
+fn regions(f: &mut Frame<'_>, area: Rect, app: &AppState, world: &World, screen: &Ecology) {
+    let buf = f.buffer_mut();
+    let sort = SORT_NAMES.get(screen.sort).copied().unwrap_or("name");
+    let inner = Panel::new("Regions").info(Table::sort_info(sort)).render(buf, area);
     let th = &app.params.ui.scarcity_thresholds;
     let prey_configured = app.params.species.initial_total(crate::sim::Kind::Prey) > 0;
-
-    util::line(f, inner, row, Line::from(Span::styled(
-        format!("{:<17}{:>6}{:>7}   {:<26}{:<26}{:>5}{:>5}{:>5}{:>10}   {}", " region", "cells", "water", " vegetation", " moisture", "prey", "pred", "sick", "pressure", "status"),
-        theme::dim_text(),
-    )));
-    row += 1;
-
     let order = screen.sorted_regions(world);
-    for (i, &ri) in order.iter().enumerate() {
-        let r = &world.regions[ri];
-        let selected = i == screen.selected;
-        let y = inner.y + row;
-        region_row(f.buffer_mut(), inner, y, ri, r, world, app, selected, th, prey_configured);
-        row += 1;
-    }
-    let _ = time;
+    let rows: Vec<TableRow<'static>> = order.iter().map(|&ri| region_row(ri, &world.regions[ri], world, app, th, prey_configured)).collect();
+    Table::new(&REGION_COLUMNS, &rows).selected(Some(screen.selected)).render(buf, inner);
 }

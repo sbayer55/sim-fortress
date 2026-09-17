@@ -10,7 +10,8 @@ use crate::widgets::map::{self};
 use crate::widgets::{bars, panel, util};
 use crate::{glyphs, theme};
 use super::WorldMap;
-use super::base::trend_arrow;
+use super::base::last_30;
+use crate::ui::screens::common::trend_arrow;
 
 /// Per-region counts of the shown species, as a share of its population.
 #[allow(clippy::too_many_arguments)]
@@ -39,7 +40,7 @@ fn species_by_region(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, sp
             row += 1;
         }
         let samples = sim.series.samples();
-        let arrow = trend_arrow(samples, sp.index());
+        let arrow = trend_arrow(&last_30(samples, sp.index()));
         let densest = densest.map_or("—", |(i, _)| world.regions[i].0.as_str());
         util::line(f, inner, row, Line::from(vec![
             Span::styled(format!(" {total} alive {arrow}"), if total == 0 { theme::dim_text() } else { theme::text() }),

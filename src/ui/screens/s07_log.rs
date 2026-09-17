@@ -15,7 +15,8 @@ use crate::ui::screens::s03_inspector::Inspector;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{EventKindStyle, SpeciesStyle};
 use crate::widgets::map::{self, MapOptions, Overlay};
-use crate::widgets::{panel, status, util};
+use crate::widgets::Constraint::{Fill, Fixed};
+use crate::widgets::{panel, util, Column, Component, FilterStrip, StatusBar, Table, TableCell, TableRow, Text};
 use crate::{glyphs, theme};
 
 const DETAIL_W: u16 = 55;
@@ -199,7 +200,7 @@ impl Screen for EventLog {
         let title = if detail { "Event Log — filtered" } else { "Event Log" };
         let inner = panel::draw_with_hint(f, list_area, title, &format!("{} events", events.len()), panel::Kind::Outer);
         self.chips(f, inner);
-        self.list(f, Rect::new(inner.x, inner.y + 2, inner.width, inner.height - 2), sim, &events, detail);
+        self.list(f, Rect::new(inner.x, inner.y + 1, inner.width, inner.height - 1), sim, &events);
 
         if detail {
             let detail_area = Rect::new(area.x + list_w, area.y, DETAIL_W, body_h);
@@ -213,78 +214,64 @@ impl Screen for EventLog {
         } else {
             &[("↑↓", "select"), ("1-9", "chips"), ("f", "cycle"), ("Enter", "jump"), ("Esc", "back")]
         };
-        status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, &right);
+        StatusBar::new(keys).right(&right).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 
+const CHIPS: [(char, &str); KIND_CHIPS + 1] = [
+    ('*', "all"),
+    (glyphs::BIRTH, "births"),
+    (glyphs::DEATH, "deaths"),
+    (glyphs::MUTATION, "mutations"),
+    (glyphs::MIGRATION, "migrations"),
+    (glyphs::EXTINCTION, "extinctions"),
+    (glyphs::DROUGHT, "droughts"),
+    (glyphs::DISEASE, "disease"),
+    (glyphs::ALERT, "wary"),
+];
+
+/// The event columns after the Marker: when, kind, species glyph, text.
+const EVENT_COLUMNS: [Column; 4] = [Column::titled("when", Fixed(16)), Column::titled("kind", Fixed(15)), Column::titled("sp", Fixed(3)), Column::titled("event", Fill(1))];
+
 impl EventLog {
     fn chips(&self, f: &mut Frame<'_>, inner: Rect) {
-        let chips: [(char, &str, EventKind); KIND_CHIPS + 1] = [
-            ('*', " all", EventKind::Note),
-            ('♥', " births", EventKind::Birth),
-            ('x', " deaths", EventKind::DeathPredation),
-            ('§', " mutations", EventKind::Mutation),
-            ('→', " migrations", EventKind::Migration),
-            ('‼', " extinctions", EventKind::Extinction),
-            ('¡', " droughts", EventKind::Drought),
-            (glyphs::DISEASE, " disease", EventKind::Outbreak),
-            (glyphs::ALERT, " wary", EventKind::Wary),
-        ];
-        let mut x = inner.x + 1;
-        for (i, (glyph, name, kind)) in chips.iter().enumerate() {
-            let active = if i == 0 { self.filter.all } else { self.filter.kinds[i - 1] };
-            let buf = f.buffer_mut();
-            if let Some(c) = buf.cell_mut((x, inner.y)) {
-                c.set_char(*glyph);
-                c.set_style(if i == 0 { theme::key() } else { Style::default().fg(kind.color()).bg(theme::PANEL_BG) });
-            }
-            buf.set_stringn(x + 1, inner.y, name, name.chars().count(), if active { theme::selected() } else { theme::text() });
-            x += 1 + crate::cast!(name.chars().count() => u16) + 1;
-        }
-        let hint = "[f] cycles, [1-9] toggles";
-        let hint_w = crate::cast!(hint.len() => u16);
-        if x + 2 + hint_w <= inner.right() {
-            f.buffer_mut().set_stringn(inner.right() - hint_w - 1, inner.y, hint, hint.len(), theme::dim_text());
-        }
-        util::line(f, inner, 1, Line::from(Span::styled(" when         kind        sp  event", theme::dim_text())));
+        let kinds = [EventKind::Note, EventKind::Birth, EventKind::DeathPredation, EventKind::Mutation, EventKind::Migration, EventKind::Extinction, EventKind::Drought, EventKind::Outbreak, EventKind::Wary];
+        let mut colors = kinds.map(|k| k.color());
+        colors[0] = theme::KEY;
+        let mut active = [false; KIND_CHIPS + 1];
+        active[0] = self.filter.all;
+        active[1..].copy_from_slice(&self.filter.kinds);
+        FilterStrip::new(&CHIPS).active(&active).colors(&colors).hint("[f] cycles, [1-9] toggles").render(f.buffer_mut(), Rect { height: 1, ..inner });
     }
 
-    fn list(&self, f: &mut Frame<'_>, area: Rect, sim: &Sim, events: &[&Event], compact: bool) {
-        let text_w = crate::cast!(area.width.saturating_sub(1) => usize);
-        for (i, e) in events.iter().take(crate::cast!(area.height => usize)).enumerate() {
-            let selected = i == self.selected;
-            let y = area.y + crate::cast!(i => u16);
-            let buf = f.buffer_mut();
-            let bg = if selected { theme::SELECT_BG } else { theme::PANEL_BG };
-            for cx in area.x..area.right().min(area.x + crate::cast!(text_w => u16)) {
-                if let Some(c) = buf.cell_mut((cx, y)) {
-                    c.set_bg(bg);
-                }
-            }
-            let bright = Style::default().fg(theme::TEXT_BRIGHT).bg(theme::SELECT_BG);
-            let when_style = if selected { bright } else { theme::dim_text() };
-            buf.set_stringn(area.x + 1, y, format!("{}Y{} D{:03} {:02}:00", if selected { "►" } else { " " }, e.year, e.day, e.hour), 16, when_style);
-            buf.set_stringn(area.x + 17, y, format!("{} {:<10}", e.kind.glyph(), e.kind.label()), 14, Style::default().fg(e.kind.color()).bg(bg).add_modifier(Modifier::BOLD));
-            let sp_glyph = match e.species {
-                Some(s) => sim.roster().adult_glyph(s).to_string(),
-                None => "-".to_string(),
-            };
-            buf.set_stringn(area.x + 32, y, sp_glyph, 1, if selected { bright } else { theme::dim_text() });
-            let text_max = text_w.saturating_sub(35);
-            let text = if e.text.chars().count() > text_max {
-                let mut t: String = e.text.chars().take(text_max.saturating_sub(1)).collect();
-                t.push('~');
-                t
-            } else {
-                e.text.clone()
-            };
-            buf.set_stringn(area.x + 35, y, &text, text_max, if selected { bright } else { theme::text() });
-        }
+    fn list(&self, f: &mut Frame<'_>, area: Rect, sim: &Sim, events: &[&Event]) {
+        let buf = f.buffer_mut();
         if events.is_empty() {
-            util::line(f, area, 0, Line::from(Span::styled(" no events", theme::dim_text())));
+            Text::new(" no events").style(theme::dim_text()).render(buf, Rect::new(area.x, area.y + 1, area.width, 1).intersection(area));
+            return;
         }
-        let _ = sim;
-        let _ = compact;
+        let text_max = usize::from(area.width).saturating_sub(35);
+        let rows: Vec<TableRow<'_>> = events
+            .iter()
+            .take(usize::from(area.height))
+            .map(|e| {
+                let sp_glyph = e.species.map_or_else(|| "-".to_string(), |s| sim.roster().adult_glyph(s).to_string());
+                let text = if e.text.chars().count() > text_max {
+                    let mut t: String = e.text.chars().take(text_max.saturating_sub(1)).collect();
+                    t.push('~');
+                    t
+                } else {
+                    e.text.clone()
+                };
+                TableRow::new([
+                    TableCell::dim(format!("Y{} D{:03} {:02}:00", e.year, e.day, e.hour)),
+                    TableCell::styled(format!("{} {:<10}", e.kind.glyph(), e.kind.label()), e.kind.color()),
+                    TableCell::dim(sp_glyph),
+                    TableCell::text(text),
+                ])
+            })
+            .collect();
+        Table::new(&EVENT_COLUMNS, &rows).selected(Some(self.selected)).render(buf, area);
     }
 
     fn detail(f: &mut Frame<'_>, area: Rect, app: &AppState, sim: &Sim, e: Option<&Event>) {

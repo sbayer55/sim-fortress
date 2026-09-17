@@ -58,7 +58,8 @@ for f in $changed; do
         src/sim/stats*)                           units[sim::stats]=1 ;;
         src/sim/*)                                units[sim]=1 ;;
         src/ui/*)                                 units[ui]=1 ;;
-        src/widgets/*)                            units[widgets]=1 ;;
+        src/widgets/*)                            units[widgets]=1; chunks[components]=1 ;;
+        docs/components/*)                        chunks[components]=1 ;;
         src/theme.rs)                             units[theme]=1; units[ui]=1 ;;
         src/glyphs.rs)                            units[glyphs]=1; units[ui]=1 ;;
         tests/*.rs)                               chunks[$(basename "$f" .rs)]=1 ;;

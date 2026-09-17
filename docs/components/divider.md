@@ -66,8 +66,8 @@ Divider::rule().render(buf, row_area)         // No text variant
 `height` is 1; `min_width` is 3.
 
 ## Gaps today
-- Lives in `panel.rs` under the name `section`; the spec name is Divider.
-- Takes `(area, row)` instead of a one-row `Rect`.
+- `panel::section` / `section_in` remain as thin wrappers until every screen
+  has moved.
 
 ## Examples
 

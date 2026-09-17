@@ -15,8 +15,7 @@ use crate::sim::{Sim, SpeciesId};
 use crate::ui::app::AppState;
 use crate::ui::screens::{Action, Screen};
 use crate::widgets::scroll::{self, Overflow};
-use crate::widgets::{panel, status};
-use crate::glyphs;
+use crate::widgets::{panel, Component, StatusBar};
 
 use table::table;
 use summary::summary_body;
@@ -222,12 +221,9 @@ impl Screen for SpeciesBrowser {
         self.measured.set((ov.content, inner.height));
 
         let updown = if self.focus == Pane::Table { "select" } else { "scroll" };
-        status::render(
-            f,
-            Rect::new(area.x, status_row, area.width, 1),
-            &[("↑↓", updown), ("Tab", "panel"), ("Enter", "detail"), ("s", "sort"), ("Esc", "back")],
-            &format!("sorted by {} {}  {}", self.sort.label(), glyphs::DOWN, sim.time.clock_label()),
-        );
+        let alive = sim.species.iter().filter(|s| s.count > 0).count();
+        let prey_n = sim.species.iter().filter(|s| s.count > 0 && sim.roster().kind(s.species) == crate::sim::Kind::Prey).count();
+        StatusBar::new(&[("↑↓", updown), ("Tab", "panel"), ("Enter", "detail"), ("s", "sort"), ("Esc", "back")]).right(format!("{} species, {} prey / {} predator  {}", alive, prey_n, alive - prey_n, sim.time.clock_label())).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 
@@ -270,12 +266,7 @@ impl Screen for SpeciesDetail {
         let left_w = 80u16;
         histograms(f, Rect::new(area.x, area.y, left_w, body_h), sim, self.species);
         drift(f, Rect::new(area.x + left_w, area.y, area.width - left_w, body_h), sim, self.species);
-        status::render(
-            f,
-            Rect::new(area.x, status_row, area.width, 1),
-            &[("←→", "other species"), ("Esc", "back")],
-            &format!("{} detail  {}", sim.roster().display_name(self.species), sim.time.clock_label()),
-        );
+        StatusBar::new(&[("←→", "other species"), ("Esc", "back")]).right(format!("{} detail  {}", sim.roster().display_name(self.species), sim.time.clock_label())).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 

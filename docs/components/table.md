@@ -134,34 +134,35 @@ Embedded cells use `widgets::bars::sparkline(buf, x, y, w, values, color)`,
 
 ### Planned
 ```rust
-pub enum Align { Left, Right }
 pub struct Column { pub title: &'static str, pub width: Constraint, pub align: Align }  // a columns.md entry
 
-pub enum Cell<'a> {
+pub enum TableCell<'a> {
     Text(Cow<'a, str>),              // row style
     Styled(Cow<'a, str>, Color),     // own foreground, keeps the row background
-    Bar(Bar),                        // Bare bar, labeled-bar.md
-    Sparkline(Sparkline),            // sparkline.md
-    Arrow(TrendArrow),               // trend-arrow.md
+    Dim(Cow<'a, str>),               // secondary text, theme::dim_text()
+    Glyph(char, Color),              // a species glyph, bold in the roster colour
+    Widget(Box<dyn Component + 'a>), // a Bare Bar, Sparkline, Trend Arrow, or an HStack of them
     Blank,
 }
-pub struct Row<'a> { pub cells: Vec<Cell<'a>>, pub absent: bool }
+pub struct TableRow<'a> { pub cells: Vec<TableCell<'a>>, pub absent: bool, .. }
+TableRow::new(cells).absent(true).tail(Text::new(" prey 368  pred 24"))   // tail spans the columns after the cells
 
 /// Rows on demand, so a screen never builds every row to draw a window.
-pub trait RowSource { fn len(&self) -> usize; fn row(&self, i: usize) -> Row<'_>; }
+pub trait RowSource { fn len(&self) -> usize; fn with_row(&self, i: usize, f: &mut dyn FnMut(&TableRow<'_>)); }
 
-Table::new(&COLUMNS)                 // a Columns spec, see columns.md; column 0 (Marker) is implicit
-    .rows(&source)                   // impl RowSource; Vec<Row> implements it
+Table::new(&COLUMNS, &rows)          // Columns, see columns.md; column 0 (Marker) is implicit; rows are a slice
+Table::from_source(&COLUMNS, &source) // or any RowSource, built on demand
     .selected(Some(0))               // Marker and theme::selected() on that row
-    .totals(Row { .. })              // optional
+    .totals(TableRow { .. })         // optional; its first text cell is the label
     .spaced(true)                    // default false
     .render(buf, area)
 Table::sort_info("count") -> String  // "sorted by count ↓", for Panel::info
 ```
-`height(width)` is `1 + rows + totals + (2 if spaced)`; `min_width` is
-`1 + COLUMNS[0].width`. Columns past the width are dropped from the right.
-When `height` exceeds the area the screen wraps the Table in a Scroll Region,
-which writes `↑n ↓m` into the Panel Foot.
+`height(width)` is `1 + rows`, plus one blank row after the header when
+spaced, plus the totals row and one blank before it when both are set;
+`min_width` is `1 + COLUMNS[0].width`. Columns past the width are dropped
+from the right. When `height` exceeds the area the screen wraps the Table in
+a Scroll Region, which writes `↑n ↓m` into the Panel Foot.
 
 ## Gaps today
 - No shared column spec; every screen hand-lays its columns.
@@ -194,7 +195,8 @@ which writes `↑n ↓m` into the Panel Foot.
 ### Species table cut after Gen, Spaced with totals (70 columns)
 Rows from S04a; the columns from `30-day trend` on are dropped. The Hare row is
 selected, so it carries the Marker and `theme::selected()`. The Info slot shows
-the Sort text the spec asks for.
+the Sort text the spec asks for, and the totals value sits under the Count
+column (S04a draws it one cell right; see Gaps today).
 ```
 ╔ Species ════════════════════════════════════════ sorted by count ↓ ╗
 ║   Species Kind  Count Adults   Juv Birth/d Death/d  Sick  Peak  Gen║
@@ -206,7 +208,7 @@ the Sort text the spec asks for.
 ║ W Wolf    pred      8      7     1       0       0     0    18    3║
 ║ L Lynx    pred      6      6     0       0       0     0     7    3║
 ║                                                                    ║
-║   totals           392   prey 368  pred 24  ratio 15.3:1   births 0║
+║   totals          392    prey 368  pred 24  ratio 15.3:1   births 0║
 ╚════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -220,7 +222,7 @@ twelve trait cells via `trait_color`, and a dim Diet cell.
 ║                                                                                                                                                         ║
 ║►H Hare    prey    201    201     0       0       1     0   703    4   ███▓▓▓▓▓▓▒▒▒░░ ↓    82  24  65  61  10  56  75  35  35  26  51   grass, bark      ║
 ║                                                                                                                                                         ║
-║   totals           392   prey 368  pred 24  ratio 15.3:1   births 0  deaths 0   net +0 today     traits = species means x100;  /d = yesterday           ║
+║   totals          392    prey 368  pred 24  ratio 15.3:1   births 0  deaths 0   net +0 today     traits = species means x100;  /d = yesterday           ║
 ╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 ```
 

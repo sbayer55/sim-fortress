@@ -18,7 +18,7 @@ use crate::ui::screens::s10_controls::Controls;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::SeasonStyle;
 use crate::widgets::map;
-use crate::widgets::{panel, status, util};
+use crate::widgets::{util, Component, Kind, Menu, Panel, StatusBar};
 use crate::{glyphs, theme};
 
 const MENU: [&str; 4] = ["New World", "Load World", "Options", "Quit"];
@@ -30,28 +30,16 @@ pub struct Title {
 
 /// The main-menu box with its selection highlight.
 fn menu_box(f: &mut Frame<'_>, area: Rect, newest: Option<&SaveHeader>, selection: usize) {
-        let box_w = 34u16;
-        let box_h = 8u16;
-        let bx = area.x + area.width.saturating_sub(box_w).div_euclid(2);
-        let by = area.y + 16;
-        let inner = panel::draw(f, Rect::new(bx, by, box_w, box_h), "Main Menu", panel::Kind::Focus);
-        for (i, entry) in MENU.iter().enumerate() {
-            let row = 1 + crate::cast!(i => u16);
-            let disabled = i == 1 && newest.is_none();
-            let selected = i == selection && !disabled;
-            let text = if selected {
-                format!("   {} {:<24}", glyphs::PLAY, entry)
-            } else if disabled {
-                format!("     {entry:<24} (empty)")
-            } else {
-                format!("     {entry:<24}")
-            };
-            let style = if disabled { theme::dim_text() } else if selected { theme::selected() } else { theme::text() };
-            util::line(f, inner, row, Line::from(Span::styled(format!("{:<w$}", text, w = crate::cast!(inner.width => usize)), style)));
-            if selected {
-                f.buffer_mut().set_stringn(inner.right() - 8, inner.y + row, "[Enter]", 7, Style::default().fg(theme::KEY).bg(theme::SELECT_BG).add_modifier(Modifier::BOLD));
-            }
-        }
+    let box_w = 34u16;
+    let box_h = 8u16;
+    let bx = area.x + area.width.saturating_sub(box_w).div_euclid(2);
+    let by = area.y + 16;
+    let buf = f.buffer_mut();
+    let inner = Panel::new("Main Menu").kind(Kind::Focus).render(buf, Rect::new(bx, by, box_w, box_h));
+    let disabled: &[usize] = if newest.is_none() { &[1] } else { &[] };
+    let menu = Menu::new(&MENU).selected(selection).disabled(disabled).hint("[Enter]").note("(empty)");
+    // The menu starts at inner row 1, under a blank row.
+    menu.render(buf, Rect::new(inner.x, inner.y + 1, inner.width, inner.height.saturating_sub(1)));
 }
 
 /// The saved-world summary (or the empty-state line).
@@ -215,12 +203,7 @@ impl Screen for Title {
 
         // ---- status bar -----------------------------------------------------
         let right = if app.sim.is_some() { "world loaded" } else { "no world loaded" };
-        status::render(
-            f,
-            Rect::new(area.x, status_row, area.width, 1),
-            &[("↑↓", "select"), ("Enter", "confirm"), ("q", "quit")],
-            right,
-        );
+        StatusBar::new(&[("↑↓", "select"), ("Enter", "confirm"), ("q", "quit")]).right(right).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 
