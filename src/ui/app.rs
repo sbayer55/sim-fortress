@@ -15,6 +15,7 @@ use crate::sim::save;
 use crate::ai::Ai;
 use crate::sim::{Alert, EventKind, Params, Season, Sim};
 use crate::theme;
+use crate::widgets::map::OverlayStack;
 use crate::ui::config;
 
 use super::screens::confirm::ConfirmModal;
@@ -84,9 +85,9 @@ pub struct AppState {
     pub confirm: Option<ConfirmRequest>,
     /// `--params` was passed on the command line (C6 FR6: ignored on load).
     pub cli_params_used: bool,
-    /// C7 FR9: the S12b "Show outbreak" button asks the map to open the disease
-    /// overlay on this pathogen slot; the map screen takes it on its next key/render.
-    pub pending_overlay: Option<crate::sim::PathogenId>,
+    /// The map's overlay stack (S14): edited by the switcher and the S12b
+    /// "Show outbreak" button, read by the map every frame.
+    pub overlay: OverlayStack,
     // ---- C9: the language-model layer ----
     /// The one gateway handle; `Ai::Off` unless `ui.toml` enables it.
     pub ai: Ai,
@@ -119,7 +120,7 @@ impl AppState {
             follow_death_tick: None,
             alert_queue: Vec::new(),
             alert_shown: None,
-            pending_overlay: None,
+            overlay: OverlayStack::PLAIN,
             world_name: None,
             saves_dir: PathBuf::from("saves"),
             last_saved_tick: None,

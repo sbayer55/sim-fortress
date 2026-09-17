@@ -9,7 +9,7 @@ use crate::sim::creatures::CreatureId;
 use crate::sim::disease::{self, PathogenId};
 use crate::sim::{Sim, World};
 use crate::ui::style::{SpeciesStyle};
-use crate::widgets::map::{self};
+use crate::widgets::map::{self, OverlayStack};
 use crate::widgets::{panel, util};
 use crate::{glyphs, theme};
 use super::WorldMap;
@@ -217,7 +217,7 @@ impl WorldMap {
     /// counts and mean Resistance, a parasite summary, the selector and notes.
     /// Fixed sections take 31 rows plus one per pathogen slot; the rows left
     /// over separate the sections and lengthen the reading notes.
-    pub(super) fn disease_sidebar(&self, f: &mut Frame<'_>, area: Rect, sim: &Sim, shown: Option<PathogenId>) {
+    pub(super) fn disease_sidebar(f: &mut Frame<'_>, area: Rect, sim: &Sim, shown: Option<PathogenId>, stack: &OverlayStack) {
         let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
         let mut row = 0u16;
         let tone = |c: Color| Style::default().fg(c).bg(theme::PANEL_BG);
@@ -262,7 +262,7 @@ impl WorldMap {
         row = disease_parasites(f, inner, row, sim, world);
         gap(&mut row, &mut spare);
 
-        row = self.overlays_selector(f, inner, row);
+        row = Self::overlays_selector(f, inner, row, stack);
         gap(&mut row, &mut spare);
 
         let notes = [" colour = animal · amber ground = fouled", " Tab pathogen · k look · Esc restores map"];

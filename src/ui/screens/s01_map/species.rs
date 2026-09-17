@@ -6,7 +6,7 @@ use ratatui::text::{Line, Span};
 use ratatui::Frame;
 use crate::sim::{Sim, SpeciesId};
 use crate::ui::style::{SpeciesStyle};
-use crate::widgets::map::{self};
+use crate::widgets::map::{self, OverlayStack};
 use crate::widgets::{bars, panel, util};
 use crate::{glyphs, theme};
 use super::WorldMap;
@@ -82,7 +82,8 @@ fn species_list(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, sp: Spe
 impl WorldMap {
     /// S02f sidebar: what the density shows, its legend, the species' spread by
     /// region, the species selector and reading notes.
-    pub(super) fn species_sidebar(&self, f: &mut Frame<'_>, area: Rect, sim: &Sim, sp: SpeciesId) {
+    pub(super) fn species_sidebar(f: &mut Frame<'_>, area: Rect, sim: &Sim, stack: &OverlayStack) {
+        let sp = stack.species;
         let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
         let mut row = 0u16;
         let color = sim.roster().color(sp);
@@ -119,7 +120,7 @@ impl WorldMap {
         row = species_by_region(f, inner, row, sim, sp, color);
         row = species_list(f, inner, row, sim, sp);
 
-        row = self.overlays_selector(f, inner, row);
+        row = Self::overlays_selector(f, inner, row, stack);
         row += 1;
 
         panel::section(f, inner, row, "Reading the map");

@@ -8,9 +8,9 @@ use crate::sim::creatures::CreatureId;
 use crate::sim::disease::{self, PathogenId};
 use crate::sim::Sim;
 use crate::ui::app::AppState;
-use crate::ui::screens::Screen;
+use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{SpeciesStyle};
-use crate::widgets::map::{self, Overlay};
+use crate::widgets::map::{self, Base, Disease, OverlayStack};
 use crate::{glyphs, theme};
 use crate::sim::disease::{Infection, Stage};
 use crate::sim::world::{Cell, Terrain};
@@ -94,8 +94,8 @@ fn s02h_disease_overlay_navigation() {
     // Render at 155×45 with all eight slots, for every Tab stop.
     let mut app = AppState::new(Params::default());
     app.sim = Some(sim);
+    app.overlay.show_disease(None);
     let mut screen = WorldMap::new("Test".into());
-    screen.overlay = Overlay::Disease(None);
     let buf = draw(&screen, &app);
     s02h_assert_sidebar(&buf);
     // The infectious creature draws in SICK when it is inside the viewport
@@ -107,8 +107,7 @@ fn s02h_disease_overlay_navigation() {
         assert_eq!(buf[(crate::cast!(ca.x => u16) + 1, crate::cast!(ca.y => u16) + 1)].fg, theme::SICK);
     }
     s02h_assert_tab_cycle(&mut screen, &mut app);
-    s02h_assert_pending(&mut screen, &mut app);
-    s02h_assert_cycle(&mut screen, &mut app);
+    s02h_assert_show_outbreak(&mut screen, &mut app);
 }
 
 /// The all-pathogens sidebar content.
@@ -119,50 +118,89 @@ fn s02h_assert_sidebar(buf: &Buffer) {
     assert!(side.iter().any(|l| l.contains("Pathogens · all")));
     assert!(side.iter().any(|l| l.contains("└ Strain7")), "strains are indented under their parent");
     assert!(side.iter().any(|l| l.contains("new")), "a strain born today carries the new tag");
-    assert!(side.iter().any(|l| l.contains("9 ") && l.contains("parasites")), "selector lists 9 rows");
     assert!(side[39].contains("Tab pathogen"), "with all eight slots the reading note is the 40th sidebar row");
 }
 
 /// Tab walks all → slot 0 … slot 7 → all; Shift+Tab walks back.
 fn s02h_assert_tab_cycle(screen: &mut WorldMap, app: &mut AppState) {
     screen.handle_key(key(KeyCode::Tab), app);
-    assert_eq!(screen.overlay, Overlay::Disease(Some(PathogenId(0))));
+    assert_eq!(app.overlay.disease, Disease::On(Some(PathogenId(0))));
     for i in 1..8u8 {
         screen.handle_key(key(KeyCode::Tab), app);
-        assert_eq!(screen.overlay, Overlay::Disease(Some(PathogenId(i))));
+        assert_eq!(app.overlay.disease, Disease::On(Some(PathogenId(i))));
         let buf = draw(screen, app);
-        assert!(row_text(&buf, 0).contains("overlay: disease"));
+        let name = app.sim.as_ref().unwrap().disease.name(PathogenId(i)).to_lowercase();
+        assert!(row_text(&buf, 0).contains(&format!("overlay: disease: {name}")), "{}", row_text(&buf, 0));
     }
     screen.handle_key(key(KeyCode::Tab), app);
-    assert_eq!(screen.overlay, Overlay::Disease(None));
+    assert_eq!(app.overlay.disease, Disease::On(None));
     screen.handle_key(key(KeyCode::BackTab), app);
-    assert_eq!(screen.overlay, Overlay::Disease(Some(PathogenId(7))));
+    assert_eq!(app.overlay.disease, Disease::On(Some(PathogenId(7))));
+    assert_eq!(app.overlay.pathogen, Some(PathogenId(7)), "the slot is remembered");
 }
 
-/// The S12b hook: a pending slot renders at once and is taken by the next key.
-fn s02h_assert_pending(screen: &mut WorldMap, app: &mut AppState) {
-    screen.overlay = Overlay::None;
-    app.pending_overlay = Some(PathogenId(2));
+/// The S12b hand-off: the Disease mark comes on for the slot, over whatever
+/// base is up, and a vanished slot falls back to every pathogen.
+fn s02h_assert_show_outbreak(screen: &mut WorldMap, app: &mut AppState) {
+    app.overlay.clear();
+    app.overlay.base = Base::Moisture;
+    app.overlay.show_disease(Some(PathogenId(2)));
     let buf = draw(screen, app);
-    assert!(row_text(&buf, 0).contains("overlay: disease"));
+    let name = app.sim.as_ref().unwrap().disease.name(PathogenId(2)).to_lowercase();
+    assert!(row_text(&buf, 0).contains(&format!("overlay: moisture + disease: {name}")), "{}", row_text(&buf, 0));
+    // A slot that no longer exists: every pathogen, from the next key on.
+    app.sim.as_mut().unwrap().disease.pathogens.truncate(2);
     screen.handle_key(key(KeyCode::Right), app);
-    assert_eq!(screen.overlay, Overlay::Disease(Some(PathogenId(2))));
-    assert!(app.pending_overlay.is_none());
+    assert_eq!(app.overlay.disease, Disease::On(None));
+    assert_eq!(app.overlay.pathogen, None);
 }
 
-/// `o` walks health → disease → parasites → plain map; `8` and `9` go direct.
-fn s02h_assert_cycle(screen: &mut WorldMap, app: &mut AppState) {
-    screen.overlay = Overlay::Health;
-    screen.handle_key(key(KeyCode::Char('o')), app);
-    assert_eq!(screen.overlay, Overlay::Disease(None));
-    screen.handle_key(key(KeyCode::Char('o')), app);
-    assert_eq!(screen.overlay, Overlay::Parasites);
-    screen.handle_key(key(KeyCode::Char('o')), app);
-    assert_eq!(screen.overlay, Overlay::None);
-    screen.handle_key(key(KeyCode::Char('9')), app);
-    assert_eq!(screen.overlay, Overlay::Parasites);
-    screen.handle_key(key(KeyCode::Char('8')), app);
-    assert_eq!(screen.overlay, Overlay::Disease(None));
+#[test]
+fn o_pushes_the_switcher_from_every_mode() {
+    let mut app = AppState::new(Params::default());
+    app.sim = Some(Sim::new(7, Params::default()));
+    let mut screen = WorldMap::new("Test".into());
+    assert!(matches!(screen.handle_key(key(KeyCode::Char('o')), &mut app), Action::Push(_)));
+    app.enter_look((5, 5));
+    assert!(matches!(screen.handle_key(key(KeyCode::Char('o')), &mut app), Action::Push(_)));
+    assert!(app.look_cursor.is_some(), "look mode is kept");
+    app.leave_look();
+    app.follow = app.sim.as_ref().unwrap().creatures.living_ids().first().copied();
+    assert!(matches!(screen.handle_key(key(KeyCode::Char('o')), &mut app), Action::Push(_)));
+    assert!(app.follow.is_some(), "follow mode is kept");
+}
+
+#[test]
+fn digits_do_nothing_on_the_map() {
+    let mut app = AppState::new(Params::default());
+    app.sim = Some(Sim::new(7, Params::default()));
+    let mut screen = WorldMap::new("Test".into());
+    for c in '0'..='9' {
+        assert!(matches!(screen.handle_key(key(KeyCode::Char(c)), &mut app), Action::Unhandled), "{c}");
+        assert_eq!(app.overlay, OverlayStack::PLAIN);
+    }
+    app.enter_look((5, 5));
+    assert!(matches!(screen.handle_key(key(KeyCode::Char('7')), &mut app), Action::Unhandled));
+    assert_eq!(app.overlay, OverlayStack::PLAIN);
+}
+
+#[test]
+fn dead_sense_subject_turns_the_mark_off() {
+    let mut app = AppState::new(Params::default());
+    app.sim = Some(Sim::new(7, Params::default()));
+    let mut screen = WorldMap::new("Test".into());
+    assert!(WorldMap::turn_sense_on(&mut app));
+    let id = app.overlay.sense_subject.expect("a predator lives");
+    app.sim.as_mut().unwrap().creatures.get_mut(id).unwrap().alive = false;
+    // The next frame draws without the ring; the next key clears the subject.
+    let buf = draw(&screen, &app);
+    assert!(!row_text(&buf, 0).contains("sense"), "{}", row_text(&buf, 0));
+    screen.handle_key(key(KeyCode::Right), &mut app);
+    assert!(!app.overlay.sense);
+    assert_eq!(app.overlay.sense_subject, None);
+    // Turning it on again picks a new subject by the S02d rule.
+    assert!(WorldMap::turn_sense_on(&mut app));
+    assert_ne!(app.overlay.sense_subject, Some(id));
 }
 
 #[test]
@@ -207,8 +245,8 @@ fn s02i_parasite_overlay_render() {
 
     let mut app = AppState::new(Params::default());
     app.sim = Some(sim);
-    let mut screen = WorldMap::new("Test".into());
-    screen.overlay = Overlay::Parasites;
+    app.overlay.base = Base::Parasites;
+    let screen = WorldMap::new("Test".into());
     let buf = draw(&screen, &app);
     assert!(row_text(&buf, 0).contains("overlay: parasites"));
     let (x, y) = (crate::cast!((idx % w) => u16) + 1, crate::cast!((idx.div_euclid(w)) => u16) + 1);
@@ -219,5 +257,5 @@ fn s02i_parasite_overlay_render() {
     assert!(side.iter().any(|l| l.contains("cells ≥25%")));
     assert!(side.iter().any(|l| l.contains("litter")));
     assert!(side[39].contains("k look"), "the reading note is the 40th sidebar row");
-    assert!(row_text(&buf, 44).contains("1-9"), "status bar hints cover the nine overlays");
+    assert!(row_text(&buf, 44).contains("[o] overlay"), "status bar names the switcher");
 }

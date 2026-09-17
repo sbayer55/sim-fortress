@@ -135,6 +135,15 @@ impl OverlayStack {
     /// Nothing on: the plain map (S01a).
     pub const PLAIN: Self = Self { base: Base::None, species: SpeciesId(0), sense: false, sense_subject: None, regions: false, health: false, disease: Disease::Off, pathogen: None };
 
+    /// Every layer off; the remembered sub-picks survive (S14 State).
+    pub const fn clear(&mut self) {
+        self.base = Base::None;
+        self.sense = false;
+        self.regions = false;
+        self.health = false;
+        self.disease = Disease::Off;
+    }
+
     pub const fn is_empty(&self) -> bool {
         matches!(self.base, Base::None) && !self.sense && !self.regions && !self.health && !self.disease.is_on()
     }
@@ -197,34 +206,6 @@ impl OverlayStack {
     }
 }
 
-/// Bridge from the single-valued `Overlay` while the map screen still keeps
-/// one; deleted once the stack lives on `AppState`.
-impl From<super::Overlay> for OverlayStack {
-    fn from(o: super::Overlay) -> Self {
-        use super::Overlay;
-        let mut s = Self::PLAIN;
-        match o {
-            Overlay::None => {}
-            Overlay::Vegetation => s.base = Base::Vegetation,
-            Overlay::Pressure => s.base = Base::Pressure,
-            Overlay::Moisture => s.base = Base::Moisture,
-            Overlay::Parasites => s.base = Base::Parasites,
-            Overlay::Species(sp) => {
-                s.base = Base::Species;
-                s.species = sp;
-            }
-            Overlay::Sense(id) => {
-                s.sense = true;
-                s.sense_subject = Some(id);
-            }
-            Overlay::Region => s.regions = true,
-            Overlay::Health => s.health = true,
-            Overlay::Disease(shown) => s.show_disease(shown),
-        }
-        s
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,6 +262,14 @@ mod tests {
         assert!(!s.fades_creatures(), "so does disease");
         let s = OverlayStack { regions: true, sense: true, ..OverlayStack::PLAIN };
         assert!(!s.fades_creatures(), "marks alone never fade anything");
+    }
+
+    #[test]
+    fn clear_keeps_the_sub_picks() {
+        let mut s = OverlayStack { base: Base::Species, species: SpeciesId(3), sense: true, sense_subject: Some(CreatureId(9)), regions: true, health: true, disease: Disease::On(Some(PathogenId(1))), pathogen: Some(PathogenId(1)) };
+        s.clear();
+        assert!(s.is_empty());
+        assert_eq!((s.species, s.sense_subject, s.pathogen), (SpeciesId(3), Some(CreatureId(9)), Some(PathogenId(1))));
     }
 
     #[test]

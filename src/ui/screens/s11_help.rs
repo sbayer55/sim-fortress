@@ -205,14 +205,10 @@ const KEY_GROUPS: [(&str, &[(&str, &str)]); 5] = [
     (
         "Overlays",
         &[
-            ("o", "cycle overlays"),
-            ("1 2 3", "veg · pressure · moisture"),
-            ("4 5 6", "sense · regions · species"),
-            ("7", "health (weakest vital)"),
-            ("8 9", "disease · parasites"),
-            ("Tab", "next predator / species"),
-            ("Shift+Tab", "previous species"),
-            ("Esc", "clear overlay"),
+            ("o", "overlay switcher"),
+            ("Tab", "next predator / species / pathogen"),
+            ("Shift+Tab", "previous species / pathogen"),
+            ("Esc", "clear overlays"),
         ],
     ),
     ("Speed", &[("Space", "pause / resume"), ("+ / -", "faster / slower"), (".", "step one tick"), ("p", "controls, options, AI")]),

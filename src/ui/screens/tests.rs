@@ -10,7 +10,7 @@ use crate::ui::screens::s01_map::WorldMap;
 use crate::ui::screens::s09_worldgen::WorldGen;
 use crate::sim::{Params, Sim, SpeciesId};
 use crate::ui::style::SpeciesStyle;
-use crate::widgets::map::Overlay;
+use crate::widgets::map::{Base, OverlayStack};
 use ratatui::backend::TestBackend;
 use ratatui::crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::style::{Color, Style};
@@ -417,26 +417,14 @@ fn map_with_sim() -> (AppState, WorldMap) {
 }
 
 #[test]
-fn s01_key_5_and_o_cycle_reach_region_overlay() {
+fn s01_esc_clears_the_stack_and_keeps_the_sub_picks() {
     let (mut app, mut s) = map_with_sim();
-    s.handle_key(key(KeyCode::Char('5')), &mut app);
-    assert_eq!(s.overlay, Overlay::Region);
-    s.handle_key(key(KeyCode::Char('3')), &mut app);
-    // The cycle runs Moisture → Sense → Region → Species → None.
-    s.handle_key(key(KeyCode::Char('o')), &mut app);
-    assert!(matches!(s.overlay, Overlay::Sense(_)), "Moisture → Sense, got {:?}", s.overlay);
-    s.handle_key(key(KeyCode::Char('o')), &mut app);
-    assert_eq!(s.overlay, Overlay::Region);
-    s.handle_key(key(KeyCode::Char('o')), &mut app);
-    assert!(matches!(s.overlay, Overlay::Species(_)), "Region → Species, got {:?}", s.overlay);
-    s.handle_key(key(KeyCode::Char('o')), &mut app);
-    assert_eq!(s.overlay, Overlay::Health, "Species → Health");
-    s.handle_key(key(KeyCode::Char('o')), &mut app);
-    assert_eq!(s.overlay, Overlay::Disease(None), "Health → Disease (C7)");
-    s.handle_key(key(KeyCode::Char('o')), &mut app);
-    assert_eq!(s.overlay, Overlay::Parasites, "Disease → Parasites (C7)");
-    s.handle_key(key(KeyCode::Char('o')), &mut app);
-    assert_eq!(s.overlay, Overlay::None);
+    app.overlay = OverlayStack { base: Base::Species, species: SpeciesId(2), regions: true, ..OverlayStack::PLAIN };
+    s.handle_key(key(KeyCode::Esc), &mut app);
+    assert!(app.overlay.is_empty());
+    assert_eq!(app.overlay.species, SpeciesId(2), "the species survives Esc");
+    // Esc on an empty stack is still the map's key, not the global Pop.
+    assert!(matches!(s.handle_key(key(KeyCode::Esc), &mut app), Action::None));
 }
 
 #[test]
@@ -492,11 +480,10 @@ fn s01_look_mode_selection_restores_speed() {
 }
 
 #[test]
-fn s01_key_7_opens_health_overlay_in_every_mode() {
+fn s01_health_mark_keeps_the_map_keys_in_every_mode() {
     let (mut app, mut s) = map_with_sim();
-    s.handle_key(key(KeyCode::Char('7')), &mut app);
-    assert_eq!(s.overlay, Overlay::Health);
-    // Arrows scroll, Tab still toggles the sidebar (no species to cycle).
+    app.overlay.health = true;
+    // Arrows scroll, Tab still toggles the sidebar (no sub-pick to cycle).
     app.viewport_size.set((110, 40));
     s.handle_key(key(KeyCode::Right), &mut app);
     assert_eq!(app.viewport_origin.0, 5);
@@ -504,23 +491,23 @@ fn s01_key_7_opens_health_overlay_in_every_mode() {
     assert!(s.wide);
     s.handle_key(key(KeyCode::Tab), &mut app);
     s.handle_key(key(KeyCode::Esc), &mut app);
-    assert_eq!(s.overlay, Overlay::None);
-    // Look mode and follow mode reach it too.
+    assert!(app.overlay.is_empty());
+    // Look mode keeps the mark; Esc leaves the mode first, as before.
+    app.overlay.health = true;
     s.handle_key(key(KeyCode::Char('k')), &mut app);
-    s.handle_key(key(KeyCode::Char('7')), &mut app);
-    assert_eq!(s.overlay, Overlay::Health);
-    assert!(app.look_cursor.is_some(), "look mode stays on under the overlay");
+    assert!(app.look_cursor.is_some() && app.overlay.health, "look mode stays on under the mark");
     s.handle_key(key(KeyCode::Esc), &mut app);
-    s.overlay = Overlay::None;
+    assert!(app.look_cursor.is_none() && app.overlay.health);
+    // Follow mode too.
     app.follow = app.sim.as_ref().unwrap().creatures.living_ids().first().copied();
-    s.handle_key(key(KeyCode::Char('7')), &mut app);
-    assert_eq!(s.overlay, Overlay::Health);
+    s.handle_key(key(KeyCode::Tab), &mut app);
+    assert!(s.wide && app.overlay.health);
 }
 
 #[test]
 fn s01_health_overlay_renders_155x45() {
     let (mut app, mut s) = map_with_sim();
-    s.handle_key(key(KeyCode::Char('7')), &mut app);
+    app.overlay.health = true;
     s.world_name = "The Valley of Sunfall".into();
     let backend = TestBackend::new(155, 45);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -531,7 +518,6 @@ fn s01_health_overlay_renders_155x45() {
     let all: String = (0..45).map(row).collect::<Vec<_>>().join("\n");
     assert!(all.contains("Weakest vital"));
     assert!(all.contains("Lynx"));
-    assert!(all.contains("7 health"), "selector lists the seventh overlay");
     // Every living creature is drawn in a condition colour, never its species colour.
     let sim = app.sim.as_ref().unwrap();
     let mut seen = 0;
@@ -550,29 +536,29 @@ fn s01_health_overlay_renders_155x45() {
 }
 
 #[test]
-fn s01_key_6_opens_species_overlay_and_tab_cycles_species() {
+fn s01_species_base_tab_cycles_species() {
     let (mut app, mut s) = map_with_sim();
-    s.handle_key(key(KeyCode::Char('6')), &mut app);
-    let Overlay::Species(first) = s.overlay else { panic!("6 opens the species overlay, got {:?}", s.overlay) };
+    let first = WorldMap::default_species(&app);
     assert!(app.sim.as_ref().unwrap().creatures.living().any(|c| c.species == first), "defaults to a living species");
+    app.overlay.base = Base::Species;
+    app.overlay.species = first;
     // Tab walks every species in ALL order, wrapping; the sidebar stays put.
     let n = app.params.species.len();
     for i in 1..=n {
         s.handle_key(key(KeyCode::Tab), &mut app);
-        assert_eq!(s.overlay, Overlay::Species(SpeciesId::from_index((first.index() + i) % n)));
+        assert_eq!(app.overlay.species, SpeciesId::from_index((first.index() + i) % n));
     }
     assert!(!s.wide, "Tab cycles species instead of toggling the sidebar");
     s.handle_key(KeyEvent::new(KeyCode::BackTab, KeyModifiers::NONE), &mut app);
-    assert_eq!(s.overlay, Overlay::Species(SpeciesId::from_index((first.index() + n - 1) % n)));
-    // Arrows still scroll under the species overlay.
+    assert_eq!(app.overlay.species, SpeciesId::from_index((first.index() + n - 1) % n));
+    // Arrows still scroll under the species base.
     app.viewport_size.set((110, 40));
     s.handle_key(key(KeyCode::Right), &mut app);
     assert_eq!(app.viewport_origin.0, 5);
-    // Esc clears; reopening restores the last species shown.
+    // Esc clears; the last species shown is remembered for the next time.
     s.handle_key(key(KeyCode::Esc), &mut app);
-    assert_eq!(s.overlay, Overlay::None);
-    s.handle_key(key(KeyCode::Char('6')), &mut app);
-    assert_eq!(s.overlay, Overlay::Species(SpeciesId::from_index((first.index() + n - 1) % n)));
+    assert!(app.overlay.is_empty());
+    assert_eq!(app.overlay.species, SpeciesId::from_index((first.index() + n - 1) % n));
 }
 
 #[test]
@@ -617,8 +603,8 @@ fn s11_help_scrolls_when_the_modal_is_short() {
 #[test]
 fn s01_species_overlay_renders_155x45() {
     let (mut app, mut s) = map_with_sim();
-    s.handle_key(key(KeyCode::Char('6')), &mut app);
-    s.overlay = Overlay::Species(SpeciesId(0));
+    app.overlay.base = Base::Species;
+    app.overlay.species = SpeciesId(0);
     s.world_name = "The Valley of Sunfall".into();
     let backend = TestBackend::new(155, 45);
     let mut terminal = Terminal::new(backend).unwrap();
@@ -630,14 +616,13 @@ fn s01_species_overlay_renders_155x45() {
     assert!(all.contains("Vole density"));
     assert!(all.contains("Lynx"));
     assert!(all.contains("next species"), "status bar names Tab");
-    assert!(all.contains("6 species"), "selector lists the sixth overlay");
 }
 
 #[test]
 fn s01_region_updown_wraps_and_enter_centres() {
     let (mut app, mut s) = map_with_sim();
     app.viewport_size.set((110, 40));
-    s.handle_key(key(KeyCode::Char('5')), &mut app);
+    app.overlay.regions = true;
     let n = app.sim.as_ref().unwrap().world.regions.len();
     s.handle_key(key(KeyCode::Up), &mut app);
     assert_eq!(s.region_sel, n - 1);
@@ -654,8 +639,8 @@ fn s01_region_updown_wraps_and_enter_centres() {
 
 #[test]
 fn s01_region_overlay_renders_155x45() {
-    let (mut app, mut s) = map_with_sim();
-    s.handle_key(key(KeyCode::Char('5')), &mut app);
+    let (mut app, s) = map_with_sim();
+    app.overlay.regions = true;
     let backend = TestBackend::new(155, 45);
     let mut terminal = Terminal::new(backend).unwrap();
     terminal.draw(|f| s.render(&app, f, Rect::new(0, 0, 155, 45))).unwrap();

@@ -7,7 +7,6 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::sim::creatures::CreatureId;
-use crate::sim::disease::PathogenId;
 use crate::sim::species::SpeciesId;
 use crate::sim::world::World;
 
@@ -21,29 +20,7 @@ pub use overlay::{condition_color, density_cell, density_field, disease_tint, ov
 pub use palette::{legend, terrain_base, terrain_cell, terrain_code_cell, world_cell};
 pub use stack::{Base, Disease, Layer, OverlayStack};
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Overlay {
-    None,
-    Vegetation,
-    Pressure,
-    Moisture,
-    /// Sense-range rings for a creature id.
-    Sense(CreatureId),
-    /// Named regions: tinted rectangles with centred labels.
-    Region,
-    /// Population density of one species (S02f).
-    Species(SpeciesId),
-    /// Health: every living creature coloured by its weakest vital (S02g).
-    Health,
-    /// Disease (S02h): every living creature coloured by its infection state
-    /// for one pathogen slot, or for every pathogen when `None`.
-    Disease(Option<PathogenId>),
-    /// Parasites (S02i): a heatmap of `cell.parasite_load`, creatures on top
-    /// coloured by their own load.
-    Parasites,
-}
-
-/// How far the terrain fades under `Overlay::Health` so the creature colours
+/// How far the terrain fades under the Health and Disease marks so the creature colours
 /// carry the picture.
 pub const HEALTH_TERRAIN_DIM: f32 = 0.6;
 
@@ -121,7 +98,7 @@ pub struct MapCreature<'a> {
     pub color: Color,
     pub sense_cells: u16,
     /// Weakest vital in 0..=1 (health, fullness, hydration or energy, whichever
-    /// is lowest); drives the colour under `Overlay::Health`.
+    /// is lowest); drives the colour under the Health mark.
     pub condition: f32,
     pub trail: &'a [(usize, usize)],
     pub target: Option<(usize, usize)>,
@@ -203,10 +180,7 @@ fn base_cell(world: &World, wx: usize, wy: usize, opts: &MapOptions, density: Op
     let cell = world.cell(wx, wy);
     match (density, opts.stack.base) {
         (Some((sp, color, field)), _) => density_cell(cell, field[wy * world.width() + wx], *sp, *color),
-        (None, Base::Parasites) => parasite_cell(cell),
-        (None, Base::Vegetation) => overlay_cell(cell, Overlay::Vegetation).unwrap_or_else(|| world_cell(world, wx, wy, opts.winter)),
-        (None, Base::Pressure) => overlay_cell(cell, Overlay::Pressure).unwrap_or_else(|| world_cell(world, wx, wy, opts.winter)),
-        (None, Base::Moisture) => overlay_cell(cell, Overlay::Moisture).unwrap_or_else(|| world_cell(world, wx, wy, opts.winter)),
+        (None, base @ (Base::Vegetation | Base::Pressure | Base::Moisture | Base::Parasites)) => overlay_cell(cell, base).unwrap_or_else(|| world_cell(world, wx, wy, opts.winter)),
         // Health and Disease over plain terrain draw the terrain without the
         // waterfall mark, as the single overlays did.
         (None, Base::None | Base::Species) if opts.stack.health || opts.stack.disease.is_on() => terrain_cell(cell, opts.winter),

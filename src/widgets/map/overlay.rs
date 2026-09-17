@@ -9,27 +9,28 @@ use crate::sim::species::SpeciesId;
 use crate::sim::world::{Cell, Terrain, World};
 use crate::{glyphs, theme};
 
-use super::{MapCreature, Overlay, DENSITY_CAP, DENSITY_RADIUS, HEALTHY_FADE, PARASITE_HEAVY, PARASITE_LIGHT};
+use super::{Base, MapCreature, DENSITY_CAP, DENSITY_RADIUS, HEALTHY_FADE, PARASITE_HEAVY, PARASITE_LIGHT};
 
-/// Glyph and colors for a cell under an overlay (before creatures are drawn).
-pub fn overlay_cell(cell: &Cell, overlay: Overlay) -> Option<(char, Color, Color)> {
-    let (t, color) = match overlay {
-        Overlay::Vegetation => (cell.vegetation, theme::veg(cell.vegetation)),
-        Overlay::Pressure => {
+/// Glyph and colors for a cell under a base heatmap (before creatures are
+/// drawn); `None` for the `None` and `Species` bases.
+pub fn overlay_cell(cell: &Cell, base: Base) -> Option<(char, Color, Color)> {
+    let (t, color) = match base {
+        Base::Vegetation => (cell.vegetation, theme::veg(cell.vegetation)),
+        Base::Pressure => {
             let t = (cell.pred_pressure * 0.7 + cell.prey_pressure * 0.5).min(1.0);
             (t, theme::heat(t))
         }
-        Overlay::Moisture => {
+        Base::Moisture => {
             let t = if cell.terrain.is_water() { 1.0 } else { cell.moisture };
             (t, theme::water(t))
         }
-        Overlay::Parasites => return Some(parasite_cell(cell)),
-        _ => return None,
+        Base::Parasites => return Some(parasite_cell(cell)),
+        Base::None | Base::Species => return None,
     };
-    if cell.terrain == Terrain::DeepWater && overlay != Overlay::Moisture {
+    if cell.terrain == Terrain::DeepWater && base != Base::Moisture {
         return Some((glyphs::DEEP_WATER, theme::dim(theme::DEEP_WATER_FG, 0.4), theme::dim(theme::DEEP_WATER_BG, 0.4)));
     }
-    if cell.terrain == Terrain::Rock && overlay != Overlay::Moisture {
+    if cell.terrain == Terrain::Rock && base != Base::Moisture {
         return Some((glyphs::ROCK, theme::dim(theme::ROCK_FG, 0.5), theme::dim(theme::ROCK_BG, 0.5)));
     }
     let g = glyphs::shade(t);

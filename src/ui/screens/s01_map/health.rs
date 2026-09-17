@@ -6,6 +6,7 @@ use ratatui::text::{Line, Span};
 use ratatui::Frame;
 use crate::sim::Sim;
 use crate::ui::style::{SpeciesStyle};
+use crate::widgets::map::OverlayStack;
 use crate::widgets::{bars, panel, util};
 use crate::theme;
 use super::WorldMap;
@@ -93,7 +94,7 @@ fn health_weakest(f: &mut Frame<'_>, inner: Rect, mut row: u16, all: [usize; 3],
 impl WorldMap {
     /// S02g sidebar: what the colours mean, every species' condition tally,
     /// which vital is failing the strained animals, and reading notes.
-    pub(super) fn health_sidebar(&self, f: &mut Frame<'_>, area: Rect, sim: &Sim) {
+    pub(super) fn health_sidebar(f: &mut Frame<'_>, area: Rect, sim: &Sim, stack: &OverlayStack) {
         let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
         let mut row = 0u16;
         let tone = |c: Color| Style::default().fg(c).bg(theme::PANEL_BG);
@@ -121,7 +122,7 @@ impl WorldMap {
         let (next_row, all, weakest) = health_by_species(f, inner, row, sim);
         row = health_weakest(f, inner, next_row, all, weakest);
 
-        row = self.overlays_selector(f, inner, row);
+        row = Self::overlays_selector(f, inner, row, stack);
         row += 1;
 
         panel::section(f, inner, row, "Reading the map");

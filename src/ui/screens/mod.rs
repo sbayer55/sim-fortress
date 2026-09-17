@@ -23,6 +23,7 @@ pub mod s10_controls;
 pub mod s11_help;
 pub mod s12_alert;
 pub mod s13_zoom;
+pub mod s14_switcher;
 
 #[derive(Debug)]
 pub enum Action {
@@ -39,8 +40,13 @@ pub enum Action {
 }
 
 pub trait Screen: std::fmt::Debug {
-    /// `false` for modals (they dim what is drawn beneath them).
+    /// `false` for modals (the stack draws what is beneath them first).
     fn opaque(&self) -> bool;
+    /// Whether the stack dims everything drawn so far before this non-opaque
+    /// screen draws. S14 says no: the map beneath it is a live preview.
+    fn dims_backdrop(&self) -> bool {
+        true
+    }
     /// The top screen sees every key first. Return `Unhandled` for keys it does
     /// not consume; only then does the stack apply the global key table.
     fn handle_key(&mut self, key: KeyEvent, app: &mut AppState) -> Action;
@@ -88,12 +94,13 @@ impl Stack {
 }
 
 /// Draw every screen from the lowest `opaque` one upward; before drawing a
-/// non-opaque screen, dim everything drawn so far by 55 % (modal backdrop).
+/// non-opaque screen that `dims_backdrop`, dim everything drawn so far by
+/// 55 % (modal backdrop).
 pub fn render_stack(stack: &Stack, app: &AppState, f: &mut Frame<'_>, area: Rect) {
     let start = stack.screens.iter().rposition(|s| s.opaque()).unwrap_or(0);
     for i in start..stack.screens.len() {
         let screen = &stack.screens[i];
-        if !screen.opaque() {
+        if !screen.opaque() && screen.dims_backdrop() {
             util::dim_area(f.buffer_mut(), area, 0.55);
         }
         screen.render(app, f, area);

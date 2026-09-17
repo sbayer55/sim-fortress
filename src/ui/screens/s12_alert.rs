@@ -194,13 +194,13 @@ impl AlertModal {
         }
     }
 
-    /// *Show outbreak*: pop the modal, ask the map to open the disease overlay
-    /// on this pathogen and centre the viewport on the origin region; the sim
-    /// stays paused.
+    /// *Show outbreak*: pop the modal, turn the Disease mark on for this
+    /// pathogen (the base and other marks stay as they are, S14 item 22) and
+    /// centre the viewport on the origin region; the sim stays paused.
     fn show_outbreak(&self, app: &mut AppState) -> Action {
         let Some((pathogen, outbreak)) = self.epidemic else { return Action::Pop };
         app.dismiss_alert(false);
-        app.pending_overlay = Some(pathogen);
+        app.overlay.show_disease(Some(pathogen));
         let centre = app.sim.as_ref().and_then(|sim| {
             let ob = sim.disease.outbreak(outbreak)?;
             let ri = crate::cast!(ob.origin_region => usize);
@@ -338,6 +338,7 @@ const fn cause_kind(cause: Cause) -> EventKind {
 mod tests {
     use super::*;
     use crate::sim::disease::Outbreak;
+    use crate::widgets::map::Disease;
     use crate::sim::Params;
     use ratatui::backend::TestBackend;
     use ratatui::crossterm::event::KeyModifiers;
@@ -408,14 +409,14 @@ mod tests {
         // `l` is not a shortcut on S12b.
         let a = modal.handle_key(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE), &mut app);
         assert!(matches!(a, Action::Unhandled));
-        assert!(app.pending_overlay.is_none());
+        assert!(!app.overlay.disease.is_on());
 
         // Right → Show outbreak, Enter activates it.
         modal.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
         assert_eq!(modal.focus, 1);
         let a = modal.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), &mut app);
         assert!(matches!(a, Action::Pop));
-        assert_eq!(app.pending_overlay, Some(PathogenId(0)));
+        assert_eq!(app.overlay.disease, Disease::On(Some(PathogenId(0))));
         assert!(app.alert_shown.is_none());
 
         // `o` is the shortcut for the same button.
@@ -424,6 +425,6 @@ mod tests {
         let mut modal = AlertModal::new(&alert);
         let a = modal.handle_key(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE), &mut app);
         assert!(matches!(a, Action::Pop));
-        assert_eq!(app.pending_overlay, Some(PathogenId(0)));
+        assert_eq!(app.overlay.disease, Disease::On(Some(PathogenId(0))));
     }
 }

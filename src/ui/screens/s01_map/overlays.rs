@@ -5,27 +5,26 @@ use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 use crate::sim::World;
-use crate::ui::app::AppState;
-use crate::widgets::map::Overlay;
+use crate::widgets::map::{Base, Disease, OverlayStack};
 use crate::widgets::{bars, panel, util};
 use crate::{glyphs, theme};
 use super::WorldMap;
 
 impl WorldMap {
     /// The `Overlays` selector shared by the heatmap and region sidebars.
-    pub(super) fn overlays_selector(&self, f: &mut Frame<'_>, inner: Rect, mut row: u16) -> u16 {
+    pub(super) fn overlays_selector(f: &mut Frame<'_>, inner: Rect, mut row: u16, stack: &OverlayStack) -> u16 {
         panel::section(f, inner, row, "Overlays");
         row += 1;
         for (key, label, active) in [
-            ("1", "vegetation", self.overlay == Overlay::Vegetation),
-            ("2", "pressure", self.overlay == Overlay::Pressure),
-            ("3", "moisture", self.overlay == Overlay::Moisture),
-            ("4", "sense", matches!(self.overlay, Overlay::Sense(_))),
-            ("5", "regions", self.overlay == Overlay::Region),
-            ("6", "species", matches!(self.overlay, Overlay::Species(_))),
-            ("7", "health", self.overlay == Overlay::Health),
-            ("8", "disease", matches!(self.overlay, Overlay::Disease(_))),
-            ("9", "parasites", self.overlay == Overlay::Parasites),
+            ("1", "vegetation", stack.base == Base::Vegetation),
+            ("2", "pressure", stack.base == Base::Pressure),
+            ("3", "moisture", stack.base == Base::Moisture),
+            ("4", "sense", stack.sense),
+            ("5", "regions", stack.regions),
+            ("6", "species", stack.base == Base::Species),
+            ("7", "health", stack.health),
+            ("8", "disease", matches!(stack.disease, Disease::On(_))),
+            ("9", "parasites", stack.base == Base::Parasites),
         ] {
             util::line(f, inner, row, Line::from(vec![
                 Span::styled(format!(" {key} "), if active { theme::selected() } else { theme::key() }),
@@ -39,14 +38,14 @@ impl WorldMap {
 }
 
 impl WorldMap {
-    pub(super) fn overlay_sidebar(&self, f: &mut Frame<'_>, area: Rect, app: &AppState, world: &World) {
+    pub(super) fn overlay_sidebar(f: &mut Frame<'_>, area: Rect, world: &World, stack: &OverlayStack) {
         let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
         let mut row = 0u16;
 
-        let (name, desc1, desc2, low, high, note) = match self.overlay {
-            Overlay::Vegetation => ("Vegetation density", "standing biomass per cell;", "prey graze it down, regrowth (*) restores it.", "bare", "lush", "≈ deep water  ▲ rock (not shaded)"),
-            Overlay::Pressure => ("Population pressure", "traffic of prey (x0.5) and predators (x0.7)", "prey leave pressure as they move", "quiet", "crowded", "≈ deep water  ▲ rock (not shaded)"),
-            Overlay::Moisture => ("Water & moisture", "soil moisture; open water is shown saturated;", "drives regrowth and thirst.", "arid", "wet", "open water counts as 100% moisture"),
+        let (name, desc1, desc2, low, high, note) = match stack.base {
+            Base::Vegetation => ("Vegetation density", "standing biomass per cell;", "prey graze it down, regrowth (*) restores it.", "bare", "lush", "≈ deep water  ▲ rock (not shaded)"),
+            Base::Pressure => ("Population pressure", "traffic of prey (x0.5) and predators (x0.7)", "prey leave pressure as they move", "quiet", "crowded", "≈ deep water  ▲ rock (not shaded)"),
+            Base::Moisture => ("Water & moisture", "soil moisture; open water is shown saturated;", "drives regrowth and thirst.", "arid", "wet", "open water counts as 100% moisture"),
             _ => return,
         };
 
@@ -60,10 +59,10 @@ impl WorldMap {
         panel::section(f, inner, row, "Legend");
         row += 1;
         let ramp = |t: f32| -> Color {
-            match self.overlay {
-                Overlay::Vegetation => theme::veg(t),
-                Overlay::Pressure => theme::heat(t),
-                Overlay::Moisture => theme::water(t),
+            match stack.base {
+                Base::Vegetation => theme::veg(t),
+                Base::Pressure => theme::heat(t),
+                Base::Moisture => theme::water(t),
                 _ => theme::DIM,
             }
         };
@@ -86,9 +85,9 @@ impl WorldMap {
         panel::section(f, inner, row, "By region");
         row += 1;
         for (ri, r) in world.regions.iter().enumerate() {
-            let mean = match self.overlay {
-                Overlay::Vegetation => crate::sim::ecology::region_land_veg_mean(world, ri),
-                Overlay::Moisture => crate::sim::ecology::region_display_moisture_mean(world, ri),
+            let mean = match stack.base {
+                Base::Vegetation => crate::sim::ecology::region_land_veg_mean(world, ri),
+                Base::Moisture => crate::sim::ecology::region_display_moisture_mean(world, ri),
                 _ => 0.0,
             };
             bars::labeled(f.buffer_mut(), inner, row, &format!(" {}", r.0), mean, ramp(0.8), 18, 14);
@@ -96,7 +95,7 @@ impl WorldMap {
         }
         row += 1;
 
-        row = self.overlays_selector(f, inner, row);
+        row = Self::overlays_selector(f, inner, row, stack);
         row += 1;
 
         panel::section(f, inner, row, "Reading the map");
@@ -105,6 +104,5 @@ impl WorldMap {
             util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
             row += 1;
         }
-        let _ = app;
     }
 }
