@@ -22,13 +22,14 @@ letter is the variant. The prototype binary shows the id on row 0.
 | S04 | Species Browser           | [s04-species-browser.md](s04-species-browser.md) | a: table · b: species detail                                  |
 | S05 | Population Charts         | [s05-population-charts.md](s05-population-charts.md) | a: over time · b: phase plot · c: stacked area · d: infections · e: group sizes |
 | S06 | Resources / Ecology       | [s06-ecology.md](s06-ecology.md)               | a: default                                                      |
-| S07 | Event Log                 | [s07-event-log.md](s07-event-log.md)           | a: full log · b: deaths & extinctions with detail               |
+| S07 | Event Log                 | [s07-event-log.md](s07-event-log.md)           | a: full log · b: deaths & extinctions with detail · c: chronicle |
 | S08 | Lineage / Family Tree     | [s08-lineage.md](s08-lineage.md)               | a: focused creature                                             |
-| S09 | World Generation          | [s09-world-generation.md](s09-world-generation.md) | a: new world form                                           |
+| S09 | World Generation          | [s09-world-generation.md](s09-world-generation.md) | a: new world form · b: species designer modal (AI)          |
 | S10 | Simulation Controls       | [s10-simulation-controls.md](s10-simulation-controls.md) | a: modal over the map                                 |
 | S11 | Legend & Help             | [s11-legend-help.md](s11-legend-help.md)       | a: overlay over the map                                         |
 | S12 | Alert Modal               | [s12-alert-modal.md](s12-alert-modal.md)       | a: extinction event · b: epidemic                                |
 | S13 | Local Zoom View           | [s13-local-zoom.md](s13-local-zoom.md)         | a: 3×3 tiles around the cursor                                  |
+| S14 | Overlay Switcher          | [s14-overlay-switcher.md](s14-overlay-switcher.md) | a: base heatmap tab · b: marks tab · c: sub-pick list — *specified, not yet built* |
 
 ## Screen families
 
@@ -36,7 +37,8 @@ letter is the variant. The prototype binary shows the id on row 0.
 - **Map family** (share the map panel, ticker row and status bar): S01 World Map, S02
   Overlays, S13 Local Zoom. Overlays and look/follow modes are *states* of the map rather
   than separate places.
-- **Modals over the map** (map stays visible, dimmed): S10 Controls, S11 Help, S12 Alert.
+- **Modals over the map** (map stays visible, dimmed): S10 Controls, S11 Help, S12 Alert;
+  S14 Overlay Switcher once built (map stays undimmed as a live preview).
 - **Data screens** (full-screen, replace the map): S03 Inspector, S04 Species, S05 Charts,
   S06 Ecology, S07 Event Log, S08 Lineage.
 

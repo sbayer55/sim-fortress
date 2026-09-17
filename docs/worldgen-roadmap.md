@@ -340,7 +340,7 @@ southern, western with double letters), stems of 2–3 syllables and 3–8 lette
 `<Stem> Brook` or `<Stem> Water` / `the <Stem> Hills|Mountains|Fells`, every
 name ≤ `NAME_FULL_MAX` (22) chars. `World.names: Names { style, features,
 map }` carries each `Feature` (kind, name, cells, anchor, source, mouth,
-parent) and a per-cell feature index; save format version 12.
+parent) and a per-cell feature index; save format version 13 (12 went to the C9 chronicle table on main).
 `World::feature_at`, `feature_near` (the cell, else a water neighbour, else a
 range), `place_name` ("by Lake Ulmar" / "in the Tavos Fells" / "in Northern
 Taiga"). Region names are unchanged (compass + biome noun; the 16-cell
@@ -423,6 +423,6 @@ ticker screens, `save.rs`.
 | 3 | Biomes as regions (done) | 1, 2 | `Cell.biome`, `World.region_map` | yes (v8) |
 | 4 | River morphology (done) | 2 | `World.falls` | yes (v9) |
 | 5 | Age regimes + events (done) | — (better after 3) | `World.history`, `ecology.warm_up_days` | yes (v11) |
-| 6 | Names, log, summary (done) | 3, 4, 5 | `World.names` | yes (v12) |
+| 6 | Names, log, summary (done) | 3, 4, 5 | `World.names` | yes (v13) |
 
 Every phase has shipped; what remains is the optional list above.

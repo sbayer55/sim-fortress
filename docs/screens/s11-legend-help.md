@@ -95,9 +95,10 @@ flowchart TB
      `3` water & moisture · `4` sense range · `5` regions · `6` species density · `7` health
      (weakest vital) · `8` disease · `9` parasites · `Esc` clear overlay.
    - **Speed**: `Space` pause / resume · `+ / -` faster / slower · `.` step one tick · `p`
-     controls panel.
+     controls, options, AI.
    - **Screens**: `s` species & traits · `g` graphs & charts · `y` ecology & regions · `e`
-     event log · `l` lineage tree · `w` world generation · `?` this help · `q` quit.
+     event log (c: chronicle) · `l` lineage tree · `w` world generation · `?` this help ·
+     `q` quit.
 10. The column is exactly filled (5 rules + 31 rows = 36 of 36 rows). The whole content
     area scrolls (`widgets::scroll`, all three columns together), so a new binding pushes
     the column past the bottom and the bottom border shows ` ↑n ↓m ` for the hidden rows.

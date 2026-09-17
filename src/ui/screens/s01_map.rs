@@ -253,7 +253,7 @@ impl Screen for WorldMap {
         let status_row = area.y + area.height - 1;
         let keys = status_keys(app, self.overlay, overlay);
         let (right, right_fg) = clock_status(time, app.params.ui.day_night_tint);
-        StatusBar::new(keys).right(&right).right_color(right_fg).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
+        StatusBar::new(keys).right(&right).right_color(right_fg).note(app.ai.status_note()).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 

@@ -19,8 +19,9 @@ be opened in the inspector or lineage view.
 |------|------------------------------------|---------------------------------------------------------------|
 | S07a | full log                           | default when opened with `e`; filter chip `all` active        |
 | S07b | deaths & extinctions with detail   | the `deaths` + `extinctions` chips are active; the detail panel is shown for the selected event |
+| S07c | chronicle                          | `c` from S07a/b (C9): one paragraph per completed season, newest first; `c` again returns to the list |
 
-The two variants are the same screen in two filter states. The detail panel appears
+The first two variants are the same screen in two filter states. The detail panel appears
 whenever a filter narrower than `all` is active (see Open questions).
 
 ## Layout
@@ -198,6 +199,18 @@ Changing the filter rebuilds the list newest-first and resets the selection to t
 row. `Enter` and `i` are disabled (no-ops with a status-bar hint) for events without a
 position or without a creature.
 
+### Chronicle panel (S07c)
+One `Chronicle` panel, 155×43, hint `N seasons`, body scrolled with `widgets::scroll`. Each
+entry is a header row — the season glyph in its colour, `Year N, Season` in the title style,
+then a dim tag: `tally` (the deterministic template written at the season boundary),
+`chronicled` (rewritten by the model) or `writing...` (a reply is streaming in) — followed by
+the text word-wrapped to the panel width and a blank row. Entries are newest first. While no
+season has completed the panel says so in dim text; when the last AI request failed a dim
+notice line sits at the top (`chronicle: gateway did not answer; template kept`). Model text
+is passed through the CP437 filter before it is stored. Status bar: `[↑↓] scroll  [c] event log
+[Esc] back`, the clock on the right, and `AI: offline` in dim text beside it when the gateway
+is enabled but unreachable. Render: [renders/S07c.txt](renders/S07c.txt) (AI off: tally entries).
+
 ## Glyphs and colors
 | Glyph                 | Meaning                                    |
 |-----------------------|--------------------------------------------|
@@ -227,6 +240,7 @@ detail panel.
 | `i`        | inspect the creature named in the event                         | [S03 Creature Inspector](s03-creature-inspector.md) |
 | `l`        | open the lineage of the named creature                          | [S08 Lineage](s08-lineage.md) |
 | `s`        | open the species browser on the event's species                 | [S04 Species Browser](s04-species-browser.md) |
+| `c`        | toggle the chronicle view (S07c); there `↑` `↓` scroll and the list keys are inactive | stays on S07 (S07a/b ↔ S07c) |
 | `Esc`      | back                                                            | [S01 World Map](s01-world-map.md) |
 | `?`        | help overlay                                                    | [S11 Legend & Help](s11-legend-help.md) |
 

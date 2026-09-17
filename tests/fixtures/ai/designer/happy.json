@@ -1,0 +1,3 @@
+{
+  "content": "{\"name\":\"boar\",\"plural\":\"Boars\",\"glyph\":\"b\",\"color\":[120,90,60],\"kind\":\"prey\",\"diet\":\"roots, acorns, carrion\",\"initial_count\":30,\"adult_age_days\":70,\"gestation_days\":40,\"litter_max\":5.0,\"mate_cooldown_days\":30,\"nocturnal\":false,\"base_genome\":{\"size\":0.75,\"aggression\":0.55,\"fertility\":0.7,\"speed\":0.4}}"
+}

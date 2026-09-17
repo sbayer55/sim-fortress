@@ -21,11 +21,20 @@ pub struct StatusBar<'a> {
     keys: &'a [(&'a str, &'a str)],
     right: Cow<'a, str>,
     right_fg: Color,
+    /// A dim note drawn just left of Right (C9: `AI: offline`); empty draws nothing.
+    note: Cow<'a, str>,
 }
 
 impl<'a> StatusBar<'a> {
     pub const fn new(keys: &'a [(&'a str, &'a str)]) -> Self {
-        Self { keys, right: Cow::Borrowed(""), right_fg: theme::ACCENT }
+        Self { keys, right: Cow::Borrowed(""), right_fg: theme::ACCENT, note: Cow::Borrowed("") }
+    }
+
+    /// A dim note left of Right. Empty leaves the bar byte-identical.
+    #[must_use]
+    pub fn note(mut self, note: impl Into<Cow<'a, str>>) -> Self {
+        self.note = note.into();
+        self
     }
 
     #[must_use]
@@ -53,9 +62,18 @@ impl<'a> StatusBar<'a> {
         }
     }
 
+    /// The note plus its two trailing cells, or 0.
+    fn note_width(&self) -> u16 {
+        if self.note.is_empty() {
+            0
+        } else {
+            crate::cast!(self.note.chars().count() => u16) + 2
+        }
+    }
+
     /// How many pairs fit beside Right in `width` cells.
     fn shown(&self, width: u16) -> usize {
-        let room = width.saturating_sub(self.right_width());
+        let room = width.saturating_sub(self.right_width() + self.note_width());
         let mut used = 1u16; // the row's leading cell
         let mut n = 0;
         for &pair in self.keys {
@@ -95,6 +113,11 @@ impl Component for StatusBar<'_> {
             let w = self.right_width().min(area.width);
             let rx = area.right() - w;
             buf.set_stringn(rx, area.y, self.right.as_ref(), crate::cast!(w - 1 => usize), bg.fg(self.right_fg));
+        }
+        let nw = self.note_width();
+        if nw > 0 && self.right_width() + nw <= area.width {
+            let nx = area.right() - self.right_width() - nw;
+            buf.set_stringn(nx, area.y, self.note.as_ref(), crate::cast!(nw - 2 => usize), bg.fg(theme::DIM));
         }
     }
 }

@@ -63,6 +63,24 @@ pub fn downsample(series: &[f32], cols: usize) -> Vec<u16> {
         .collect()
 }
 
+/// Single-line text entry: a printable char appends (bounded by `max`
+/// characters), Backspace pops. Returns true when the buffer changed.
+pub fn edit_text(buf: &mut String, code: ratatui::crossterm::event::KeyCode, max: usize) -> bool {
+    use ratatui::crossterm::event::KeyCode;
+    match code {
+        KeyCode::Char(c) if !c.is_control() => {
+            if buf.chars().count() < max {
+                buf.push(c);
+                true
+            } else {
+                false
+            }
+        }
+        KeyCode::Backspace => buf.pop().is_some(),
+        _ => false,
+    }
+}
+
 /// Truncate to `max` cells with a trailing dot.
 pub fn clip(text: &str, max: usize) -> String {
     if text.chars().count() <= max {

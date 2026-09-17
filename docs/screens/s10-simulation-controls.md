@@ -25,13 +25,13 @@ readable under the modal.
 | Panel                | Position (cols × rows)         | Notes                                              |
 |----------------------|--------------------------------|----------------------------------------------------|
 | Backdrop             | 155 × 44                       | S01a rendered normally, then dimmed                |
-| Controls modal       | 60 × 21, centred in the body   | double border in the focus colour; inner 58 × 19   |
+| Controls modal       | 60 × 26, centred in the body   | double border in the focus colour; inner 58 × 24 (60 × 21 before the C9 AI section) |
 | Status bar           | 155 × 1, row 44                | redrawn undimmed                                   |
 
 ```mermaid
 flowchart TB
     subgraph body["155 × 44 body — S01a dimmed 55 %"]
-        modal["Simulation Controls  60 × 21 (centred)<br/>hint: Esc closes<br/><br/>state · speed · step<br/>── Clock ──<br/>── Options ──<br/>key hints"]
+        modal["Simulation Controls  60 × 26 (centred)<br/>hint: Esc closes<br/><br/>state · speed · step<br/>── Clock ──<br/>── Options ──<br/>── AI ──<br/>key hints"]
     end
     status["Status bar 155 × 1 — undimmed"]
     body --> status
@@ -40,7 +40,7 @@ flowchart TB
 The modal title is `Simulation Controls` with the right-aligned dim hint `Esc closes`.
 
 ## Content requirements
-Rows are counted inside the modal, top to bottom (19 rows available).
+Rows are counted inside the modal, top to bottom (24 rows available).
 
 1. **State row** (row 0), from the clock: `state` label, then either `► RUNNING` in the good
    colour or `││ PAUSED` in the warning colour, bold; then the current speed as `►► x‹n›`;
@@ -65,6 +65,12 @@ Rows are counted inside the modal, top to bottom (19 rows available).
      The mark is `[ ]` only for `off`.
    - `[x] auto-pause on epidemic` — `[d]` (C7: raises [S12b](s12-alert-modal.md))
    then the autosave row `◄ autosave every N days ►` stepped with `[←→]` (`off` at 0).
+5b. **AI section** (C9; rule `AI`, three rows, so the modal is 60×26): `[ ] AI enabled
+   status: off   [m]` — the mark follows `[ai] enabled` in `ui.toml`; the status cell reads
+   `off` (disabled), `offline` (enabled, the `GET /v1/models` probe failed), `ready`, or
+   `not compiled` (enabled but the binary lacks `--features ai`). Then one row per feature,
+   `chronicle` and `designer`, showing the model string from `[ai.features]` or `(off)`,
+   in dim text until the master is on. Model strings are edited in `ui.toml`, not here.
 6. **Key hints** (last row): `[Space] pause  [+/-] speed  [.] step  [Esc] close` in key /
    dim styles.
 7. **Status bar**: hints as in the table below; right side is the clock label followed by
@@ -95,6 +101,7 @@ the persistent option flags. Nothing else on the modal depends on world state.
 | `1`–`5`  | set speed to x1 / x2 / x5 / x10 / x25      | stays here |
 | `.`      | advance one step of the selected size      | stays here (only meaningful while paused) |
 | `a` `b` `c` `t` `d` | toggle the corresponding option | stays here |
+| `m`      | AI master switch: persist `ui.toml`, then stop the worker (off) or start one from `ui.toml` (on); in-flight replies are discarded | stays here |
 | `←` `→`  | autosave interval down / up (days)         | stays here |
 | `Esc`    | close the modal                            | [S01 World Map](s01-world-map.md) |
 

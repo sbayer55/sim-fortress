@@ -1,0 +1,1 @@
+{ "status": 500, "error": "model ollama/nope is not served by any provider" }
