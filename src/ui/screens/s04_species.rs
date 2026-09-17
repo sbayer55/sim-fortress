@@ -16,7 +16,6 @@ use crate::ui::app::AppState;
 use crate::ui::screens::{Action, Screen};
 use crate::widgets::scroll::{self, Overflow};
 use crate::widgets::{panel, status};
-use crate::glyphs;
 
 use table::table;
 use summary::summary_body;
@@ -222,11 +221,13 @@ impl Screen for SpeciesBrowser {
         self.measured.set((ov.content, inner.height));
 
         let updown = if self.focus == Pane::Table { "select" } else { "scroll" };
+        let alive = sim.species.iter().filter(|s| s.count > 0).count();
+        let prey_n = sim.species.iter().filter(|s| s.count > 0 && sim.roster().kind(s.species) == crate::sim::Kind::Prey).count();
         status::render(
             f,
             Rect::new(area.x, status_row, area.width, 1),
             &[("↑↓", updown), ("Tab", "panel"), ("Enter", "detail"), ("s", "sort"), ("Esc", "back")],
-            &format!("sorted by {} {}  {}", self.sort.label(), glyphs::DOWN, sim.time.clock_label()),
+            &format!("{} species, {} prey / {} predator  {}", alive, prey_n, alive - prey_n, sim.time.clock_label()),
         );
     }
 }

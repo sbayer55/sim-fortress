@@ -1,5 +1,5 @@
  S04a  Species Browser - species table                                                                                                                     
-╔ Species ════════════════════════════════════════════════════════════════════════════════════════════════════════════════ 5 species, 2 prey / 3 predator ╗
+╔ Species ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ sorted by count ↓ ╗
 ║   Species Kind  Count Adults   Juv Birth/d Death/d  Sick  Peak  Gen  30-day trend        Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat    Diet            ║
 ║                                                                                                                                                         ║
 ║►H Hare    prey    143    143     0       0       3     0   699    5   ███▓▓▓▓▓▒▒▒░░░ ↓    81  24  65  60  11  56  75  35  34  25  49   grass, bark      ║
@@ -9,7 +9,7 @@
 ║ L Lynx    pred      6      5     1       0       0     0     6    3   ▓▓▓▓▓▓▓▓▓▓▓▓▓▓ ↔    76  52  85  44  74  71  29  53  40   9  52   hares, voles     ║
 ║ V Vole    prey      0      0     0       0       0     0   466    7   ██▓▓▒▒░░░░░░░░ ↓    52   5  41  79   9  68  96  25  49  32  51   seeds, roots     ║
 ║                                                                                                                                                         ║
-║   totals           246   prey 172  pred 74  ratio 2.3:1   births 0  deaths 1   net -1 today     traits = species means x100;  /d = yesterday            ║
+║   totals          246    prey 172  pred 74  ratio 2.3:1   births 0  deaths 1   net -1 today     traits = species means x100;  /d = yesterday            ║
 ║                                                                                                                                                         ║
 ╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 ╔ Selected: Hare ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════ Enter for full detail ╗
@@ -42,4 +42,4 @@
 ║ H Nettle   h#260    6 offspring  gen 1    452 days  Central Tun                                                                                         ║
 ║ H Fern     h#276    4 offspring  gen 1    570 days  Southern Fo                                                                                         ║
 ╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ ↓2 ╝
- [↑↓] select  [Tab] panel  [Enter] detail  [s] sort  [Esc] back                                          sorted by count ↓  Year 2, Day 1 of Spring  06:00 
+ [↑↓] select  [Tab] panel  [Enter] detail  [s] sort  [Esc] back                             5 species, 2 prey / 3 predator  Year 2, Day 1 of Spring  06:00 
