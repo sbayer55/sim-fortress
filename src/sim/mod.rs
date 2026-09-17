@@ -670,11 +670,14 @@ mod tests {
         // Re-baselined for river morphology: rivers widen by tier, trunks
         // run deep, deltas fan, falls keep their rock and arid brooks start
         // as dry washes, so the water cells and everything near them moved.
+        // Re-baselined for Mutability: the genome grew to twelve traits, so
+        // every founder draws one more jitter gaussian and a sterility roll,
+        // and every birth draws a sterility roll after inheritance.
         // Re-baselined for history: the event draws precede the epochs, the
         // events reshape the relief, the vegetation warm-up replaces the
         // seeded biomass founders land on, and regions are split into
         // 4-connected pieces.
-        assert_eq!(a.checksum(), 0x04c4_09f5_c812_ae71);
+        assert_eq!(a.checksum(), 0xd0e3_ee1a_c665_f531);
     }
 
     #[test]

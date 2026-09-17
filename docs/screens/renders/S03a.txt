@@ -1,45 +1,45 @@
  S03a  Creature Inspector - prey (Deer)                                                                                                                    
 ╔ Identity & Vitals ═══════════════════════════════╗╔ Genome ════════════════════════════ vs Deer mean ╗╔ Life ═══════════════════════════════════════════╗
-║ D Rowan  d#509  prey                             ║║ trait       individual  own  delta  species range║║ days alive  804          ┌ Surroundings ───────┐║
-║   Deer  ♀ female  adult  diet: grass, leaves     ║║ Speed      [███████░░░] 0.68 ±+0.04 [░░░░▒█▒░░]  ║║ offspring   12           │▲▲▲▲▲▲▲.*.*,,♦~~≡♠♣♣"│║
-║                                                  ║║ Size       [█████████░] 0.87 ±+0.06 [░░░░░▒▒█▒]  ║║ distance    12 cells     │▲▲▲▲▲▲▲▲▲***~"≡≡~♠♠♠♣│║
-║ age  [████████████████░░]    89% 804 / 906 days  ║║ Sense      [█████░░░░░] 0.50 ±-0.05 [░░░░█▒░░░]  ║║                          │▲▲▲H*.***╬*╬~*"♣♠~♠♠▲│║
-║       2.2 years old   generation 1               ║║ Metabolism [███░░░░░░░] 0.33 ±-0.06 [░░▒█▒░░░░]  ║║                          │****~~HHHHD~***"♠∙~♣♣│║
-║                                                  ║║ Aggression [█░░░░░░░░░] 0.11 ±-0.07 [░█▒░░░░░░]  ║║                          │*****H*~~╬~╬,,*"∙,*~"│║
-║─ Family ─────────────────────────────────────────║║ Camouflage [████░░░░░░] 0.38 ±+0.02 [░░▒█▒░░░░]  ║║                          │H.****HΩ∙∙∙∙∙∙∙∙***.~│║
-║ mother  founder            father  founder       ║║ Fertility  [███░░░░░░░] 0.26 ±-0.08 [░░▒█▒░░░░]  ║║                          │*Ω*ΩV**,""≡♣♣♣▲▲*▲**.│║
-║ offspring  12    ¶ lineage: [l]                  ║║ Longevity  [███████░░░] 0.74 ±+0.04 [░░░░░▒█░░]  ║║                          └─────────────────────┘║
-║                                                  ║║ Resistance [█████░░░░░] 0.46 ±+0.01 [░░▒▒█▒▒░░]  ║║                                                 ║
-║─ Location ───────────────────────────────────────║║ Sociality  [██████░░░░] 0.65 ±-0.06 [░░░░░▒█▒░]  ║║─ Survival ──────────────────────────────────────║
-║ (41, 31)  Southern Forest   . bare dirt          ║║ Maturity   [██████░░░░] 0.60 ±+0.09 [░░░▒█▒░░░]  ║║ chased 11 times, escaped 11 (100%)              ║
-║ goal    wandering                                ║║                                                  ║║ grew wary of predators 222 times                ║
-║ target  ♦ (44, 28)  3 cells                      ║║─ Mutation history ───────────────────────────────║║ escape rate    [██████████████]   100%          ║
-║ trail   (41,31) (40,32) (39,33) (40,33) (41,33)  ║║ none recorded                                    ║║─ Threats seen ──────────────────────────────────║
-║                                                  ║║ from 1 lines; rate 0.04 per trait per birth      ║║ Foxes          [████░░░░░░░░░░]    27% 3 times  ║
-║─ Vitals ─────────────────────────────────────────║║                                                  ║║ Wolves         [██████████░░░░]    73% 8 times  ║
-║ health  [██████████████████████]   100%          ║║─ Derived ────────────────────────────────────────║║                                                 ║
-║ hunger  [███████░░░░░░░░░░░░░░░]    30%          ║║ sense range       6 cells                        ║║─ Legacy ────────────────────────────────────────║
-║ thirst  [█░░░░░░░░░░░░░░░░░░░░░]     5%          ║║ move speed        1.9 cells/tick                 ║║ 12 offspring, 6 living descendants, 0 notable   ║
-║ energy  [████████████████████░░]    91%          ║║ daily food need   0.22 biomass                   ║║ no notable mutations among descendants          ║
-║ sicknesshealthy                                  ║║ adult at          198 days                       ║║                                                 ║
-║ immune  none                                     ║║ max lifespan      906 days                       ║║─ Kin nearby ────────────────────────────────────║
-║ ∩ parasites[░░░░░░░░░░░░░░░░░░░░░░]     2% light ║║ litter size       3 (fert 0.26, mat 0.60)        ║║ D Sorrel  d#1031   9 cells NE child             ║
-║                                                  ║║ mate cooldown     30 days                        ║║ d Burdock d#1514  10 cells NE child             ║
-║─ Condition ──────────────────────────────────────║║ resistance cost   +5 % food                      ║║ d Vetch   d#1513  13 cells SE child             ║
-║ predation risk  [░░░░░░░░░░░░░░]     0%          ║║ kin nearby        0 (scattered)                  ║║                                                 ║
-║ contagion risk  [░░░░░░░░░░░░░░]     0%          ║║                                                  ║║─ Recent events ─────────────────────────────────║
-║ local forage    [██░░░░░░░░░░░░]    17%          ║║─ Offspring forecast (with an average mate) ──────║║ ♥ Y1 D211 14h Rowan d#509 bore 3 pups in Weste· ║
-║ nearest water —   nearest den —                  ║║ Speed       [░░░░░░░░░░░▒▒█▒░░░░░] 0.58..0.74    ║║ ♥ Y1 D174 10h Rowan d#509 bore 3 pups in Weste· ║
-║                                                  ║║ Size        [░░░░░░░░░░░░░░▒▒█▒▒░] 0.76..0.93    ║║ ♥ Y1 D92  14h Rowan d#509 bore 3 pups in South· ║
-║─ Behaviour ──────────────────────────────────────║║ Sense       [░░░░░░░░▒▒█▒░░░░░░░░] 0.44..0.60    ║║ ♥ Y1 D49  21h Rowan d#509 bore 3 pups in Weste· ║
-║ wandering                                        ║║ Metabolism  [░░░░░▒▒█▒▒░░░░░░░░░░] 0.27..0.45    ║║                                                 ║
-║                                                  ║║ Aggression  [░▒▒█▒░░░░░░░░░░░░░░░] 0.05..0.24    ║║                                                 ║
-║─ Timeline ───────────────────────────────────────║║ Camouflage  [░░░░░░▒█▒░░░░░░░░░░░] 0.30..0.44    ║║                                                 ║
-║ ♥ founder   placed as a founder                  ║║ Fertility   [░░░░▒▒█▒░░░░░░░░░░░░] 0.20..0.39    ║║                                                 ║
-║ ♥ Y1 D049   litter of 3                          ║║ Longevity   [░░░░░░░░░░░░▒▒█▒░░░░] 0.64..0.80    ║║                                                 ║
-║ ♥ Y1 D092   litter of 3                          ║║ Resistance  [░░░░░░░▒▒█▒░░░░░░░░░] 0.39..0.52    ║║                                                 ║
-║ ♥ Y1 D174   litter of 3                          ║║ Sociality   [░░░░░░░░░░░▒▒█▒▒░░░░] 0.59..0.76    ║║                                                 ║
-║ ♥ Y1 D211   litter of 3                          ║║ Maturity    [░░░░░░░░░▒▒█▒▒░░░░░░] 0.45..0.66    ║║                                                 ║
-║                                                  ║║                                                  ║║                                                 ║
+║ D Sorrel  d#450  prey                            ║║ trait       individual  own  delta  species range║║ days alive  804          ┌ Surroundings ───────┐║
+║   Deer  ♂ male  adult  diet: grass, leaves       ║║ Speed      [██████░░░░] 0.58 ±-0.07 [░░░░▒█▒░░]  ║║ offspring   15           │~~~~~·♠♠♠♠♠♠∙""",**,"│║
+║                                                  ║║ Size       [███████░░░] 0.72 ±-0.07 [░░░░░▒█▒░]  ║║ distance    12 cells     │··≡···D~DHD♠♠∙"******│║
+║ age  [█████████████████░]    97% 804 / 832 days  ║║ Sense      [███████░░░] 0.66 ±+0.13 [░░░▒█▒░░░]  ║║                          │♠""""♣H~♠╬♠╬♣♣∙*****,│║
+║       2.2 years old   generation 1               ║║ Metabolism [███░░░░░░░] 0.33 ±-0.05 [░░▒█▒░░░░]  ║║                          │****"♣≡~D∙D♠♣∙"♦*****│║
+║                                                  ║║ Aggression [███░░░░░░░] 0.26 ±+0.06 [░▒█░░░░░░]  ║║                          │****"♣~~≡╬♠╬♣∙"***,*Ω│║
+║─ Family ─────────────────────────────────────────║║ Camouflage [████░░░░░░] 0.43 ±+0.08 [░░▒█▒░░░░]  ║║                          │*.,,"~~~≡≡V∙∙♣♣",*"""│║
+║ mother  founder            father  founder       ║║ Fertility  [████░░░░░░] 0.40 ±+0.06 [░▒▒█▒░░░░]  ║║                          │****"~~≡≡♣♠♠♠♠♣","H♣♣│║
+║ offspring  15    ¶ lineage: [l]                  ║║ Longevity  [███████░░░] 0.72 ±+0.03 [░░░░░▒█▒░]  ║║                          └─────────────────────┘║
+║                                                  ║║ Resistance [█████░░░░░] 0.54 ±+0.06 [░░▒▒█▒▒░░]  ║║                                                 ║
+║─ Location ───────────────────────────────────────║║ Sociality  [██████░░░░] 0.61 ±-0.10 [░░░░░▒█▒░]  ║║─ Survival ──────────────────────────────────────║
+║ (136, 26)  Eastern Forest   ♠ forest             ║║ Maturity   [█████░░░░░] 0.47 ±-0.00 [░░░▒█▒░░░]  ║║ chased 26 times, escaped 26 (100%)              ║
+║ goal    wandering                                ║║ Mutability [████░░░░░░] 0.43 ±-0.08 [░░░▒█▒░░░]  ║║ grew wary of predators 366 times                ║
+║ target  ♦ (141, 26)  2 cells                     ║║─ Mutation history ───────────────────────────────║║ escape rate    [██████████████]   100%          ║
+║ trail   (136,26) (135,26) (134,26) (135,27) (136,║║ none recorded                                    ║║─ Threats seen ──────────────────────────────────║
+║                                                  ║║ from 1 lines; rate 0.038  sd 0.058  mut 0.43     ║║ Foxes          [█████░░░░░░░░░]    35% 9 times  ║
+║─ Vitals ─────────────────────────────────────────║║                                                  ║║ Wolves         [████████░░░░░░]    54% 14 times ║
+║ health  [██████████████████████]   100%          ║║─ Derived ────────────────────────────────────────║║ Lynxes         [██░░░░░░░░░░░░]    12% 3 times  ║
+║ hunger  [███░░░░░░░░░░░░░░░░░░░]    15%          ║║ sense range       8 cells                        ║║                                                 ║
+║ thirst  [█░░░░░░░░░░░░░░░░░░░░░]     5%          ║║ move speed        1.7 cells/tick                 ║║─ Legacy ────────────────────────────────────────║
+║ energy  [██████████████████░░░░]    82%          ║║ daily food need   0.19 biomass                   ║║ 15 offspring, 1 living descendants, 0 notable   ║
+║ sicknesshealthy                                  ║║ adult at          175 days                       ║║ no notable mutations among descendants          ║
+║ immune  none                                     ║║ max lifespan      832 days                       ║║                                                 ║
+║ ∩ parasites[░░░░░░░░░░░░░░░░░░░░░░]     1% light ║║ litter size       4 (fert 0.40, mat 0.47)        ║║─ Kin nearby ────────────────────────────────────║
+║                                                  ║║ mate cooldown     30 days                        ║║ no kin within 15 cells                          ║
+║─ Condition ──────────────────────────────────────║║ resistance cost   +5 % food                      ║║                                                 ║
+║ predation risk  [░░░░░░░░░░░░░░]     0%          ║║ kin nearby        9 (herd)                       ║║─ Recent events ─────────────────────────────────║
+║ contagion risk  [░░░░░░░░░░░░░░]     0%          ║║                                                  ║║ no events for this creature                     ║
+║ local forage    [████░░░░░░░░░░]    25%          ║║─ Offspring forecast (with an average mate) ──────║║                                                 ║
+║ nearest water —   nearest den —                  ║║ Speed       [░░░░░░░░░░▒▒█▒▒░░░░░] 0.52..0.71    ║║                                                 ║
+║                                                  ║║ Size        [░░░░░░░░░░░░░▒█▒▒░░░] 0.66..0.85    ║║                                                 ║
+║─ Behaviour ──────────────────────────────────────║║ Sense       [░░░░░░░░░▒▒█▒▒▒░░░░░] 0.47..0.72    ║║                                                 ║
+║ wandering                                        ║║ Metabolism  [░░░░░▒▒█▒░░░░░░░░░░░] 0.27..0.43    ║║                                                 ║
+║                                                  ║║ Aggression  [░░░▒█▒▒░░░░░░░░░░░░░] 0.14..0.32    ║║                                                 ║
+║─ Timeline ───────────────────────────────────────║║ Camouflage  [░░░░░▒▒█▒▒░░░░░░░░░░] 0.28..0.48    ║║                                                 ║
+║ ♥ founder   placed as a founder                  ║║ Fertility   [░░░░░░▒█▒▒░░░░░░░░░░] 0.29..0.46    ║║                                                 ║
+║ ♥ Y1 D042   litter of 4                          ║║ Longevity   [░░░░░░░░░░░░▒█▒▒░░░░] 0.63..0.77    ║║                                                 ║
+║ ♥ Y1 D076   litter of 3                          ║║ Resistance  [░░░░░░░░▒▒█▒░░░░░░░░] 0.42..0.60    ║║                                                 ║
+║ ♥ Y1 D115   litter of 4                          ║║ Sociality   [░░░░░░░░░░▒▒█▒▒░░░░░] 0.55..0.76    ║║                                                 ║
+║ ♥ Y1 D189   litter of 4                          ║║ Maturity    [░░░░░░░░▒█▒░░░░░░░░░] 0.41..0.53    ║║                                                 ║
+║                                                  ║║ Mutability  [░░░░░░░▒▒█▒▒░░░░░░░░] 0.37..0.57    ║║                                                 ║
 ╚══════════════════════════════════════════════════╝╚══════════════════════════════════════════════════╝╚═════════════════════════════════════════════════╝
- [f] follow  [l] lineage  [Tab] next creature  [←→] panel  [↑↓] scroll  [Esc] back                             Rowan d#509  Year 2, Day 1 of Spring  06:00 
+ [f] follow  [l] lineage  [Tab] next creature  [←→] panel  [↑↓] scroll  [Esc] back                            Sorrel d#450  Year 2, Day 1 of Spring  06:00 

@@ -8,7 +8,7 @@ replacement for it. Read this first, then the doc that matches your task.
 `sim-fortress` is a Rust 2021 (pinned toolchain **1.90**) terminal predator/prey/
 evolution simulation with a Dwarf-Fortress-inspired ratatui 0.30 UI. A configurable
 roster of species (six by default: voles, hares, deer, foxes, wolves, lynxes) lives on
-a procedurally generated map and evolves an eleven-trait genome. It is an internal
+a procedurally generated map and evolves a twelve-trait genome. It is an internal
 application (`publish = false`) with no real downstream users, so there is freedom to
 change internals — but determinism and save format are load-bearing.
 
@@ -116,7 +116,7 @@ Do not weaken these to make a change pass. Fix the change.
   → ecology → migration/extinction. **Never reorder or merge RNG draws.** Three RNG
   streams exist (`rng`, `creature_rng`, `disease_rng`) so enabling one subsystem does
   not perturb another. `sim::tests::checksum_is_fnv_stable` pins the exact checksum
-  `0x04c4_09f5_c812_ae71`; only re-baseline deliberately, with a comment saying why.
+  `0xd0e3_ee1a_c665_f531`; only re-baseline deliberately, with a comment saying why.
 - **Sim/UI separation.** `src/sim` is pure data and logic: **no `ratatui`, `HashMap`
   or `HashSet`** anywhere under it. `src/sim/mod.rs` guards this by scanning every
   `.rs` file there for those substrings — **comments and strings included** — skipping
@@ -162,7 +162,7 @@ Do not weaken these to make a change pass. Fix the change.
 - **All numeric casts go through `cast!(expr => Ty)`** (defined in `src/lib.rs`).
   Bare `as` is denied; the macro is the one reviewed place that preserves `as`
   semantics and works in `const` context.
-- **Save format is versioned and never migrated.** Binary `SIMF` files, `VERSION = 10`
+- **Save format is versioned and never migrated.** Binary `SIMF` files, `VERSION = 11`
   in `src/sim/save.rs`. A version mismatch is rejected (`SaveError`), never half-read;
   old files stay listable so they can be deleted. `Params`/`Sim` serde field order and
   attributes are load-bearing — changing them means bumping `VERSION` and accepting
@@ -189,7 +189,8 @@ Do not weaken these to make a change pass. Fix the change.
   `docs/PROTOTYPE_GUIDE.md` is the accurate guide to the current UI tree (its filename
   is historical — there are no static prototypes any more). `docs/PERFORMANCE.md`
   records the measured budget; `docs/file-split-plan.md` records how the 800-line
-  ceiling was reached. `docs/feature-ideas.md` is the prioritised backlog.
+  ceiling was reached. `docs/feature-ideas.md` is the prioritised backlog. `docs/ai-requirements.md` is binding
+  for any feature that sends a prompt to a language model (opt in, optional, never in the step).
 - **Adding or changing a screen.** Screens live in `src/ui/screens/sNN_*.rs` and
   implement `Screen` (`opaque`, `handle_key`, `render`). The **top screen sees every
   key first** and returns `Action::Unhandled` for keys it does not consume; only then
@@ -252,5 +253,5 @@ git diff --stat                                 # only the files you meant to to
 ```
 
 If you touched `src/sim`, re-run `cargo test --lib sim::tests::checksum_is_fnv_stable`
-and confirm the value is still `0x04c4_09f5_c812_ae71` unless the change deliberately
+and confirm the value is still `0xd0e3_ee1a_c665_f531` unless the change deliberately
 re-baselines it.

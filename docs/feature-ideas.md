@@ -27,7 +27,7 @@ If you want, I can write the burrows-and-dens idea up as a ninth chunk doc in th
 
 ---
 
-The current genome has eleven slots: speed, size, sense, metabolism, aggression, camouflage, fertility, longevity, resistance (C7), sociality and maturity (C8). The most interesting additions are ones that trade off against an existing slot or against a specific mechanic, so selection can pull them in different directions in different worlds.
+The current genome has twelve slots: speed, size, sense, metabolism, aggression, camouflage, fertility, longevity, resistance (C7), sociality and maturity (C8), and mutability. The most interesting additions are ones that trade off against an existing slot or against a specific mechanic, so selection can pull them in different directions in different worlds.
 
 **Traits that exploit the existing environment**
 
@@ -47,7 +47,6 @@ The current genome has eleven slots: speed, size, sense, metabolism, aggression,
 
 - **Parental care.** Offspring start with more reserves and the parent loses hunger for a period after birth. Litters get smaller but survive. Nice interaction with any future dens.
 - **Dispersal.** How far a newborn wanders from its parent before settling. Low values create local inbred pockets, high values spread genes and spark migrations. Very visible on the lineage tree.
-- **Mutation rate itself.** Evolvability as a trait. Stable worlds select it down, worlds with droughts and epidemics select it up. Cheap to add and a genuinely interesting experiment.
 
 **Traits that need one new mechanic**
 
@@ -55,3 +54,76 @@ The current genome has eleven slots: speed, size, sense, metabolism, aggression,
 - **Coat colour** as a numeric value matched against the terrain palette under the creature. Camouflage becomes terrain specific, so a forest vole and a meadow vole drift apart, and you could tint the glyph with the value.
 
 If you want the most result for the least code, I'd take nocturnality, boldness and mutation rate first. All three slot into behaviour code that already exists, and each one can be watched drifting on the charts screen without any new UI.
+
+---
+
+## AI-assisted features (opt in, via a local Bifrost gateway)
+
+Every idea here is bound by [docs/ai-requirements.md](ai-requirements.md): AI is **off by
+default and opted into per feature**, the game is byte-for-byte unchanged when it is off or
+the gateway is unreachable, and **no model output ever enters the simulation step**. The one
+provider is a local [Bifrost](https://github.com/maximhq/bifrost) instance speaking the
+OpenAI-compatible chat API, which routes to Ollama for cheap interactive calls and to AWS
+Bedrock for heavy reasoning. Each idea names its fallback: what the player gets with AI off.
+
+**My pick for a first chunk (C9): the species designer plus the chronicle narrator.** One
+upstream feature and one downstream feature, so together they force the whole plumbing — the
+`[ai]` config, the worker thread, the fake gateway for tests, the Options section and the
+headless flags — that every later idea reuses. Neither touches `src/sim`.
+
+**Downstream: the model reads the world and writes text.**
+
+- **Chronicle narrator.** The Dwarf Fortress legends screen above, written by a model from
+  each season's slice of the event ring buffer plus the per-species census: "Year 3, autumn:
+  the voles of Sedgehollow vanished; the foxes followed by winter." A chronicle mode on S07 and
+  a `--chronicle` headless flag that writes Markdown next to `summary.csv`. *Fallback:* the
+  event log as today; optionally a deterministic template chronicle ("Year 3: 2 extinctions,
+  1 epidemic") that needs no model.
+- **Named places.** The biome-region work gives each basin a terrain and moisture profile. A
+  model names them once at world generation ("Sedgehollow", "the Ashfall shelf") and the names
+  go into the save as an optional, decorative table, so events read "in Sedgehollow" instead of
+  "in region 7". One call per world. *Fallback:* the index-based region labels used today.
+- **Creature biographies and obituaries.** S03 already shows a genome, age, lineage, kills, kin
+  and pack state; a key produces a three-line bio. Pairs with *named notable creatures* above:
+  the oldest, the most prolific and the best hunter get a name and an obituary event.
+  *Fallback:* the inspector as today; the key hint is not drawn.
+- **Ask the world.** Natural-language questions answered by a tool-using model over the
+  read-only `&Sim` API: species counts, region stats, event search, lineage lookup. "Why did
+  the lynx die out?" becomes a chain of tool calls and a grounded answer. Bifrost's MCP support
+  may carry the tool round-trips so the game needs no agent loop; spike before committing.
+  *Fallback:* the menu entry is absent.
+- **Run post-mortem.** After a headless run or sweep, hand `summary.csv` and the population
+  series to a model for an ecologist's report: what crashed, when, and which lever it correlates
+  with. `--postmortem` on the headless runner. *Fallback:* the CSV.
+
+**Upstream: the model writes inputs the sim already accepts.**
+
+- **Species designer.** "Add a boar: omnivore, big litters, forest dweller." The model emits a
+  `[[species]]` overlay in the schema the roster already loads, `Params::validate` runs, and
+  validation errors go back to the model until it passes. Species are data, so this needs no
+  sim change at all. *Fallback:* hand-write the overlay and pass it with `--params`.
+- **Preset and world from a prompt.** "A harsh archipelago where predators barely hold on"
+  becomes a params overlay plus the worldgen levers (moisture, roughness, edge outlets). A text
+  field on S09 beside the five presets. *Fallback:* the five presets.
+- **Scenario files.** The infrastructure idea above (seed, params, scripted interventions per
+  tick, assertions on counts), drafted by a model from a sentence. The same format is what the
+  balance agent needs. *Fallback:* write the file by hand.
+- **Balance-tuning agent** *(dev tool, `examples/`, never in the game's default path)*. The C4
+  and C5 notes say some population bands are unreachable by levers alone. A loop where the
+  model proposes parameter deltas, `scripts/sweep.sh` runs them and the model reads
+  `summary.csv` and iterates is a real experiment on that claim. Routed to Bedrock: each
+  iteration is one large reasoning call over a lot of numbers.
+
+**Player-facing flavour.**
+
+- **Field guide.** S11 help backed by retrieval over `docs/`: chunk specs, screen requirements
+  and the `--dump-params` field comments. "What does Resistance do?" gets a grounded answer with
+  the file it came from. Ollama embeddings plus a small chat model, fully local. *Fallback:*
+  S11 as today.
+- **Creature thoughts.** One line in S03 from the current goal and needs, cached per goal
+  transition so it costs one call per goal change, not per tick. Bifrost's semantic cache makes
+  the repeats free. CP437 only, so a text line rather than a speech bubble. *Fallback:* nothing
+  drawn.
+
+**Ranked by payoff per line of code:** species designer, chronicle, named places, post-mortem,
+bio, preset-from-prompt, field guide, thoughts, ask-the-world, scenarios, balance agent.

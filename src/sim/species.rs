@@ -6,23 +6,29 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Number of genome traits (C7 added Resistance; Sociality and Maturity are 9 and 10).
-pub const N_TRAITS: usize = 11;
+/// Number of genome traits (C7 added Resistance; Sociality and Maturity are 9
+/// and 10; Mutability is 11).
+pub const N_TRAITS: usize = 12;
 
 /// Trait indices that code outside this module refers to by name.
 pub const IDX_RESISTANCE: usize = 8;
 pub const IDX_SOCIALITY: usize = 9;
 pub const IDX_MATURITY: usize = 10;
+pub const IDX_MUTABILITY: usize = 11;
+
+/// The closed range every trait value is clamped into.
+pub const TRAIT_MIN: f32 = 0.02;
+pub const TRAIT_MAX: f32 = 0.98;
 
 /// Trait names, indexed by the `Genome` array order.
 pub const TRAIT_NAMES: [&str; N_TRAITS] = [
     "Speed", "Size", "Sense", "Metabolism", "Aggression", "Camouflage", "Fertility", "Longevity", "Resistance", "Sociality",
-    "Maturity",
+    "Maturity", "Mutability",
 ];
 
 /// Three-letter trait abbreviations for the table headers, in `Genome` order.
 /// Headers are built from this, never hand-typed.
-pub const TRAIT_ABBR: [&str; N_TRAITS] = ["Spd", "Siz", "Sen", "Met", "Agg", "Cam", "Fer", "Lon", "Res", "Soc", "Mat"];
+pub const TRAIT_ABBR: [&str; N_TRAITS] = ["Spd", "Siz", "Sen", "Met", "Agg", "Cam", "Fer", "Lon", "Res", "Soc", "Mat", "Mut"];
 
 /// Built-in prey name pool, used by prey species with an empty `names` list.
 pub const PREY_NAMES: &[&str] = &[
@@ -106,13 +112,18 @@ impl Genome {
     pub const fn maturity(&self) -> f32 {
         self.0[IDX_MATURITY]
     }
+    /// Evolvability (mutability): the parents' mean scales how often and how
+    /// far their offspring's traits mutate; near the cap it risks sterility.
+    pub const fn mutability(&self) -> f32 {
+        self.0[IDX_MUTABILITY]
+    }
     /// Sense range in map cells.
     pub fn sense_cells(&self) -> u16 {
         2 + crate::cast!((self.sense() * 10.0) => u16)
     }
-    /// Trait values live in `0.02..=0.98` (founders and inheritance alike).
+    /// Trait values live in `TRAIT_MIN..=TRAIT_MAX` (founders and inheritance alike).
     pub const fn clamp_trait(v: f32) -> f32 {
-        v.clamp(0.02, 0.98)
+        v.clamp(TRAIT_MIN, TRAIT_MAX)
     }
 }
 
@@ -167,6 +178,8 @@ mod tests {
         assert_eq!(Genome::LEN, N_TRAITS);
         // Abbreviations are exactly three cells: the S04 columns are sized on that.
         assert!(TRAIT_ABBR.iter().all(|a| a.len() == 3), "abbreviations must be 3 chars");
+        assert_eq!(TRAIT_NAMES[IDX_MUTABILITY], "Mutability");
+        assert_eq!(TRAIT_ABBR[IDX_MUTABILITY], "Mut");
     }
 
     #[test]
@@ -181,8 +194,11 @@ mod tests {
             assert_eq!(g.resistance(), g.0[IDX_RESISTANCE]);
             assert_eq!(g.sociality(), g.0[IDX_SOCIALITY]);
             assert_eq!(g.maturity(), g.0[IDX_MATURITY]);
-            // Maturity 0.5 everywhere is what keeps the starting balance unchanged.
+            assert_eq!(g.mutability(), g.0[IDX_MUTABILITY]);
+            // Maturity and Mutability 0.5 everywhere is what keeps the starting
+            // balance unchanged (both are neutral multipliers at 0.5).
             assert_eq!(g.maturity(), 0.5, "{id:?} must start at maturity 0.5");
+            assert_eq!(g.mutability(), 0.5, "{id:?} must start at mutability 0.5");
         }
     }
 }

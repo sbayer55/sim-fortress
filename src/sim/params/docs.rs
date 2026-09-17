@@ -78,6 +78,10 @@ pub(super) const FIELD_DOCS: &[(&str, &str)] = &[
             ("genetics.maturity_age_span", "Adult age x (1 + (maturity - 0.5) x 2 x this)."),
             ("genetics.maturity_litter_span", "Litter size x (1 + (maturity - 0.5) x 2 x this)."),
             ("genetics.maturity_lifespan_span", "Max lifespan x (1 + (maturity - 0.5) x 2 x this)."),
+            ("genetics.mutability_rate_span", "Mutation rate x (1 + (parents' mean mutability - 0.5) x 2 x this)."),
+            ("genetics.mutability_strength_span", "Mutation sd x (1 + (parents' mean mutability - 0.5) x 2 x this)."),
+            ("genetics.sterility_onset", "Mutability at or below which a newborn is never sterile."),
+            ("genetics.sterility_max", "Sterility chance at the 0.98 mutability cap (quadratic ramp)."),
             ("genetics.drift_every_generations", "Generations between drift samples."),
             ("genetics.lineage_keep_generations", "Generations kept in the lineage store."),
             ("genetics.lineage_up", "Generations up the S08 tree root."),
@@ -229,4 +233,5 @@ pub(super) const FIELD_DOCS: &[(&str, &str)] = &[
             ("species.base_genome.resistance", "Baseline Resistance trait."),
             ("species.base_genome.sociality", "Baseline Sociality trait."),
             ("species.base_genome.maturity", "Baseline Maturity trait (0.5 is balance-neutral)."),
+            ("species.base_genome.mutability", "Baseline Mutability trait (0.5 is balance-neutral)."),
         ];

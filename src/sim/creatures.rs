@@ -229,6 +229,8 @@ pub struct Creature {
     pub thirst: f32,
     pub energy: f32,
     pub adult: bool,
+    /// Born sterile (a high-Mutability cost): never eligible to mate.
+    pub sterile: bool,
     pub goal: Goal,
     pub target: Option<(usize, usize)>,
     pub replan_at: u64,
@@ -435,7 +437,7 @@ impl CreatureStore {
 
 /// Build one founder creature (all per-founder state at its defaults).
 #[allow(clippy::too_many_arguments)]
-fn founder(species: SpeciesId, n_species: usize, name: NameId, sex: Sex, pos: (usize, usize), age_days: u32, genome: Genome, adult_age: u32, rng: &mut Rng) -> Creature {
+fn founder(species: SpeciesId, n_species: usize, name: NameId, sex: Sex, pos: (usize, usize), age_days: u32, genome: Genome, adult_age: u32, sterile: bool, rng: &mut Rng) -> Creature {
     let (x, y) = pos;
     Creature {
                 id: CreatureId(0),
@@ -453,6 +455,7 @@ fn founder(species: SpeciesId, n_species: usize, name: NameId, sex: Sex, pos: (u
                 thirst: rng.f32() * 0.4,
                 energy: 0.6 + rng.f32() * 0.4,
                 adult: age_days >= adult_age,
+                sterile,
                 goal: Goal::Wander,
                 target: None,
                 replan_at: 0,
@@ -552,8 +555,10 @@ pub fn place_founders(world: &World, roster: &Roster, params: &CreaturesParams, 
             };
             let sex = if rng.chance(0.5) { Sex::Male } else { Sex::Female };
             let name = crate::cast!(rng.below(name_pool_len) => NameId);
+            // The same sterility roll a newborn gets, so the rule has no exceptions.
+            let sterile = rng.chance(gp.sterility_chance(genome.mutability()));
 
-            out.push(founder(species, roster.len(), name, sex, (x, y), age_days, genome, adult_age, rng));
+            out.push(founder(species, roster.len(), name, sex, (x, y), age_days, genome, adult_age, sterile, rng));
             placed += 1;
         }
     }

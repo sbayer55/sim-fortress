@@ -41,6 +41,8 @@ pub struct Census {
     /// Living members immune to at least one pathogen.
     pub immune: Vec<u32>,
     pub parasite_sum: Vec<f32>,
+    /// Living members born sterile (the Mutability cost).
+    pub sterile: Vec<u32>,
 }
 
 impl Census {
@@ -82,10 +84,14 @@ pub fn census(store: &CreatureStore, n_species: usize) -> Census {
     let mut infected = vec![0u32; n];
     let mut immune = vec![0u32; n];
     let mut parasite_sum = vec![0.0f32; n];
+    let mut sterile = vec![0u32; n];
 
     for c in store.living() {
         let i = c.species.index();
         population[i] += 1;
+        if c.sterile {
+            sterile[i] += 1;
+        }
         if c.infection.is_some() {
             infected[i] += 1;
         }
@@ -123,7 +129,7 @@ pub fn census(store: &CreatureStore, n_species: usize) -> Census {
         }
     }
 
-    Census { population, adults, juveniles, genome_mean, genome_min, genome_max, hist, max_generation, generation_sum, infected, immune, parasite_sum }
+    Census { population, adults, juveniles, genome_mean, genome_min, genome_max, hist, max_generation, generation_sum, infected, immune, parasite_sum, sterile }
 }
 
 /// One species' live record (C4 FR5). Counters are incremental during the day;
@@ -157,6 +163,8 @@ pub struct SpeciesStats {
     pub immune: u32,
     pub deaths_disease_today: u32,
     pub deaths_disease_yesterday: u32,
+    /// Living members born sterile (Mutability's cost near its cap).
+    pub sterile: u32,
 }
 
 impl SpeciesStats {
@@ -185,6 +193,7 @@ impl SpeciesStats {
             immune: 0,
             deaths_disease_today: 0,
             deaths_disease_yesterday: 0,
+            sterile: 0,
         }
     }
 
@@ -228,6 +237,7 @@ impl SpeciesStats {
         self.hist = c.hist[i];
         self.sick = c.infected[i];
         self.immune = c.immune[i];
+        self.sterile = c.sterile[i];
         self.trend.push(crate::cast!(self.count.min(u32::from(u16::MAX)) => u16));
         if self.trend.len() > 30 {
             let excess = self.trend.len() - 30;

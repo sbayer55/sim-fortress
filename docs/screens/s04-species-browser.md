@@ -94,7 +94,7 @@ classDiagram
         mean : Genome
         min : Genome
         max : Genome
-        hist : u16 x11x12
+        hist : u16 x12x12
         drift : Vec~Genome~
         trend_arrow()
     }
@@ -107,7 +107,7 @@ classDiagram
         base_genome()
     }
     class Genome {
-        traits : f32 x11
+        traits : f32 x12
     }
     class Series {
         population : Vec~Vec~f32~~
@@ -148,7 +148,7 @@ classDiagram
 
 ### S04a — Species table panel
 1. **Header row** (dim): `Species  Kind  Count  Adults  Juv  Birth/d  Death/d  Sick  Peak
-   Gen  30-day trend  Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat  Diet` (`Sick` and
+   Gen  30-day trend  Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat Mut  Diet` (`Sick` and
    `Res` live since C7; `Soc` and `Mat` since C8).
 2. **One row per species**, starting on the second row under the header, sorted by count
    descending (the default sort; see Interaction). Columns: selection marker `►` (only on
@@ -157,7 +157,7 @@ classDiagram
    deaths today (8, bad colour), sick (6, sick colour when > 0; *live since: C7*), peak
    (6), generation (5), a 14-cell sparkline of the 30-day
    trend in the species colour followed by the trend arrow (`↑` good, `↓` bad, `↔` dim),
-   the eleven trait means as two-digit integers (value × 100) each in its trait colour, and
+   the twelve trait means as two-digit integers (value × 100) each in its trait colour, and
    the diet text (dim). Source: species stats.
 3. **Selected row** is drawn in the selected style across the full inner width.
 4. **Totals row** (after one blank row): `totals <total>   prey <p>  pred <q>  ratio
@@ -223,7 +223,7 @@ classDiagram
 16. **Footer legend.** `┼ mean   █ full  ▄ half bucket   each column is 1/12 of the 0..1
     range`. *Live since: C7* — the **Selection pressure** (item 20, at most two lines) and
     **Compared with other species** (item 21) sections are drawn under the legend in this
-    panel, since eleven traits leave the drift panel no room for them.
+    panel, since twelve traits leave the drift panel no room for them.
 
 ### S04b — Drift over generations panel
 17. **Drift sparklines.** Header `trait  gen 1  oldest … newest  g<current> change`, then
@@ -247,9 +247,9 @@ classDiagram
 20. **Selection pressure.** Two or three `§`/`¶` lines explaining which traits are moving
     and why (for example aggression rising, camouflage falling, longevity flat).
 21. **Compared with other species (mean x100).** Header built from `TRAIT_ABBR`
-    (`Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat`) plus `count gen`, then one row per
+    (`Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat Mut`) plus `count gen`, then one row per
     species (all six, absent ones dimmed): glyph, name (title style for the selected
-    species), eleven means in trait colours, count and generation.
+    species), twelve means in trait colours, count and generation.
     (C4 renamed the block from "Compared with other predators".)
 
 ### Status bar

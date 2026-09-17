@@ -259,7 +259,7 @@ scoured 0.02, ice-margin cells banked 0.012 as moraine, the top 2 % bared.
 `classify::land_terrain` cuts bedrock land as `Rock` first, inside the
 `rock_pct` budget, so a dome's core stays rock after thirty epochs and the
 rock target still holds. `World.history: Vec<HistoryEvent>` (kind, epoch, x,
-y, extent, angle) is saved, format version 10; `HistoryEvent::describe` gives
+y, extent, angle) is saved, format version 11 (10 went to the Mutability trait on main); `HistoryEvent::describe` gives
 the sentence Phase 6 will log and `examples/dump_world.rs` prints. Ecological
 pre-history: `ecology::warm_up` runs `ecology.warm_up_days` (60) days of
 vegetation growth with no rain, evaporation or draws from `Sim::new`, using
@@ -280,7 +280,7 @@ between its sides), the `history::tests` unit checks on synthetic surfaces
 (dome cone and core, scarp step across not along, glaciation scours and dams,
 smoothing flattens the mask), plus the ignored diagnostic `print_history`
 (events per seed, generation time per age). Checksum re-baselined to
-`0x04c4_09f5_c812_ae71`. `ecology::tests::moisture_equilibria_by_rainfall`'s
+`0xd0e3_ee1a_c665_f531`. `ecology::tests::moisture_equilibria_by_rainfall`'s
 seed-42 dry cut widened from 0.60 to 0.65 (measured 0.6016; the ordering
 checks are untouched). Deviations from the acceptance below: an early scarp
 is deliberately worn faint by the epochs after it, so only late scarps are
@@ -366,7 +366,7 @@ ticker screens, `save.rs`.
 | 2 | Marsh, riparian, shore types (done) | 1 | `Terrain::Marsh`, `creatures.marsh_step_cost` | yes (v7) |
 | 3 | Biomes as regions (done) | 1, 2 | `Cell.biome`, `World.region_map` | yes (v8) |
 | 4 | River morphology (done) | 2 | `World.falls` | yes (v9) |
-| 5 | Age regimes + events (done) | — (better after 3) | `World.history`, `ecology.warm_up_days` | yes (v10) |
+| 5 | Age regimes + events (done) | — (better after 3) | `World.history`, `ecology.warm_up_days` | yes (v11) |
 | 6 | Names, log, summary | 3, 4, 5 | `World.names` | yes |
 
 Phase 6 is next; everything it names now exists.

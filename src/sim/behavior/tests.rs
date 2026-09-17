@@ -42,6 +42,7 @@ pub(super) fn test_creature(x: usize, y: usize) -> Creature {
         thirst: 0.3,
         energy: 0.8,
         adult: true,
+        sterile: false,
         goal: Goal::Wander,
         target: None,
         replan_at: 0,
