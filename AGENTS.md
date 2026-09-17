@@ -189,7 +189,8 @@ Do not weaken these to make a change pass. Fix the change.
   `docs/PROTOTYPE_GUIDE.md` is the accurate guide to the current UI tree (its filename
   is historical — there are no static prototypes any more). `docs/PERFORMANCE.md`
   records the measured budget; `docs/file-split-plan.md` records how the 800-line
-  ceiling was reached. `docs/feature-ideas.md` is the prioritised backlog.
+  ceiling was reached. `docs/feature-ideas.md` is the prioritised backlog. `docs/ai-requirements.md` is binding
+  for any feature that sends a prompt to a language model (opt in, optional, never in the step).
 - **Adding or changing a screen.** Screens live in `src/ui/screens/sNN_*.rs` and
   implement `Screen` (`opaque`, `handle_key`, `render`). The **top screen sees every
   key first** and returns `Action::Unhandled` for keys it does not consume; only then
