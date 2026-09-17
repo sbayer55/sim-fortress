@@ -19,6 +19,7 @@ use crate::widgets::{panel, Component, Divider, Legend, Panel, Spacer, StatusBar
 use crate::theme;
 
 use base::{clock_section, population_section, resources_section};
+pub use stack_sidebar::{layer_legend, stack_section, sub_pick_text};
 use disease_overlay::disease_tints;
 use parasites::parasite_tints;
 
@@ -388,7 +389,7 @@ impl WorldMap {
 
 mod base;
 mod input;
-mod overlays;
+mod stack_sidebar;
 mod look;
 mod follow;
 mod sense;

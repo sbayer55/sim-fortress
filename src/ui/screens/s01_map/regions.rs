@@ -90,15 +90,14 @@ impl WorldMap {
         }
         row += 1;
 
-        row = Self::overlays_selector(f, inner, row, stack);
-        row += 1;
-
         panel::section(f, inner, row, "Reading the map");
         row += 1;
         for note in [" tint = region, bright = selected", " labels are clipped at the edge", " Esc restores the plain map"] {
             util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
             row += 1;
         }
+        row += 1;
+        Self::stack_rows(f, inner, row, stack);
     }
 }
 

@@ -177,7 +177,7 @@ pub(super) fn disease_tints(sim: &Sim, shown: Option<PathogenId>) -> HashMap<Cre
 
 /// Immune to the shown pathogen, or to any of the `slots` live slots when all
 /// are shown.
-fn immune_to_shown(c: &crate::sim::creatures::Creature, shown: Option<PathogenId>, slots: usize, day: u32) -> bool {
+pub(super) fn immune_to_shown(c: &crate::sim::creatures::Creature, shown: Option<PathogenId>, slots: usize, day: u32) -> bool {
     match shown {
         Some(p) => disease::is_immune(c, p, day),
         None => (0..slots).any(|k| disease::is_immune(c, PathogenId(crate::cast!(k => u8)), day)),
@@ -214,9 +214,10 @@ fn active_arrow(samples: &[crate::sim::Sample], shown: Option<PathogenId>, windo
 impl WorldMap {
     /// S02h sidebar: what the colours mean, the pathogen roster with the shown
     /// slot marked, that pathogen's outbreak, every species' sick / immune
-    /// counts and mean Resistance, a parasite summary, the selector and notes.
-    /// Fixed sections take 31 rows plus one per pathogen slot; the rows left
-    /// over separate the sections and lengthen the reading notes.
+    /// counts and mean Resistance, a parasite summary, the reading notes and
+    /// the Stack section. Fixed sections take 24 rows plus one per pathogen
+    /// slot; the rows left over separate the sections and lengthen the
+    /// reading notes.
     pub(super) fn disease_sidebar(f: &mut Frame<'_>, area: Rect, sim: &Sim, shown: Option<PathogenId>, stack: &OverlayStack) {
         let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
         let mut row = 0u16;
@@ -262,12 +263,10 @@ impl WorldMap {
         row = disease_parasites(f, inner, row, sim, world);
         gap(&mut row, &mut spare);
 
-        row = Self::overlays_selector(f, inner, row, stack);
-        gap(&mut row, &mut spare);
-
         let notes = [" colour = animal · amber ground = fouled", " Tab pathogen · k look · Esc restores map"];
         if reading_extra == 0 {
             util::line(f, inner, row, Line::from(Span::styled(notes[1], theme::dim_text())));
+            row += 1;
         } else {
             panel::section(f, inner, row, "Reading the map");
             row += 1;
@@ -276,5 +275,7 @@ impl WorldMap {
                 row += 1;
             }
         }
+        gap(&mut row, &mut spare);
+        Self::stack_rows(f, inner, row, stack);
     }
 }

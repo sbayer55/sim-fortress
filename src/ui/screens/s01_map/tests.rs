@@ -33,6 +33,22 @@ fn row_text(buf: &Buffer, y: u16) -> String {
     (0..buf.area.width).map(|x| buf[(x, y)].symbol().chars().next().unwrap_or(' ')).collect()
 }
 
+/// The sidebar's last rows are the Stack section: the rule, `rows`, the hint.
+fn assert_stack_section(side: &[String], rows: &[&str]) {
+    let at = side.iter().position(|l| l.contains("─ Stack ─")).expect("a Stack section");
+    for (i, row) in rows.iter().enumerate() {
+        assert!(side[at + 1 + i].contains(row), "row {i}: {:?}", side[at + 1 + i]);
+    }
+    assert!(side[at + 1 + rows.len()].contains("o edits the stack   Esc clears all"), "hint row: {side:#?}");
+    let blank = |l: &String| l.chars().skip(1).take(41).all(|c| c == ' ');
+    assert!(side[at + 2 + rows.len()..].iter().all(blank), "nothing follows the Stack section: {side:?}");
+}
+
+/// The 41-column sidebar text, one string per inner row.
+fn sidebar_rows(buf: &Buffer) -> Vec<String> {
+    (1..41).map(|y| row_text(buf, y).chars().skip(112).collect::<String>()).collect()
+}
+
 /// A sim with every pathogen slot filled (the roster plus strains of slot 0).
 fn full_roster_sim() -> Sim {
     let mut sim = Sim::new(7, Params::default());
@@ -118,7 +134,8 @@ fn s02h_assert_sidebar(buf: &Buffer) {
     assert!(side.iter().any(|l| l.contains("Pathogens · all")));
     assert!(side.iter().any(|l| l.contains("└ Strain7")), "strains are indented under their parent");
     assert!(side.iter().any(|l| l.contains("new")), "a strain born today carries the new tag");
-    assert!(side[39].contains("Tab pathogen"), "with all eight slots the reading note is the 40th sidebar row");
+    assert!(side.iter().any(|l| l.contains("Tab pathogen")), "the reading note survives with all eight slots");
+    assert_stack_section(&side, &["1. Disease   (mark)"]);
 }
 
 /// Tab walks all → slot 0 … slot 7 → all; Shift+Tab walks back.
@@ -256,6 +273,62 @@ fn s02i_parasite_overlay_render() {
     assert!(side.iter().any(|l| l.contains("Carriers")));
     assert!(side.iter().any(|l| l.contains("cells ≥25%")));
     assert!(side.iter().any(|l| l.contains("litter")));
-    assert!(side[39].contains("k look"), "the reading note is the 40th sidebar row");
+    assert!(side.iter().any(|l| l.contains("k look")), "the reading note is kept");
+    assert_stack_section(&side, &["1. Parasites (base)"]);
     assert!(row_text(&buf, 44).contains("[o] overlay"), "status bar names the switcher");
+}
+
+#[test]
+fn single_layer_sidebar_ends_with_stack_section() {
+    let mut app = AppState::new(Params::default());
+    app.sim = Some(Sim::new(7, Params::default()));
+    let screen = WorldMap::new("Test".into());
+    for (stack, row) in [
+        (OverlayStack { base: Base::Moisture, ..OverlayStack::PLAIN }, "1. Moisture  (base)"),
+        (OverlayStack { base: Base::Species, ..OverlayStack::PLAIN }, "1. Species   (base)"),
+        (OverlayStack { regions: true, ..OverlayStack::PLAIN }, "1. Regions   (mark)"),
+        (OverlayStack { health: true, ..OverlayStack::PLAIN }, "1. Health    (mark)"),
+    ] {
+        app.overlay = stack;
+        let side = sidebar_rows(&draw(&screen, &app));
+        assert!(!side.iter().any(|l| l.contains("Overlays")), "the selector is gone: {side:?}");
+        assert_stack_section(&side, &[row]);
+    }
+    app.overlay = OverlayStack::PLAIN;
+    assert!(WorldMap::turn_sense_on(&mut app));
+    let side = sidebar_rows(&draw(&screen, &app));
+    assert_stack_section(&side, &["1. Sense     (mark)"]);
+}
+
+#[test]
+fn compact_sidebar_lists_layers_in_order() {
+    let mut app = AppState::new(Params::default());
+    app.sim = Some(Sim::new(7, Params::default()));
+    app.overlay = OverlayStack { base: Base::Species, species: crate::sim::SpeciesId(2), regions: true, health: true, ..OverlayStack::PLAIN };
+    app.overlay.show_disease(None);
+    let screen = WorldMap::new("Test".into());
+    let buf = draw(&screen, &app);
+    assert!(row_text(&buf, 0).contains("overlay: deer + regions + health + disease"), "{}", row_text(&buf, 0));
+    let side = sidebar_rows(&buf);
+    let find = |s: &str| side.iter().position(|l| l.contains(s)).unwrap_or_else(|| panic!("{s} in {side:?}"));
+    let (sp, re, he, di) = (find("─ Species · deer ─"), find("─ Regions ─"), find("─ Health ─"), find("─ Disease · All pathogens ─"));
+    assert!(sp < re && re < he && he < di, "sections in composition order");
+    assert!(side[sp + 1].contains("population density of one species"));
+    assert!(side[he + 1].contains("creatures by their weakest vital"));
+    assert!(side[he + 2].contains("fit") && side[he + 2].contains("critical"));
+    assert!(side[di + 2].contains("sick") && side[di + 2].contains("immune"));
+    assert_stack_section(&side, &["1. Species   (base)", "2. Regions   (mark)", "3. Health    (mark)", "4. Disease   (mark)"]);
+}
+
+#[test]
+fn long_title_is_cut_before_the_hint() {
+    let mut app = AppState::new(Params::default());
+    app.sim = Some(Sim::new(7, Params::default()));
+    app.overlay = OverlayStack { base: Base::Species, sense: false, regions: true, health: true, ..OverlayStack::PLAIN };
+    app.overlay.show_disease(Some(PathogenId(0)));
+    let screen = WorldMap::new("The Valley of Sunfall and the Long Road Beyond It".into());
+    let top = row_text(&draw(&screen, &app), 0);
+    assert!(top.contains("← → scroll ╗"), "the scroll hint survives: {top}");
+    assert!(top.contains(&format!("{}", glyphs::DOT)), "the title is cut with a dot: {top}");
+    assert!(!top.contains("greyfever"), "the tail of the title is gone: {top}");
 }

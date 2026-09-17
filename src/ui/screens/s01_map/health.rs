@@ -122,14 +122,13 @@ impl WorldMap {
         let (next_row, all, weakest) = health_by_species(f, inner, row, sim);
         row = health_weakest(f, inner, next_row, all, weakest);
 
-        row = Self::overlays_selector(f, inner, row, stack);
-        row += 1;
-
         panel::section(f, inner, row, "Reading the map");
         row += 1;
         for note in [" colour is the animal, not the ground", " k look / Enter inspects one animal", " Esc restores the plain map"] {
             util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
             row += 1;
         }
+        row += 1;
+        Self::stack_rows(f, inner, row, stack);
     }
 }

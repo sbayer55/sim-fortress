@@ -120,14 +120,14 @@ impl WorldMap {
         row = species_by_region(f, inner, row, sim, sp, color);
         row = species_list(f, inner, row, sim, sp);
 
-        row = Self::overlays_selector(f, inner, row, stack);
         row += 1;
-
         panel::section(f, inner, row, "Reading the map");
         row += 1;
         for note in [" shown species bright, others faded", " Esc restores the plain map", " ░ <25%  ▒ <50%  ▓ <75%  █ ≥75%"] {
             util::line(f, inner, row, Line::from(Span::styled(note, theme::dim_text())));
             row += 1;
         }
+        row += 1;
+        Self::stack_rows(f, inner, row, stack);
     }
 }

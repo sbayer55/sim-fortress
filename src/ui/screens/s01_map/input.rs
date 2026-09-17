@@ -42,7 +42,7 @@ impl WorldMap {
             match layers.as_slice() {
                 [] => Self::sidebar(f, side, app, sim, world, time),
                 [one] => self.layer_sidebar(f, side, app, sim, world, stack, *one),
-                [first, ..] => self.layer_sidebar(f, side, app, sim, world, stack, *first),
+                _ => Self::compact_sidebar(f, side, sim, stack),
             }
         }
     }

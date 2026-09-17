@@ -119,7 +119,7 @@ fn parasite_by_species(sim: &Sim) -> (Vec<f32>, Vec<u32>) {
 impl WorldMap {
     /// S02i sidebar: the parasite ramp and creature bands, mean cell load per
     /// region, per-species load / heavy count / litter penalty, the three
-    /// heaviest carriers, the selector and a reading note. Exactly 40 rows.
+    /// heaviest carriers, a reading note and the Stack section.
     pub(super) fn parasite_sidebar(f: &mut Frame<'_>, area: Rect, sim: &Sim, stack: &OverlayStack) {
         let inner = panel::draw(f, area, "Overlay", panel::Kind::Outer);
         let mut row = 0u16;
@@ -181,7 +181,8 @@ impl WorldMap {
         row = parasite_species_section(f, inner, row, sim, dp);
         row = parasite_carriers(f, inner, row, sim, world);
 
-        row = Self::overlays_selector(f, inner, row, stack);
         util::line(f, inner, row, Line::from(Span::styled(" k look = exact cell load · Esc restores", theme::dim_text())));
+        row += 2;
+        Self::stack_rows(f, inner, row, stack);
     }
 }
