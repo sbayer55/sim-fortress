@@ -95,6 +95,7 @@ pub(super) const FIELD_DOCS: &[(&str, &str)] = &[
             ("ecology.water_dry_region_moisture", "Moisture at which a water cell dries."),
             ("ecology.water_refill_region_moisture", "Moisture at which a dry cell refills."),
             ("ecology.water_changes_per_region_per_day", "Water cells changed per region per day."),
+            ("ecology.warm_up_days", "Days of creature-free vegetation growth at world creation."),
             ("ecology.max_vegetation", "Maximum vegetation per terrain."),
             ("ecology.season_cap", "Seasonal vegetation cap."),
             ("ecology.season_regrowth", "Seasonal regrowth multiplier."),

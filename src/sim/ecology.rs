@@ -5,7 +5,7 @@ use crate::sim::events::{Event, EventKind, EventRing};
 use crate::sim::params::{EcologyParams, Rainfall};
 use crate::sim::rng::Rng;
 use crate::sim::stats::{Census, Sample, Series};
-use crate::sim::time::Time;
+use crate::sim::time::{Season, Time};
 use crate::sim::world::{Terrain, World};
 
 /// True when any of the eight neighbours of `(x, y)` is a water cell.
@@ -51,6 +51,23 @@ fn refill_dried_cells(world: &mut World, ri: usize, w: usize, limit: usize) {
         world.cells[idx].terrain = Terrain::ShallowWater;
         world.cells[idx].dried_from = None;
         world.cells[idx].vegetation = 0.0;
+    }
+}
+
+/// Ecological pre-history run once when a world is made.
+///
+/// `days` of vegetation growth and die-back with no rain, evaporation,
+/// creatures or draws, so a fresh world's biomass sits at the carrying
+/// capacity its moisture, biome and `season` allow.
+pub fn warm_up(world: &mut World, ecology: &EcologyParams, season: Season, days: u32) {
+    let (w, h) = (world.width, world.height);
+    let season_cap = ecology.season_cap.get(&season).copied().unwrap_or(1.0);
+    let season_regrowth = ecology.season_regrowth.get(&season).copied().unwrap_or(1.0);
+    for _ in 0..days {
+        step_vegetation(world, ecology, season_cap, season_regrowth, w, h);
+    }
+    for cell in &mut world.cells {
+        cell.vegetation = cell.vegetation.clamp(0.0, 1.0);
     }
 }
 
@@ -434,8 +451,9 @@ mod tests {
         assert!(means[0] < means[1], "dry {} not < normal {}", means[0], means[1]);
         assert!(means[1] < means[2], "normal {} not < wet {}", means[1], means[2]);
         // The rain sequence follows the ecology RNG stream, which regrowth-site
-        // sampling advances; C4's `growth_k` retune moved the dry mean from ~0.48 to ~0.56.
-        assert!(means[0] < 0.6, "dry too wet: {}", means[0]);
+        // sampling advances; C4's `growth_k` retune moved the dry mean from ~0.48 to ~0.56,
+        // and the worldgen history phase (events reshape seed 42's regions) to ~0.60.
+        assert!(means[0] < 0.65, "dry too wet: {}", means[0]);
         assert!(means[2] > 0.8, "wet too dry: {}", means[2]);
     }
 
@@ -548,6 +566,7 @@ mod tests {
             water_cells_at_generation: 1,
             shore: vec![],
             falls: vec![],
+            history: vec![],
         };
         let mean = region_land_veg_mean(&world, 0);
         assert!((mean - 0.2).abs() < 1e-6, "land veg mean {mean} should exclude the water cell");

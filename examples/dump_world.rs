@@ -10,7 +10,7 @@
 // shade table's length.
 #![allow(clippy::indexing_slicing)]
 use sim_fortress::sim::params::WorldParams;
-use sim_fortress::sim::world::{Terrain, World};
+use sim_fortress::sim::world::{AgeRegime, Terrain, World};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -68,5 +68,8 @@ fn main() {
             eprintln!("{} {}: {} cells", char::from(b"ABCDEFGH"[i.min(7)]), r.0, world.region_size(i));
         }
     }
-    eprintln!("generated {w}x{h} seed {seed} age {age} in {took:?}");
+    for e in &world.history {
+        eprintln!("{}", e.describe(age));
+    }
+    eprintln!("generated {w}x{h} seed {seed} age {age} ({} land) in {took:?}", AgeRegime::for_age(age).name);
 }

@@ -616,6 +616,7 @@ mod tests {
             water_cells_at_generation: 0,
             shore: vec![],
             falls: vec![],
+            history: vec![],
         }
     }
 

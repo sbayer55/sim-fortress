@@ -7,7 +7,7 @@ use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
 use super::WorldGenForm;
-use crate::sim::world::Biome;
+use crate::sim::world::{AgeRegime, Biome};
 use crate::sim::World;
 use crate::widgets::map;
 use crate::widgets::{bars, panel, util};
@@ -17,7 +17,16 @@ pub(super) fn preview_panel(f: &mut Frame<'_>, area: Rect, form: &WorldGenForm) 
     let world = &form.preview;
     // Smallest zoom-out (at least 1:2) at which the whole world fits 75x20.
     let scale = world.width().div_ceil(75).max(world.height().div_ceil(20)).max(2);
-    let hint = format!("seed {}, {}x{} at 1:{}, {} wind", form.seed_text, world.width(), world.height(), scale, world.wind.name());
+    let hint = format!(
+        "seed {}, {}x{} at 1:{}, {} wind, {} land, {} events",
+        form.seed_text,
+        world.width(),
+        world.height(),
+        scale,
+        world.wind.name(),
+        AgeRegime::for_age(form.world.age).name,
+        world.history.len()
+    );
     let inner = panel::draw_with_hint(f, area, "Preview", &hint, panel::Kind::Outer);
 
     let iw = crate::cast!(world.width().div_ceil(scale) => u16);

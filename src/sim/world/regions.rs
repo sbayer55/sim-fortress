@@ -72,8 +72,38 @@ fn compact(raw: &[usize]) -> (Vec<usize>, usize) {
 /// The label every cell starts from: its flow-tree root on land, and for
 /// ocean cells the nearest land basin (a multi-source flood from the shore,
 /// in index order), so every region is anchored on land and owns the water
-/// it touches.
+/// it touches. Drainage runs over eight neighbours, so a basin can hang
+/// together by a diagonal alone; each label is split into its 4-connected
+/// pieces so every region is contiguous the way the map walks it.
 fn seed_labels(grid: Grid, basin: &[usize], sea: &[bool]) -> Vec<usize> {
+    let label = drainage_labels(grid, basin, sea);
+    let n = grid.len();
+    let (w, h) = (grid.w, grid.h);
+    let mut piece = vec![usize::MAX; n];
+    let mut stack = Vec::new();
+    for start in 0..n {
+        if piece[start] != usize::MAX {
+            continue;
+        }
+        piece[start] = start;
+        stack.push(start);
+        while let Some(i) = stack.pop() {
+            let (x, y) = (i % w, i.div_euclid(w));
+            let around = [(y > 0).then(|| i - w), (x > 0).then(|| i - 1), (x + 1 < w).then(|| i + 1), (y + 1 < h).then(|| i + w)];
+            for j in around.into_iter().flatten() {
+                if piece[j] == usize::MAX && label[j] == label[i] {
+                    piece[j] = start;
+                    stack.push(j);
+                }
+            }
+        }
+    }
+    piece
+}
+
+/// Each cell's flow-tree root on land, and for ocean cells the nearest land
+/// basin.
+fn drainage_labels(grid: Grid, basin: &[usize], sea: &[bool]) -> Vec<usize> {
     let n = grid.len();
     let (w, h) = (grid.w, grid.h);
     let mut label: Vec<usize> = (0..n).map(|i| if sea[i] { usize::MAX } else { basin[i] }).collect();

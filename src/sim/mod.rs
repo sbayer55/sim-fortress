@@ -144,7 +144,7 @@ pub struct Sim {
 
 impl Sim {
     pub fn new(seed: u64, params: Params) -> Self {
-        let world = World::generate(seed, &params.world);
+        let mut world = World::generate(seed, &params.world);
         let time = Time::new(
             params.time.start_hour,
             params.time.season_days,
@@ -152,6 +152,7 @@ impl Sim {
             params.time.sunrise_hour,
             params.time.sunset_hour,
         );
+        ecology::warm_up(&mut world, &params.ecology, time.season(), params.ecology.warm_up_days);
         let events = EventRing::new(params.events.capacity);
         let series = Series::new(params.stats.series_days);
         let rng = Rng::new(seed);
@@ -669,7 +670,11 @@ mod tests {
         // Re-baselined for river morphology: rivers widen by tier, trunks
         // run deep, deltas fan, falls keep their rock and arid brooks start
         // as dry washes, so the water cells and everything near them moved.
-        assert_eq!(a.checksum(), 0xb6e9_09b8_a4c6_2f17);
+        // Re-baselined for history: the event draws precede the epochs, the
+        // events reshape the relief, the vegetation warm-up replaces the
+        // seeded biomass founders land on, and regions are split into
+        // 4-connected pieces.
+        assert_eq!(a.checksum(), 0x04c4_09f5_c812_ae71);
     }
 
     #[test]

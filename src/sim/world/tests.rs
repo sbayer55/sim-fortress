@@ -246,6 +246,99 @@ fn age_erodes_the_relief() {
     };
     assert!(roughness(&old) < roughness(&young) * 0.8, "young {} old {}", roughness(&young), roughness(&old));
     assert_ne!(young.cells, old.cells);
+    // The regimes, not just the epoch count, set the character: a young
+    // world keeps its ridges and an old one is worn to broad valleys.
+    let sharp = World::generate(5, &WorldParams { age: 2, ..WorldParams::default() });
+    let worn = World::generate(5, &WorldParams { age: 14, ..WorldParams::default() });
+    assert_eq!(AgeRegime::for_age(2).name, "young");
+    assert_eq!(AgeRegime::for_age(14).name, "old");
+    assert!(roughness(&worn) < roughness(&sharp) * 0.8, "young {} old {}", roughness(&sharp), roughness(&worn));
+    assert!(!sharp.history.is_empty() && !worn.history.is_empty() && !young.history.is_empty());
+}
+
+/// Horizontal-unit distance between two cells (rows count double).
+fn span(a: (usize, usize), b: (usize, usize)) -> f32 {
+    let dx = crate::cast!(a.0 => f32) - crate::cast!(b.0 => f32);
+    let dy = (crate::cast!(a.1 => f32) - crate::cast!(b.1 => f32)) * 2.0;
+    dx.hypot(dy)
+}
+
+#[test]
+fn events_leave_traces() {
+    let params = WorldParams::default();
+    for seed in 1..=20u64 {
+        let world = World::generate(seed, &params);
+        assert!((1..=3).contains(&world.history.len()), "seed {seed}: {} events", world.history.len());
+        assert!(world.history.iter().all(|e| e.epoch <= params.age));
+        assert!(world.history.windows(2).all(|p| p[0].epoch <= p[1].epoch));
+        assert!(world.history.iter().filter(|e| e.kind == HistoryKind::Glaciation).count() <= 1);
+        let land: Vec<(usize, usize)> = (0..world.height).flat_map(|y| (0..world.width).map(move |x| (x, y))).filter(|&(x, y)| !world.cell(x, y).terrain.is_water()).collect();
+        let rock_share = |cells: &[(usize, usize)]| {
+            let rock = cells.iter().filter(|&&(x, y)| world.cell(x, y).terrain == Terrain::Rock).count();
+            crate::cast!(rock => f32) / crate::cast!(cells.len().max(1) => f32)
+        };
+        let world_rock = rock_share(&land);
+        // Bedrock an event bared is rock on the finished map.
+        let grid = flow::Grid { w: params.width, h: params.height };
+        let relief = relief::build(&mut Rng::new(seed), grid, &params);
+        assert_eq!(relief.history, world.history);
+        let bared = land.iter().filter(|&&(x, y)| relief.bedrock[y * grid.w + x]).count();
+        let bared_rock = land.iter().filter(|&&(x, y)| relief.bedrock[y * grid.w + x] && world.cell(x, y).terrain == Terrain::Rock).count();
+        assert!(bared_rock >= bared.min(share_of(world.cells.len(), params.rock_pct)), "seed {seed}: {bared_rock} of {bared} bedrock cells are rock");
+        for e in &world.history {
+            match e.kind {
+                HistoryKind::VolcanicDome => {
+                    let near: Vec<(usize, usize)> = land.iter().copied().filter(|&c| span(c, (e.x, e.y)) < crate::cast!(e.extent => f32)).collect();
+                    assert!(!near.is_empty() && rock_share(&near) > world_rock, "seed {seed}: dome at ({}, {}) rock {} vs {world_rock}", e.x, e.y, rock_share(&near));
+                }
+                HistoryKind::Glaciation => {
+                    assert!(e.extent > 0 && bared > 0, "seed {seed}: glaciation bared nothing");
+                }
+                HistoryKind::FaultScarp => {
+                    // The thrown side still stands above the other, for a
+                    // scarp the later epochs have not had long to wear down.
+                    let theta = f32::from(e.angle_deg).to_radians();
+                    let (dx, dy) = (theta.cos(), theta.sin());
+                    let (cx, cy) = (crate::cast!(e.x => f32), crate::cast!(e.y => f32) * 2.0);
+                    let across = |c: &(usize, usize)| {
+                        let (rx, ry) = (crate::cast!(c.0 => f32) - cx, crate::cast!(c.1 => f32) * 2.0 - cy);
+                        ((rx * dx + ry * dy).abs() < crate::cast!(e.extent => f32)).then(|| -rx * dy + ry * dx)
+                    };
+                    let mean_height = |side: std::ops::Range<f32>| {
+                        let v: Vec<f32> = land.iter().filter_map(|&c| across(&c).filter(|a| side.contains(a)).map(|_| world.cell(c.0, c.1).elevation)).collect();
+                        v.iter().sum::<f32>() / crate::cast!(v.len().max(1) => f32)
+                    };
+                    let step = mean_height(2.0..6.0) - mean_height(-6.0..-2.0);
+                    if e.epoch * 2 >= params.age {
+                        assert!(step > 0.02, "seed {seed}: scarp at ({}, {}) in epoch {} steps {step}", e.x, e.y, e.epoch);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn share_of(total: usize, pct: u8) -> usize {
+    (crate::cast!(pct => usize) * total).div_euclid(100)
+}
+
+#[test]
+#[ignore = "diagnostic: prints the age regime, the events and the generation time per age"]
+fn print_history() {
+    for seed in 1..=10u64 {
+        let params = WorldParams::default();
+        let world = World::generate(seed, &params);
+        println!("seed {seed} ({}):", AgeRegime::for_age(params.age).name);
+        for e in &world.history {
+            println!("  {}", e.describe(params.age));
+        }
+    }
+    for age in [2u8, 8, 20] {
+        let big = WorldParams { width: 200, height: 60, age, ..WorldParams::default() };
+        let started = std::time::Instant::now();
+        let world = World::generate(3, &big);
+        println!("200x60 age {age} ({}): {:?}, {} events", AgeRegime::for_age(age).name, started.elapsed(), world.history.len());
+    }
 }
 
 #[test]
