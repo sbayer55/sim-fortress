@@ -6,12 +6,15 @@ component, all in the format of [_template.md](_template.md). The
 sheets say *how* the shared pieces look and behave, so a screen file can say
 "a Labeled Bar" and stop there.
 
-**Status: implementing.** The trait, the stacks, Text, Panel and Divider have
-shipped in `src/widgets`; `tests/components.rs` pins their examples and lists
-the sheets still pending. Each sheet records the helper that draws the thing
-*today* (`src/widgets/*.rs`, or an ad-hoc loop inside a screen) and the
-*planned* first-class API. Where today's behaviour differs from the spec, the
-sheet says so under **Gaps today**. The spec wins; the code moves toward it.
+**Status: shipped, screens moving.** Every sheet's component lives in
+`src/widgets` and `tests/components.rs` pins every example. The S01 status
+sidebar, S03, S04's table, S06's regions, S07, S09, S10, S11, S12, the confirm
+dialog, the title menu and Load World draw through the components; the S01
+overlay sidebars, S08, S13, S04b, the S04 summary and S05's stacked, phase and
+group charts still call the thin free-function wrappers and move next. Each
+sheet's *Today* section names the helper that wrapped the component; where
+live behaviour still differs from the sheet, **Gaps today** says so. The spec
+wins; the code moves toward it.
 
 ## Index
 

@@ -195,7 +195,7 @@ Do not weaken these to make a change pass. Fix the change.
   implement `Screen` (`opaque`, `handle_key`, `render`). The **top screen sees every
   key first** and returns `Action::Unhandled` for keys it does not consume; only then
   does the global table in `src/ui/screens/mod.rs` apply. Register the module there,
-  keep the status bar (`widgets::status`) and `?` help honest, and refresh the affected
+  keep the status bar (`widgets::StatusBar`) and `?` help honest, and refresh the affected
   renders. Modals return `opaque() == false` so the stack dims what is beneath them.
 - **Tests.** Acceptance criteria live in `tests/` (one file per chunk); unit tests live
   in `src/**/tests.rs`. Prefer extending the existing acceptance test over inventing a
