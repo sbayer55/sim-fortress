@@ -4,15 +4,16 @@
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
 use crate::sim::params::DayNightTint;
 use crate::ui::app::AppState;
 use crate::ui::config;
+use crate::ui::screens::common::sp;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{clock_status, SeasonStyle};
-use crate::widgets::{panel, status, util};
+use crate::widgets::Constraint::Fill;
+use crate::widgets::{status, Checkbox, Component, Divider, HStack, KeyHint, Modal, Rows, Spacer, Stepper, Text, VStack};
 use crate::{glyphs, theme};
 
 const SPEEDS: [u32; 5] = [1, 2, 5, 10, 25];
@@ -121,9 +122,8 @@ impl Screen for Controls {
     }
 
     fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
-        let modal = util::centered(area, 60.min(area.width.saturating_sub(2)), 21.min(area.height.saturating_sub(2)));
-        let inner = panel::draw_with_hint(f, modal, "Simulation Controls", "Esc closes", panel::Kind::Focus);
-        let mut row = 0u16;
+        let hint = KeyHint::row(&[("Space", "pause"), ("+/-", "speed"), (".", "step"), ("Esc", "close")]).label_style(theme::dim_text()).center();
+        let modal = Modal::new(60.min(area.width.saturating_sub(2)), 21.min(area.height.saturating_sub(2))).title("Simulation Controls").info("Esc closes").hint_with(hint);
 
         let running = !app.paused;
         let (state_glyph, state_txt, state_color) = if running {
@@ -131,61 +131,45 @@ impl Screen for Controls {
         } else {
             (glyphs::PAUSE_STR.to_string(), "PAUSED", theme::WARN)
         };
-        util::line(f, inner, row, Line::from(vec![
-            Span::styled(" state   ", theme::label()),
-            Span::styled(format!("{state_glyph} {state_txt}"), Style::default().fg(state_color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
-            Span::styled(format!("      {} x{}  ", glyphs::FAST_STR, app.speed()), theme::text()),
-            Span::styled(format!("{} {}", glyphs::PAUSE_STR, "Space toggles"), theme::dim_text()),
-        ]));
-        row += 2;
-
-        let mut spans = vec![Span::styled(" speed   ", theme::label())];
+        let state = Text::spans(vec![
+            sp(" state   ", theme::label()),
+            sp(format!("{state_glyph} {state_txt}"), Style::default().fg(state_color).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(format!("      {} x{}  ", glyphs::FAST_STR, app.speed()), theme::text()),
+            sp(format!("{} {}", glyphs::PAUSE_STR, "Space toggles"), theme::dim_text()),
+        ]);
+        let mut spans = vec![sp(" speed   ", theme::label())];
         for s in SPEEDS {
-            let label = format!(" x{s} ");
-            if s == app.speed() {
-                spans.push(Span::styled(label, theme::selected()));
-            } else {
-                spans.push(Span::styled(label, theme::text()));
-            }
-            spans.push(Span::styled(" ", theme::text()));
+            spans.push(sp(format!(" x{s} "), if s == app.speed() { theme::selected() } else { theme::text() }));
+            spans.push(sp(" ", theme::text()));
         }
-        spans.push(Span::styled("   +/- or 1-5", theme::dim_text()));
-        util::line(f, inner, row, Line::from(spans));
-        row += 1;
-
-        let mut spans = vec![Span::styled(" step    ", theme::label())];
+        spans.push(sp("   +/- or 1-5", theme::dim_text()));
+        let speed = Text::spans(spans);
+        let mut spans = vec![sp(" step    ", theme::label())];
         for (i, (s, _)) in STEPS.iter().enumerate() {
-            let label = format!(" {s} ");
-            if i == self.step_idx {
-                spans.push(Span::styled(label, Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG).add_modifier(Modifier::UNDERLINED)));
-            } else {
-                spans.push(Span::styled(label, theme::text()));
-            }
-            spans.push(Span::styled(" ", theme::text()));
+            let st = if i == self.step_idx { Style::default().fg(theme::TEXT_BRIGHT).bg(theme::PANEL_BG).add_modifier(Modifier::UNDERLINED) } else { theme::text() };
+            spans.push(sp(format!(" {s} "), st));
+            spans.push(sp(" ", theme::text()));
         }
-        spans.push(Span::styled(format!("   {} . steps once", glyphs::STEP_STR), theme::dim_text()));
-        util::line(f, inner, row, Line::from(spans));
-        row += 2;
+        spans.push(sp(format!("   {} . steps once", glyphs::STEP_STR), theme::dim_text()));
+        let step = Text::spans(spans);
 
-        row = clock_panel(f, inner, row, app);
-        options_panel(f, inner, row, app);
+        // Autosave row: `◄ N ►` days.
+        let n = app.params.ui.autosave_days;
+        let n_label = if n == 0 { "off".to_string() } else { format!("{n} days") };
+        let (gap, autosave) = (Spacer::cols(2), Stepper::inline(format!("autosave every {n_label}")).key("[←→]"));
+        let autosave_row = HStack::new().child(&gap).child_with(Fill(1), &autosave);
 
-        let hint_row = inner.height - 1;
-        util::line(f, inner, hint_row, Line::from(vec![
-            Span::styled(" ", theme::text()),
-            Span::styled("[Space]", theme::key()),
-            Span::styled(" pause  ", theme::dim_text()),
-            Span::styled("[+/-]", theme::key()),
-            Span::styled(" speed  ", theme::dim_text()),
-            Span::styled("[.]", theme::key()),
-            Span::styled(" step  ", theme::dim_text()),
-            Span::styled("[Esc]", theme::key()),
-            Span::styled(" close", theme::dim_text()),
-        ]));
+        let mut rows: Rows<'_> = vec![Box::new(state), Box::new(Spacer::rows(1)), Box::new(speed), Box::new(step), Box::new(Spacer::rows(1))];
+        rows.extend(clock_rows(app));
+        rows.extend(options_rows(app));
+        rows.push(Box::new(autosave_row));
+
+        let buf = f.buffer_mut();
+        let body = modal.render(buf, area);
+        VStack::from_boxes(&rows).render(buf, body);
 
         // Repaint the status bar undimmed.
         let status_row = area.y + area.height - 1;
-        util::fill(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1), Style::default().bg(theme::STATUS_BG));
         let keys: &[(&str, &str)] = &[("Space", "pause"), ("+/-", "speed"), ("1-5", "set speed"), (".", "step"), ("a/b/c/t/d", "toggle"), ("Esc", "close")];
         let (right, right_fg) = match &app.sim {
             Some(sim) => clock_status(&sim.time, app.params.ui.day_night_tint),
@@ -195,76 +179,50 @@ impl Screen for Controls {
     }
 }
 
-/// Clock + tick-rate rows; returns the row after the section.
-fn clock_panel(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState) -> u16 {
-    panel::section(f, inner, row, "Clock");
-    row += 1;
-        if let Some(sim) = &app.sim {
-            let time = &sim.time;
-            let season = time.season();
-            util::line(f, inner, row, Line::from(vec![
-                Span::styled(" tick ", theme::dim_text()),
-                Span::styled(crate::ui::screens::s01_map::group(time.tick), theme::text()),
-                Span::styled("    day ", theme::dim_text()),
-                Span::styled(format!("{}", time.day_of_season()), theme::text()),
-                Span::styled(format!(" of {} ", season.name()), theme::dim_text()),
-                Span::styled(season.glyph().to_string(), Style::default().fg(season.color()).bg(theme::PANEL_BG)),
-                Span::styled("    year ", theme::dim_text()),
-                Span::styled(format!("{}", time.year()), theme::text()),
-                Span::styled(format!("    {} {}", time.hour_label(), glyphs::SUN), theme::text()),
-            ]));
-            row += 1;
-            util::line(f, inner, row, Line::from(Span::styled(
-                format!(" 1 tick = 1 hour   1 day = {} ticks   x{} = {} ticks/s", app.params.time.ticks_per_day, app.speed(), 2 * app.speed()),
-                theme::dim_text(),
-            )));
-        } else {
-            util::line(f, inner, row, Line::from(Span::styled(" no world loaded", theme::dim_text())));
-            row += 1;
-        }
-        row += 2;
-    row
+/// The Clock section: tick, day, year and the tick-rate line.
+fn clock_rows(app: &AppState) -> Rows<'static> {
+    let mut rows: Rows<'static> = vec![Box::new(Divider::new("Clock"))];
+    if let Some(sim) = &app.sim {
+        let time = &sim.time;
+        let season = time.season();
+        rows.push(Box::new(Text::spans(vec![
+            sp(" tick ", theme::dim_text()),
+            sp(crate::ui::screens::s01_map::group(time.tick), theme::text()),
+            sp("    day ", theme::dim_text()),
+            sp(format!("{}", time.day_of_season()), theme::text()),
+            sp(format!(" of {} ", season.name()), theme::dim_text()),
+            sp(season.glyph().to_string(), Style::default().fg(season.color()).bg(theme::PANEL_BG)),
+            sp("    year ", theme::dim_text()),
+            sp(format!("{}", time.year()), theme::text()),
+            sp(format!("    {} {}", time.hour_label(), glyphs::SUN), theme::text()),
+        ])));
+        rows.push(Box::new(
+            Text::new(format!(" 1 tick = 1 hour   1 day = {} ticks   x{} = {} ticks/s", app.params.time.ticks_per_day, app.speed(), 2 * app.speed())).style(theme::dim_text()),
+        ));
+        rows.push(Box::new(Spacer::rows(1)));
+    } else {
+        rows.push(Box::new(Text::new(" no world loaded").style(theme::dim_text())));
+        rows.push(Box::new(Spacer::rows(2)));
+    }
+    rows
 }
 
-/// The options toggles and the autosave row.
-fn options_panel(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState) {
-    panel::section(f, inner, row, "Options");
-    row += 1;
-        // `[t]` cycles three states; the mark is on for anything but `off`.
-        let tint = app.params.ui.day_night_tint;
-        let tint_label = format!("day/night tint: {}", tint.label());
-        let toggles: [(&str, bool, &str); 5] = [
-            ("a", app.params.ui.auto_pause_on_extinction, "auto-pause on extinction"),
-            ("b", app.params.ui.log_births, "log births to the event log"),
-            ("c", app.params.ui.pause_on_follow_death, "pause when a followed creature dies"),
-            ("t", tint != DayNightTint::Off, &tint_label),
-            ("d", app.params.ui.auto_pause_on_epidemic, "auto-pause on epidemic"),
-        ];
-        for (key, on, label) in toggles {
-            let mark = if on { "[x]" } else { "[ ]" };
-            let mark_style = if on {
-                Style::default().fg(theme::GOOD).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)
-            } else {
-                theme::dim_text()
-            };
-            util::line(f, inner, row, Line::from(vec![
-                Span::styled(" ", theme::text()),
-                Span::styled(mark, mark_style),
-                Span::styled(format!(" {label:<36}"), theme::text()),
-                Span::styled(format!("[{key}]"), theme::key()),
-            ]));
-            row += 1;
-        }
-        // Autosave row: `◄ N ►` days.
-        let n = app.params.ui.autosave_days;
-        let n_label = if n == 0 { "off".to_string() } else { format!("{n} days") };
-        util::line(f, inner, row, Line::from(vec![
-            Span::styled(" ", theme::text()),
-            Span::styled(format!(" {} ", glyphs::REWIND), theme::key()),
-            Span::styled(format!("autosave every {n_label:<8}"), theme::text()),
-            Span::styled(format!(" {} ", glyphs::PLAY), theme::key()),
-            Span::styled("[←→]", theme::key()),
-        ]));
+/// The Options section: five Checkbox rows driven by their letters.
+fn options_rows(app: &AppState) -> Rows<'static> {
+    // `[t]` cycles three states; the mark is on for anything but `off`.
+    let tint = app.params.ui.day_night_tint;
+    let toggles: [(&str, bool, String); 5] = [
+        ("a", app.params.ui.auto_pause_on_extinction, "auto-pause on extinction".into()),
+        ("b", app.params.ui.log_births, "log births to the event log".into()),
+        ("c", app.params.ui.pause_on_follow_death, "pause when a followed creature dies".into()),
+        ("t", tint != DayNightTint::Off, format!("day/night tint: {}", tint.label())),
+        ("d", app.params.ui.auto_pause_on_epidemic, "auto-pause on epidemic".into()),
+    ];
+    let mut rows: Rows<'static> = vec![Box::new(Divider::new("Options"))];
+    for (key, on, label) in toggles {
+        rows.push(Box::new(Checkbox::new(label, on).key(key)));
+    }
+    rows
 }
 
 #[cfg(test)]
