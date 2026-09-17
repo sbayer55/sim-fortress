@@ -69,7 +69,7 @@ pub(super) fn region_legend(sim: &Sim) -> Rows<'static> {
             let n = sim.creatures.living().filter(|c| world.region_index(c.x, c.y) == i).count();
             let row: Box<dyn Component> = Box::new(Text::spans(vec![
                 sp(format!(" {} ", glyphs::SQUARE), Style::default().fg(theme::region(i)).bg(theme::PANEL_BG)),
-                sp(format!("{:<16}", r.0), theme::text()),
+                sp(format!("{:<16} ", r.0), theme::text()),
                 sp(format!("{n} creatures"), theme::dim_text()),
             ]));
             row
