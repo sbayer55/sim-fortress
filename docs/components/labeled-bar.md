@@ -82,7 +82,7 @@ LabeledBar::new("vegetation", 0.63)
 
 LabeledBar::new("carcasses", 8.0 / 60.0).value_text("8")       // Count
 LabeledBar::new("biomass", 0.57).value_text("0.57")            // Decimal
-LabeledBar::new("age", 0.99).suffix("848 / 858 days")          // Suffix
+LabeledBar::new("age", 0.99).suffix("848 / 858 days")          // Suffix; `.suffix_style(theme::dim_text())` recolours it
 LabeledBar::vital("hunger", 0.41, Inverted::Yes)               // Vital
 
 Bar::new(0.70).color(c).render(buf, cell_area)                 // Bare

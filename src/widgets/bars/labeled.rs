@@ -98,12 +98,13 @@ pub struct LabeledBar<'a> {
     /// Count / Decimal text; `None` draws the Percent form.
     value_text: Option<Cow<'a, str>>,
     suffix: Option<Cow<'a, str>>,
+    suffix_style: Style,
 }
 
 impl<'a> LabeledBar<'a> {
     /// Percent form with the S01 sidebar sizes (`label_w` 12, `bar_w` 20).
     pub fn new(label: impl Into<Cow<'a, str>>, value: f32) -> Self {
-        Self { label: label.into(), bar: Bar::new(value), label_w: 12, bar_w: 20, value_text: None, suffix: None }
+        Self { label: label.into(), bar: Bar::new(value), label_w: 12, bar_w: 20, value_text: None, suffix: None, suffix_style: theme::text() }
     }
 
     /// Fill colour from the vital rule.
@@ -148,6 +149,13 @@ impl<'a> LabeledBar<'a> {
         self
     }
 
+    /// The Suffix style; `theme::text()` by default.
+    #[must_use]
+    pub const fn suffix_style(mut self, style: Style) -> Self {
+        self.suffix_style = style;
+        self
+    }
+
     fn value(&self) -> String {
         self.value_text.as_deref().map_or_else(
             || format!("{:>3}%", crate::cast!((self.bar.value.clamp(0.0, 1.0) * 100.0).round() => u32)),
@@ -184,7 +192,7 @@ impl Component for LabeledBar<'_> {
         if let Some(s) = self.suffix.as_deref() {
             let sx = vx + 5;
             if sx < right {
-                buf.set_stringn(sx, y, s, crate::cast!(right - sx => usize), theme::text());
+                buf.set_stringn(sx, y, s, crate::cast!(right - sx => usize), self.suffix_style);
             }
         }
     }

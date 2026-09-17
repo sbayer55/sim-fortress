@@ -11,7 +11,6 @@ use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
-use ratatui::text::Line;
 use ratatui::Frame;
 use crate::sim::creatures::{Cause, Creature, CreatureId, Goal};
 use crate::sim::Kind;
@@ -19,14 +18,13 @@ use crate::ui::app::AppState;
 use crate::ui::screens::s08_lineage::LineageScreen;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::SpeciesStyle;
-use crate::widgets::scroll::{self, Overflow};
-use crate::widgets::{panel, status, util};
+use crate::widgets::scroll::Overflow;
+use crate::widgets::Constraint::{Fill, Fixed};
+use crate::widgets::{panel, status, Component, HStack, Panel, Rows, ScrollRegion, Spacer, VStack};
 use crate::{glyphs, theme};
 
-use identity::{identity, identity_title};
-use genome::genome;
-use life::life;
-use style::sp;
+use identity::identity_title;
+use style::{blank, line, one, section, sp};
 
 const LEFT_W: u16 = 52;
 
@@ -165,31 +163,34 @@ impl Screen for Inspector {
         let Some(sim) = &app.sim else { return };
         let Some(c) = sim.creatures.get(self.id) else { return };
         let status_row = area.y + area.height - 1;
-        let body_h = area.height - 1;
-
-        let left = Rect::new(area.x, area.y, LEFT_W, body_h);
-        let mid = Rect::new(area.x + LEFT_W, area.y, MID_W, body_h);
-        let right = Rect::new(area.x + LEFT_W + MID_W, area.y, area.width - LEFT_W - MID_W, body_h);
+        let body = Rect::new(area.x, area.y, area.width, area.height - 1);
+        let (l, m, r) = (Spacer::rows(0), Spacer::rows(0), Spacer::rows(0));
+        let rects = HStack::new().child_with(Fixed(LEFT_W), &l).child_with(Fixed(MID_W), &m).child_with(Fill(1), &r).areas(body);
+        let genome_info = format!("vs {} mean", sim.roster().plural(c.species));
 
         let mut content = [0u16; 3];
         let mut visible = 0u16;
-        for pane in Pane::ALL {
+        for (pane, rect) in Pane::ALL.into_iter().zip(rects) {
             let i = pane.index();
-            let (rect, inner) = match pane {
-                Pane::Identity => (left, panel::draw(f, left, identity_title(c), self.panel_kind(pane))),
-                Pane::Genome => {
-                    let hint = format!("vs {} mean", sim.roster().plural(c.species));
-                    (mid, panel::draw_with_hint(f, mid, "Genome", &hint, self.panel_kind(pane)))
-                }
-                Pane::Life => (right, panel::draw(f, right, "Life", self.panel_kind(pane))),
+            let inner = Panel::inner(rect);
+            let rows = match pane {
+                Pane::Identity => identity::rows(sim, c),
+                Pane::Genome => genome::rows(sim, c),
+                Pane::Life => life::rows(sim, c, self.id, inner.width),
             };
-            let ov = scroll::draw(f, rect, inner, self.offset[i], |buf, canvas| match pane {
-                Pane::Identity => identity(buf, canvas, sim, c),
-                Pane::Genome => genome(buf, canvas, sim, c),
-                Pane::Life => life(buf, canvas, sim, c, self.id),
-            });
+            let stack = VStack::from_boxes(&rows);
+            let region = ScrollRegion::new(&stack).offset(self.offset[i]);
+            let ov = region.overflow(inner);
+            let (title, info) = match pane {
+                Pane::Identity => (identity_title(c), ""),
+                Pane::Genome => ("Genome", genome_info.as_str()),
+                Pane::Life => ("Life", ""),
+            };
+            let buf = f.buffer_mut();
+            Panel::new(title).info(info).kind(self.panel_kind(pane)).foot(ov.foot().unwrap_or_default()).render(buf, rect);
+            region.render(buf, inner);
             content[i] = ov.content;
-            visible = inner.height;
+            visible = ov.visible;
         }
         self.measured.set((content, visible));
 
@@ -203,10 +204,21 @@ impl Screen for Inspector {
     }
 }
 
-/// `Name tag` for a relative, from the store or the lineage.
-/// S03c (Identity & Death panel): the killer from
-/// `death.killer` and the two nearest living predators with the Scavenge goal.
-pub(crate) fn killer_and_scavengers(buf: &mut Buffer, inner: Rect, mut row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
+/// S03c (Identity & Death panel): the killer from `death.killer` and the two
+/// nearest living predators with the Scavenge goal, drawn at `row` of `inner`.
+/// Returns the next free row. Wrapper over [`killer_and_scavengers_rows`] for
+/// the S01 follow sidebar.
+pub(crate) fn killer_and_scavengers(buf: &mut Buffer, inner: Rect, row: u16, sim: &crate::sim::Sim, c: &Creature) -> u16 {
+    let rows = killer_and_scavengers_rows(sim, c);
+    let stack = VStack::from_boxes(&rows);
+    let area = Rect::new(inner.x, inner.y.saturating_add(row), inner.width, inner.height.saturating_sub(row));
+    stack.render(buf, area);
+    row + stack.height(inner.width)
+}
+
+/// The Outbreak or Killer section and the Scavengers nearby section.
+pub(crate) fn killer_and_scavengers_rows(sim: &crate::sim::Sim, c: &Creature) -> Rows<'static> {
+    let mut rows = Rows::new();
     // C7 (S03c): a disease death names its outbreak instead of a killer.
     let outbreak_index = if c.death.is_some_and(|d| d.cause == Cause::Disease) {
         sim.lineage.get(c.id).and_then(|n| n.outbreak).or_else(|| c.infection.map(|i| i.outbreak))
@@ -214,20 +226,16 @@ pub(crate) fn killer_and_scavengers(buf: &mut Buffer, inner: Rect, mut row: u16,
         None
     };
     if let Some(o) = outbreak_index.and_then(|i| sim.disease.outbreak(i)) {
-        panel::section_in(buf, inner, row, "Outbreak");
-        row += 1;
         let year = o.started_day.div_euclid((4 * sim.time.season_days).max(1)) + 1;
         let region = sim.world.regions.get(crate::cast!(o.origin_region => usize)).map_or("?", |r| r.0.as_str());
-        util::line_in(buf, inner, row, Line::from(vec![
+        rows.push(section("Outbreak"));
+        rows.push(line(vec![
             sp(format!(" {} ", glyphs::DISEASE), Style::default().fg(theme::SICK).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
             sp(format!("{} outbreak of Year {}, began {}", sim.disease.name(o.pathogen), year, region), theme::text()),
         ]));
-        row += 1;
-        util::line_in(buf, inner, row, Line::from(sp(format!("   {} others died in it", o.deaths.saturating_sub(1)), theme::dim_text())));
-        row += 2;
+        rows.push(one(format!("   {} others died in it", o.deaths.saturating_sub(1)), theme::dim_text()));
+        rows.push(blank(1));
     } else if let Some(killer_id) = c.death.and_then(|d| d.killer) {
-        panel::section_in(buf, inner, row, "Killer");
-        row += 1;
         let kname = sim
             .creatures
             .get(killer_id)
@@ -238,15 +246,15 @@ pub(crate) fn killer_and_scavengers(buf: &mut Buffer, inner: Rect, mut row: u16,
         let kcolor = sim.creatures.get(killer_id).map_or(theme::DIM, |k| sim.roster().color(k.species));
         let kills = sim.creatures.get(killer_id).map_or(0, |k| k.kills);
         let chase = c.death.map_or(0, |d| d.chase_ticks);
-        util::line_in(buf, inner, row, Line::from(vec![
+        rows.push(section("Killer"));
+        rows.push(line(vec![
             sp(format!(" {kglyph} "), Style::default().fg(kcolor).bg(theme::PANEL_BG)),
             sp(kname, theme::title()),
             sp(format!("  {kills} kills  chase {chase} ticks"), theme::text()),
         ]));
-        row += 2;
+        rows.push(blank(1));
     }
-    panel::section_in(buf, inner, row, "Scavengers nearby");
-    row += 1;
+    rows.push(section("Scavengers nearby"));
     let mut scav: Vec<(f32, &Creature)> = sim
         .creatures
         .living()
@@ -255,17 +263,15 @@ pub(crate) fn killer_and_scavengers(buf: &mut Buffer, inner: Rect, mut row: u16,
         .collect();
     scav.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal).then(a.1.id.cmp(&b.1.id)));
     if scav.is_empty() {
-        util::line_in(buf, inner, row, Line::from(sp(" none", theme::dim_text())));
-        row += 1;
+        rows.push(one(" none", theme::dim_text()));
     }
     for (d, o) in scav.iter().take(2) {
-        util::line_in(buf, inner, row, Line::from(vec![
+        rows.push(line(vec![
             sp(format!(" {} ", sim.roster().adult_glyph(o.species)), Style::default().fg(sim.roster().color(o.species)).bg(theme::PANEL_BG)),
             sp(format!("{:<9}{:<7} {:>3.0} cells {}  {}", o.name_str(sim.roster()), o.tag(sim.roster()), d, compass(c.x, c.y, o.x, o.y), o.goal.plain()), theme::text()),
         ]));
-        row += 1;
     }
-    row
+    rows
 }
 
 pub(crate) fn kin_name(sim: &crate::sim::Sim, id: CreatureId) -> String {
