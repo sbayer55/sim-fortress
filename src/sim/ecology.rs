@@ -547,6 +547,7 @@ mod tests {
             wind: crate::sim::world::Wind::Westerly,
             water_cells_at_generation: 1,
             shore: vec![],
+            falls: vec![],
         };
         let mean = region_land_veg_mean(&world, 0);
         assert!((mean - 0.2).abs() < 1e-6, "land veg mean {mean} should exclude the water cell");

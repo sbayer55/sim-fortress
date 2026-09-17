@@ -14,6 +14,8 @@ pub const FOREST: char = '♠';
 pub const ROCK: char = '▲';
 /// Marsh: reed beds on standing water (CP437 0xF0).
 pub const MARSH: char = '≡';
+/// Waterfall: white water over rock (the same CP437 0xF0, on deep blue).
+pub const FALLS: char = '≡';
 pub const HILL: char = '^';
 pub const SNOW: char = '*';
 
@@ -124,7 +126,7 @@ mod tests {
 
     const ALL: &[char] = &[
         DEEP_WATER, SHALLOW_WATER, SAND, DIRT, GRASS_SPARSE, GRASS, GRASS_DENSE, FOREST, ROCK, MARSH,
-        HILL, SNOW, SHADE_1, SHADE_2, SHADE_3, SHADE_4, HALF_UPPER, HALF_LOWER, FULL_BLOCK,
+        FALLS, HILL, SNOW, SHADE_1, SHADE_2, SHADE_3, SHADE_4, HALF_UPPER, HALF_LOWER, FULL_BLOCK,
         SQUARE, CARCASS, DEN, SEED, CURSOR, CORNER, TRAIL,
         RING, DOT, BULLET, BAR_L, BAR_R, BAR_FILL, BAR_EMPTY, H_LINE, V_LINE, CROSS, SPRING,
         SUMMER, AUTUMN, WINTER, SUN, MOON, BIRTH, DEATH, MUTATION, MIGRATION, EXTINCTION,
