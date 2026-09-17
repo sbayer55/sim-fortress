@@ -218,6 +218,86 @@ fn regenerate_screen_renders() {
     }
 }
 
+/// The map with the S14 stack: S01a (plain), S02a–i (one layer each) and
+/// S14a–c (the switcher over the S02c state). Same frame convention as
+/// `regenerate_screen_renders`.
+///
+/// `cargo test --lib -- --ignored regenerate_screen_renders`
+#[test]
+#[ignore = "writes docs/screens/renders/S01a, S02*, S14*.txt; run explicitly to refresh the snapshots"]
+fn regenerate_screen_renders_overlays() {
+    use crate::ui::screens::s01_map::WorldMap;
+    use crate::ui::screens::s14_switcher::OverlaySwitcher;
+    use crate::ui::screens::{render_stack, Screen, Stack};
+    use crate::sim::SpeciesId;
+    use crate::widgets::map::{Base, OverlayStack};
+    use ratatui::backend::TestBackend;
+    use ratatui::layout::Rect;
+    use ratatui::Terminal;
+
+    let mut sim = Sim::new(7, Params::default());
+    for _ in 0..8640 {
+        sim.step();
+    }
+    let mut app = AppState::new(Params::default());
+    app.sim = Some(sim);
+    app.viewport_origin = (20, 0);
+    let world = "The Valley of Sunfall";
+
+    let snap = |app: &AppState, screens: Vec<Box<dyn Screen>>, title: &str| -> String {
+        let stack = Stack { screens };
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| {
+                f.buffer_mut().set_stringn(0, 0, format!(" {title:<154}"), 155, ratatui::style::Style::default());
+                render_stack(&stack, app, f, Rect::new(0, 1, 155, 44));
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        (0..45).map(|y| (0..155).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect()
+    };
+    let map = || -> Box<dyn Screen> { Box::new(WorldMap::new(world.to_string())) };
+    let mut files: Vec<(&str, String)> = Vec::new();
+    let single: [(&str, &str, OverlayStack); 9] = [
+        ("S01a", "World Map - default", OverlayStack::PLAIN),
+        ("S02a", "Map Overlay - vegetation density", OverlayStack { base: Base::Vegetation, ..OverlayStack::PLAIN }),
+        ("S02b", "Map Overlay - population pressure", OverlayStack { base: Base::Pressure, ..OverlayStack::PLAIN }),
+        ("S02c", "Map Overlay - water & moisture", OverlayStack { base: Base::Moisture, ..OverlayStack::PLAIN }),
+        ("S02e", "Map Overlay - regions", OverlayStack { regions: true, ..OverlayStack::PLAIN }),
+        ("S02f", "Map Overlay - species density", OverlayStack { base: Base::Species, species: SpeciesId(1), ..OverlayStack::PLAIN }),
+        ("S02g", "Map Overlay - health", OverlayStack { health: true, ..OverlayStack::PLAIN }),
+        ("S02h", "Map Overlay - disease", OverlayStack { disease: crate::widgets::map::Disease::On(None), ..OverlayStack::PLAIN }),
+        ("S02i", "Map Overlay - parasites", OverlayStack { base: Base::Parasites, ..OverlayStack::PLAIN }),
+    ];
+    for (id, title, stack) in single {
+        app.overlay = stack;
+        files.push((id, snap(&app, vec![map()], &format!("{id}  {title}"))));
+    }
+    app.overlay = OverlayStack::PLAIN;
+    if WorldMap::turn_sense_on(&mut app) {
+        files.push(("S02d", snap(&app, vec![map()], "S02d  Map Overlay - sense range of selected predator")));
+    }
+    // S14 over the S02c state: the Base tab, the Marks tab, the species list.
+    app.overlay = OverlayStack { base: Base::Moisture, ..OverlayStack::PLAIN };
+    let k = |c| KeyEvent::new(c, KeyModifiers::NONE);
+    let s14a = OverlaySwitcher::open(&mut app);
+    files.push(("S14a", snap(&app, vec![map(), Box::new(s14a)], "S14a  Overlay Switcher - base heatmap tab")));
+    let mut s14b = OverlaySwitcher::open(&mut app);
+    s14b.handle_key(k(KeyCode::Tab), &mut app);
+    files.push(("S14b", snap(&app, vec![map(), Box::new(s14b)], "S14b  Overlay Switcher - marks tab")));
+    let mut s14c = OverlaySwitcher::open(&mut app);
+    for _ in 0..4 {
+        s14c.handle_key(k(KeyCode::Down), &mut app);
+    }
+    s14c.handle_key(k(KeyCode::Right), &mut app);
+    files.push(("S14c", snap(&app, vec![map(), Box::new(s14c)], "S14c  Overlay Switcher - sub-pick list focused")));
+    for (id, text) in files {
+        let path = format!("docs/screens/renders/{id}.txt");
+        std::fs::write(&path, text).unwrap_or_else(|e| panic!("write {path}: {e}"));
+    }
+}
+
 /// C9 renders, AI off: S07c with a year of tally entries and S10a with the AI
 /// section. Same frame convention as `regenerate_screen_renders`.
 ///

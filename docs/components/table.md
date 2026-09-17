@@ -7,8 +7,9 @@ takes `theme::selected()` and a `►` in column 0. An optional totals row closes
 the table, and the sort state is shown in the enclosing Panel's Info slot. The
 species table in [S04](../screens/s04-species-browser.md), the regions table in
 [S06](../screens/s06-ecology.md), the event list in
-[S07](../screens/s07-event-log.md) and the save list in the Load World modal of
-[S00](../screens/s00-title.md) are Tables.
+[S07](../screens/s07-event-log.md), the save list in the Load World modal of
+[S00](../screens/s00-title.md) and the sub-pick list of
+[S14](../screens/s14-overlay-switcher.md) are Tables.
 
 ## Anatomy
 A Table is inherently wide. The anatomy is shown at 60 columns inside the
@@ -57,9 +58,9 @@ component never writes outside its area.
 | Plain          | Header row, then rows                                                               | S06 regions, S07 log, Load World |
 | Spaced         | one blank row after the Header and one before Totals                                | S04 species                      |
 | With totals    | Totals row, label in `theme::label()`                                               | S04 species                      |
-| Selectable     | Marker column and `theme::selected()` on one row                                    | S04, S06, S07, Load World        |
+| Selectable     | Marker column and `theme::selected()` on one row                                    | S04, S06, S07, Load World, S14   |
 | Sorted         | Sort text in the Panel Info slot                                                    | S04, S06                         |
-| Absent row     | a row whose subject is gone (count 0) drawn in `theme::dim_text()`                  | S04 extinct species              |
+| Absent row     | a row whose subject is gone (count 0) drawn in `theme::dim_text()`                  | S04 and S14 extinct species      |
 | Coloured cells | a cell with its own foreground: births `theme::GOOD`, deaths `theme::BAD`, sick `theme::SICK`, prey `theme::PREY`, predators `theme::PRED`, water `theme::SHALLOW_FG`, traits via `common::trait_color` | S04, S06 |
 | Embedded cells | Bare Bar, Sparkline, Trend Arrow or species glyph inside a cell                     | S04 trend, S06 vegetation and moisture, S04b habitat |
 

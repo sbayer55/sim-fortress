@@ -106,16 +106,16 @@ and the host species statistics (mean genome, count).
 | `Enter`  | activate the focused button                           | see buttons |
 | `←` `→`  | move focus between buttons                            | stays here |
 | `l`      | shortcut for View lineage (S12a only)                 | [S08 Lineage](s08-lineage.md) |
-| `o`      | shortcut for Show outbreak (S12b only; `l` is unbound) | [S02h Disease overlay](s02-map-overlay.md), paused |
+| `o`      | shortcut for Show outbreak (S12b only; `l` is unbound) | [S02h Disease mark](s02-map-overlay.md) on in the S14 stack, paused |
 | `Space`  | shortcut for Pause (keep the modal closed but paused) | [S01 World Map](s01-world-map.md), paused |
 | `Esc`    | Continue                                              | [S01 World Map](s01-world-map.md), resumed |
 
 Buttons: **Continue** closes the modal and resumes the simulation at its previous speed.
 **View lineage** closes the modal and opens the lineage screen focused on the last
 individual, leaving the simulation paused. **Pause** closes the modal and leaves the
-simulation paused on the map. **Show outbreak** (S12b) closes the modal, opens the disease
-overlay on the alert's pathogen and centres the map on the outbreak's origin region, leaving
-the simulation paused.
+simulation paused on the map. **Show outbreak** (S12b) closes the modal, turns the Disease
+mark on for the alert's pathogen (the base and other marks stay as they are, S14 item 22)
+and centres the map on the outbreak's origin region, leaving the simulation paused.
 
 All other global keys are swallowed while the modal is open.
 

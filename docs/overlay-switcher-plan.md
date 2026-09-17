@@ -4,6 +4,14 @@
 2026-09-16. Everything below reflects that tree; the paragraph "What the component
 system changed" lists the deltas from the first draft.*
 
+*Implemented 2026-09-16 (branch `claude/overlay-switcher-plan-f05483`). Deviations from
+the text below: steps 3 and 4 landed as one commit; the Disease slot is a `Disease` enum
+rather than `Option<Option<PathogenId>>` (clippy `option_option`); `Esc` and `Backspace`
+call `OverlayStack::clear`, which keeps the sub-picks as the S14 State section requires;
+the cut mark is `·` and the row cue `»`, since CP437 has neither `…` nor `›`; the S02
+renders were never test-generated, so `regenerate_screen_renders_overlays` now writes
+S01a, S02a–i and S14a–c.*
+
 **Goal.** Build [S14 Overlay Switcher](screens/s14-overlay-switcher.md): a modal over
 the map that composes one base heatmap with any number of marks, picks the species,
 pathogen or predator inside the dialog, previews live on the map beneath, and retires

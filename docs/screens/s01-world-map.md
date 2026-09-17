@@ -112,7 +112,7 @@ flowchart TB
 | `i` (S01e) | inspect the followed creature | [S03](s03-creature-inspector.md) |
 | `c` (S01e) | centre the viewport on the followed creature | — |
 | `Tab` (S01e) | follow the next notable creature | — |
-| `o`, `1`–`7` | open / switch overlays | [S02](s02-map-overlay.md) |
+| `o` | open the overlay switcher | [S14](s14-overlay-switcher.md) |
 | `Space`, `+/-` | pause, change speed | — |
 | `p` | open the controls modal | [S10](s10-simulation-controls.md) |
 | `s` `g` `y` `e` `l` | species, graphs, ecology, events, lineage | [S04](s04-species-browser.md), [S05](s05-population-charts.md), [S06](s06-ecology.md), [S07](s07-event-log.md), [S08](s08-lineage.md) |
