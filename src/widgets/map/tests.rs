@@ -6,6 +6,7 @@ use super::*;
 use crate::sim::world::{Cell, Terrain};
 use ratatui::backend::TestBackend;
 use ratatui::Terminal;
+use std::collections::HashMap;
 
 struct TestSource<'a> {
     world: &'a World,
@@ -19,8 +20,8 @@ impl MapSource for TestSource<'_> {
     fn living_creatures(&self) -> Vec<MapCreature<'_>> {
         self.creatures.clone()
     }
-    fn creature(&self, _id: CreatureId) -> Option<MapCreature<'_>> {
-        None
+    fn creature(&self, id: CreatureId) -> Option<MapCreature<'_>> {
+        self.creatures.iter().find(|c| c.id == id).copied()
     }
 }
 
@@ -56,6 +57,15 @@ fn creature(id: u32, x: usize, y: usize, species: SpeciesId) -> MapCreature<'sta
     MapCreature { id: CreatureId(id), x, y, alive: true, adult: true, species, glyph: 'v', color: theme::TAN, sense_cells: 3, condition: 1.0, trail: &[], target: None }
 }
 
+/// Render `world` with `creatures` under `opts` into a `w`×`h` buffer.
+fn draw_with(world: &World, creatures: Vec<MapCreature<'_>>, opts: &MapOptions, w: u16, h: u16) -> Buffer {
+    let backend = TestBackend::new(w, h);
+    let mut terminal = Terminal::new(backend).unwrap();
+    let source = TestSource { world, creatures };
+    terminal.draw(|f| render(f.buffer_mut(), Rect::new(0, 0, w, h), &source, opts)).unwrap();
+    terminal.backend().buffer().clone()
+}
+
 #[test]
 fn density_field_peaks_under_the_creature_and_clamps() {
     let world = two_region_world(20, 12);
@@ -81,12 +91,9 @@ fn species_overlay_shades_cells_and_keeps_own_species_bright() {
     let mut world = two_region_world(20, 8);
     world.cells[0].terrain = Terrain::DeepWater;
     let creatures = vec![creature(1, 10, 4, SpeciesId(0)), creature(2, 3, 4, SpeciesId(1))];
-    let opts = MapOptions { overlay: Overlay::Species(SpeciesId(0)), fade_creatures: true, species_color: theme::TAN, ..MapOptions::default() };
-    let backend = TestBackend::new(20, 8);
-    let mut terminal = Terminal::new(backend).unwrap();
-    let source = TestSource { world: &world, creatures };
-    terminal.draw(|f| render(f.buffer_mut(), Rect::new(0, 0, 20, 8), &source, &opts)).unwrap();
-    let buf = terminal.backend().buffer().clone();
+    let stack = OverlayStack { base: Base::Species, species: SpeciesId(0), ..OverlayStack::PLAIN };
+    let opts = MapOptions { stack, species_color: theme::TAN, ..MapOptions::default() };
+    let buf = draw_with(&world, creatures, &opts, 20, 8);
     // Far cells are the empty shade drawn as bare dirt; the vole cell has a shaded background.
     assert_eq!(buf[(18, 0)].symbol(), glyphs::DIRT.to_string());
     assert_eq!(buf[(11, 4)].symbol(), glyphs::shade(1.0 / DENSITY_CAP * (1.0 - 0.5 / 4.0)).to_string());
@@ -107,12 +114,8 @@ fn health_overlay_colours_creatures_by_condition_and_dims_terrain() {
     let mut critical = creature(3, 6, 2, SpeciesId(2));
     critical.condition = 0.1;
     let creatures = vec![fit, strained, critical];
-    let opts = MapOptions { overlay: Overlay::Health, fade_creatures: true, ..MapOptions::default() };
-    let backend = TestBackend::new(20, 8);
-    let mut terminal = Terminal::new(backend).unwrap();
-    let source = TestSource { world: &world, creatures };
-    terminal.draw(|f| render(f.buffer_mut(), Rect::new(0, 0, 20, 8), &source, &opts)).unwrap();
-    let buf = terminal.backend().buffer().clone();
+    let opts = MapOptions { stack: OverlayStack { health: true, ..OverlayStack::PLAIN }, ..MapOptions::default() };
+    let buf = draw_with(&world, creatures, &opts, 20, 8);
     assert_eq!(buf[(10, 4)].fg, theme::GOOD, "healthy reads green");
     assert_eq!(buf[(3, 4)].fg, theme::WARN, "strained reads amber");
     assert_eq!(buf[(6, 2)].fg, theme::BAD, "critical reads red");
@@ -126,7 +129,7 @@ fn health_overlay_colours_creatures_by_condition_and_dims_terrain() {
 #[test]
 fn region_overlay_tints_bg() {
     let world = two_region_world(8, 4);
-    let opts = MapOptions { overlay: Overlay::Region, selected_region: Some(1), ..MapOptions::default() };
+    let opts = MapOptions { stack: OverlayStack { regions: true, ..OverlayStack::PLAIN }, selected_region: Some(1), ..MapOptions::default() };
     let buf = draw(&world, &opts, 8, 4);
     // Row 0 carries no label (labels sit on row 2), so its cells show the pure tint
     // over the (biome-tinted) terrain background.
@@ -145,7 +148,7 @@ fn region_overlay_tints_bg() {
 fn region_labels_clip_at_viewport_edge() {
     let world = two_region_world(8, 4);
     // Origin x = 2 hides column 1 ("A"); the "b" must stay at world x = 2 → screen x = 0.
-    let opts = MapOptions { overlay: Overlay::Region, origin: (2, 0), ..MapOptions::default() };
+    let opts = MapOptions { stack: OverlayStack { regions: true, ..OverlayStack::PLAIN }, origin: (2, 0), ..MapOptions::default() };
     let buf = draw(&world, &opts, 6, 4);
     assert_eq!(buf[(0, 2)].symbol(), "b");
     assert_eq!(buf[(1, 2)].symbol(), glyphs::DIRT.to_string());
@@ -154,4 +157,69 @@ fn region_labels_clip_at_viewport_edge() {
     wide.regions[1].0 = "Toolongname".to_string();
     assert_eq!(region_label_origin(&wide, 1), (0, 2));
     let _ = draw(&wide, &opts, 6, 4);
+}
+
+#[test]
+fn health_beats_disease_on_a_creature() {
+    let world = two_region_world(20, 8);
+    let mut sick = creature(1, 10, 4, SpeciesId(0));
+    sick.condition = 0.1;
+    let mut tints = HashMap::new();
+    tints.insert(CreatureId(1), (theme::SICK, true));
+    // Disease alone: the tint wins and forces bold.
+    let stack = OverlayStack { disease: Disease::On(None), ..OverlayStack::PLAIN };
+    assert_eq!(creature_color(&stack, &sick, tints.get(&CreatureId(1))), (theme::SICK, true));
+    // Health and Disease: the condition band wins (S14 item 17).
+    let both = OverlayStack { health: true, ..stack };
+    assert_eq!(creature_color(&both, &sick, tints.get(&CreatureId(1))), (theme::BAD, false));
+    let opts = MapOptions { stack: both, creature_tint: Some(tints), ..MapOptions::default() };
+    let buf = draw_with(&world, vec![sick], &opts, 20, 8);
+    assert_eq!(buf[(10, 4)].fg, theme::BAD);
+    // The disease ground tint still shows under both.
+    let mut fouled = two_region_world(20, 8);
+    fouled.cells[0].parasite_load = 0.9;
+    let buf = draw_with(&fouled, vec![], &opts, 20, 8);
+    let (_, _, bg) = terrain_cell(fouled.cell(0, 0), false);
+    assert_eq!(buf[(0, 0)].bg, theme::lerp(theme::dim(bg, HEALTH_TERRAIN_DIM), theme::WARN, PARASITE_TINT));
+    // The sense subject is bright under every combination.
+    let subject = OverlayStack { sense: true, sense_subject: Some(CreatureId(1)), ..both };
+    assert_eq!(creature_color(&subject, &sick, None).0, theme::TEXT_BRIGHT);
+}
+
+#[test]
+fn regions_and_sense_tints_both_apply() {
+    let world = two_region_world(20, 8);
+    let subject = creature(1, 10, 4, SpeciesId(0));
+    let stack = OverlayStack { regions: true, sense: true, sense_subject: Some(CreatureId(1)), ..OverlayStack::PLAIN };
+    let opts = MapOptions { stack, ..MapOptions::default() };
+    let buf = draw_with(&world, vec![subject], &opts, 20, 8);
+    // Row 0 is outside the ring (radius 3 around y = 4): the region tint alone.
+    let base = terrain_cell(world.cell(0, 0), false).2;
+    assert_eq!(buf[(0, 0)].bg, theme::lerp(base, theme::region(0), REGION_TINT));
+    // Beside the subject: the region tint, then the ring interior tint over it.
+    let regioned = theme::lerp(base, theme::region(1), REGION_TINT);
+    assert_eq!(buf[(11, 4)].bg, theme::lerp(regioned, theme::ACCENT, 0.18));
+    // The ring edge is drawn and the subject is bright; neither layer fades it.
+    assert_eq!(buf[(10, 1)].symbol(), glyphs::RING.to_string());
+    assert_eq!(buf[(10, 4)].fg, theme::TEXT_BRIGHT);
+    assert!(!stack.fades_creatures());
+}
+
+#[test]
+fn species_base_under_regions_keeps_density_shade() {
+    let world = two_region_world(20, 8);
+    let creatures = vec![creature(1, 10, 4, SpeciesId(0)), creature(2, 3, 4, SpeciesId(1))];
+    let stack = OverlayStack { base: Base::Species, species: SpeciesId(0), regions: true, ..OverlayStack::PLAIN };
+    let opts = MapOptions { stack, species_color: theme::TAN, ..MapOptions::default() };
+    let buf = draw_with(&world, creatures, &opts, 20, 8);
+    // The density shade glyph survives the region tint on its background.
+    let t = 1.0 / DENSITY_CAP * (1.0 - 0.5 / 4.0);
+    assert_eq!(buf[(11, 4)].symbol(), glyphs::shade(t).to_string());
+    let (_, _, density_bg) = density_cell(world.cell(11, 4), t, SpeciesId(0), theme::TAN);
+    assert_eq!(buf[(11, 4)].bg, theme::lerp(density_bg, theme::region(1), REGION_TINT));
+    // Own species full colour, the other faded; the region labels still draw.
+    assert_eq!(buf[(10, 4)].fg, theme::TAN);
+    assert_eq!(buf[(3, 4)].fg, theme::dim(theme::TAN, HEALTHY_FADE));
+    let (lx, ly) = region_label_origin(&world, 0);
+    assert_eq!(buf[(crate::cast!(lx => u16), crate::cast!(ly => u16))].symbol(), "A");
 }

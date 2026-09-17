@@ -12,7 +12,7 @@ use crate::ui::app::AppState;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{clock_status, EventKindStyle, SpeciesStyle};
 use crate::ui::viewport::{self, GUTTER_W, MAP_CHROME_ROWS, MIN_MAP_W, SIDEBAR_W};
-use crate::widgets::map::{self, MapOptions, Overlay};
+use crate::widgets::map::{self, MapOptions, Overlay, OverlayStack};
 use crate::widgets::{panel, Component, Divider, Legend, Panel, Spacer, StatusBar, Text, Ticker, VStack};
 use crate::theme;
 
@@ -296,15 +296,15 @@ fn draw_ticker(f: &mut Frame<'_>, area: Rect, map_rows: u16, sim: &Sim, app: &Ap
 fn map_options(sim: &Sim, app: &AppState, overlay: Overlay, origin: (usize, usize), time: &crate::sim::Time, region_sel: usize, overlay_active: bool) -> MapOptions {
     let night = !overlay_active && time.is_night() && app.params.ui.day_night_tint == DayNightTint::Map;
     let winter = !overlay_active && time.season() == Season::Winter;
+    let stack: OverlayStack = overlay.into();
     MapOptions {
-            overlay,
+            stack,
             night,
             winter,
             cursor: app.look_cursor,
             follow: app.follow,
             origin,
             creatures: true,
-            fade_creatures: overlay_active && overlay != Overlay::Region && !matches!(overlay, Overlay::Sense(_)),
             selected_region: if overlay == Overlay::Region { Some(region_sel) } else { None },
             species_color: match overlay {
                 Overlay::Species(sp) => sim.roster().color(sp),

@@ -197,6 +197,34 @@ impl OverlayStack {
     }
 }
 
+/// Bridge from the single-valued `Overlay` while the map screen still keeps
+/// one; deleted once the stack lives on `AppState`.
+impl From<super::Overlay> for OverlayStack {
+    fn from(o: super::Overlay) -> Self {
+        use super::Overlay;
+        let mut s = Self::PLAIN;
+        match o {
+            Overlay::None => {}
+            Overlay::Vegetation => s.base = Base::Vegetation,
+            Overlay::Pressure => s.base = Base::Pressure,
+            Overlay::Moisture => s.base = Base::Moisture,
+            Overlay::Parasites => s.base = Base::Parasites,
+            Overlay::Species(sp) => {
+                s.base = Base::Species;
+                s.species = sp;
+            }
+            Overlay::Sense(id) => {
+                s.sense = true;
+                s.sense_subject = Some(id);
+            }
+            Overlay::Region => s.regions = true,
+            Overlay::Health => s.health = true,
+            Overlay::Disease(shown) => s.show_disease(shown),
+        }
+        s
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
