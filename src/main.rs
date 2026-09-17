@@ -7,9 +7,13 @@
 //!   sim-fortress --seeds 1-20 --years Y --summary     → sweep + summary.csv
 //!   sim-fortress --profile --headless --seed N ...    → per-system timings
 //!   sim-fortress --dump-params                        → defaults with comments (stdout)
+//!   sim-fortress --headless ... --chronicle [--out F] → narrated run (C9; needs `--features ai`
+//!                                                       and `[ai]` in ui.toml), chronicle.md
+//!   sim-fortress --design-species "..." [--out F]     → a validated [[species]] overlay file
 //!
 //! `params.toml` in the cwd is applied automatically; `--params FILE` is an
-//! overlay. `--saves-dir DIR` overrides the save directory (live app).
+//! overlay. `--saves-dir DIR` overrides the save directory (live app). The AI
+//! flags exit 1 with one line when AI is off, unreachable or not compiled.
 
 // The binary is a separate compilation root from `src/lib.rs`, so it does not
 // inherit that file's allow list. The `indexing_slicing` sites here follow the
@@ -32,7 +36,9 @@ fn main() -> std::io::Result<()> {
     let summary = has_flag(&args, "--summary");
     let row = has_flag(&args, "--row");
     let profile = has_flag(&args, "--profile");
-    let headless = has_flag(&args, "--headless") || has_flag(&args, "--seeds") || summary || row || profile;
+    let chronicle = has_flag(&args, "--chronicle");
+    let out_file = flag_value(&args, "--out").map(str::to_string);
+    let headless = has_flag(&args, "--headless") || has_flag(&args, "--seeds") || summary || row || profile || chronicle;
     let seed = flag_value(&args, "--seed").and_then(|s| s.parse().ok()).unwrap_or(0);
     let seeds = flag_value(&args, "--seeds").and_then(parse_seed_range);
     let ticks = flag_value(&args, "--ticks").and_then(|s| s.parse().ok()).unwrap_or(0);
@@ -43,8 +49,12 @@ fn main() -> std::io::Result<()> {
     let csv = flag_value(&args, "--csv");
     let saves_dir = flag_value(&args, "--saves-dir").map(Path::new);
 
+    if let Some(prompt) = flag_value(&args, "--design-species") {
+        let params = load_params(params_file, width, height)?;
+        return ai_exit(sim_fortress::ai::headless::design_species(prompt, out_file.as_deref(), &params));
+    }
     if headless {
-        return run_headless(seed, seeds, ticks, years, params_file, width, height, csv, &Outputs { summary, row, profile });
+        return run_headless(seed, seeds, ticks, years, params_file, width, height, csv, &Outputs { summary, row, profile, chronicle, out_file });
     }
 
     let params = load_params(params_file, width, height)?;
@@ -64,6 +74,22 @@ struct Outputs {
     summary: bool,
     row: bool,
     profile: bool,
+    /// C9: narrate the run season by season (needs the gateway).
+    chronicle: bool,
+    /// `--out FILE` for the chronicle.
+    out_file: Option<String>,
+}
+
+/// AI flags fail with one line and exit 1 (ai-requirements R10), never a
+/// silent fallback.
+fn ai_exit(result: std::io::Result<()>) -> std::io::Result<()> {
+    match result {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1)
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -81,6 +107,10 @@ fn run_headless(
     let params = load_params(params_file, width, height)?;
     let ticks_per_year = 4 * u64::from(params.time.season_days) * u64::from(params.time.ticks_per_day);
     let ticks = years.map_or(ticks, |y| y * ticks_per_year);
+
+    if out.chronicle {
+        return ai_exit(sim_fortress::ai::headless::chronicle(seed, ticks, &params, out.out_file.as_deref()));
+    }
 
     if let Some((first, last)) = seeds {
         // In-process sequential sweep (FR8).

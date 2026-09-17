@@ -35,12 +35,18 @@ const T_PRESETS: usize = 4; // 4..=8, five presets
 const T_GENERATE: usize = 9;
 const T_RANDOMIZE: usize = 10;
 const T_BACK: usize = 11;
-const T_COUNT: usize = 12;
+/// The species-designer button (C9); present only while the feature is on.
+const T_DESIGN: usize = 12;
+const T_COUNT: usize = 13;
 const FORM_W: u16 = 66;
 
+#[cfg(feature = "ai")]
+mod designer;
 mod form;
 mod input;
 mod preview;
+#[cfg(test)]
+mod tests;
 use form::form_panel;
 use input::{apply_preset, field_step, handle_adjust, handle_text_field, handle_typed_entry, is_numeric_field};
 use preview::preview_panel;
@@ -69,6 +75,8 @@ struct WorldGenForm {
     /// Typed replacement for the focused numeric field (Space opens it,
     /// Enter applies it, Esc cancels it).
     edit: Option<String>,
+    /// The designer feature is on, so the `[ Design species ]` button exists.
+    designer: bool,
 }
 
 impl WorldGenForm {
@@ -78,7 +86,25 @@ impl WorldGenForm {
     }
 
     fn field_count(&self) -> usize {
-        self.tail() + T_COUNT
+        self.tail() + T_COUNT - usize::from(!self.designer)
+    }
+
+    /// Apply a validated `[[species]]` overlay (C9 designer): the roster and
+    /// the founder counts are replaced, the focus is clamped because the tail
+    /// indices move. The preview never reads the roster, so `dirty` is untouched.
+    fn apply_species_overlay(&mut self, overlay: &str) -> Result<(), String> {
+        let mut p = self.build_params();
+        p.apply_overlay(overlay)?;
+        self.species = p.species;
+        self.counts = self.species.0.iter().map(|s| s.initial_count).collect();
+        self.focus = self.focus.min(self.field_count().saturating_sub(1));
+        Ok(())
+    }
+
+    /// Refresh the designer flag from the handle and keep the focus in range.
+    fn sync_designer(&mut self, app: &AppState) {
+        self.designer = app.ai.feature_on(crate::ai::Feature::Designer);
+        self.focus = self.focus.min(self.field_count().saturating_sub(1));
     }
 
     /// The focused text field: `name` at focus 0, `seed_text` at focus 1.
@@ -111,6 +137,7 @@ impl WorldGenForm {
             dirty: false,
             text_edited: false,
             edit: None,
+            designer: false,
         }
     }
 
@@ -189,6 +216,12 @@ impl Screen for WorldGen {
     fn handle_key(&mut self, key: KeyEvent, app: &mut AppState) -> Action {
         let mut form = self.form.borrow_mut();
         let code = key.code;
+        form.sync_designer(app);
+        if let Some(overlay) = app.pending_species_overlay.take() {
+            if let Err(e) = form.apply_species_overlay(&overlay) {
+                eprintln!("designer overlay error: {e}");
+            }
+        }
 
         // Typed numeric entry (opened with Space) captures every key until it
         // is applied (Enter/Tab) or cancelled (Esc).
@@ -225,6 +258,7 @@ impl Screen for WorldGen {
                     Action::None
                 }
                 (T_BACK, KeyCode::Enter) => Action::Pop,
+                (T_DESIGN, KeyCode::Enter) => open_designer(&form),
                 _ => Action::None,
             };
         }
@@ -248,8 +282,9 @@ impl Screen for WorldGen {
         handle_adjust(&mut form, focus, code, app)
     }
 
-    fn render(&self, _app: &AppState, f: &mut Frame<'_>, area: Rect) {
+    fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
         let mut form = self.form.borrow_mut();
+        form.sync_designer(app);
         form.regenerate_if_needed();
 
         let status_row = area.y + area.height - 1;
@@ -272,6 +307,16 @@ impl Screen for WorldGen {
             StatusBar::new(&[("Tab", "next field"), ("←→", "adjust"), ("Space", "type value"), ("Enter", "generate"), ("Esc", "back")]).right(&seed_hint).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
         }
     }
+}
+
+#[cfg(feature = "ai")]
+fn open_designer(form: &WorldGenForm) -> Action {
+    Action::Push(Box::new(designer::Designer::new(form.build_params())))
+}
+
+#[cfg(not(feature = "ai"))]
+const fn open_designer(_form: &WorldGenForm) -> Action {
+    Action::None
 }
 
 /// The text shown in a numeric field: the typed buffer with a caret while

@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::ai::AiConfig;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Rainfall {
@@ -158,6 +160,8 @@ pub struct UiParams {
     /// Pause when a pathogen becomes epidemic (C7 FR9).
     pub auto_pause_on_epidemic: bool,
     pub scarcity_thresholds: ScarcityThresholds,
+    /// The `[ai]` table (C9); read only from `ui.toml`, see `params::ai`.
+    pub ai: AiConfig,
 }
 
 impl Default for UiParams {
@@ -172,6 +176,7 @@ impl Default for UiParams {
             day_night_tint: DayNightTint::StatusText,
             auto_pause_on_epidemic: true,
             scarcity_thresholds: ScarcityThresholds::default(),
+            ai: AiConfig::default(),
         }
     }
 }

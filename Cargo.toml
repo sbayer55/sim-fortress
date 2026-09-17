@@ -17,6 +17,13 @@ serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 postcard = { version = "1", features = ["alloc"] }
 toml_edit = "0.22"
+# C9: the language-model layer, compiled in only with `--features ai`.
+ureq = { version = "3", optional = true, features = ["json"] }
+serde_json = { version = "1", optional = true }
+
+[features]
+default = []
+ai = ["dep:ureq", "dep:serde_json"]
 
 
 [profile.dev]

@@ -12,7 +12,7 @@ use crate::ui::style::SpeciesStyle;
 use crate::widgets::Constraint::{Fill, Fixed};
 use crate::widgets::{Bar, Block, ButtonRow, Columns, Component, Divider, Panel, Row, Rows, Spacer, Stepper, Text, TextField, VStack};
 use crate::{glyphs, theme};
-use super::{shown, WorldGenForm, F_AGE, F_HEIGHT, F_SEASON, F_SPECIES, F_WATER, F_WIDTH, F_FOREST, F_ROCK, T_BACK, T_GENERATE, T_MUTATION_RATE, T_MUTATION_STRENGTH, T_PRESETS, T_RANDOMIZE, T_REGROWTH};
+use super::{shown, WorldGenForm, F_AGE, F_HEIGHT, F_SEASON, F_SPECIES, F_WATER, F_WIDTH, F_FOREST, F_ROCK, T_BACK, T_DESIGN, T_GENERATE, T_MUTATION_RATE, T_MUTATION_STRENGTH, T_PRESETS, T_RANDOMIZE, T_REGROWTH};
 
 pub(super) fn form_panel(f: &mut Frame<'_>, area: Rect, form: &WorldGenForm) {
     let hint = format!("field {} of {}", form.focus + 1, form.field_count());
@@ -22,9 +22,17 @@ pub(super) fn form_panel(f: &mut Frame<'_>, area: Rect, form: &WorldGenForm) {
     rows.extend(species_section(form));
     rows.extend(evolution_section(form));
     rows.extend(presets_section(form));
+    // A fourth button, the C9 species designer, only while that feature is
+    // on; the four labels fill the 64-column row exactly.
     let tail = form.tail();
-    let button_focus = [T_GENERATE, T_RANDOMIZE, T_BACK].iter().position(|&t| form.focus == tail + t);
-    let (rest, buttons) = (Spacer::rows(0), ButtonRow::new(&["[ Generate ]", "[ Randomize seed ]", "[ Back ]"]).focused(button_focus).primary(0).left(4).gap(3));
+    let mut labels: Vec<&str> = vec!["[ Generate ]", "[ Randomize ]", "[ Back ]"];
+    let mut slots = vec![T_GENERATE, T_RANDOMIZE, T_BACK];
+    if form.designer {
+        labels.push("[ Design species ]");
+        slots.push(T_DESIGN);
+    }
+    let button_focus = slots.iter().position(|&t| form.focus == tail + t);
+    let (rest, buttons) = (Spacer::rows(0), ButtonRow::new(&labels).focused(button_focus).primary(0).left(4).gap(3));
     VStack::from_boxes(&rows).child_with(Fill(1), &rest).child(&buttons).render(buf, inner);
 }
 

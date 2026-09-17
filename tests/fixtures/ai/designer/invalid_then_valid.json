@@ -1,0 +1,6 @@
+{
+  "sequence": [
+    { "content": "{\"name\":\"boar\",\"plural\":\"Boars\",\"glyph\":\"B\",\"kind\":\"prey\",\"initial_count\":30,\"base_genome\":{\"size\":1.4}}" },
+    { "content": "{\"name\":\"boar\",\"plural\":\"Boars\",\"glyph\":\"b\",\"kind\":\"prey\",\"initial_count\":30,\"base_genome\":{\"size\":0.75}}" }
+  ]
+}

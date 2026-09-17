@@ -215,14 +215,14 @@ const KEY_GROUPS: [(&str, &[(&str, &str)]); 5] = [
             ("Esc", "clear overlay"),
         ],
     ),
-    ("Speed", &[("Space", "pause / resume"), ("+ / -", "faster / slower"), (".", "step one tick"), ("p", "controls panel")]),
+    ("Speed", &[("Space", "pause / resume"), ("+ / -", "faster / slower"), (".", "step one tick"), ("p", "controls, options, AI")]),
     (
         "Screens",
         &[
             ("s", "species & traits"),
             ("g", "graphs & charts"),
             ("y", "ecology & regions"),
-            ("e", "event log"),
+            ("e", "event log (c: chronicle)"),
             ("l", "lineage tree"),
             ("F5", "save world"),
             ("F9", "quick-load"),

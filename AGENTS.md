@@ -14,16 +14,22 @@ change internals — but determinism and save format are load-bearing.
 
 ```
 src/lib.rs       crate root: modules + the `cast!` macro
-src/main.rs      hand-rolled CLI: --headless, --seeds, --summary, --profile, live app
+src/main.rs      hand-rolled CLI: --headless, --seeds, --summary, --profile, live app,
+                 and the C9 AI flags --chronicle / --design-species
 src/sim/         pure, deterministic core; no terminal code
-src/ui/          ratatui layer: App/AppState (ui/app.rs), screen stack, screens
+src/ai/          C9 language-model layer (docs/ai-requirements.md): plain types, prompts
+                 and the CP437 filter always; client, worker, fake and headless bodies
+                 only with `--features ai` (not default). Never imported from src/sim.
+src/ui/          ratatui layer: App/AppState (ui/app.rs), screen stack, screens;
+                 ui/ai_bridge.rs is where replies meet the app
 src/widgets/     shared drawing: the components (docs/components) and the helpers that wrap them
 src/theme.rs     truecolor palette, ramps and styles
 src/glyphs.rs    named CP437 glyph constants
 tests/           integration acceptance tests (one file per chunk)
 examples/        throwaway balance/bench/diagnostic dev tools
 docs/            the specification: roadmap chunks, screen requirements, references
-scripts/         sweep.sh (parallel seed sweep), affected-tests.sh, hooks/ (Claude Code)
+scripts/         sweep.sh (parallel seed sweep), affected-tests.sh, hooks/ (Claude Code),
+                 fake-gateway.js (Node fake Bifrost for the AI tests and offline dev)
 justfile         named test tiers — see "Tests are tiered"
 ```
 
@@ -36,8 +42,9 @@ Time model (fixed): 1 tick = 1 simulated hour, 24 ticks/day, 90 days/season,
 cargo build                                   # dev profile is opt-level 1
 cargo run                                     # live app (title → New World → play)
 cargo clippy --all-targets                    # MUST be 0 warnings
-just check                                    # clippy + 800-line guard, seconds
+just check                                    # clippy (both feature sets) + 800-line guard, seconds
 just test-unit sim::disease                   # cargo test --lib <filter>
+just test-unit-ai ai                          # the same with --features ai; needs `node` on PATH
 just test-chunk predators                     # one tests/*.rs binary, in release
 just test-affected                            # the tests the current diff touches
 ```
@@ -106,7 +113,9 @@ cargo test --lib -- --ignored regenerate_screen_renders
 
 `params.toml` in the working directory is applied automatically and `--params FILE`
 overlays it; **saved parameters win on load**, so `--params` is ignored there. UI
-options are separate: `~/.config/sim-fortress/ui.toml` (or `$XDG_CONFIG_HOME/...`).
+options are separate: `~/.config/sim-fortress/ui.toml` (or `$XDG_CONFIG_HOME/...`);
+its `[ai]` table (C9) is the only place AI is switched on — a `--params` overlay never
+enables it, and tests that set `XDG_CONFIG_HOME` hold `ui::config::env_lock()`.
 
 ## Hard invariants — enforced by tests and lints
 
@@ -163,7 +172,7 @@ Do not weaken these to make a change pass. Fix the change.
 - **All numeric casts go through `cast!(expr => Ty)`** (defined in `src/lib.rs`).
   Bare `as` is denied; the macro is the one reviewed place that preserves `as`
   semantics and works in `const` context.
-- **Save format is versioned and never migrated.** Binary `SIMF` files, `VERSION = 11`
+- **Save format is versioned and never migrated.** Binary `SIMF` files, `VERSION = 12`
   in `src/sim/save.rs`. A version mismatch is rejected (`SaveError`), never half-read;
   old files stay listable so they can be deleted. `Params`/`Sim` serde field order and
   attributes are load-bearing — changing them means bumping `VERSION` and accepting
@@ -255,4 +264,6 @@ git diff --stat                                 # only the files you meant to to
 
 If you touched `src/sim`, re-run `cargo test --lib sim::tests::checksum_is_fnv_stable`
 and confirm the value is still `0xd0e3_ee1a_c665_f531` unless the change deliberately
-re-baselines it.
+re-baselines it. If you touched `src/ai`, `src/ui/ai_bridge.rs` or the AI screens, also run
+`just test-unit-ai ai`, `just test-unit-ai ui` and `cargo test --features ai --test headless`
+(they launch `scripts/fake-gateway.js`, so `node` must be on PATH).

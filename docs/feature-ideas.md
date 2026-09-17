@@ -66,14 +66,15 @@ provider is a local [Bifrost](https://github.com/maximhq/bifrost) instance speak
 OpenAI-compatible chat API, which routes to Ollama for cheap interactive calls and to AWS
 Bedrock for heavy reasoning. Each idea names its fallback: what the player gets with AI off.
 
-**My pick for a first chunk (C9): the species designer plus the chronicle narrator.** One
-upstream feature and one downstream feature, so together they force the whole plumbing — the
+**Shipped as C9 (2026-09-16): the species designer plus the chronicle narrator** — see
+[chunks/c9-ai-designer-and-chronicle.md](chunks/c9-ai-designer-and-chronicle.md). One
+upstream feature and one downstream feature, so together they forced the whole plumbing — the
 `[ai]` config, the worker thread, the fake gateway for tests, the Options section and the
 headless flags — that every later idea reuses. Neither touches `src/sim`.
 
 **Downstream: the model reads the world and writes text.**
 
-- **Chronicle narrator.** The Dwarf Fortress legends screen above, written by a model from
+- ~~**Chronicle narrator.**~~ *Shipped in C9 as S07c and `--chronicle`; the template fallback shipped too.* The Dwarf Fortress legends screen above, written by a model from
   each season's slice of the event ring buffer plus the per-species census: "Year 3, autumn:
   the voles of Sedgehollow vanished; the foxes followed by winter." A chronicle mode on S07 and
   a `--chronicle` headless flag that writes Markdown next to `summary.csv`. *Fallback:* the
@@ -98,7 +99,7 @@ headless flags — that every later idea reuses. Neither touches `src/sim`.
 
 **Upstream: the model writes inputs the sim already accepts.**
 
-- **Species designer.** "Add a boar: omnivore, big litters, forest dweller." The model emits a
+- ~~**Species designer.**~~ *Shipped in C9 as S09b and `--design-species`.* "Add a boar: omnivore, big litters, forest dweller." The model emits a
   `[[species]]` overlay in the schema the roster already loads, `Params::validate` runs, and
   validation errors go back to the model until it passes. Species are data, so this needs no
   sim change at all. *Fallback:* hand-write the overlay and pass it with `--params`.

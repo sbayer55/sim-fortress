@@ -16,6 +16,7 @@ pub use ecology::EcologyParams;
 pub use pathogen::{DiseaseParams, PathogenParams};
 pub use presets::{PRESETS, Preset};
 pub use species::{BaseGenome, Roster, SpeciesParams};
+pub use ai::{AiConfig, AiFeatures, GatewayToken};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
@@ -81,6 +82,7 @@ impl Params {
 }
 
 mod world;
+mod ai;
 mod creatures;
 mod predation;
 mod genetics;

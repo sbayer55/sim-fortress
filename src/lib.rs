@@ -55,6 +55,7 @@ macro_rules! cast {
     }};
 }
 
+pub mod ai;
 pub mod glyphs;
 pub mod sim;
 pub mod theme;

@@ -1,6 +1,6 @@
 # Sim Fortress — Delivery Roadmap
 
-The project is delivered as **eight sequential chunks**. Each chunk ends at a **checkpoint**:
+The project is delivered as **nine sequential chunks**. Each chunk ends at a **checkpoint**:
 a build the user can run, observe in the terminal, and judge before the next chunk starts.
 Course corrections happen at checkpoints; a chunk's scope may be revised as a result, but a
 chunk is never started before the previous checkpoint is accepted.
@@ -18,6 +18,7 @@ checkpoint demo script, tests and the decisions it depends on.
 | C6 | Persistence, title flow, balance and tooling | Save/load, title menu, headless experiments, parameter tuning, performance budget | [c6-persistence-and-balance.md](c6-persistence-and-balance.md) |
 | C7 | Disease and parasites | Pathogens spread by proximity, parasites build up from ground and carcasses, a Resistance gene evolves under a hunger cost; epidemic alerts, disease overlay, outbreak history in the lineage tree | [c7-disease-and-parasites.md](c7-disease-and-parasites.md) |
 | C8 | Sociality and maturity | A Sociality gene coheres herds and packs (join/disperse, herd grazing, kin alarms, shared hunt targets and shared kills) and a Maturity gene moves adult age, litter size and lifespan; the inspector shows `kin nearby (herd\|pack)` and the browser reads `Soc`/`Mat` drift | [c8-sociality-and-maturity.md](c8-sociality-and-maturity.md) |
+| C9 | AI species designer and chronicle narrator | Opt-in language-model layer over a local Bifrost gateway: S07c chronicle (a tally per season, rewritten by a model when enabled), a `[ Design species ]` button on S09 whose reply goes through the roster loader, an AI section in Options, `--chronicle` and `--design-species` headless; the step never sees a model | [c9-ai-designer-and-chronicle.md](c9-ai-designer-and-chronicle.md) |
 
 ## Why this order
 
@@ -30,6 +31,7 @@ flowchart LR
     C5 --> C6["C6 Persistence + balance<br/>save/load · tuning · tooling"]
     C6 --> C7["C7 Disease<br/>pathogens · parasites"]
     C7 --> C8["C8 Sociality + maturity<br/>herds · packs · life history"]
+    C8 --> C9["C9 AI layer<br/>species designer · chronicle"]
     C1 -. "checkpoint 1" .-> U1((user))
     C2 -. "checkpoint 2" .-> U2((user))
     C3 -. "checkpoint 3" .-> U3((user))
@@ -38,6 +40,7 @@ flowchart LR
     C6 -. "checkpoint 6" .-> U6((user))
     C7 -. "checkpoint 7" .-> U7((user))
     C8 -. "checkpoint 8" .-> U8((user))
+    C9 -. "checkpoint 9" .-> U9((user))
 ```
 
 Each chunk adds one layer of the food web on top of a layer that has already been observed
@@ -57,6 +60,7 @@ still runs on fixture data.
 | S04a/b Species Browser, S08 Lineage, S05a/c population lines, S09 evolution fields | C4 |
 | S02d Sense overlay, S03b Predator inspector, S05b Phase plot, S12 Alert | C5 |
 | S00 Title, Load list, Options and confirm modals, S09 presets, save/load, sweep CLI | C6 |
+| S07c Chronicle, S09b Species designer, S10 AI section, `AI: offline` status note | C9 |
 
 ## Architecture the chunks build toward
 
@@ -129,3 +133,4 @@ Rules that hold for every chunk:
 | C6 | validated (2 passes) | [VALIDATION.md](VALIDATION.md) | implemented |
 | C7 | drafted (not yet validated) | — | implemented (balance table and recorded results in the doc) |
 | C8 | drafted from the implementation (not yet validated) | — | implemented (unit-tested only; no acceptance run — see the "Measured today" table) |
+| C9 | drafted with the implementation (not yet validated) | — | implemented; tested against the Node fake gateway only, never a real Bifrost |
