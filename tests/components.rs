@@ -35,16 +35,13 @@ const PENDING_SHEETS: &[&str] = &[
     "columns",
     "filter-strip",
     "histogram",
-    "key-hint",
     "legend",
     "menu",
     "modal",
     "scroll-region",
-    "status-bar",
     "stepper",
     "table",
     "text-field",
-    "ticker",
 ];
 
 /// Examples no test can draw, with the reason. Each must still exist in its sheet.

@@ -8,8 +8,10 @@ use ratatui::style::Style;
 use ratatui::text::Span;
 use sim_fortress::{cast, theme};
 use sim_fortress::widgets::Constraint::{Fill, Fixed};
+use sim_fortress::glyphs;
 use sim_fortress::widgets::{
-    Bar, Component, Divider, HStack, Inverted, Kind, LabeledBar, Panel, RangeBar, Spacer, Sparkline, Text, TrendArrow, VStack,
+    util, Bar, Component, Divider, HStack, Inverted, KeyHint, Kind, LabeledBar, Panel, RangeBar, Spacer, Sparkline, StatusBar, Text, Ticker,
+    TrendArrow, VStack,
 };
 
 use super::{Entry, Frame};
@@ -233,6 +235,112 @@ fn trend_arrow() -> Vec<Entry> {
     ]
 }
 
+const S00_KEYS: &[(&str, &str)] = &[("↑↓", "select"), ("Enter", "confirm"), ("q", "quit")];
+const S01_CLOCK: &str = "Year 12, Day 4 of Autumn  14:00  ☼ day";
+
+fn key_hint() -> Vec<Entry> {
+    vec![
+        Entry {
+            fg: &[(2, 1, theme::DIM)],
+            ..rows("key-hint", "In a panel body, S01 sidebar (43 columns)", |b, a| {
+                let (gap, hints) = (Spacer::cols(1), KeyHint::row(&[("k", "look"), ("e", "events"), ("g", "charts")]).separator(" · ").dim());
+                HStack::new().child(&gap).child_with(Fill(1), &hints).render(b, a);
+            })
+        },
+        Entry {
+            fg: &[(2, 1, theme::KEY), (9, 1, theme::DIM)],
+            ..rows("key-hint", "Modal hint line, S10 (43 columns)", |b, a| {
+                let (gap, hints) = (Spacer::cols(1), KeyHint::row(&[("Space", "pause"), ("Esc", "close")]).label_style(theme::dim_text()));
+                HStack::new().child(&gap).child_with(Fill(1), &hints).render(b, a);
+            })
+        },
+        Entry {
+            fg: &[(34, 1, theme::KEY)],
+            bg: &[(1, 1, theme::SELECT_BG), (34, 1, theme::SELECT_BG)],
+            ..rows("key-hint", "Menu, right-aligned on the selected row (43 columns)", |b, a| {
+                util::fill(b, a, theme::selected());
+                let (label, hint, gap) = (Text::new("   ► New World").style(theme::selected()), KeyHint::key("Enter").bg(theme::SELECT_BG), Spacer::cols(1));
+                HStack::new().child_with(Fill(1), &label).child_with(Fixed(7), &hint).child(&gap).render(b, a);
+            })
+        },
+        Entry {
+            fg: &[(3, 1, theme::DIM)],
+            ..rows("key-hint", "Bracketless, centred, S12 (43 columns)", |b, a| {
+                KeyHint::row(&[("Enter", "select"), ("←→", "move"), ("Esc", "continue")]).bracketless().separator("   ").center().render(b, a);
+            })
+        },
+        Entry {
+            fg: &[(2, 0, theme::KEY), (38, 0, theme::ACCENT)],
+            bg: &[(0, 0, theme::STATUS_BG)],
+            ..bare("key-hint", "In the status bar (43 columns)", |b, a| {
+                StatusBar::new(&[("k", "look"), ("e", "events"), ("g", "charts")]).right("help").render(b, a);
+            })
+        },
+    ]
+}
+
+fn status_bar() -> Vec<Entry> {
+    vec![
+        bare("status-bar", "Default, from S00a (155 columns)", |b, a| StatusBar::new(S00_KEYS).right("no world loaded").render(b, a)),
+        Entry {
+            fg: &[(116, 0, theme::TITLE)],
+            ..bare("status-bar", "Coloured right, from S01a (155 columns)", |b, a| {
+                const KEYS: &[(&str, &str)] =
+                    &[("k", "look"), ("o", "overlay"), ("Space", "pause"), ("+/-", "speed"), ("s", "species"), ("g", "graphs"), ("e", "events"), ("?", "help")];
+                StatusBar::new(KEYS).right(S01_CLOCK).right_color(theme::TITLE).render(b, a);
+            })
+        },
+        bare("status-bar", "Modal repaint, from S12a (155 columns)", |b, a| {
+            const KEYS: &[(&str, &str)] = &[("Enter", "select"), ("←→", "move"), ("l", "lineage"), ("Space", "pause"), ("Esc", "continue")];
+            StatusBar::new(KEYS).right(format!("{} paused on extinction", glyphs::PAUSE_STR)).render(b, a);
+        }),
+        bare("status-bar", "Default, from S03a (155 columns)", |b, a| {
+            const KEYS: &[(&str, &str)] = &[("f", "follow"), ("l", "lineage"), ("Tab", "next creature"), ("←→", "panel"), ("↑↓", "scroll"), ("Esc", "back")];
+            StatusBar::new(KEYS).right("Sedge d#494  Year 2, Day 1 of Spring  06:00").render(b, a);
+        }),
+        bare("status-bar", "Short (60 columns)", |b, a| StatusBar::new(S00_KEYS).right("no world loaded").render(b, a)),
+        bare("status-bar", "Narrow, pairs dropped [Planned] (60 columns)", |b, a| {
+            const KEYS: &[(&str, &str)] = &[
+                ("k", "look"),
+                ("Tab", "wide"),
+                ("←→↑↓", "scroll"),
+                ("1-9", "overlay"),
+                ("Space", "pause"),
+                ("+/-", "speed"),
+                ("p", "controls"),
+                ("?", "help"),
+                ("q", "world"),
+            ];
+            StatusBar::new(KEYS).right(S01_CLOCK).render(b, a);
+        }),
+    ]
+}
+
+fn ticker() -> Vec<Entry> {
+    vec![
+        Entry {
+            fg: &[(1, 0, theme::TEXT), (46, 0, theme::DIM)],
+            bg: &[(0, 0, theme::BG)],
+            ..bare("ticker", "Note, from S01a row 44 (155 columns)", |b, a| {
+                Ticker::new(Some((glyphs::NOTE, theme::TEXT, "Ashfang w#042 is stalking Bramble h#217"))).render(b, a);
+            })
+        },
+        Entry {
+            fg: &[(1, 0, theme::BAD)],
+            ..bare("ticker", "Death by predation (155 columns)", |b, a| {
+                Ticker::new(Some((glyphs::DEATH, theme::BAD, "Thistle d#133 was killed by Ashfang w#042 in the Fenlands"))).render(b, a);
+            })
+        },
+        Entry {
+            fg: &[(1, 0, theme::GOOD)],
+            ..bare("ticker", "Cut at width, Pointer lost (43 columns)", |b, a| {
+                Ticker::new(Some((glyphs::BIRTH, theme::GOOD, "Clover v#031 gave birth to 4 young in Reedmace Hollow"))).render(b, a);
+            })
+        },
+        Entry { bg: &[(0, 0, theme::BG), (42, 0, theme::BG)], ..bare("ticker", "Empty (43 columns)", |b, a| Ticker::new(None).render(b, a)) },
+    ]
+}
+
 fn text() -> Vec<Entry> {
     vec![
         rows("text", "Plain (43 columns)", |b, a| Text::new(" Hello!").render(b, a)),
@@ -269,6 +377,9 @@ pub fn examples() -> Vec<Entry> {
     v.extend(range_bar());
     v.extend(sparkline());
     v.extend(trend_arrow());
+    v.extend(key_hint());
+    v.extend(status_bar());
+    v.extend(ticker());
     v.extend(text());
     v.sort_by_key(|e| (e.sheet, e.heading));
     v

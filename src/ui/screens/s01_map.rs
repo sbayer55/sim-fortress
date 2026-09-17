@@ -3,7 +3,6 @@
 
 use ratatui::crossterm::event::KeyEvent;
 use ratatui::layout::Rect;
-use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 use crate::sim::creatures::CreatureId;
@@ -15,7 +14,7 @@ use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{clock_status, EventKindStyle, SpeciesStyle};
 use crate::ui::viewport::{self, GUTTER_W, MAP_CHROME_ROWS, MIN_MAP_W, SIDEBAR_W};
 use crate::widgets::map::{self, MapOptions, Overlay};
-use crate::widgets::{panel, status, util};
+use crate::widgets::{panel, status, util, Component, Ticker};
 use crate::theme;
 
 use base::{clock_section, legend_section, population_section, resources_section};
@@ -286,24 +285,11 @@ fn status_keys(app: &AppState, screen: Overlay, overlay: Overlay) -> &'static [(
 
 /// The one-line event ticker under the map.
 fn draw_ticker(f: &mut Frame<'_>, area: Rect, map_rows: u16, sim: &Sim, app: &AppState) {
-        let ticker_row = area.y + map_rows;
-        let ticker = Rect::new(area.x, ticker_row, area.width, 1);
-        util::fill(f.buffer_mut(), ticker, Style::default().bg(theme::BG));
-        // C4 FR11: births and mutations reach the ticker only when `log_births` is on.
-        let log_births = app.params.ui.log_births;
-        let last = sim.events.iter().rev().find(|e| log_births || !matches!(e.kind, crate::sim::EventKind::Birth | crate::sim::EventKind::Mutation));
-        if let Some(last) = last {
-            util::line(
-                f,
-                ticker,
-                0,
-                Line::from(vec![
-                    Span::styled(format!(" {} ", last.kind.glyph()), Style::default().fg(last.kind.color()).bg(theme::BG).add_modifier(Modifier::BOLD)),
-                    Span::styled(last.text.clone(), Style::default().fg(theme::TEXT).bg(theme::BG)),
-                    Span::styled("   (e: full log)", Style::default().fg(theme::DIM).bg(theme::BG)),
-                ]),
-            );
-        }
+    let ticker = Rect::new(area.x, area.y + map_rows, area.width, 1);
+    // C4 FR11: births and mutations reach the ticker only when `log_births` is on.
+    let log_births = app.params.ui.log_births;
+    let last = sim.events.iter().rev().find(|e| log_births || !matches!(e.kind, crate::sim::EventKind::Birth | crate::sim::EventKind::Mutation));
+    Ticker::new(last.map(|e| (e.kind.glyph(), e.kind.color(), e.text.as_str()))).render(f.buffer_mut(), ticker);
 }
 
 /// The `MapOptions` for the current frame.
