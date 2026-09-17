@@ -46,6 +46,9 @@ pub const TRAIL: char = '∙';
 pub const RING: char = '°';
 pub const DOT: char = '·';
 pub const BULLET: char = '•';
+/// A sub-pick list opens to the right of this row (S14). CP437 has no `›`,
+/// so the cue is the double chevron.
+pub const CUE: char = '»';
 
 // ---- bars
 pub const BAR_L: char = '[';
@@ -57,6 +60,10 @@ pub const BAR_EMPTY: char = '░';
 pub const H_LINE: char = '─';
 pub const V_LINE: char = '│';
 pub const CROSS: char = '┼';
+/// A vertical rule meeting a double top edge (S14 column divider).
+pub const T_DOWN: char = '╤';
+/// The foot of a vertical rule.
+pub const T_UP: char = '┴';
 
 // ---- seasons / time
 pub const SPRING: char = '♪';

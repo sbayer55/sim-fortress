@@ -1,9 +1,33 @@
-//! Small helpers shared by the data screens (S03/S04/S05/S08).
+//! Small helpers shared by the data screens (S03/S04/S05/S08) and the modals.
 
+use ratatui::buffer::Buffer;
+use ratatui::layout::Rect;
 use ratatui::style::{Color, Style};
 use ratatui::text::Span;
 
+use crate::widgets::Component;
 use crate::{glyphs, theme};
+
+/// A one-cell vertical rule between columns, the full height of its area
+/// (S11 and S14).
+#[derive(Debug, Clone, Copy)]
+pub struct Rule;
+
+impl Component for Rule {
+    fn height(&self, _width: u16) -> u16 {
+        0
+    }
+
+    fn min_width(&self) -> u16 {
+        1
+    }
+
+    fn render(&self, buf: &mut Buffer, area: Rect) {
+        for y in area.top()..area.bottom() {
+            buf.set_stringn(area.x, y, glyphs::V_LINE.to_string(), 1, theme::border());
+        }
+    }
+}
 
 pub fn sp(s: impl Into<String>, st: Style) -> Span<'static> {
     Span::styled(s.into(), st)
