@@ -34,10 +34,8 @@ const PENDING_SHEETS: &[&str] = &[
     "checkbox",
     "filter-strip",
     "histogram",
-    "legend",
     "menu",
     "modal",
-    "scroll-region",
     "stepper",
     "text-field",
 ];

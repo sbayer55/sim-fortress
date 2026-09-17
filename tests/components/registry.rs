@@ -9,8 +9,9 @@ use ratatui::text::Span;
 use sim_fortress::widgets::Constraint::{Fill, Fixed, Min};
 use sim_fortress::widgets::{
     util, Align, Bar, Block, Column, Columns, Component, Divider, HStack, Inverted, KeyHint, Kind, LabeledBar, Panel, RangeBar, Row, Spacer,
-    Sparkline, StatusBar, Table, TableCell, TableRow, Text, Ticker, TrendArrow, VStack,
+    Legend, ScrollRegion, Sparkline, StatusBar, Table, TableCell, TableRow, Text, Ticker, TrendArrow, VStack,
 };
+use sim_fortress::sim::Params;
 use sim_fortress::{cast, glyphs, theme};
 
 use super::{Entry, Frame};
@@ -500,6 +501,87 @@ fn table() -> Vec<Entry> {
     ]
 }
 
+/// The twelve map entries the sheets were drawn with (before Marsh was added).
+const MAP_ENTRIES: [(char, Color, &str); 12] = [
+    (glyphs::DEEP_WATER, theme::DEEP_WATER_FG, "deep water"),
+    (glyphs::SHALLOW_WATER, theme::SHALLOW_FG, "shallow water"),
+    (glyphs::SAND, theme::SAND_FG, "sand"),
+    (glyphs::DIRT, theme::DIRT_FG, "bare dirt"),
+    (glyphs::GRASS_SPARSE, theme::GRASS_SPARSE_FG, "sparse grass"),
+    (glyphs::GRASS, theme::GRASS_FG, "grassland"),
+    (glyphs::GRASS_DENSE, theme::GRASS_DENSE_FG, "meadow"),
+    (glyphs::FOREST, theme::FOREST_FG, "forest"),
+    (glyphs::ROCK, theme::ROCK_FG, "rock"),
+    (glyphs::DEN, theme::DEN, "den / burrow"),
+    (glyphs::CARCASS, theme::CARCASS, "carcass"),
+    (glyphs::SEED, theme::SEED, "regrowth"),
+];
+
+const TERRAIN_NOTES: [&str; 3] = ["impassable, drinkable", "drinkable, slow", "no forage"];
+
+/// The nine-row S01 legend: twelve entries in two columns, six species, Footer.
+fn sidebar_legend() -> Legend<'static> {
+    Legend::new(&MAP_ENTRIES).species(&Params::default().species)
+}
+
+/// A `║ … │` row frame: the modal's left border and the column rule.
+fn help_frame(buf: &mut Buffer, area: Rect) -> Rect {
+    for y in area.top()..area.bottom() {
+        buf.set_stringn(area.x, y, "║", 1, theme::border());
+        buf.set_stringn(area.right() - 1, y, glyphs::V_LINE.to_string(), 1, theme::border());
+    }
+    Rect::new(area.x + 1, area.y, area.width - 2, area.height)
+}
+
+fn legend() -> Vec<Entry> {
+    vec![
+        rows("legend", "Sidebar, S01 rows (43 columns)", |b, a| sidebar_legend().render(b, a)),
+        rows("legend", "Sidebar under its Divider (43 columns)", |b, a| {
+            let (d, l) = (Divider::new("Legend"), sidebar_legend());
+            VStack::new().child(&d).child(&l).render(b, a);
+        }),
+        Entry {
+            fg: &[(2, 0, theme::DEEP_WATER_FG), (18, 0, theme::DIM)],
+            ..bare("legend", "Help, one column with notes (40 columns)", |b, a| {
+                let inner = help_frame(b, a);
+                Legend::new(&MAP_ENTRIES[..3]).columns(1).label_w(14).notes(&TERRAIN_NOTES).render(b, inner);
+            })
+        },
+        bare("legend", "Creatures, S11 column (40 columns)", |b, a| {
+            for y in a.top()..a.bottom() {
+                b.set_stringn(a.x, y, glyphs::V_LINE.to_string(), 1, theme::border());
+                b.set_stringn(a.right() - 1, y, glyphs::V_LINE.to_string(), 1, theme::border());
+            }
+            let inner = Rect::new(a.x + 1, a.y, a.width - 2, a.height);
+            let roster = Params::default().species;
+            let legend = Legend::creatures(&roster);
+            // The sheet shows the header, the first two species and the Footer.
+            let (h, f) = (legend.height(inner.width), inner.height);
+            let stack = ScrollRegion::new(&legend);
+            stack.render(b, Rect { height: f - 1, ..inner });
+            let footer = ScrollRegion::new(&legend).offset(h - 1);
+            footer.render(b, Rect::new(inner.x, inner.bottom() - 1, inner.width, 1));
+        }),
+    ]
+}
+
+/// A titled Legend panel showing a two-row window of `legend` at `offset`.
+fn scrolled(buf: &mut Buffer, area: Rect, legend: &Legend<'_>, offset: u16) {
+    let region = ScrollRegion::new(legend).offset(offset);
+    let ov = region.overflow(Panel::inner(area));
+    let inner = Panel::new("Legend").foot(ov.foot().unwrap_or_default()).render(buf, area);
+    region.render(buf, inner);
+}
+
+fn scroll_region() -> Vec<Entry> {
+    vec![
+        bare("scroll-region", "Fits, no Foot (43 columns)", |b, a| scrolled(b, a, &Legend::new(&MAP_ENTRIES[..4]), 0)),
+        bare("scroll-region", "Top, offset 0 (43 columns)", |b, a| scrolled(b, a, &sidebar_legend(), 0)),
+        bare("scroll-region", "Middle, offset 3 (43 columns)", |b, a| scrolled(b, a, &sidebar_legend(), 3)),
+        bare("scroll-region", "Bottom, offset 7 (43 columns)", |b, a| scrolled(b, a, &sidebar_legend(), 7)),
+    ]
+}
+
 fn text() -> Vec<Entry> {
     vec![
         rows("text", "Plain (43 columns)", |b, a| Text::new(" Hello!").render(b, a)),
@@ -541,6 +623,8 @@ pub fn examples() -> Vec<Entry> {
     v.extend(ticker());
     v.extend(columns());
     v.extend(table());
+    v.extend(legend());
+    v.extend(scroll_region());
     v.extend(text());
     v.sort_by_key(|e| (e.sheet, e.heading));
     v
