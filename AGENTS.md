@@ -116,7 +116,7 @@ Do not weaken these to make a change pass. Fix the change.
   → ecology → migration/extinction. **Never reorder or merge RNG draws.** Three RNG
   streams exist (`rng`, `creature_rng`, `disease_rng`) so enabling one subsystem does
   not perturb another. `sim::tests::checksum_is_fnv_stable` pins the exact checksum
-  `0x3bb742c2703aa248`; only re-baseline deliberately, with a comment saying why.
+  `0x9b4ed39b8baac6f5`; only re-baseline deliberately, with a comment saying why.
 - **Sim/UI separation.** `src/sim` is pure data and logic: **no `ratatui`, `HashMap`
   or `HashSet`** anywhere under it. `src/sim/mod.rs` guards this by scanning every
   `.rs` file there for those substrings — **comments and strings included** — skipping
@@ -252,5 +252,5 @@ git diff --stat                                 # only the files you meant to to
 ```
 
 If you touched `src/sim`, re-run `cargo test --lib sim::tests::checksum_is_fnv_stable`
-and confirm the value is still `0x3bb742c2703aa248` unless the change deliberately
+and confirm the value is still `0x9b4ed39b8baac6f5` unless the change deliberately
 re-baselines it.

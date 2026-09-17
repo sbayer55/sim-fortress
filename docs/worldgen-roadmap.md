@@ -170,6 +170,47 @@ O(n) with a 3×3 kernel).
 
 ## Phase 4 — River morphology
 
+**Status: done (Sept 2026).** `classify::water_bodies` now returns a
+`Bodies` layout (water kind, `Channel`, `Delta`, the fall slope cut) and
+`Relief` carries `recv` (each cell's receiver) so a channel knows which way
+it flows. Rivers are cut largest drainage first: `flow::Tiers` sets the
+brook / river / trunk cuts per world (trunk ≥ 9 % of the cells' drainage
+or the eighth-largest channel drainage, whichever is less, so every seed has
+a trunk of ≥ `TRUNK_MIN_CELLS` (8) cells; river ≥ 4.5 % of the cells or
+half the trunk cut); a river takes one bank cell
+across the flow (the lower side), a trunk two, and a trunk's channel is
+`DeepWater`. Banks are paid from the river budget, which rose from 15 % to
+22 % of the water target (ocean 12 % → 10 %). `DELTA_SHARE` (15 %) of the
+budget is held back for deltas: where a trunk's receiver is ocean or a lake
+of ≥ 12 cells and the land within (2, 1) of the mouth has mean slope in the
+bottom quintile, land within `FAN_RISE` (0.015) of the mouth becomes shallow
+`Channel::Fan`, land up to `BAR_RISE` (0.03) a sand bar, and flat land up to
+`PLAIN_RISE` (0.05) within (4, 2) is floodplain that the marsh pass takes
+first. Deltas form on about half of the default seeds (fans of 4–11 cells).
+Falls: channel cells in the top 5 % of channel slopes (`FALL_SLOPE_QUANTILE`)
+keep `Rock` and are listed in `World.falls` (sorted `(x, y)`; `is_fall`,
+`terrain_name` → "waterfall"), drawn by `map::world_cell` as `≡` on the
+deep-water blue (`FALLS_FG`/`FALLS_BG`), in the legend and help; 8–12 per
+seed. Washes: a brook whose rain-only climate (moisture without the
+water-proximity term) is desert or steppe is `Channel::Wash`: generated as
+`Sand` with `dried_from = Some(ShallowWater)`, free of the river budget, and
+not a moisture source, so the country around it stays visibly arid; the
+existing re-wet rule refills them (30–180 cells on a Dry seed, 10–105 on
+Normal, all running again well inside the first year). Save format version
+9 (`World.falls`). Dev-profile 200×60 generation measured ~18.7 ms (classify
+3.8 ms, up ~0.8 ms for the channel walk and delta pass), 150×40 ~9.5 ms. Tests:
+`trunks_are_deep_banked_and_continuous`, `deltas_fan_where_trunks_meet_the_sea`,
+`falls_sit_on_the_steepest_channels`, `washes_are_dry_brooks_that_rewet_within_the_year`,
+plus the ignored diagnostic `print_river_morphology`. Checksum re-baselined
+to `0xb6e9_09b8_a4c6_2f17`. Two notes against the
+acceptance below: the trunk is the largest-drainage reach, and that is what
+the test pins; "longest connected water path" is not an invariant of this
+generator (lakes break paths and a long thin basin can out-run a broad one),
+and it was dropped rather than forced. With the current ecology constants
+a Dry region's mean moisture sits above the refill threshold for most of the
+year, so washes refill early and rarely dry again; making the dry-out
+seasonal is ecology work, not worldgen.
+
 **Payoff.** Medium-high. Rivers already route correctly; this phase makes them
 look and behave like rivers rather than one-cell channels.
 
@@ -278,9 +319,8 @@ ticker screens, `save.rs`.
 | 1 | Temperature + orographic rain (done) | — | `Cell.temperature`, `World.wind` | yes (v6) |
 | 2 | Marsh, riparian, shore types (done) | 1 | `Terrain::Marsh`, `creatures.marsh_step_cost` | yes (v7) |
 | 3 | Biomes as regions (done) | 1, 2 | `Cell.biome`, `World.region_map` | yes (v8) |
-| 4 | River morphology | 2 | none | no |
+| 4 | River morphology (done) | 2 | `World.falls` | yes (v9) |
 | 5 | Age regimes + events | — (better after 3) | `World.history` | yes |
 | 6 | Names, log, summary | 3, 4, 5 | `World.names` | yes |
 
-Phases 4 and 5 are independent of each other and can now be built in parallel
-branches.
+Phase 5 is independent of Phase 4 and can be built next.

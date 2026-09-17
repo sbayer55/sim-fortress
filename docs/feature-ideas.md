@@ -1,19 +1,16 @@
-The roadmap's six chunks are all shipped, so the next feature is genuinely open. Here are the candidates I find most interesting, grouped by what they add, with the one I'd pick first at the top.
+The roadmap's eight chunks are all shipped, so the next feature is genuinely open. Here are the candidates I find most interesting, grouped by what they add, with the one I'd pick first at the top.
 
 **My pick: burrows and dens (the vole refuge).** The predator chunk's own status note says the population bands are unreachable by tuning alone and names the missing mechanism: voles have no refuge, and wolves and lynxes die without meeting a mate. A burrow cell is a home tile that a vole retreats to when fleeing, is undetectable inside, and rests in at night. A den is the predator version: a pack home that gives wolves and lynxes a mate-seeking target and a place to raise a litter. This is one mechanic that fixes two open balance problems, adds a visible new glyph on the map, and gives the inspector a "home" field to follow. It builds directly on the existing Flee, Rest and Mate goals.
 
 **Other simulation-side ideas, roughly in order of payoff:**
 
 - **Carcasses and scavenging as real objects.** Scavenge is already a goal, but a kill could leave a decaying carcass tile that foxes and voles compete over, and that fertilises the vegetation beneath it. Cheap to add, and it produces the kind of emergent scene players screenshot.
-- **Disease or parasites.** A contagious status that spreads by proximity, gated by a new genome slot for resistance. It gives evolution a second selective pressure besides predation and would make the lineage tree far more dramatic after an epidemic event.
 - **Weather beyond drought.** Snow cover that hides grass in winter, floods that push rivers outward, wildfire that burns forest into sparse grass and regrows. Fire in particular is visually striking in CP437 and interacts with every layer already there.
 - **Speciation.** When two lineages of the same species drift far enough apart in genome distance, they stop interbreeding and the browser shows a split. The lineage screen and genome already exist, so this is mostly a distance check plus a naming scheme.
-- ~~**Herd and pack behaviour.** Deer that cluster and flee together, wolves that hunt in groups with a shared target. This also addresses the wolf mate-finding problem from a different angle than dens.~~ **Shipped: C8 — herds cohere and bias grazing, a sighted prey alarms social kin, and predators join a packmate's target and share the kill.**
 - **Territory and scent marking.** Predators leave a decaying scent field that repels rivals and attracts mates. It naturally spaces predators out and gives you a new map overlay.
 
-**C8 follow-ups: seeing sociality and packs.** The mechanics shipped, but the only windows into them are one creature at a time. Neither of these ideas changes behaviour; both make the behaviour that already exists legible and testable.
+**C8 follow-ups: seeing sociality and packs.** The mechanics shipped, and S04a/S05e now count groups, but a pack still has no identity of its own. This idea does not change behaviour; it makes the behaviour that already exists legible and testable.
 
-- ~~**Group-size and mean-pack-size statistics.** S04 knows each species' mean Sociality and S03 shows one creature's `kin nearby`, but nothing counts the groups those values actually produce — how large herds get, how often packs form at all, or whether a rising Sociality mean is translating into larger groups or just more neighbours. A per-species mean and max group size, plus a pack-size distribution on the charts screen, would turn "sociality is drifting up" into "packs are forming and the mean is 3.4 wolves". It also gives the C5 balance claims — wolf mate-finding and the unreachable population bands — a number to assert on in the headless runner instead of a screenshot.~~ **Shipped: C8 FR13 — `sim::stats::groups` counts the herds and packs the cohesion rule holds together per species; S04a reads `groups: 26 herds, mean 2.5, max 5, 48% grouped`, S05e draws the size distribution (the fifth charts view) and `--summary`/`--header` carry `group_mean_<species>` and `group_max_<species>`.**
 - **Pack identity tracking.** A pack today is inferred fresh each tick from `hunt_target` and `kin_nearby`, so it has no name, no members and no continuity: two wolves on the same deer are a pack this tick and strangers the next, and the event log can only say "a pack of 4 wolves" when they happen to migrate together. A persistent pack record — members, a leader, a tag like `W#110`, and formed/dissolved events — would let the inspector show "pack: Ashfall, 4 members, leader Y10", let the lineage screen group by pack rather than by family, and let the map draw members together. It is also the stable group that the dens idea above and territory marking both need to attach to.
 
 **Player-facing ideas, if you want a break from ecology:**
@@ -25,7 +22,7 @@ The roadmap's six chunks are all shipped, so the next feature is genuinely open.
 
 **One infrastructure option:** you have a determinism rule and a headless mode, so a **scenario file** format (seed, params, scripted interventions per tick, assertions on counts) would let you regression-test balance claims like the C5 bands instead of re-running sweeps by hand.
 
-If you want, I can write the burrows-and-dens idea up as a seventh chunk doc in the same format as the existing six, with requirements, acceptance bands and a checkpoint demo script.
+If you want, I can write the burrows-and-dens idea up as a ninth chunk doc in the same format as the existing eight, with requirements, acceptance bands and a checkpoint demo script.
 
 
 ---
@@ -44,19 +41,15 @@ The current genome has twelve slots: speed, size, sense, metabolism, aggression,
 - **Boldness.** The distance at which prey starts to flee. Timid animals lose grazing time, bold ones get eaten. Classic and very legible in the sense-ring overlay.
 - **Vigilance versus foraging.** Fraction of a graze tick spent scanning. It directly trades hunger against detection, and it is the natural counterpart to camouflage.
 - **Stamina.** Chase duration before speed collapses. Lets a slow predator with high stamina beat a fast prey, breaking the current speed arms race into two axes.
-- ~~**Sociality.** Preferred group size. High values cluster into herds that detect predators earlier but strip vegetation; for predators it is the seed of pack hunting.~~ **Shipped: genome slot 10 — herds cohere and bias grazing, a sighted prey alarms social kin, and predators join a packmate's target and share the kill.**
 - **Prey preference.** For predators, a bias toward small or large prey. A fox lineage that stops bothering voles is another route to the vole refuge your predator notes ask for.
 
 **Life-history traits**
 
-- ~~**Maturity age.** Breed early with small litters or late with large ones, paired against longevity. This gives r-versus-K strategy shifts you could see in the species browser.~~ **Shipped: genome slot 11 — one trait scales adult age, litter size and max lifespan, and S04b names the r/K direction in Selection pressure.**
 - **Parental care.** Offspring start with more reserves and the parent loses hunger for a period after birth. Litters get smaller but survive. Nice interaction with any future dens.
 - **Dispersal.** How far a newborn wanders from its parent before settling. Low values create local inbred pockets, high values spread genes and spark migrations. Very visible on the lineage tree.
-- ~~**Mutation rate itself.** Evolvability as a trait. Stable worlds select it down, worlds with droughts and epidemics select it up. Cheap to add and a genuinely interesting experiment.~~ **Shipped: genome slot 11 (Mutability) — the parents' mean scales each birth's mutation rate and sd (neutral at 0.5), and a newborn near the 0.98 cap risks being born sterile, so evolvability has a price at the top of its range.**
 
 **Traits that need one new mechanic**
 
-- **Disease resistance,** if you add contagion. A second selective pressure independent of predation.
 - **Toxicity or spines,** a cost to the predator on a kill. Gives prey a defence that is not running or hiding.
 - **Coat colour** as a numeric value matched against the terrain palette under the creature. Camouflage becomes terrain specific, so a forest vole and a meadow vole drift apart, and you could tint the glyph with the value.
 
