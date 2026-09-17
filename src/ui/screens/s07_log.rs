@@ -1,5 +1,6 @@
 //! S07: the live event log. S07a lists every event; S07b (any narrow filter)
-//! shows a detail panel with a mini-map and subject link.
+//! shows a detail panel with a mini-map and subject link; S07c (`c`) is the
+//! chronicle, one paragraph per season (C9).
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
@@ -17,6 +18,8 @@ use crate::ui::style::{EventKindStyle, SpeciesStyle};
 use crate::widgets::map::{self, MapOptions, Overlay};
 use crate::widgets::{panel, status, util};
 use crate::{glyphs, theme};
+
+mod chronicle;
 
 const DETAIL_W: u16 = 55;
 const MINI_W: u16 = 25;
@@ -109,6 +112,11 @@ impl ChipFilter {
 pub struct EventLog {
     filter: ChipFilter,
     selected: usize,
+    /// S07c: showing the chronicle instead of the list.
+    chronicle: bool,
+    chron_scroll: u16,
+    /// What the chronicle blit measured last render, for clamping the scroll.
+    chron_measured: std::cell::Cell<(u16, u16)>,
 }
 
 impl Default for EventLog {
@@ -119,7 +127,7 @@ impl Default for EventLog {
 
 impl EventLog {
     pub const fn new() -> Self {
-        Self { filter: ChipFilter::new(), selected: 0 }
+        Self { filter: ChipFilter::new(), selected: 0, chronicle: false, chron_scroll: 0, chron_measured: std::cell::Cell::new((0, 0)) }
     }
 
     fn filtered<'a>(&self, sim: &'a Sim) -> Vec<&'a Event> {
@@ -133,6 +141,26 @@ impl Screen for EventLog {
     }
 
     fn handle_key(&mut self, key: KeyEvent, app: &mut AppState) -> Action {
+        if key.code == KeyCode::Char('c') {
+            self.chronicle = !self.chronicle;
+            return Action::None;
+        }
+        if self.chronicle {
+            let (content, visible) = self.chron_measured.get();
+            let max = crate::widgets::scroll::Overflow::max_offset(content, visible);
+            return match key.code {
+                KeyCode::Up => {
+                    self.chron_scroll = self.chron_scroll.saturating_sub(1);
+                    Action::None
+                }
+                KeyCode::Down => {
+                    self.chron_scroll = (self.chron_scroll + 1).min(max);
+                    Action::None
+                }
+                KeyCode::Esc => Action::Pop,
+                _ => Action::Unhandled,
+            };
+        }
         match key.code {
             KeyCode::Char('1') => {
                 self.filter.toggle(1);
@@ -189,6 +217,11 @@ impl Screen for EventLog {
         let Some(sim) = &app.sim else {
             return;
         };
+        if self.chronicle {
+            let m = chronicle::render(f, area, app, sim, self.chron_scroll);
+            self.chron_measured.set((m.content, area.height.saturating_sub(3)));
+            return;
+        }
         let events = self.filtered(sim);
         let detail = !self.filter.all;
         let status_row = area.y + area.height - 1;
@@ -209,11 +242,11 @@ impl Screen for EventLog {
 
         let right = format!("{}  {} {}", sim.time.clock_label(), glyphs::SUN, "day");
         let keys: &[(&str, &str)] = if detail {
-            &[("↑↓", "select"), ("f", "filter"), ("Enter", "jump"), ("i", "inspect"), ("Esc", "back")]
+            &[("↑↓", "select"), ("f", "filter"), ("Enter", "jump"), ("i", "inspect"), ("c", "chronicle"), ("Esc", "back")]
         } else {
-            &[("↑↓", "select"), ("1-9", "chips"), ("f", "cycle"), ("Enter", "jump"), ("Esc", "back")]
+            &[("↑↓", "select"), ("1-9", "chips"), ("f", "cycle"), ("Enter", "jump"), ("c", "chronicle"), ("Esc", "back")]
         };
-        status::render(f, Rect::new(area.x, status_row, area.width, 1), keys, &right);
+        status::render_noted(f, Rect::new(area.x, status_row, area.width, 1), keys, app.ai.status_note(), &right, theme::ACCENT);
     }
 }
 

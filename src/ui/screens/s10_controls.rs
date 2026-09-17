@@ -1,5 +1,8 @@
 //! S10 / Options modal (C6 FR5): drawn over the dimmed world map (or the title
-//! screen). The Options section is six rows and persists to `ui.toml`.
+//! screen).
+//!
+//! The Options section is six rows and persists to `ui.toml`; the AI section
+//! (C9) is the master switch, the gateway status and one row per feature.
 
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
@@ -7,6 +10,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::Frame;
 
+use crate::ai::{Ai, Feature};
 use crate::sim::params::DayNightTint;
 use crate::ui::app::AppState;
 use crate::ui::config;
@@ -106,6 +110,16 @@ impl Screen for Controls {
                 persist(app);
                 Action::None
             }
+            KeyCode::Char('m') => {
+                // The master switch (ai-requirements R1/R7): persist first, then
+                // rebuild the handle from ui.toml alone. Dropping the old handle
+                // stops the worker and discards in-flight replies.
+                app.params.ui.ai.enabled = !app.params.ui.ai.enabled;
+                persist(app);
+                app.chronicle_pending = None;
+                app.ai = Ai::start(&config::load_ai());
+                Action::None
+            }
             KeyCode::Left => {
                 app.params.ui.autosave_days = app.params.ui.autosave_days.saturating_sub(1);
                 persist(app);
@@ -121,7 +135,7 @@ impl Screen for Controls {
     }
 
     fn render(&self, app: &AppState, f: &mut Frame<'_>, area: Rect) {
-        let modal = util::centered(area, 60.min(area.width.saturating_sub(2)), 21.min(area.height.saturating_sub(2)));
+        let modal = util::centered(area, 60.min(area.width.saturating_sub(2)), 26.min(area.height.saturating_sub(2)));
         let inner = panel::draw_with_hint(f, modal, "Simulation Controls", "Esc closes", panel::Kind::Focus);
         let mut row = 0u16;
 
@@ -168,7 +182,8 @@ impl Screen for Controls {
         row += 2;
 
         row = clock_panel(f, inner, row, app);
-        options_panel(f, inner, row, app);
+        row = options_panel(f, inner, row, app);
+        ai_panel(f, inner, row, app);
 
         let hint_row = inner.height - 1;
         util::line(f, inner, hint_row, Line::from(vec![
@@ -186,7 +201,7 @@ impl Screen for Controls {
         // Repaint the status bar undimmed.
         let status_row = area.y + area.height - 1;
         util::fill(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1), Style::default().bg(theme::STATUS_BG));
-        let keys: &[(&str, &str)] = &[("Space", "pause"), ("+/-", "speed"), ("1-5", "set speed"), (".", "step"), ("a/b/c/t/d", "toggle"), ("Esc", "close")];
+        let keys: &[(&str, &str)] = &[("Space", "pause"), ("+/-", "speed"), ("1-5", "set speed"), (".", "step"), ("a/b/c/t/d/m", "toggle"), ("Esc", "close")];
         let (right, right_fg) = match &app.sim {
             Some(sim) => clock_status(&sim.time, app.params.ui.day_night_tint),
             None => ("options".to_string(), theme::ACCENT),
@@ -226,8 +241,8 @@ fn clock_panel(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState) -> 
     row
 }
 
-/// The options toggles and the autosave row.
-fn options_panel(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState) {
+/// The options toggles and the autosave row; returns the row after the section.
+fn options_panel(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState) -> u16 {
     panel::section(f, inner, row, "Options");
     row += 1;
         // `[t]` cycles three states; the mark is on for anything but `off`.
@@ -265,6 +280,43 @@ fn options_panel(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState) {
             Span::styled(format!(" {} ", glyphs::PLAY), theme::key()),
             Span::styled("[←→]", theme::key()),
         ]));
+        row + 2
+}
+
+/// The AI section (C9): master switch, gateway status, one row per feature
+/// showing its model string (set in `ui.toml`; greyed until the master is on).
+fn ai_panel(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState) {
+    panel::section(f, inner, row, "AI");
+    row += 1;
+    let cfg = &app.params.ui.ai;
+    let status = if !cfg.enabled {
+        "off"
+    } else if app.ai.is_on() {
+        app.ai.status().label()
+    } else {
+        "not compiled"
+    };
+    let (mark, mark_style) = if cfg.enabled {
+        ("[x]", Style::default().fg(theme::GOOD).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD))
+    } else {
+        ("[ ]", theme::dim_text())
+    };
+    util::line(f, inner, row, Line::from(vec![
+        Span::styled(" ", theme::text()),
+        Span::styled(mark, mark_style),
+        Span::styled(format!(" AI enabled   status: {status:<24}"), theme::text()),
+        Span::styled("[m]", theme::key()),
+    ]));
+    row += 1;
+    let row_style = if cfg.enabled { theme::text() } else { theme::dim_text() };
+    for feature in [Feature::Chronicle, Feature::Designer] {
+        let model = cfg.features.model(feature.key()).map_or_else(|| "(off)".to_string(), |m| crate::ui::screens::common::clip(m, 38));
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(format!("     {:<10} ", feature.key()), theme::label()),
+            Span::styled(model, row_style),
+        ]));
+        row += 1;
+    }
 }
 
 #[cfg(test)]
@@ -289,6 +341,7 @@ mod tests {
     fn s10_epidemic_toggle() {
         // `d` persists through `save_ui`; point it at a scratch dir so the test
         // never overwrites the user's real `~/.config/sim-fortress/ui.toml`.
+        let _env = config::env_lock();
         let scratch = std::env::temp_dir().join(format!("sim-fortress-s10-test-{}", std::process::id()));
         std::env::set_var("XDG_CONFIG_HOME", &scratch);
 
@@ -310,5 +363,41 @@ mod tests {
         // Toggle back so the persisted ui.toml is left as it was.
         c.handle_key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE), &mut app);
         assert_eq!(app.params.ui.auto_pause_on_epidemic, before);
+    }
+
+    /// C9: `m` flips the master switch, persists it and rebuilds the handle
+    /// from ui.toml; the rows read off / offline / not compiled, never a URL.
+    #[test]
+    fn s10_ai_master_toggle() {
+        let _env = config::env_lock();
+        let scratch = std::env::temp_dir().join(format!("sim-fortress-s10-ai-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::env::set_var("XDG_CONFIG_HOME", &scratch);
+
+        let mut app = AppState::new(Params::default());
+        // A port nothing listens on, so the probe never reaches a real gateway.
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        drop(l);
+        app.params.ui.ai.base_url = format!("http://127.0.0.1:{port}/v1");
+        app.params.ui.ai.features.chronicle = "ollama/llama3.1:8b".into();
+        let text = render(&app);
+        assert!(text.contains("[ ] AI enabled   status: off"), "row missing:\n{text}");
+        assert!(text.contains("chronicle  ollama/llama3.1:8b"), "{text}");
+        assert!(text.contains("designer   (off)"), "{text}");
+        assert!(text.contains("[Space] pause"), "hint row must survive the AI section:\n{text}");
+
+        let mut c = Controls::new();
+        c.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE), &mut app);
+        assert!(app.params.ui.ai.enabled);
+        let text = render(&app);
+        assert!(text.contains("[x] AI enabled   status: offline") || text.contains("[x] AI enabled   status: not compiled"), "{text}");
+        assert!(config::load_ai().enabled, "persisted");
+        assert_eq!(app.ai.is_on(), cfg!(feature = "ai"));
+
+        c.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE), &mut app);
+        assert!(!app.params.ui.ai.enabled);
+        assert!(!app.ai.is_on());
+        assert!(render(&app).contains("[ ] AI enabled   status: off"));
     }
 }

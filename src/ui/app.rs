@@ -12,7 +12,8 @@ use ratatui::{DefaultTerminal, Frame};
 
 use crate::sim::creatures::CreatureId;
 use crate::sim::save;
-use crate::sim::{Alert, EventKind, Params, Sim};
+use crate::ai::Ai;
+use crate::sim::{Alert, EventKind, Params, Season, Sim};
 use crate::theme;
 use crate::ui::config;
 
@@ -27,6 +28,7 @@ use super::screens::s08_lineage::LineageScreen;
 use super::screens::s10_controls::Controls;
 use super::screens::s11_help::Help;
 use super::screens::s12_alert::AlertModal;
+use super::ai_bridge::{ChroniclePending, DesignerInbox};
 use super::screens::{self, Action, Stack, TickAccumulator};
 
 /// A pending confirm-modal request (C6 FR4).
@@ -85,6 +87,20 @@ pub struct AppState {
     /// C7 FR9: the S12b "Show outbreak" button asks the map to open the disease
     /// overlay on this pathogen slot; the map screen takes it on its next key/render.
     pub pending_overlay: Option<crate::sim::PathogenId>,
+    // ---- C9: the language-model layer ----
+    /// The one gateway handle; `Ai::Off` unless `ui.toml` enables it.
+    pub ai: Ai,
+    /// Set by `step_ticks` when a batch crossed a season boundary: the
+    /// `(year, season)` that just ended. Consumed by `enqueue_chronicle`.
+    pub season_ended: Option<(u32, Season)>,
+    /// The chronicle request in flight, if any.
+    pub chronicle_pending: Option<ChroniclePending>,
+    /// One dim line about the last AI failure, cleared by the next success.
+    pub ai_notice: Option<String>,
+    /// Designer replies waiting for the S09 modal.
+    pub designer_inbox: DesignerInbox,
+    /// A validated `[[species]]` overlay the designer hands back to the S09 form.
+    pub pending_species_overlay: Option<String>,
 }
 
 impl AppState {
@@ -110,6 +126,12 @@ impl AppState {
             last_autosave_day: None,
             confirm: None,
             cli_params_used: false,
+            ai: Ai::Off,
+            season_ended: None,
+            chronicle_pending: None,
+            ai_notice: None,
+            designer_inbox: DesignerInbox::default(),
+            pending_species_overlay: None,
         }
     }
 
@@ -253,9 +275,15 @@ impl AppState {
     pub fn step_ticks(&mut self, n: u64) -> Vec<Alert> {
         let mut out = Vec::new();
         if let Some(sim) = self.sim.as_mut() {
+            // A batch is at most 200 ticks and a season at least 720, so at
+            // most one boundary is crossed per call (C9 chronicle trigger).
+            let before = (sim.time.year(), sim.time.season());
             for _ in 0..n {
                 let report = sim.step();
                 out.extend(report.alerts);
+            }
+            if sim.time.season() != before.1 {
+                self.season_ended = Some(before);
             }
         }
         out
@@ -495,6 +523,8 @@ pub fn run(terminal: &mut DefaultTerminal, params: Params, saves_dir: Option<&Pa
     }
     let mut app = App::new(params);
     app.state.cli_params_used = cli_params_used;
+    // The `[ai]` table is read from ui.toml only, never from a params overlay (R1).
+    app.state.ai = Ai::start(&config::load_ai());
     if let Some(dir) = saves_dir {
         app.state.saves_dir = dir.to_path_buf();
     }
@@ -542,6 +572,10 @@ pub fn run(terminal: &mut DefaultTerminal, params: Params, saves_dir: Option<&Pa
         }
         app.state.handle_follow();
         app.state.autosave_if_due();
+        app.state.enqueue_chronicle();
+        if app.state.pump_ai() {
+            force_draw = true;
+        }
 
         // Raise the next queued extinction alert, if one is pending and none is shown.
         if let Some(alert) = app.state.take_next_alert() {

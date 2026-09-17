@@ -27,8 +27,10 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// per-cell biome and the per-cell region map (biomes as regions); version 9
 /// came with river morphology (width tiers, deltas, washes and falls); version
 /// 10 widened the genome to twelve traits (Mutability) and added the
-/// per-creature `sterile` flag.
-pub const VERSION: u16 = 10;
+/// per-creature `sterile` flag; version 11 added the chronicle table (C9,
+/// decorative and optional: an empty table loads in any build) and the `[ai]`
+/// block inside the saved `UiParams`.
+pub const VERSION: u16 = 11;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 
@@ -503,6 +505,28 @@ mod tests {
             }
             assert_eq!(loaded.checksum(), sim.checksum(), "seed {seed} round-trip checksum");
         }
+    }
+
+    /// ai-requirements R11: the chronicle table round-trips, and a world with
+    /// none loads unchanged; neither needs the `ai` feature.
+    #[test]
+    fn ai_tables_are_optional_on_load() {
+        use crate::sim::chronicle::{ChronicleEntry, Source};
+        use crate::sim::Season;
+        let dir = tmpdir("ai-tables");
+        let mut sim = Sim::new(3, Params::default());
+        for _ in 0..240 {
+            sim.step();
+        }
+        let empty_path = save(&sim, "No Chronicle", &dir).unwrap();
+        assert!(load(&empty_path).unwrap().sim.chronicle.is_empty());
+
+        sim.chronicle.push(ChronicleEntry { year: 1, season: Season::Spring, text: "The voles thrived.".into(), source: Source::Model });
+        sim.chronicle.push(crate::sim::chronicle::template_entry(&sim, 1, Season::Spring));
+        let path = save(&sim, "With Chronicle", &dir).unwrap();
+        let loaded = load(&path).unwrap().sim;
+        assert_eq!(loaded.chronicle, sim.chronicle);
+        assert_eq!(loaded.checksum(), sim.checksum(), "the table is not part of the checksum");
     }
 
     #[test]

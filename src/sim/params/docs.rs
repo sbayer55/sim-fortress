@@ -31,6 +31,15 @@ pub(super) const FIELD_DOCS: &[(&str, &str)] = &[
             ("ui.scarcity_thresholds.plenty", "Vegetation above this fraction (with prey) is Plenty."),
             ("ui.scarcity_thresholds.plenty_min_prey", "Prey count a region needs to reach Plenty."),
             ("ui.scarcity_thresholds.crowded_prey_per_veg", "Prey-per-vegetation ratio that reads as Crowded."),
+            // ---- ui.ai (C9): lives in ui.toml as [ai]; a params overlay never switches it on
+            ("ui.ai.enabled", "Master switch for the language-model layer. Off: no worker, no probe, no request."),
+            ("ui.ai.base_url", "Bifrost's OpenAI-compatible root (http://localhost:8080/v1)."),
+            ("ui.ai.token", "Optional bearer token for the gateway itself; never a cloud key. Blank in saves."),
+            ("ui.ai.timeout_secs", "Per-request timeout in seconds; a timeout is an error, never a retry."),
+            ("ui.ai.features.chronicle", "Model for the season chronicle, or \"\" = off. Sends: year, season, region names, the season's events (label, day, text; at most 200), per-species counts/births/deaths, the previous entry. Never params, paths or config."),
+            ("ui.ai.features.chronicle_fallbacks", "Models Bifrost tries in order if the chronicle model fails."),
+            ("ui.ai.features.designer", "Model for the species designer, or \"\" = off. Sends: your sentence, the species.* field docs, one example [[species]] entry, the roster's names/kinds/glyphs. Never the full params."),
+            ("ui.ai.features.designer_fallbacks", "Models Bifrost tries in order if the designer model fails."),
             // ---- events
             ("events.capacity", "Event ring buffer size."),
             // ---- stats

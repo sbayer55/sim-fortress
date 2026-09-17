@@ -3,7 +3,9 @@
 Back to the [roadmap](chunks/README.md). Ideas that would use this: the
 [AI section of the backlog](feature-ideas.md#ai-assisted-features-opt-in-via-a-local-bifrost-gateway).
 
-> **Status: drafted 2026-09-16, nothing implemented.** This document is binding for every
+> **Status: drafted 2026-09-16; the shared plumbing and the first two features shipped in
+> [C9](chunks/c9-ai-designer-and-chronicle.md) the same day.** Amendments made while building
+> are marked *(C9)* inline. This document is binding for every
 > feature that sends a prompt to a language model. It states the rules (R1–R14), the
 > configuration and architecture every feature shares, the checklist for building one, and the
 > tests that pin the rules. A chunk doc for an AI feature references this file instead of
@@ -59,7 +61,8 @@ AI is off.
 
 **R3 — The step never sees the model.** No AI code under `src/sim`. `Sim::step` and everything
 it calls cannot observe whether AI is on. `sim::tests::checksum_is_fnv_stable` must produce
-`0xfe19543fc5fd7dbe` with the `ai` Cargo feature on and off. The existing purity scan in
+`0x9b4ed39b8baac6f5` (the value `AGENTS.md` pins; an earlier draft quoted a stale one) with
+the `ai` Cargo feature on and off. The existing purity scan in
 `src/sim/mod.rs` keeps ratatui and hash maps out; the AI module lives beside `ui`, not under
 `sim`, so the scan never sees it. The `[ai]` **config struct** may live with `UiParams` in
 `sim::params` because it is plain data with no behaviour.
@@ -134,12 +137,14 @@ sim needs in order to function is AI-generated.
 *Pinned by:* `sim::save::tests::ai_tables_are_optional_on_load`.
 
 **R12 — Tests are offline.** No test tier contacts a real gateway. Acceptance and unit tests use
-a **fake gateway**: an in-process HTTP listener on an ephemeral port that returns canned
-completions from `tests/fixtures/ai/*.json` and records every request it receives. The fixture
-name is the feature id plus a scenario. The fake is the only place the `ai` feature's tests run,
-so `just test-unit ai` and the affected chunk stay within their tiers.
-*Pinned by:* `scripts/hooks/guard-cargo-test.sh` unchanged; `ai::tests::*` and the C9 chunk
-binary construct the fake gateway in their setup.
+a **fake gateway** *(C9: `scripts/fake-gateway.js`, a Node `node:http` script the tests launch
+on an ephemeral port through `ai::fake::Fake`, rather than an in-process Rust listener; it
+doubles as the development mock)* that returns canned completions from
+`tests/fixtures/ai/<feature>/<scenario>.json` and records every request it receives. The fake is
+the only place the `ai` feature's tests run, so `just test-unit-ai ai` and the affected chunk
+stay within their tiers. The AI tests need Node on `PATH`.
+*Pinned by:* `scripts/hooks/guard-cargo-test.sh` unchanged; `ai::tests::*`, `ui::tests::ai::*`
+and `tests/headless.rs::with_gateway::*` construct the fake gateway in their setup.
 
 **R13 — Existing invariants apply unchanged.** CP437 glyphs only, colours from `theme.rs`, the
 800-line ceiling, the strict clippy set, `cast!` for every numeric cast, parameters with
@@ -147,8 +152,10 @@ binary construct the fake gateway in their setup.
 happens to make an HTTP request.
 *Pinned by:* `just check` and `tests/file_size.rs`.
 
-**R14 — Compile-time optional.** The HTTP dependency and the `src/ai/` module sit behind an
-`ai` Cargo feature that is **not** in `default`. `cargo build` with defaults produces today's
+**R14 — Compile-time optional.** The HTTP dependency and the network half of `src/ai/` sit
+behind an `ai` Cargo feature that is **not** in `default` *(C9: the plain types, the prompt
+builders, the CP437 filter and the headless stubs compile always, so screens and `main.rs`
+carry no `cfg`; `Ai::start` is `Off` and the AI flags say "built without the ai feature")*. `cargo build` with defaults produces today's
 binary with no new dependency; CI and contributors need nothing. With the feature compiled in,
 R1 still governs at run time.
 *Pinned by:* CI building both `--no-default-features` (plus whatever defaults exist) and
@@ -173,12 +180,17 @@ timeout_secs = 30                      # per request; a timeout is an error repl
 # Model strings are Bifrost's "<provider>/<model>"; the prefix tells you where the data goes.
 chronicle = "ollama/llama3.1:8b"
 chronicle_fallbacks = ["bedrock/claude-sonnet"]   # tried by Bifrost, in order, if the first fails
-names = "ollama/llama3.1:8b"
-bio = false
-thoughts = false
 designer = "bedrock/claude-sonnet"
-postmortem = "bedrock/claude-opus"
+designer_fallbacks = []
+# Later features add their key here the same way: names, bio, thoughts, postmortem, ...
 ```
+
+*(C9)* Model keys are plain strings and `""` means off; the `bio = false` form is not accepted
+because `AiConfig` also travels inside `Params` in binary saves, and postcard cannot read an
+untagged bool-or-string. `AiConfig` is a field of `UiParams`, so `--dump-params` lists these
+keys as `ui.ai.*` while `ui.toml` (which is `UiParams` at its root) shows `[ai]`. The handle
+is built from `ui::config::load_ai()` only, never from `params.ui.ai`. The `token` newtype
+writes `""` to non-human-readable formats so a save never carries it.
 
 Rules for the table:
 

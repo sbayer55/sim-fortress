@@ -255,7 +255,7 @@ impl Screen for WorldMap {
         let status_row = area.y + area.height - 1;
         let keys = status_keys(app, self.overlay, overlay);
         let (right, right_fg) = clock_status(time, app.params.ui.day_night_tint);
-        status::render_colored(f, Rect::new(area.x, status_row, area.width, 1), keys, &right, right_fg);
+        status::render_noted(f, Rect::new(area.x, status_row, area.width, 1), keys, app.ai.status_note(), &right, right_fg);
     }
 }
 

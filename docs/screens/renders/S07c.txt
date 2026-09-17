@@ -1,0 +1,45 @@
+ S07c  Event Log — chronicle                                                                                                                               
+╔ Chronicle ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ 4 seasons ╗
+║ * Year 1, Winter   tally                                                                                                                                ║
+║   Voles 310→140, Hares 407→172, Deer 148→37, Foxes 5→4, Wolves 7→2, Lynxes 4→3.                                                                         ║
+║   0 births, 523 deaths (predation 78, starved 260, thirst 134, disease 2, old age 49).                                                                  ║
+║   A herd of 21 Voles migrated from Southern Savanna to Eastern Forest.                                                                                  ║
+║   A herd of 23 Hares migrated from Southern Savanna to Eastern Forest.                                                                                  ║
+║   A family of 3 Deer migrated from Southern Savanna to Eastern Forest.                                                                                  ║
+║   The Deer line of Southern Savanna is extinct.                                                                                                         ║
+║   A herd of 97 Voles migrated from Southern Forest to Western Forest.                                                                                   ║
+║   A herd of 15 Voles migrated from Eastern Tundra to Southern Savanna.                                                                                  ║
+║   A herd of 6 Voles migrated from Upper Forest to Southern Savanna.                                                                                     ║
+║   A herd of 131 Hares migrated from Southern Forest to Western Forest.                                                                                  ║
+║                                                                                                                                                         ║
+║ ♫ Year 1, Autumn   tally                                                                                                                                ║
+║   Voles 489→310, Hares 660→407, Deer 298→148, Foxes 6→5, Wolves 7→7, Lynxes 5→4.                                                                        ║
+║   52 births, 698 deaths (predation 84, starved 241, thirst 307, disease 1, old age 65).                                                                 ║
+║   The Deer line of Eastern Tundra is extinct.                                                                                                           ║
+║   A herd of 191 Voles migrated from Southern Forest to Northern Taiga.                                                                                  ║
+║   A herd of 17 Voles migrated from Upper Forest to Southern Savanna.                                                                                    ║
+║   A herd of 314 Hares migrated from Southern Forest to Northern Taiga.                                                                                  ║
+║   A herd of 24 Hares migrated from Upper Forest to Southern Savanna.                                                                                    ║
+║   A herd of 110 Deer migrated from Southern Forest to Northern Taiga.                                                                                   ║
+║   A herd of 16 Deer migrated from Upper Forest to Southern Savanna.                                                                                     ║
+║   A herd of 43 Voles migrated from Western Forest to Southern Forest.                                                                                   ║
+║                                                                                                                                                         ║
+║ ☼ Year 1, Summer   tally                                                                                                                                ║
+║   Voles 392→489, Hares 381→660, Deer 211→298, Foxes 6→6, Wolves 5→7, Lynxes 4→5.                                                                        ║
+║   442 births, 266 deaths (predation 75, starved 6, thirst 128, old age 57).                                                                             ║
+║   A herd of 11 Voles migrated from Upper Forest to Southern Savanna.                                                                                    ║
+║   A herd of 12 Hares migrated from Upper Forest to Southern Savanna.                                                                                    ║
+║   A herd of 7 Deer migrated from Upper Forest to Southern Savanna.                                                                                      ║
+║                                                                                                                                                         ║
+║ ♪ Year 1, Spring   tally                                                                                                                                ║
+║   Voles 239→392, Hares 180→381, Deer 90→211, Foxes 8→6, Wolves 6→5, Lynxes 4→4.                                                                         ║
+║   382 births, 144 deaths (predation 76, starved 1, thirst 66, old age 1).                                                                               ║
+║   The Deer line of Western Forest is extinct.                                                                                                           ║
+║   The Deer line of Northern Taiga is extinct.                                                                                                           ║
+║   The Deer line of Northern Taiga is extinct.                                                                                                           ║
+║   The Deer line of Western Forest is extinct.                                                                                                           ║
+║   The Deer line of Eastern Tundra is extinct.                                                                                                           ║
+║   The Deer line of Western Forest is extinct.                                                                                                           ║
+║   The Deer line of Eastern Tundra is extinct.                                                                                                           ║
+╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ ↓2 ╝
+ [↑↓] scroll  [c] event log  [Esc] back                                                                              Year 2, Day 1 of Spring  06:00  ☼ day 

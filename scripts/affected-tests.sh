@@ -39,6 +39,7 @@ fi
 
 declare -A units=() chunks=()
 core=0
+features=""
 
 for f in $changed; do
     case "$f" in
@@ -57,6 +58,8 @@ for f in $changed; do
         src/sim/params*)                          units[sim::params]=1; chunks[headless]=1 ;;
         src/sim/stats*)                           units[sim::stats]=1 ;;
         src/sim/*)                                units[sim]=1 ;;
+        src/ai/*|scripts/fake-gateway.js|tests/fixtures/ai/*)
+            units[ai]=1; chunks[headless]=1; features="--features ai" ;;
         src/ui/*)                                 units[ui]=1 ;;
         src/widgets/*)                            units[widgets]=1 ;;
         src/theme.rs)                             units[theme]=1; units[ui]=1 ;;
@@ -85,12 +88,12 @@ if [ "$core" -eq 1 ]; then
     echo "  core files changed: the whole lib suite is relevant (just test-unit-all, ~95 s, ask the user)"
 fi
 for u in $(printf '%s\n' "${!units[@]}" | sort); do
-    echo "  cargo test --lib $u"
+    echo "  cargo test $features --lib $u"
 done
 for c in $(printf '%s\n' "${!chunks[@]}" | sort); do
     case "$c" in
-        predators|evolution|disease|sweep) echo "  cargo test --release --test $c" ;;
-        *)                                 echo "  cargo test --test $c" ;;
+        predators|evolution|disease|sweep) echo "  cargo test --release $features --test $c" ;;
+        *)                                 echo "  cargo test $features --test $c" ;;
     esac
 done
 
@@ -99,17 +102,20 @@ done
 echo
 status=0
 for u in $(printf '%s\n' "${!units[@]}" | sort); do
-    echo "==> cargo test --lib $u"
-    cargo test --lib "$u" || status=1
+    echo "==> cargo test $features --lib $u"
+    # shellcheck disable=SC2086
+    cargo test $features --lib "$u" || status=1
 done
 for c in $(printf '%s\n' "${!chunks[@]}" | sort); do
     case "$c" in
         predators|evolution|disease|sweep)
-            echo "==> cargo test --release --test $c"
-            cargo test --release --test "$c" || status=1 ;;
+            echo "==> cargo test --release $features --test $c"
+            # shellcheck disable=SC2086
+            cargo test --release $features --test "$c" || status=1 ;;
         *)
-            echo "==> cargo test --test $c"
-            cargo test --test "$c" || status=1 ;;
+            echo "==> cargo test $features --test $c"
+            # shellcheck disable=SC2086
+            cargo test $features --test "$c" || status=1 ;;
     esac
 done
 exit "$status"

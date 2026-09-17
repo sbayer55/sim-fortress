@@ -15,6 +15,7 @@ builds the world and drops the player onto the map.
 | Id   | Variant         | When it is shown |
 |------|-----------------|------------------|
 | S09a | new world form  | After `New World` on the [title screen](s00-title.md). |
+| S09b | species designer modal | `[ Design species ]` on S09a (C9); the button exists only while `[ai.features] designer` names a model and AI is enabled. No AI-off render exists because the button is absent then. |
 
 ## Layout
 Two panels over a status bar; body is 155×43.
@@ -107,8 +108,26 @@ unfocused values are bright text on the plain background.
 6. **Generate note.** `► Generate builds the world from the seed above; the preview
    updates as seed or terrain sliders change.`
 7. **Buttons** pinned to the last inner row, from column 4 with 3-cell gaps: `[ Generate ]`
-   (primary: cursor foreground on the accent background, bold), `[ Randomize seed ]` and
-   `[ Back ]` (bright text on the header background).
+   (primary: cursor foreground on the accent background, bold), `[ Randomize ]` and
+   `[ Back ]` (bright text on the header background), and, only while the C9 designer
+   feature is on, a fourth `[ Design species ]` that is the last Tab stop. The four labels
+   fill the 64-column row exactly.
+
+### Species designer modal (S09b, C9)
+A 78×18 focus-bordered modal over the dimmed form, title `Species designer`, hint `Esc
+closes`. Row 0 explains the field; row 2 is the prompt line `> …_` (up to 200 characters,
+`common::edit_text`). The body below shows one of four phases: an example sentence while
+typing; `∙ asking <model> ...` while waiting (with a note if the single correction round is in
+progress); `☺ validated: <name>` plus the summary lines — `name / Plural  glyph g  kind  diet`,
+`founders N  adult at N days  gestation N days  litter up to N`, `genome: <non-average
+traits>`, `prey: <shares>` — after the loader accepted the reply; or `☹ <the loader's message>`
+after two rejections or a gateway error. The reply is JSON for one species, turned into a
+`[[species]]` overlay and run through `Params::apply_overlay` on the form's current
+parameters; a new name appends, an existing name edits in place. Enter on the preview
+writes `<config dir>/species/<name>.toml` and applies the overlay to the form's roster and
+founder counts (the tail focus indices move; the preview map is untouched). Status bar by
+phase: `[Enter] design [Esc] close` · `[Esc] cancel` · `[Enter] add to roster [Esc] try
+again` · `[Enter] try again [Esc] close`.
 
 ### Preview panel
 8. **Terrain preview.** The generated world drawn at 1:2 (every second column and row) as
@@ -164,7 +183,7 @@ unfocused values are bright text on the plain background.
 | `Tab`       | move focus to the next field (wrapping from the last button to the first field); `Shift+Tab` should move back | stays on S09 |
 | `←` `→`     | decrement / increment the focused adjustable field or species count; cycle enumerations (rainfall, difficulty); on a text field move the caret | stays on S09 |
 | typing      | edit the focused text field (world name, seed)               | stays on S09 |
-| `Enter`     | generate the world with the current settings (equivalent to the `[ Generate ]` button; on a preset row it applies the preset; on `[ Randomize seed ]` it draws a new seed) | [S01 World Map](s01-world-map.md) |
+| `Enter`     | generate the world with the current settings (equivalent to the `[ Generate ]` button; on a preset row it applies the preset; on `[ Randomize ]` it draws a new seed; on `[ Design species ]` it opens S09b) | [S01 World Map](s01-world-map.md) |
 | `Esc`       | back without generating                                      | [S00 Title](s00-title.md) |
 
 Global keys have no world to act on and are disabled here; `s g y e w` must reach the text

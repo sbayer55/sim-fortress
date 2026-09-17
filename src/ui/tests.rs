@@ -1,5 +1,6 @@
 //! C6 UI tests: title navigation, load-list ordering, confirm-modal keys and
-//! options persistence.
+//! options persistence. C9: the chronicle trigger and, with `--features ai`,
+//! the R1/R2 tests against the fake gateway.
 
 use std::path::PathBuf;
 
@@ -217,6 +218,66 @@ fn regenerate_screen_renders() {
     }
 }
 
+/// C9 renders, AI off: S07c with a year of tally entries and S10a with the AI
+/// section. Same frame convention as `regenerate_screen_renders`.
+///
+/// `cargo test --lib -- --ignored regenerate_screen_renders`
+#[test]
+#[ignore = "writes docs/screens/renders/S07c.txt and S10a.txt; run explicitly to refresh the snapshots"]
+fn regenerate_screen_renders_c9() {
+    use crate::ui::screens::s01_map::WorldMap;
+    use crate::ui::screens::s07_log::EventLog;
+    use crate::ui::screens::s10_controls::Controls;
+    use crate::ui::screens::{render_stack, Screen, Stack};
+    use ratatui::backend::TestBackend;
+    use ratatui::layout::Rect;
+    use ratatui::Terminal;
+
+    // One year through the app's own batch loop, so every season boundary
+    // leaves a template chronicle entry.
+    let mut app = AppState::new(Params::default());
+    app.sim = Some(Sim::new(7, Params::default()));
+    for _ in 0..360 {
+        app.step_ticks(24);
+        app.enqueue_chronicle();
+    }
+    app.world_name = Some("The Valley of Sunfall".to_string());
+    app.paused = true;
+
+    let snap = |app: &AppState, screens: Vec<Box<dyn Screen>>, title: &str| -> String {
+        let stack = Stack { screens };
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| {
+                f.buffer_mut().set_stringn(0, 0, format!(" {title:<154}"), 155, ratatui::style::Style::default());
+                render_stack(&stack, app, f, Rect::new(0, 1, 155, 44));
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        let mut out = String::new();
+        for y in 0..45 {
+            for x in 0..155 {
+                out.push_str(buf[(x, y)].symbol());
+            }
+            out.push('\n');
+        }
+        out
+    };
+
+    let mut log = EventLog::new();
+    log.handle_key(key(KeyCode::Char('c')), &mut app);
+    let s07c = snap(&app, vec![Box::new(log)], "S07c  Event Log — chronicle");
+    let s10a = snap(
+        &app,
+        vec![Box::new(WorldMap::new("The Valley of Sunfall".to_string())), Box::new(Controls::new())],
+        "S10a  Simulation Controls — modal over world map",
+    );
+    for (path, text) in [("docs/screens/renders/S07c.txt", s07c), ("docs/screens/renders/S10a.txt", s10a)] {
+        std::fs::write(path, text).unwrap_or_else(|e| panic!("write {path}: {e}"));
+    }
+}
+
 /// The status-bar clock is the day/night cue only under `StatusText`: moon blue at
 /// night, accent otherwise. The text itself always reports the real sky.
 #[test]
@@ -243,4 +304,279 @@ fn clock_status_colour_by_tint_mode() {
     assert_eq!(DayNightTint::Off.next(), DayNightTint::Map);
     assert_eq!(DayNightTint::Map.next(), DayNightTint::StatusText);
     assert_eq!(DayNightTint::StatusText.next(), DayNightTint::Off);
+}
+
+/// C9: a batch that crosses a season boundary pushes one template entry; no
+/// gateway is involved with AI off.
+#[test]
+fn chronicle_template_pushed_at_season_boundary() {
+    use crate::sim::chronicle::Source;
+    let mut app = AppState::new(Params::default());
+    app.sim = Some(Sim::new(7, Params::default()));
+    let season_ticks = 90 * 24;
+    let mut ran = 0;
+    while ran < season_ticks + 200 {
+        app.step_ticks(200);
+        ran += 200;
+        app.enqueue_chronicle();
+        assert!(!app.pump_ai());
+    }
+    let sim = app.sim.as_ref().unwrap();
+    assert_eq!(sim.chronicle.len(), 1, "one season ended");
+    let e = &sim.chronicle[0];
+    assert_eq!((e.year, e.season), (1, crate::sim::Season::Spring));
+    assert_eq!(e.source, Source::Template);
+    assert!(e.text.contains("births"), "{}", e.text);
+    assert!(app.season_ended.is_none());
+}
+
+#[cfg(feature = "ai")]
+mod ai {
+    use std::time::{Duration, Instant};
+
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use ratatui::layout::Rect;
+    use ratatui::Terminal;
+
+    use crate::ai::fake::Fake;
+    use crate::ai::{Ai, Feature, Status};
+    use crate::sim::chronicle::Source;
+    use crate::sim::params::AiConfig;
+    use crate::sim::{Params, Sim};
+    use crate::ui::app::AppState;
+    use crate::ui::config;
+    use crate::ui::screens::s07_log::EventLog;
+    use crate::ui::screens::s09_worldgen::WorldGen;
+    use crate::ui::screens::s10_controls::Controls;
+    use crate::ui::screens::{Action, Screen};
+
+    fn key(c: KeyCode) -> KeyEvent {
+        KeyEvent::new(c, KeyModifiers::NONE)
+    }
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("simf-ui-ai-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("sim-fortress")).unwrap();
+        dir
+    }
+
+    fn write_ui_toml(dir: &std::path::Path, cfg: &AiConfig) {
+        let ui = crate::sim::params::UiParams { ai: cfg.clone(), ..Default::default() };
+        config::save_ui_to(&dir.join("sim-fortress").join("ui.toml"), &ui).unwrap();
+    }
+
+    fn render(app: &AppState, screen: &dyn Screen) -> String {
+        let backend = TestBackend::new(155, 45);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| screen.render(app, f, Rect::new(0, 0, 155, 45))).unwrap();
+        let buf = terminal.backend().buffer();
+        (0..45).map(|y| (0..155).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect()
+    }
+
+    /// Two seasons of stepping through the app's own batch loop, pumping replies.
+    fn two_seasons(app: &mut AppState) {
+        let mut ran = 0;
+        while ran < 2 * 90 * 24 + 200 {
+            app.step_ticks(200);
+            ran += 200;
+            app.enqueue_chronicle();
+            app.pump_ai();
+        }
+    }
+
+    /// Visit every screen the app has, as R1 asks, and draw each once.
+    fn visit_every_screen(app: &mut AppState) {
+        let mut log = EventLog::new();
+        render(app, &log);
+        log.handle_key(key(KeyCode::Char('c')), app);
+        render(app, &log);
+        let mut gen = WorldGen::from_params(&Params::default());
+        gen.handle_key(key(KeyCode::Tab), app);
+        render(app, &gen);
+        render(app, &Controls::new());
+    }
+
+    fn wait_until(app: &mut AppState, pred: impl Fn(&AppState) -> bool) -> bool {
+        let start = Instant::now();
+        while start.elapsed() < Duration::from_secs(8) {
+            app.pump_ai();
+            if pred(app) {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(15));
+        }
+        false
+    }
+
+    /// R1: no `[ai]` table (a reachable gateway is not a signal): zero requests.
+    #[test]
+    fn ai_off_makes_no_requests() {
+        let _env = config::env_lock();
+        let fake = Fake::start("happy").unwrap();
+        let dir = scratch("off");
+        let mut cfg = fake.config("fake/m", "fake/m", 5);
+        cfg.enabled = false;
+        write_ui_toml(&dir, &cfg);
+        std::env::set_var("XDG_CONFIG_HOME", &dir);
+        let mut app = AppState::new(Params::default());
+        app.ai = Ai::start(&config::load_ai());
+        assert!(!app.ai.is_on());
+        app.sim = Some(Sim::new(7, Params::default()));
+        two_seasons(&mut app);
+        visit_every_screen(&mut app);
+        assert_eq!(app.sim.as_ref().unwrap().chronicle.len(), 2);
+        assert!(app.sim.as_ref().unwrap().chronicle.iter().all(|e| e.source == Source::Template));
+        assert!(fake.requests().is_empty());
+    }
+
+    /// R1: the master on with no feature naming a model: probe only, no request.
+    #[test]
+    fn ai_master_on_without_features_makes_no_requests() {
+        let _env = config::env_lock();
+        let fake = Fake::start("happy").unwrap();
+        let dir = scratch("nofeat");
+        write_ui_toml(&dir, &fake.config("", "", 5));
+        std::env::set_var("XDG_CONFIG_HOME", &dir);
+        let mut app = AppState::new(Params::default());
+        app.ai = Ai::start(&config::load_ai());
+        assert!(app.ai.is_on());
+        assert!(!app.ai.feature_on(Feature::Chronicle));
+        app.sim = Some(Sim::new(7, Params::default()));
+        two_seasons(&mut app);
+        visit_every_screen(&mut app);
+        assert!(wait_until(&mut app, |a| a.ai.status() == Status::Ready));
+        assert!(fake.requests().is_empty(), "{:?}", fake.requests());
+        assert!(app.chronicle_pending.is_none());
+    }
+
+    /// R2: enabled but unreachable: the map is reached, the sim steps, the
+    /// chronicle keeps its template entries and the status note says offline.
+    #[test]
+    fn ai_unreachable_reaches_map_and_steps() {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://127.0.0.1:{}/v1", l.local_addr().unwrap().port());
+        drop(l);
+        let mut cfg = AiConfig { enabled: true, base_url: url, timeout_secs: 2, ..AiConfig::default() };
+        cfg.features.chronicle = "fake/m".into();
+        let mut app = AppState::new(Params::default());
+        app.ai = Ai::start(&cfg);
+        app.sim = Some(Sim::new(7, Params::default()));
+        two_seasons(&mut app);
+        assert!(wait_until(&mut app, |a| a.chronicle_pending.is_none() && a.ai_notice.is_some()));
+        assert_eq!(app.ai.status_note(), "AI: offline");
+        let sim = app.sim.as_ref().unwrap();
+        assert_eq!(sim.chronicle.len(), 2);
+        assert!(sim.chronicle.iter().all(|e| e.source == Source::Template && e.text.contains("births")));
+        let text = render(&app, &crate::ui::screens::s01_map::WorldMap::new("Test".into()));
+        assert!(text.contains("AI: offline"), "{text}");
+    }
+
+    /// The chronicle arrives streamed from the fake and replaces the template.
+    #[test]
+    fn chronicle_streams_in_from_the_fake() {
+        let fake = Fake::start("happy").unwrap();
+        let mut app = AppState::new(Params::default());
+        app.ai = Ai::start(&fake.config("fake/m", "", 5));
+        app.sim = Some(Sim::new(7, Params::default()));
+        let mut ran = 0;
+        while ran < 90 * 24 + 200 {
+            app.step_ticks(200);
+            ran += 200;
+            app.enqueue_chronicle();
+        }
+        assert!(app.chronicle_pending.is_some());
+        assert!(wait_until(&mut app, |a| a.sim.as_ref().unwrap().chronicle[0].source == Source::Model));
+        let e = &app.sim.as_ref().unwrap().chronicle[0];
+        assert!(e.text.contains("\"quiet valley\""), "sanitised: {}", e.text);
+        assert!(!e.text.contains('\u{201c}'));
+        assert_eq!(fake.requests().len(), 1);
+        let body = &fake.requests()[0]["body"];
+        assert_eq!(body["stream"], true);
+        assert!(body["messages"][1]["content"].as_str().unwrap().starts_with("Year 1, Spring."));
+        let mut log = EventLog::new();
+        log.handle_key(key(KeyCode::Char('c')), &mut app);
+        let text = render(&app, &log);
+        assert!(text.contains("Year 1, Spring") && text.contains("chronicled") && text.contains("quiet valley"), "{text}");
+    }
+
+    /// Open the S09 designer modal from the form's last button.
+    fn open_designer(gen: &mut WorldGen, app: &mut AppState) -> Box<dyn Screen> {
+        // The form opens on Map width (focus 2); three BackTabs reach the last
+        // field, which is the designer button while the feature is on.
+        for _ in 0..3 {
+            gen.handle_key(key(KeyCode::BackTab), app);
+        }
+        match gen.handle_key(key(KeyCode::Enter), app) {
+            Action::Push(m) => m,
+            other => panic!("the designer button should open the modal, got {other:?}"),
+        }
+    }
+
+    /// Type a sentence, send it, and render until the preview names `boar`.
+    fn design_boar(modal: &mut Box<dyn Screen>, app: &mut AppState, sentence: &str) -> String {
+        for c in sentence.chars() {
+            modal.handle_key(key(KeyCode::Char(c)), app);
+        }
+        modal.handle_key(key(KeyCode::Enter), app);
+        let start = Instant::now();
+        let mut shown = String::new();
+        while start.elapsed() < Duration::from_secs(8) && !shown.contains("validated: boar") {
+            app.pump_ai();
+            shown = render(app, modal.as_ref());
+            std::thread::sleep(Duration::from_millis(15));
+        }
+        shown
+    }
+
+    /// The designer round trip: sentence in, validated overlay handed to S09,
+    /// and the overlay file written under the config dir.
+    #[test]
+    fn designer_modal_round_trip() {
+        let _env = config::env_lock();
+        let fake = Fake::start("happy").unwrap();
+        let dir = scratch("designer");
+        std::env::set_var("XDG_CONFIG_HOME", &dir);
+        let mut app = AppState::new(Params::default());
+        app.ai = Ai::start(&fake.config("", "fake/m", 5));
+        let mut gen = WorldGen::from_params(&Params::default());
+        let text = render(&app, &gen);
+        assert!(text.contains("[ Design species ]"), "{text}");
+        let mut modal = open_designer(&mut gen, &mut app);
+        let shown = design_boar(&mut modal, &mut app, "a boar");
+        assert!(shown.contains("validated: boar"), "{shown}");
+        assert!(shown.contains("boar / Boars"), "{shown}");
+        assert!(matches!(modal.handle_key(key(KeyCode::Enter), &mut app), Action::Pop));
+        assert!(app.pending_species_overlay.is_some());
+        gen.handle_key(key(KeyCode::Tab), &mut app);
+        let p = gen.form_params();
+        assert_eq!(p.species.0.last().map(|s| s.name.as_str()), Some("boar"));
+        assert_eq!(p.species.0.last().map(|s| s.initial_count), Some(30));
+        let file = dir.join("sim-fortress").join("species").join("boar.toml");
+        let written = std::fs::read_to_string(&file).unwrap();
+        assert!(written.contains("[[species]]") && written.contains("name = \"boar\""), "{written}");
+        assert_eq!(fake.requests().len(), 1);
+        assert_eq!(fake.requests()[0]["body"]["response_format"]["type"], "json_schema");
+    }
+
+    /// The single correction round: the first reply fails the loader, the
+    /// second passes; a third is never sent.
+    #[test]
+    fn designer_retries_once_on_invalid_overlay() {
+        let _env = config::env_lock();
+        let fake = Fake::start("invalid_then_valid").unwrap();
+        let dir = scratch("designer-retry");
+        std::env::set_var("XDG_CONFIG_HOME", &dir);
+        let mut app = AppState::new(Params::default());
+        app.ai = Ai::start(&fake.config("", "fake/m", 5));
+        let mut gen = WorldGen::from_params(&Params::default());
+        let mut modal = open_designer(&mut gen, &mut app);
+        let shown = design_boar(&mut modal, &mut app, "x");
+        assert!(shown.contains("validated: boar"), "{shown}");
+        let reqs = fake.requests();
+        assert_eq!(reqs.len(), 2, "exactly one correction round");
+        let second = reqs[1]["body"]["messages"][1]["content"].as_str().unwrap();
+        assert!(second.contains("rejected by the loader"), "{second}");
+    }
 }

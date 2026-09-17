@@ -14,6 +14,24 @@ pub fn render(f: &mut Frame<'_>, area: Rect, keys: &[(&str, &str)], right: &str)
     render_colored(f, area, keys, right, theme::ACCENT);
 }
 
+/// `render_colored` with a dim `note` drawn just left of the right-side message
+/// (the `AI: offline` cell). An empty note draws nothing, so the bar is
+/// byte-identical to `render_colored`.
+pub fn render_noted(f: &mut Frame<'_>, area: Rect, keys: &[(&str, &str)], note: &str, right: &str, right_fg: Color) {
+    render_colored(f, area, keys, right, right_fg);
+    if note.is_empty() {
+        return;
+    }
+    let right_w = if right.is_empty() { 0 } else { crate::cast!(right.chars().count() => u16) + 1 };
+    let w = crate::cast!(note.chars().count() => u16) + 2;
+    if right_w + w > area.width {
+        return;
+    }
+    let r = Rect::new(area.x + area.width - right_w - w, area.y, w, 1);
+    let bg = Style::default().bg(theme::STATUS_BG);
+    Paragraph::new(Line::from(Span::styled(format!("{note}  "), bg.fg(theme::DIM)))).render(r, f.buffer_mut());
+}
+
 /// `render` with the right-side message in `right_fg`.
 pub fn render_colored(f: &mut Frame<'_>, area: Rect, keys: &[(&str, &str)], right: &str, right_fg: Color) {
     let bg = Style::default().bg(theme::STATUS_BG);

@@ -2,6 +2,7 @@
 //! under `src/sim` (enforced by a test); this module only reads/writes plain data.
 
 pub mod behavior;
+pub mod chronicle;
 pub mod creatures;
 pub mod disease;
 pub mod ecology;
@@ -21,15 +22,14 @@ pub mod world;
 
 pub use creatures::{Cause, Creature, CreatureId, Death, DeathTallies, Goal, Mutation, RestReason, Sex};
 pub use disease::{DiseaseState, Infection, Outbreak, Pathogen, PathogenId, PathogenStats, Stage};
+pub use chronicle::ChronicleEntry;
 pub use events::{Event, EventKind};
 pub use geom::{cheb, dist};
-pub use params::{Params, PredationParams, Rainfall, Roster, SpeciesParams};
-pub use params::{Difficulty, Preset, PRESETS};
+pub use params::{Difficulty, GeneticsParams, Params, PredationParams, Preset, Rainfall, Roster, SpeciesParams, PRESETS};
 pub use rng::Rng;
 pub use spatial::SpatialIndex;
 pub use species::{Genome, Kind, SpeciesId, TRAIT_NAMES};
 pub use lineage::{Lineage, LineageNode, Tree, TreeItem};
-pub use params::GeneticsParams;
 pub use stats::{census, group_census, Census, GroupCensus, Sample, Series, SpeciesStats};
 pub use time::{Season, Time};
 pub use world::{Cell, RegionRect, Terrain, World};
@@ -140,6 +140,10 @@ pub struct Sim {
     /// creature streams untouched.
     pub disease_rng: Rng,
     pub disease: DiseaseState,
+    /// C9 season summaries: decorative, never read by the step (R11). Postcard
+    /// is not self-describing, so save VERSION 11 carries the field, not `default`.
+    #[serde(default)]
+    pub chronicle: Vec<ChronicleEntry>,
 }
 
 impl Sim {
@@ -207,6 +211,7 @@ impl Sim {
             profile_enabled: false,
             disease_rng,
             disease,
+            chronicle: Vec::new(),
         }
     }
 
