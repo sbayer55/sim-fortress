@@ -59,7 +59,7 @@ and its deviations from the standard are collected there.
 | `q`              | back to the title screen (only when no text field is focused)       |
 
 Steps and ranges: width ±10 in 100..=1000, height ±5 in 30..=1000, water,
-forest, rock and age ±1, season length ±10 in 30..=180, species counts ±10
+forest, rock and age ±1, season length ±10 in 30..=180, species counts ±1
 in 0..=999, mutation rate and strength ±0.01, regrowth ±0.1. Rainfall and
 difficulty cycle through three names and wrap. On S10 `←` / `→` step the
 autosave interval by one day in 0..=365 with no focus at all.

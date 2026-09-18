@@ -93,10 +93,11 @@ unfocused values are bright text on the plain background.
 3. **Initial species section.** Header `species  kind  count  share of starting
    population`, then one row per roster species (`[[species]]` order, six by default): glyph (upper-case, species
    colour), plural name, `prey`/`predator` (dim), `◄ <count> ►` (arrows in key colour when
-   focused), a 22-cell bar of the species' share of the total in the species colour, and
-   the share as `<pct>%`. The focused row is highlighted across the full width. Prototype
-   defaults: Voles 240, Hares 180, Deer 90, Foxes 30, Wolves 24, Lynxes 12. A dim total
-   line follows: `total <n>   prey <p>   predators <q>   ratio <p/q>:1`.
+   focused; `←`/`→` step one individual at a time), a 22-cell bar of the species' share of
+   the total in the species colour, and the share as `<pct>%`. The focused row is
+   highlighted across the full width. Prototype defaults: Voles 240, Hares 180, Deer 90,
+   Foxes 30, Wolves 24, Lynxes 12. A dim total line follows:
+   `total <n>   prey <p>   predators <q>   ratio <p/q>:1`.
 4. **Evolution section** — four adjustable fields: `Mutation rate` (0.04, `per
    trait/birth`), `Mutation strength` (0.06, `mutation sd`), `Predation difficulty`
    (normal, `easy/norm/hard`), `Regrowth rate` (1.0, `veg multiplier`); then a two-line

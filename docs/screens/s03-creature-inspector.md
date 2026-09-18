@@ -248,7 +248,8 @@ classDiagram
 ### Right panel — Life
 19. **Life statistics (left of the mini map).** `days alive`, `kills` (predator) or
     `escapes` (prey), `offspring`, `grandkids`, `mates`, `distance <n> cells`, `regions <n>
-    visited`. Kills/escapes use the title style.
+    visited`, then `last ate`, `last drank` and `last slept` as `3h ago`, `2d 5h ago` or
+    `never`. Kills/escapes use the title style.
 20. **Surroundings mini map.** 23×9 Inner panel titled "Surroundings" showing the standard
     map renderer with creatures on, the cursor on the creature and (for a living creature)
     follow mode enabled. Origin is the creature position offset by (−10, −3), clamped to

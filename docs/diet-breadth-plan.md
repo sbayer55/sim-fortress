@@ -12,7 +12,7 @@ spacer row rather than folding the axis into the footer; S03 carries `none recor
 Mutation-history section rule and drops both blank rows to fit the thirteenth trait;
 `src/sim/mod.rs` crossed the 800-line ceiling by three lines, so its test module moved to
 `src/sim/tests.rs` (pure code motion). Checksum re-baselined to `0xf883_9b51_57e3_c3f8`,
-save `VERSION = 14`. The sweep result is recorded in the C4 balance table.*
+save `VERSION = 15` (main took 14 for the last-ate/drank/slept stamps while this was in review). The sweep result is recorded in the C4 balance table.*
 
 **Goal.** Add the thirteenth genome slot, **Diet breadth**, from
 [feature-ideas.md](feature-ideas.md): for herbivores, which terrains the animal can graze,

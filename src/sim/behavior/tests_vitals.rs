@@ -6,7 +6,7 @@ use crate::sim::creatures::{
 use crate::sim::events::{EventRing};
 use crate::sim::species::testing::*;
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{CreaturesParams, EcologyParams, GeneticsParams, PredationParams };
+use crate::sim::params::{CreaturesParams, DietParams, EcologyParams, GeneticsParams, PredationParams };
 use crate::sim::rng::Rng;
 use crate::sim::disease::{DiseaseState};
 use crate::sim::params::DiseaseParams;
@@ -272,4 +272,55 @@ fn nocturnal_rest_by_day() {
     wolf.species = WOLF;
     plan(&mut wolf, &idx, &w, &day_time(22), &cp, &mut rng);
     assert_eq!(wolf.goal, Goal::Rest, "diurnal wolf rests at night");
+}
+
+#[test]
+fn need_actions_stamp_last_ate_drank_slept() {
+    use super::vitals::act;
+    let mut w = all_grass_world();
+    let mut events = EventRing::new(100);
+    let mut rng = Rng::new(1);
+    let cp = CreaturesParams::default();
+    let dp = DiseaseParams::default();
+    let diet = DietParams::default();
+    let mut t = day_time(12);
+    t.tick = 500;
+
+    // Grazing on vegetation stamps last_ate; a bare cell does not.
+    let mut c = test_creature(5, 5);
+    c.goal = Goal::Graze;
+    act(&mut c, &mut w, &mut events, &t, roster(), &cp, &dp, &diet, &mut rng);
+    assert_eq!(c.last_ate, Some(500));
+    w.cell_mut(5, 5).vegetation = 0.0;
+    t.tick = 501;
+    act(&mut c, &mut w, &mut events, &t, roster(), &cp, &dp, &diet, &mut rng);
+    assert_eq!(c.last_ate, Some(500), "nothing to eat on a bare cell");
+    // Diet breadth: a grass specialist chewing forest gets nothing digestible,
+    // so it has not eaten either.
+    w.cell_mut(5, 5).terrain = Terrain::Forest;
+    w.cell_mut(5, 5).vegetation = 0.5;
+    c.genome.0[crate::sim::species::IDX_DIET_BREADTH] = 0.2;
+    act(&mut c, &mut w, &mut events, &t, roster(), &cp, &dp, &diet, &mut rng);
+    assert_eq!(c.last_ate, Some(500), "inedible terrain is not a meal");
+
+    // Drinking away from any shore does nothing; on a shore it stamps last_drank.
+    c.goal = Goal::Drink;
+    act(&mut c, &mut w, &mut events, &t, roster(), &cp, &dp, &diet, &mut rng);
+    assert_eq!(c.last_drank, None);
+    w.cell_mut(6, 5).terrain = Terrain::ShallowWater;
+    w.refresh_shore();
+    t.tick = 502;
+    act(&mut c, &mut w, &mut events, &t, roster(), &cp, &dp, &diet, &mut rng);
+    assert_eq!(c.last_drank, Some(502));
+
+    // Resting in place stamps last_slept; walking to a den does not.
+    c.goal = Goal::Rest;
+    c.rest_reason = Some(RestReason::Night);
+    c.target = Some((20, 5));
+    t.tick = 503;
+    act(&mut c, &mut w, &mut events, &t, roster(), &cp, &dp, &diet, &mut rng);
+    assert_eq!(c.last_slept, None, "still walking to the den");
+    c.target = None;
+    act(&mut c, &mut w, &mut events, &t, roster(), &cp, &dp, &diet, &mut rng);
+    assert_eq!(c.last_slept, Some(503));
 }

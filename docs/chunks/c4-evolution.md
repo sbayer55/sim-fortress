@@ -157,7 +157,7 @@ and sweeps. The mate check in `eligible` (prey stands on vegetation ≥ the mini
 raw vegetation, not edible vegetation: it is a fed-ness proxy and moving it would change
 mating for reasons unrelated to diet. S03 draws the row and a Derived `diet grazes up to
 <terrain>; bite x<n>` line, S04a the `Dbr` column, S04b the thirteenth histogram (a 3 × 5
-grid), and `--summary` writes `diet_breadth_<species>`. Save `VERSION = 14`.
+grid), and `--summary` writes `diet_breadth_<species>`. Save `VERSION = 15` (14 was taken by the last-ate/drank/slept stamps that landed on `main` first).
 
 ### FR4 Maturity and following
 At the individual's adult age the glyph switches to uppercase and movement speed becomes

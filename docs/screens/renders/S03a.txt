@@ -3,9 +3,9 @@
 ║ D Mallow  d#451  prey                            ║║ trait         individual  own  delta  sp. range  ║║ days alive  582          ┌ Surroundings ───────┐║
 ║   Deer  ♂ male  adult  diet: grass, leaves       ║║ Speed        [██████░░░░] 0.61 ±-0.04 [░░░░▒█▒░░]║║ offspring   9            │H**H**V***DD*≡≡♣♣♣♣♣*│║
 ║                                                  ║║ Size         [████████░░] 0.84 ±+0.04 [░░░░░▒█▒▒]║║ distance    12 cells     │▲▲▲▲▲▲▲Ω*ΩΩVV*DV♣H♣♣"│║
-║ age  [████████████░░░░░░]    67% 582 / 864 days  ║║ Sense        [██████░░░░] 0.57 ±+0.01 [░░░░█▒░░░]║║                          │▲▲▲▲▲▲▲*∙╬H╬,D♣♠♠♣♣♣"│║
-║       1.6 years old   generation 1               ║║ Metabolism   [████░░░░░░] 0.38 ±-0.02 [░░▒█▒░░░░]║║                          │▲▲▲▲▲▲▲**∙V∙♦V♣≡♠♠♣♣♣│║
-║                                                  ║║ Aggression   [██░░░░░░░░] 0.21 ±+0.03 [▒█▒▒░░░░░]║║                          │**"▲▲▲***╬V╬∙~~♠♠♠♣"♣│║
+║ age  [████████████░░░░░░]    67% 582 / 864 days  ║║ Sense        [██████░░░░] 0.57 ±+0.01 [░░░░█▒░░░]║║ last ate    12h ago      │▲▲▲▲▲▲▲*∙╬H╬,D♣♠♠♣♣♣"│║
+║       1.6 years old   generation 1               ║║ Metabolism   [████░░░░░░] 0.38 ±-0.02 [░░▒█▒░░░░]║║ last drank  1d 13h ago   │▲▲▲▲▲▲▲**∙V∙♦V♣≡♠♠♣♣♣│║
+║                                                  ║║ Aggression   [██░░░░░░░░] 0.21 ±+0.03 [▒█▒▒░░░░░]║║ last slept  1h ago       │**"▲▲▲***╬V╬∙~~♠♠♠♣"♣│║
 ║─ Family ─────────────────────────────────────────║║ Camouflage   [███░░░░░░░] 0.31 ±-0.07 [░░▒█▒░░░░]║║                          │***♣♣♣****""♠∙♠♠♠♠♣"♣│║
 ║ mother  founder            father  founder       ║║ Fertility    [███░░░░░░░] 0.29 ±-0.07 [░░▒█▒░░░░]║║                          │♣*L♣♣♠"**"♣∙∙∙∙♠♠♠♠♠♠│║
 ║ offspring  9    ¶ lineage: [l]                   ║║ Longevity    [████████░░] 0.80 ±+0.09 [░░░░░▒█▒░]║║                          └─────────────────────┘║

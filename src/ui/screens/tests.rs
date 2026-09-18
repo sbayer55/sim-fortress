@@ -168,13 +168,14 @@ fn s09_width_and_height_fields_adjust_with_arrows() {
     // Up/Down are no longer a second axis for the size.
     s.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE), &mut app);
     assert_eq!(s.form_params().world.height, h0);
-    // Tab to Map height: Left/Right change the height.
+    // Tab to Map height: Left/Right change the height, in steps of 10 like
+    // the width since the larger world-generation limits landed.
     s.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE), &mut app);
     s.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
     s.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
-    assert_eq!(s.form_params().world.height, (h0 + 10).min(1000));
+    assert_eq!(s.form_params().world.height, (h0 + 20).min(1000));
     s.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE), &mut app);
-    assert_eq!(s.form_params().world.height, (h0 + 5).min(1000));
+    assert_eq!(s.form_params().world.height, (h0 + 10).min(1000));
 }
 
 #[test]
@@ -652,4 +653,30 @@ fn s01_region_overlay_renders_155x45() {
         assert!(side.contains(&r.0), "region {:?} missing from the sidebar", r.0);
     }
     assert!(side.contains("Enter"));
+}
+
+#[test]
+fn s09_species_counts_step_one_individual_at_a_time() {
+    let mut app = state();
+    let mut s = WorldGen::new();
+    let founders: Vec<u32> = app.params.species.0.iter().map(|sp| sp.initial_count).collect();
+    // From the default Map width focus, eight Tabs reach the first species row.
+    for _ in 0..8 {
+        s.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE), &mut app);
+    }
+    s.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
+    let counts = |s: &WorldGen| s.form_params().species.0.iter().map(|sp| sp.initial_count).collect::<Vec<_>>();
+    assert_eq!(counts(&s)[0], founders[0] + 1, "Right adds one founder to the focused row");
+    assert_eq!(&counts(&s)[1..], &founders[1..], "the other rows are untouched");
+    // The last row holds the smallest founder count; Left takes it down by one, not to zero.
+    let last = founders.len() - 1;
+    for _ in 0..last {
+        s.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE), &mut app);
+    }
+    s.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE), &mut app);
+    assert_eq!(counts(&s)[last], founders[last] - 1);
+    for _ in 0..founders[last] {
+        s.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE), &mut app);
+    }
+    assert_eq!(counts(&s)[last], 0, "counts clamp at zero");
 }

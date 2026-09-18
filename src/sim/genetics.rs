@@ -290,6 +290,9 @@ fn newborn(
                 mutations,
                 // Pups know their mother's drinking spot (they follow her anyway).
                 last_water: mother_water,
+                last_ate: None,
+                last_drank: None,
+                last_slept: None,
                 move_budget: 0.0,
                 path: Vec::new(),
                 rest_reason: None,
