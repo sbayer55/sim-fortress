@@ -147,6 +147,7 @@ fn legacy_bool_day_night_tint_loads() {
 fn regenerate_screen_renders() {
     use crate::ui::screens::s03_inspector::Inspector;
     use crate::ui::screens::s04_species::{SpeciesBrowser, SpeciesDetail};
+    use crate::ui::screens::s15_traits::TraitsScreen;
     use crate::ui::screens::Screen;
     use crate::sim::{SpeciesId, Kind};
     use ratatui::backend::TestBackend;
@@ -174,6 +175,8 @@ fn regenerate_screen_renders() {
         .filter(|s| sim.species[s.index()].count > 0)
         .max_by_key(|s| (sim.roster().kind(*s) == Kind::Predator, sim.species[s.index()].count))
         .unwrap_or(SpeciesId(0));
+    // S15a: the species with the most living members (voles may be gone by year 1).
+    let traits_species = sim.roster().ids().max_by_key(|s| sim.species[s.index()].count).unwrap_or(SpeciesId(0));
     let prey_name = sim.roster().display_name(prey.1);
     let detail_name = sim.roster().display_name(detail_species);
 
@@ -212,6 +215,11 @@ fn regenerate_screen_renders() {
             snap(&app, &SpeciesBrowser::new(), "S04a  Species Browser - species table"),
         ),
         ("docs/screens/renders/S04b.txt", s04b_title.clone(), snap(&app, &SpeciesDetail::new(detail_species), &s04b_title)),
+        (
+            "docs/screens/renders/S15a.txt",
+            "S15a  Traits & Fates - trait by outcome matrix".to_string(),
+            snap(&app, &TraitsScreen::for_species(traits_species.index()), "S15a  Traits & Fates - trait by outcome matrix"),
+        ),
     ];
     for (path, title, text) in files {
         std::fs::write(path, text).unwrap_or_else(|e| panic!("write {path} ({title}): {e}"));

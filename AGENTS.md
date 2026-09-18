@@ -172,7 +172,7 @@ Do not weaken these to make a change pass. Fix the change.
 - **All numeric casts go through `cast!(expr => Ty)`** (defined in `src/lib.rs`).
   Bare `as` is denied; the macro is the one reviewed place that preserves `as`
   semantics and works in `const` context.
-- **Save format is versioned and never migrated.** Binary `SIMF` files, `VERSION = 15`
+- **Save format is versioned and never migrated.** Binary `SIMF` files, `VERSION = 16`
   in `src/sim/save.rs`. A version mismatch is rejected (`SaveError`), never half-read;
   old files stay listable so they can be deleted. `Params`/`Sim` serde field order and
   attributes are load-bearing — changing them means bumping `VERSION` and accepting

@@ -29,6 +29,7 @@ use super::screens::s08_lineage::LineageScreen;
 use super::screens::s10_controls::Controls;
 use super::screens::s11_help::Help;
 use super::screens::s12_alert::AlertModal;
+use super::screens::s15_traits::TraitsScreen;
 use super::ai_bridge::{ChroniclePending, DesignerInbox};
 use super::screens::{self, Action, Stack, TickAccumulator};
 
@@ -419,6 +420,7 @@ impl App {
             KeyCode::Char('y') => Action::Push(Box::new(Ecology::new())),
             KeyCode::Char('g') => Action::Push(Box::new(Charts::new())),
             KeyCode::Char('s') => Action::Push(Box::new(SpeciesBrowser::new())),
+            KeyCode::Char('t') => Action::Push(Box::new(TraitsScreen::new())),
             KeyCode::Char('l') => {
                 // Lineage of the followed creature, else the oldest living one.
                 let focus = self.state.follow.or_else(|| self.state.sim.as_ref().and_then(Sim::oldest_living));

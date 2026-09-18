@@ -28,6 +28,9 @@ pub const SHADE_4: char = '█';
 pub const SHADES: [char; 5] = [SHADE_0, SHADE_1, SHADE_2, SHADE_3, SHADE_4];
 pub const HALF_UPPER: char = '▀';
 pub const HALF_LOWER: char = '▄';
+/// Left and right half blocks: S15 brackets the selected matrix cell with them.
+pub const HALF_LEFT: char = '▌';
+pub const HALF_RIGHT: char = '▐';
 pub const FULL_BLOCK: char = '█';
 pub const SQUARE: char = '■';
 
@@ -133,7 +136,7 @@ mod tests {
 
     const ALL: &[char] = &[
         DEEP_WATER, SHALLOW_WATER, SAND, DIRT, GRASS_SPARSE, GRASS, GRASS_DENSE, FOREST, ROCK, MARSH,
-        FALLS, HILL, SNOW, SHADE_1, SHADE_2, SHADE_3, SHADE_4, HALF_UPPER, HALF_LOWER, FULL_BLOCK,
+        FALLS, HILL, SNOW, SHADE_1, SHADE_2, SHADE_3, SHADE_4, HALF_UPPER, HALF_LOWER, HALF_LEFT, HALF_RIGHT, FULL_BLOCK,
         SQUARE, CARCASS, DEN, SEED, CURSOR, CORNER, TRAIL,
         RING, DOT, BULLET, BAR_L, BAR_R, BAR_FILL, BAR_EMPTY, H_LINE, V_LINE, CROSS, SPRING,
         SUMMER, AUTUMN, WINTER, SUN, MOON, BIRTH, DEATH, MUTATION, MIGRATION, EXTINCTION,

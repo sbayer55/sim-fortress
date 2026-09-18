@@ -34,8 +34,10 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// the world's named features (ocean, lakes, rivers, ranges) and their
 /// per-cell map; version 14 added the per-creature last-ate, last-drank and
 /// last-slept tick stamps; version 15 added the `[diet]` table and the
-/// thirteenth genome slot, Diet breadth.
-pub const VERSION: u16 = 15;
+/// thirteenth genome slot, Diet breadth; version 16 added the lineage's life
+/// log (the deaths of the last 240 days with their outcome counters, for S15
+/// Traits & Fates).
+pub const VERSION: u16 = 16;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 
@@ -503,6 +505,9 @@ mod tests {
             }
             let path = save(&sim, "Round Trip", &dir).unwrap();
             let mut loaded = load(&path).unwrap().sim;
+            // The checksum does not cover the lineage, so the life log (save 16) is compared directly.
+            assert!(!sim.lineage.lives().is_empty(), "seed {seed}: no deaths logged in {N} ticks");
+            assert_eq!(loaded.lineage.lives(), sim.lineage.lives(), "seed {seed} life log round-trip");
             // `load(save(sim))` then N ticks equals `sim` then N ticks.
             for _ in 0..N {
                 sim.step();

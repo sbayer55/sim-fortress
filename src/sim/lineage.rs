@@ -5,6 +5,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+pub mod lifelog;
+pub use lifelog::{LifeLog, LifeRecord, LIFE_WINDOW_DAYS};
+
 use serde::{Deserialize, Serialize};
 
 use crate::sim::creatures::{Cause, Creature, CreatureId, CreatureStore, Mutation, NameId, Sex};
@@ -87,6 +90,9 @@ impl Tree {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Lineage {
     nodes: BTreeMap<CreatureId, LineageNode>,
+    /// Deaths of the last 240 days with their outcome counters (S15, save 16).
+    /// Unlike `nodes` it is never pruned by generation, only by age.
+    lives: LifeLog,
 }
 
 impl Lineage {
@@ -108,6 +114,16 @@ impl Lineage {
 
     pub fn nodes(&self) -> impl Iterator<Item = &LineageNode> {
         self.nodes.values()
+    }
+
+    /// Deaths of the last `LIFE_WINDOW_DAYS` days, oldest first.
+    pub const fn lives(&self) -> &LifeLog {
+        &self.lives
+    }
+
+    /// Log a finished life (called from `behavior::kill`).
+    pub fn record_life(&mut self, rec: LifeRecord) {
+        self.lives.push(rec);
     }
 
     /// Record a creature (founder or newborn). Links it into its parents'
