@@ -171,7 +171,7 @@ fn old_age_cells_are_neutral() {
     terminal.draw(|f| s.render(&app, f, Rect::new(0, 1, 155, 44))).unwrap();
     let buf = terminal.backend().buffer();
     // Inner x 1 + X0 31 + 5 × 8 = column 72; trait rows start at screen row 5.
-    for t in 0..12u16 {
+    for t in 0..crate::cast!(N_TRAITS => u16) {
         let bg = buf[(74, 5 + 2 * t)].bg;
         assert_eq!(bg, theme::PANEL_BG, "trait {t}: the old-age cell is coloured");
     }

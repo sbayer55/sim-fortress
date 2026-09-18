@@ -1,0 +1,57 @@
+{
+  "skill_name": "tui-mockup",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Without changing any existing code, make a temporary web mockup of a redesigned Simulation Controls modal (S10) with 3 variants. Assume: it stays a modal over the world map; explore (a) a compact two-column layout, (b) a tabbed layout with Speed / Options / Autosave tabs, (c) a bottom drawer that slides up over the ticker instead of a centred box. Strict terminal grid, real theme colours. No tests, it's throwaway.",
+      "expected_output": "One self-contained HTML file with three tabs, each a keyboard-driven 155x45 cell grid showing the S10 controls redesigned as described, over the map screen chrome, using theme.rs colours and CP437 glyphs, with a blurb per variant and an honest status bar; verified in the browser; no repo source files modified.",
+      "files": [],
+      "expectations": [
+        "Exactly one .html output file was produced and it loads no remote scripts or stylesheets (self-contained)",
+        "The page renders a strict 155 by 45 character grid (45 lines of exactly 155 cells)",
+        "The page offers 3 selectable variants (tabs or buttons), matching the request",
+        "The grid uses theme.rs colours: at least three of BG rgb(12,12,16), PANEL_BG rgb(18,18,24), TITLE rgb(236,206,118), SELECT_BG rgb(70,60,30) appear in the file",
+        "Every glyph drawn in the grid is a CP437 character, one cell wide",
+        "The mockup is keyboard driven: dispatching o / arrows / Enter / Tab / Space / Escape changes the grid",
+        "Each variant has a written description (blurb) visible on the page outside the grid",
+        "The grid shows a status bar row with key hints in [key] label form",
+        "No file inside the repository was modified or added (git status clean apart from the skill folder)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I want to see what a species filter for the S04 species browser could look like. Give me a couple of variants as a throwaway web mockup — one as a filter strip above the table, one as a sidebar picker — on the real 155x45 grid. Assume prey/predator/all chips plus per-species toggles. Don't touch the code.",
+      "expected_output": "One self-contained HTML file with two tabs on a strict 155x45 grid drawing the S04 table screen with a filter strip variant and a sidebar picker variant, real roster names and colours, keyboard toggles, blurbs and status bar; verified in the browser; no source changes.",
+      "files": [],
+      "expectations": [
+        "Exactly one .html output file was produced and it loads no remote scripts or stylesheets (self-contained)",
+        "The page renders a strict 155 by 45 character grid (45 lines of exactly 155 cells)",
+        "The page offers 2 selectable variants (tabs or buttons), matching the request",
+        "The grid uses theme.rs colours: at least three of BG rgb(12,12,16), PANEL_BG rgb(18,18,24), TITLE rgb(236,206,118), SELECT_BG rgb(70,60,30) appear in the file",
+        "Every glyph drawn in the grid is a CP437 character, one cell wide",
+        "The mockup is keyboard driven: dispatching o / arrows / Enter / Tab / Space / Escape changes the grid",
+        "Each variant has a written description (blurb) visible on the page outside the grid",
+        "The grid shows a status bar row with key hints in [key] label form",
+        "No file inside the repository was modified or added (git status clean apart from the skill folder)"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Mock up the event ticker on row 43 of the map screen with 3 variants: today's single line, a two-line ticker where the previous event is dimmed under the newest, and a right-to-left marquee for long events. Throwaway HTML, strict grid, show them over the real map screen so I can judge them in context. Assume the ticker keeps the (e: full log) hint.",
+      "expected_output": "One self-contained HTML file with three tabs, each the full map screen (map panel, sidebar, status bar) with the ticker row drawn per variant, the marquee actually animating at a terminal-like frame rate, theme colours and CP437 glyphs, blurbs; verified in the browser; no source changes.",
+      "files": [],
+      "expectations": [
+        "Exactly one .html output file was produced and it loads no remote scripts or stylesheets (self-contained)",
+        "The page renders a strict 155 by 45 character grid (45 lines of exactly 155 cells)",
+        "The page offers 3 selectable variants (tabs or buttons), matching the request",
+        "The grid uses theme.rs colours: at least three of BG rgb(12,12,16), PANEL_BG rgb(18,18,24), TITLE rgb(236,206,118), SELECT_BG rgb(70,60,30) appear in the file",
+        "Every glyph drawn in the grid is a CP437 character, one cell wide",
+        "The mockup is keyboard driven: dispatching o / arrows / Enter / Tab / Space / Escape changes the grid",
+        "Each variant has a written description (blurb) visible on the page outside the grid",
+        "The grid shows a status bar row with key hints in [key] label form",
+        "No file inside the repository was modified or added (git status clean apart from the skill folder)",
+        "The marquee variant animates: the ticker row text changes over time without any key press"
+      ]
+    }
+  ]
+}

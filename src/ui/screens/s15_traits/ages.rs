@@ -12,8 +12,9 @@ use crate::sim::stats::outcomes::{age_profile, age_trend, AGE_BANDS};
 use crate::theme;
 use crate::widgets::{Component, Divider, Histogram};
 
-/// Inner row of the age section divider, and the band column origin and pitch.
-const TOP: u16 = 28;
+/// Inner row of the age section divider (right under the thirteenth trait
+/// row), and the band column origin and pitch.
+const TOP: u16 = 29;
 const BX: u16 = 13;
 const BC: u16 = 5;
 
@@ -34,7 +35,7 @@ pub(super) fn draw(buf: &mut Buffer, inner: Rect, v: &View<'_>) {
     put(buf, x + 1, y + 4, 12, &format!("mean {abbr}"), fg(theme::TEXT));
     let means: Vec<f32> = p.bands.iter().filter_map(|b| b.trait_mean).collect();
     let (mn, mx) = means.iter().fold((f32::MAX, f32::MIN), |(a, b), &m| (a.min(m), b.max(m)));
-    put(buf, x + 1, y + 6, 12, "died of", fg(theme::TEXT));
+    put(buf, x + 1, y + 5, 12, "died of", fg(theme::TEXT));
     for (b, band) in p.bands.iter().enumerate() {
         let bx = x + BX + crate::cast!(b => u16) * BC;
         match band.trait_mean {
@@ -48,9 +49,9 @@ pub(super) fn draw(buf: &mut Buffer, inner: Rect, v: &View<'_>) {
             Some((cause, n)) => {
                 let (g, c) = cause_mark(cause);
                 let pct = (n * 100).div_euclid(band.deaths.max(1));
-                put(buf, bx, y + 6, BC - 1, &format!("{g}{pct}"), fg(c));
+                put(buf, bx, y + 5, BC - 1, &format!("{g}{pct}"), fg(c));
             }
-            None => put(buf, bx + 1, y + 6, 1, &glyphs::DOT.to_string(), fg(theme::DIM)),
+            None => put(buf, bx + 1, y + 5, 1, &glyphs::DOT.to_string(), fg(theme::DIM)),
         }
     }
     let trend = match age_trend(v.lives, v.trait_ix) {
@@ -66,8 +67,8 @@ pub(super) fn draw(buf: &mut Buffer, inner: Rect, v: &View<'_>) {
         }
         None => "Too few living to compare the young with the old.".to_string(),
     };
-    put(buf, x + 1, y + 7, inner.width - 2, &trend, fg(theme::DIM));
-    key(buf, inner, y + 8);
+    put(buf, x + 1, y + 6, inner.width - 2, &trend, fg(theme::DIM));
+    key(buf, inner, y + 7);
 }
 
 fn key(buf: &mut Buffer, inner: Rect, y: u16) {

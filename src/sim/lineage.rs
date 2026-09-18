@@ -90,7 +90,7 @@ impl Tree {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Lineage {
     nodes: BTreeMap<CreatureId, LineageNode>,
-    /// Deaths of the last 240 days with their outcome counters (S15, save 15).
+    /// Deaths of the last 240 days with their outcome counters (S15, save 16).
     /// Unlike `nodes` it is never pruned by generation, only by age.
     lives: LifeLog,
 }

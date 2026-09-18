@@ -8,7 +8,7 @@ replacement for it. Read this first, then the doc that matches your task.
 `sim-fortress` is a Rust 2021 (pinned toolchain **1.90**) terminal predator/prey/
 evolution simulation with a Dwarf-Fortress-inspired ratatui 0.30 UI. A configurable
 roster of species (six by default: voles, hares, deer, foxes, wolves, lynxes) lives on
-a procedurally generated map and evolves a twelve-trait genome. It is an internal
+a procedurally generated map and evolves a thirteen-trait genome. It is an internal
 application (`publish = false`) with no real downstream users, so there is freedom to
 change internals — but determinism and save format are load-bearing.
 
@@ -126,7 +126,7 @@ Do not weaken these to make a change pass. Fix the change.
   → ecology → migration/extinction. **Never reorder or merge RNG draws.** Three RNG
   streams exist (`rng`, `creature_rng`, `disease_rng`) so enabling one subsystem does
   not perturb another. `sim::tests::checksum_is_fnv_stable` pins the exact checksum
-  `0xd0e3_ee1a_c665_f531`; only re-baseline deliberately, with a comment saying why.
+  `0xf883_9b51_57e3_c3f8`; only re-baseline deliberately, with a comment saying why.
 - **Sim/UI separation.** `src/sim` is pure data and logic: **no `ratatui`, `HashMap`
   or `HashSet`** anywhere under it. `src/sim/mod.rs` guards this by scanning every
   `.rs` file there for those substrings — **comments and strings included** — skipping
@@ -172,7 +172,7 @@ Do not weaken these to make a change pass. Fix the change.
 - **All numeric casts go through `cast!(expr => Ty)`** (defined in `src/lib.rs`).
   Bare `as` is denied; the macro is the one reviewed place that preserves `as`
   semantics and works in `const` context.
-- **Save format is versioned and never migrated.** Binary `SIMF` files, `VERSION = 15`
+- **Save format is versioned and never migrated.** Binary `SIMF` files, `VERSION = 16`
   in `src/sim/save.rs`. A version mismatch is rejected (`SaveError`), never half-read;
   old files stay listable so they can be deleted. `Params`/`Sim` serde field order and
   attributes are load-bearing — changing them means bumping `VERSION` and accepting
@@ -263,7 +263,7 @@ git diff --stat                                 # only the files you meant to to
 ```
 
 If you touched `src/sim`, re-run `cargo test --lib sim::tests::checksum_is_fnv_stable`
-and confirm the value is still `0xd0e3_ee1a_c665_f531` unless the change deliberately
+and confirm the value is still `0xf883_9b51_57e3_c3f8` unless the change deliberately
 re-baselines it. If you touched `src/ai`, `src/ui/ai_bridge.rs` or the AI screens, also run
 `just test-unit-ai ai`, `just test-unit-ai ui` and `cargo test --features ai --test headless`
 (they launch `scripts/fake-gateway.js`, so `node` must be on PATH).

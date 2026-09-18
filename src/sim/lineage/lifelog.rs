@@ -2,7 +2,7 @@
 //!
 //! Each record holds what the creature slot forgets once the carcass is freed:
 //! genome, age, cause and the outcome counters. Written by `behavior::kill`,
-//! saved with the lineage (save format 15), and read together with the living
+//! saved with the lineage (save format 16), and read together with the living
 //! creatures by `stats::outcomes`.
 //!
 //! Passive: it draws no RNG and emits no events, so the checksum is unchanged.

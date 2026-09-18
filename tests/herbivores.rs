@@ -117,3 +117,44 @@ fn performance_budget() {
     let elapsed = t0.elapsed();
     assert!(elapsed.as_secs_f64() < 15.0, "1200 days took {elapsed:?}");
 }
+
+/// Diet breadth (genome slot 12): a browser lineage of deer spreads into the
+/// forest while a grass-specialist lineage stays out of it. Same seed, same
+/// C3 world, only the deer's base Diet breadth differs; predators are absent,
+/// so nothing but food moves the deer.
+#[test]
+fn diet_breadth_spreads_grazers() {
+    let forest_share = |breadth: f32| -> f32 {
+        let mut p = no_breeding();
+        let deer = p.species.id("deer").unwrap();
+        p.species.get_mut(deer).base_genome.diet_breadth = breadth;
+        // Only deer: the share is over one species and its own food choices.
+        for name in ["vole", "hare"] {
+            p.species.set_initial_count(name, 0);
+        }
+        let mut sim = Sim::new(42, p);
+        run_days(&mut sim, 30);
+        // Count deer-ticks spent grazing in place over the second month, so
+        // the sample is not one hour of the day (06:00 is still rest time).
+        let mut grazing = 0u32;
+        let mut in_forest = 0u32;
+        for _ in 0..30 * 24 {
+            sim.step();
+            for c in sim.creatures.living() {
+                if c.goal != sim_fortress::sim::Goal::Graze || c.target.is_some() {
+                    continue;
+                }
+                grazing += 1;
+                if sim.world.cell(c.x, c.y).terrain == sim_fortress::sim::Terrain::Forest {
+                    in_forest += 1;
+                }
+            }
+        }
+        assert!(grazing > 0, "no deer grazing in place at breadth {breadth}");
+        sim_fortress::cast!(in_forest => f32) / sim_fortress::cast!(grazing => f32)
+    };
+    let specialist = forest_share(0.2);
+    let browser = forest_share(0.95);
+    assert!(specialist < 0.05, "grass specialists must not graze in place in forest: {specialist:.2}");
+    assert!(browser > specialist, "browsers must use the forest more than specialists: {browser:.2} vs {specialist:.2}");
+}

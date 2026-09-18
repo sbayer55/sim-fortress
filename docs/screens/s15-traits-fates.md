@@ -6,7 +6,7 @@ Status: built (S15a), from variant 1 ("the matrix") of the Traits & Fates mockup
 Render: [renders/S15a.txt](renders/S15a.txt).
 
 ## Purpose
-S15 shows the link between genome and fate for one species. For each of the twelve traits it
+S15 shows the link between genome and fate for one species. For each of the thirteen traits it
 shows how the trait relates to what happened to the creatures that carried it over the last
 240 days: how long they lived, how many young they raised, how often they escaped or killed,
 and what killed them. It also follows one trait across age among the living, so selection
@@ -35,18 +35,18 @@ Main panel, inner rows (inner row 0 is screen row 2), inner columns from the lef
 | 0 | Species strip (cols 0–65) and crowding strip (cols 66–109) |
 | 1 | Group labels, as dividers: `what they achieved` over columns 31–53, and `how they died: share of deaths` over columns 55–101 |
 | 2 | Header row on `HEADER_BG`: `trait` at 1, `living` at 13, `mean` at 25, then the nine outcome headers centred in their cells. The selected outcome's header is in `KEY`. |
-| 3–26 | Twelve trait rows, two rows each, starting at `3 + 2·t` |
-| 28 | Divider `<Trait> across ages, living <plural>` |
-| 29 | `age` and a day label on every fourth band (18 bands of 5 columns from column 13) |
-| 30–31 | `living now`: a histogram of living count per age band |
-| 32 | `mean <Abr>`: the mean trait value per band, on a `heat` ground |
+| 3–28 | Thirteen trait rows, two rows each, starting at `3 + 2·t` |
+| 29 | Divider `<Trait> across ages, living <plural>` |
+| 30 | `age` and a day label on every fourth band (18 bands of 5 columns from column 13) |
+| 31–32 | `living now`: a histogram of living count per age band |
+| 33 | `mean <Abr>`: the mean trait value per band, on a `heat` ground |
 | 34 | `died of`: the commonest cause's letter and its % of the band's deaths, `p100` included |
 | 35 | The age-trend sentence |
 | 36–40 | Divider `Key` and four key rows (the last explains why OldAge is uncoloured) |
 
 **Trait row anatomy.**
 - Cursor `»` at 0 on the selected row, which is also filled with `SELECT_BG` across columns 0–29.
-- Trait name at 1, padded to 11.
+- Trait name at 1, padded to 12 (`Diet breadth` is the longest).
 - A 10-bucket, 2-row histogram of the living over the trait's range among the lives (min and max widened to .05, at least .10 wide), at 13–22, in the species colour.
 - Mean of the living (`.55`) at 25.
 - Nine cells at `31 + 8·o`, each 7 × 2 with a one-column gap.
@@ -65,7 +65,7 @@ Main panel, inner rows (inner row 0 is screen row 2), inner columns from the lef
 6. `Population`: `alive now <n>  died <m>`, then a 39-cell bar of deaths by cause.
 
 ## Content requirements
-1. **Lives.** The analysis runs over one record per creature of the species that lived in the window: the living set (age now), plus the deaths of the last 240 days from `Lineage::lives()`, the life log (`sim::lineage::lifelog`). The log is written by `behavior::kill`, which snapshots the genome, birth day, death day, cause, offspring, kills, attempts, chased and escaped. It is saved with the world (save format 15), keeps the last 240 days, and is capped at 50 000 records.
+1. **Lives.** The analysis runs over one record per creature of the species that lived in the window: the living set (age now), plus the deaths of the last 240 days from `Lineage::lives()`, the life log (`sim::lineage::lifelog`). The log is written by `behavior::kill`, which snapshots the genome, birth day, death day, cause, offspring, kills, attempts, chased and escaped. It is saved with the world (save format 16), keeps the last 240 days, and is capped at 50 000 records.
 2. **Outcomes** (`sim::stats::outcomes::OUTCOMES`):
 
    | Column | Value | Who counts |

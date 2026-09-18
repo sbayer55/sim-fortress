@@ -57,6 +57,9 @@ pub enum Terrain {
 }
 
 impl Terrain {
+    /// Number of variants; `terrain as usize` indexes a `[T; COUNT]` table.
+    pub const COUNT: usize = 10;
+
     pub const fn is_water(self) -> bool {
         matches!(self, Self::DeepWater | Self::ShallowWater)
     }

@@ -213,10 +213,10 @@ fn links(buf: &mut Buffer, inner: Rect, y: u16, v: &View<'_>) -> u16 {
         if t == v.trait_ix && o == v.outcome {
             crate::widgets::util::fill(buf, Rect::new(inner.x, y, inner.width, 1), Style::default().bg(theme::SELECT_BG));
         }
-        put(buf, x, y, 12, TRAIT_NAMES.get(t).copied().unwrap_or(""), fg(theme::TEXT));
+        put(buf, x, y, 13, TRAIT_NAMES.get(t).copied().unwrap_or(""), fg(theme::TEXT));
         let arrow = if r > 0.0 { glyphs::UP } else { glyphs::DOWN };
         let color = effect_color(r, outcome);
-        put(buf, x + 12, y, 22, &format!("{arrow} {}", outcome.label(v.kind)), fg(color));
+        put(buf, x + 13, y, 21, &format!("{arrow} {}", outcome.label(v.kind)), fg(color));
         put(buf, x + 34, y, 5, &signed(r), fg(theme::TEXT));
         y += 1;
     }

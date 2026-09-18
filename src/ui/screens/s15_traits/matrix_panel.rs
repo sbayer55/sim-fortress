@@ -78,7 +78,7 @@ fn trait_row(buf: &mut Buffer, inner: Rect, v: &View<'_>, t: usize) {
         put(buf, x, y, 1, &glyphs::CUE.to_string(), bold(theme::BORDER_FOCUS));
     }
     let name = TRAIT_NAMES.get(t).copied().unwrap_or("");
-    put(buf, x + 1, y, 11, name, if on { bold(theme::TEXT_BRIGHT) } else { fg(theme::TEXT) });
+    put(buf, x + 1, y, 12, name, if on { bold(theme::TEXT_BRIGHT) } else { fg(theme::TEXT) });
     let (lo, hi) = range(v, t);
     let mut buckets = [0u16; 10];
     let mut sum = 0.0;

@@ -136,6 +136,29 @@ size` row, S04 summary counts `sterile N`, and `--summary` writes `mutability_*`
 stable worlds should settle Mutability down, volatile ones raise it, and lineages that push it
 to the cap breed themselves out.
 
+**Diet breadth (slot 12, `[diet]`, 2026-09-17).** The thirteenth trait, `Dbr`, is a herbivore's
+reach along a grass→browse terrain axis. Every vegetated terrain has a fixed position
+(`diet.terrain_position`: meadow 0.00, grassland 0.10, sparse grass 0.25, marsh 0.40, dirt
+0.55, sand 0.65, forest 0.90; water and rock are never food), and a creature with breadth `b`
+digests `edibility(b, p) = clamp(1 − (p − b) / edge, 0, 1)` of a cell's vegetation (`edge`
+0.15): everything at or below its reach fully, nothing `edge` past it. Its bite is
+`bite(b) = 1 + (1 − b) × specialist_bonus` (0.5): a pure specialist eats 1.5× per hour, a full
+generalist 1×. The trait acts at exactly three sites and adds no creature state: `perceive`
+scores a cell as `vegetation × edibility / (1 + d/4)` and only when that product reaches
+`graze_min_vegetation` (edibility is a per-terrain table built once per replan, one multiply
+per cell in the hot loop); the graze-in-place rule in `goals.rs` applies the same edible
+vegetation to the current cell, so a specialist standing in forest walks to grass instead of
+grazing nothing; `vitals::graze` bites `min(vegetation, graze_per_hour × bite)` from the cell
+and relieves `graze_nutrition × bite × edibility` of hunger. Specialists pay in range,
+generalists in bite rate, and there is no third cost. Base genomes: vole 0.35, hare 0.50, deer
+0.85; predators carry 0.5 and never graze, so theirs is inert. `DietParams::neutral()`
+(every position 0, bonus 0) reproduces pre-diet grazing exactly and is the control for tests
+and sweeps. The mate check in `eligible` (prey stands on vegetation ≥ the minimum) still reads
+raw vegetation, not edible vegetation: it is a fed-ness proxy and moving it would change
+mating for reasons unrelated to diet. S03 draws the row and a Derived `diet grazes up to
+<terrain>; bite x<n>` line, S04a the `Dbr` column, S04b the thirteenth histogram (a 3 × 5
+grid), and `--summary` writes `diet_breadth_<species>`. Save `VERSION = 15` (14 was taken by the last-ate/drank/slept stamps that landed on `main` first).
+
 ### FR4 Maturity and following
 At the individual's adult age the glyph switches to uppercase and movement speed becomes
 full (C3 FR6). Since C8 that age is `round(adult_age_days[species] × maturity_factor)`
@@ -216,6 +239,13 @@ Adds `births_<species>`, `<species>_generation_mean`, `<species>_generation_max`
   rates and with a mean |Δ| ratio within ±10 % of the sd ratio; `sterility_chance` is 0 at and
   below the onset, `sterility_max` at the cap and monotone between; a 0.98 pair with
   `sterility_max = 1` bears only sterile pups; sterile adults fail `eligible`.
+- Diet breadth unit tests (`sim::params::diet::tests`, `sim::behavior::tests_diet`): edibility is
+  1 at or below the reach and 0 past the edge, the bite is 1× for a generalist and 1.5× for a
+  specialist, the neutral overlay makes every terrain edible; a 0.2 specialist in forest picks
+  a grass cell and does not graze in place, a 0.95 generalist grazes forest where it stands,
+  and under the neutral overlay the graze score and the bite equal the pre-diet formula.
+  `tests/herbivores.rs::diet_breadth_spreads_grazers`: deer at base breadth 0.2 never graze
+  in place in forest, deer at 0.95 do.
 - Lineage: every living creature's parents resolve (or are `None` for founders); pruning
   never removes an ancestor of a living creature; the S08 tree never exceeds
   `lineage_rows_max` nodes.
@@ -235,6 +265,10 @@ Adds `births_<species>`, `<species>_generation_mean`, `<species>_generation_max`
 | Selection, dry seeds 1..=10 | **6 of 10** (needs 7) — voles survive in all ten dry worlds but only at 2–23 individuals, so the mean-metabolism change is noisy: −0.089, −0.019, −0.045, −0.118, −0.002, −0.015, −0.033, −0.005, −0.073, −0.053. `tests/evolution.rs::dry_world_selection_7_of_10` is `#[ignore]`d for this reason and reports the per-seed values when run. |
 | Performance | 5 years headless ≈ 60–70 s on the reference machine (< 120 s) at ~500–900 prey |
 | Mutability (slot 11), seeds 1..=6, 5 years, `--summary` | **weak selection at defaults** — surviving species' Mutability means stay within 0.45–0.54 (deer 0.49/0.54/0.54/0.50/0.45, hare 0.50/0.48); with the Plague years overlay deer 0.48–0.53, wolves 0.43; `sterile_*` is 0 everywhere at the default onset 0.75. With `sterility_onset = 0.5` the cost bites (deer 1/1/2 sterile, hare 1) and means stay 0.48–0.57. Five years is a handful of generations for the large species; a longer run is needed to see the trait move under selection. |
+
+| Diet breadth (slot 12), seed 42, C3 world, 60 days | **mechanism holds** — see `diet_breadth_spreads_grazers` and the sweep row below. |
+| Diet breadth (slot 12), seeds 1..=6, 5 years, `--summary` vs the neutral overlay (`diet.specialist_bonus = 0`, every `terrain_position` 0) | **no band changed; the six-species world is dominated by the open C5 collapse in both arms.** Year-5 deer: default 63 / 65 / 56 / 287 / 0 / 1, neutral 61 / 134 / 200 / 262 / 237 / 0; hares survive in one seed per arm (253 vs 147, plus 9 in neutral seed 2); voles and every predator are gone by year 5 in all twelve runs, as the C5 notes record. Deer `Dbr` means stay 0.80–0.95 where deer survive (base 0.85), so five years shows no selection on the trait. |
+| Diet breadth, prey only (fox/wolf/lynx `initial_count = 0`), seeds 1..=6, 5 years, default vs neutral | **the trait moves the prey balance and selects.** Extinctions 3 vs 8 across the six runs. Year-5 deer 171 / 74 / 60 / 68 / 109 / 135 with the trait against 60 / 126 / 0 / 21 / 10 / 29 without it; hares 5 / 0 / 151 / 261 / 161 / 292 against 0 / 0 / 285 / 366 / 275 / 417; voles 14 / 0 / 0 / 5 / 1 / 5 against 0 / 0 / 0 / 4 / 1 / 15. Deer `Dbr` rises to 0.87–0.91 from the 0.85 base wherever deer survive (neutral arm, where the slot is inert, drifts 0.81–0.89), so browsing forest is selected for; hare means hold 0.49–0.55 and vole 0.31–0.41 around their bases. Reading: a 0.85 deer browses forest that hares and voles cannot reach, so the meadow competition it used to lose is gone, and the grass species pay for it. No lever was changed; the levers are `diet.specialist_bonus`, `diet.edge` and the base values if the C3 vole band needs restoring. |
 
 ## Checkpoint demo script
 1. Generate the default world, `p`, enable `[b] log births`, `Esc`, x25, two years.
@@ -256,6 +290,8 @@ Adds `births_<species>`, `<species>_generation_mean`, `<species>_generation_max`
 - `ui::tests::{s04_sort_cycle, s07_birth_ticker_gate}`
 - `tests/evolution.rs::{five_year_survival, no_soft_cap_hit, floor_five_percent, dry_world_selection_7_of_10,
   performance_budget}`
+- Diet breadth: `sim::params::diet::tests::*`, `sim::behavior::tests_diet::*`,
+  `tests/herbivores.rs::diet_breadth_spreads_grazers`
 
 ## Decisions made here
 - Two-parent sexual reproduction; per-trait gaussian mutation; no linkage or dominance.

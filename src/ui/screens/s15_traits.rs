@@ -1,6 +1,6 @@
 //! S15: Traits & Fates (S15a, the matrix).
 //!
-//! How each of the twelve genome traits relates to age, population and
+//! How each of the genome traits relates to age, population and
 //! outcomes for one species over the last 240 days: a trait × outcome
 //! correlation matrix, the selected trait followed across age, and a sidebar
 //! that explains the selected cell. The numbers come from

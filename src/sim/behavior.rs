@@ -8,7 +8,7 @@ use crate::sim::creatures::{
 use crate::sim::events::{Event, EventKind, EventRing};
 use crate::sim::genetics::{self, TickView};
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{CreaturesParams, EcologyParams, GeneticsParams, PredationParams, Roster, SocialParams};
+use crate::sim::params::{CreaturesParams, DietParams, EcologyParams, GeneticsParams, PredationParams, Roster, SocialParams};
 use crate::sim::rng::Rng;
 use crate::sim::spatial::SpatialIndex;
 use crate::sim::species::SpeciesId;
@@ -40,6 +40,7 @@ pub fn tick_creatures(
     pp: &PredationParams,
     dp: &DiseaseParams,
     sp: &SocialParams,
+    diet: &DietParams,
     rng: &mut Rng,
     tallies: &mut DeathTallies,
     lineage: &mut Lineage,
@@ -51,7 +52,7 @@ pub fn tick_creatures(
     // FR5: predator-first threat marking (bucket-bounded; never per-prey scans).
     mark_threats(store, spatial, world, time.tick, roster, pp, sp);
     for c in store.living_mut() {
-        update_one(c, spatial, world, events, time, roster, cp, ep, gp, pp, dp, sp, &view, rng, tallies, lineage);
+        update_one(c, spatial, world, events, time, roster, cp, ep, gp, pp, dp, sp, diet, &view, rng, tallies, lineage);
     }
     // C7 FR4: infectious-first contagion over the same spatial snapshot.
     disease::contagion_pass(store, spatial, world, time, dp, dstate, drng);
@@ -345,3 +346,6 @@ mod tests_migration;
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests_social;
+#[cfg(test)]
+#[allow(clippy::float_cmp)]
+mod tests_diet;
