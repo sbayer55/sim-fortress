@@ -58,7 +58,7 @@ pub(super) fn drift(f: &mut Frame<'_>, area: Rect, sim: &Sim, id: SpeciesId) {
     {
         let y = inner.y;
         let buf = f.buffer_mut();
-        buf.set_stringn(inner.x, y, format!(" trait       g{first_gen:<4}"), 18, theme::dim_text());
+        buf.set_stringn(inner.x, y, format!(" trait        g{first_gen:<4}"), 19, theme::dim_text());
         buf.set_stringn(inner.x + 21, y, "oldest", 6, theme::dim_text());
         buf.set_stringn(inner.x + 51, y, "newest", 6, theme::dim_text());
         buf.set_stringn(inner.x + 58, y, format!(" g{:<3} change", s.generation), 12, theme::dim_text());
@@ -80,13 +80,13 @@ fn drift_trait_rows(f: &mut Frame<'_>, inner: Rect, s: &SpeciesStats, n: usize, 
             let first = s.drift[0].1 .0[t];
             let last = s.drift[n - 1].1 .0[t];
             let vals: Vec<u16> = s.drift.iter().map(|g| crate::cast!((g.1 .0[t] * 100.0).round() => u16)).collect();
-            buf.set_stringn(inner.x + 13, y, format!("{first:.2}"), 4, theme::dim_text());
+            buf.set_stringn(inner.x + 14, y, format!("{first:.2}"), 4, theme::dim_text());
             let wide: Vec<u16> = vals.iter().flat_map(|v| [*v, *v, *v]).collect();
             bars::sparkline(buf, inner.x + 21, y, 36, &wide, color);
             buf.set_stringn(inner.x + 59, y, format!("{last:.2}"), 4, theme::text());
             buf.set_stringn(inner.x + 66, y, format!("{:+.2}", last - first), 5, delta_style(last - first));
         } else {
-            buf.set_stringn(inner.x + 13, y, "no samples yet", 14, theme::dim_text());
+            buf.set_stringn(inner.x + 14, y, "no samples yet", 14, theme::dim_text());
         }
         row += 1;
     }

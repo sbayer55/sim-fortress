@@ -51,6 +51,7 @@ pub const fn trait_color(t: usize) -> Color {
         9 => theme::CREAM,
         10 => theme::SEED,
         11 => theme::MARSH_FG,
+        12 => theme::FOREST_FG,
         _ => theme::DIM,
     }
 }

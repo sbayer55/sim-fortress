@@ -7,7 +7,7 @@ use crate::sim::events::EventRing;
 use crate::sim::genetics::{self, TickView};
 use crate::sim::geom;
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{CreaturesParams, EcologyParams, GeneticsParams, PredationParams, Roster, SocialParams};
+use crate::sim::params::{CreaturesParams, DietParams, EcologyParams, GeneticsParams, PredationParams, Roster, SocialParams};
 use crate::sim::rng::Rng;
 use crate::sim::spatial::SpatialIndex;
 use crate::sim::species::Kind;
@@ -37,6 +37,7 @@ pub(super) fn update_one(
     pp: &PredationParams,
     dp: &DiseaseParams,
     sp: &SocialParams,
+    diet: &DietParams,
     view: &TickView,
     rng: &mut Rng,
     tallies: &mut DeathTallies,
@@ -69,7 +70,7 @@ pub(super) fn update_one(
     }
     // Replan when due.
     if time.tick >= c.replan_at {
-        replan(c, spatial, world, time, roster, cp, gp, pp, view, rng, dp, fx.rest_energy, sp);
+        replan(c, spatial, world, time, roster, cp, gp, pp, view, rng, dp, fx.rest_energy, sp, diet);
     }
     // Track the current prey target while hunting (Stalk → Chase).
     if c.goal == Goal::Hunt && c.hunt_phase != HuntPhase::Eat {
@@ -78,7 +79,7 @@ pub(super) fn update_one(
     // Move toward the target.
     move_toward(c, world, time, cp, pp, fx.speed_factor);
     // Act on the goal at the current location.
-    act(c, world, events, time, roster, cp, dp, rng);
+    act(c, world, events, time, roster, cp, dp, diet, rng);
     // Needs and hp.
     needs(c, world, time, cp, ep, gp, dp, fx.hunger_factor);
     // Death.
@@ -195,6 +196,7 @@ pub(super) fn replan(
     dp: &DiseaseParams,
     rest_energy: f32,
     sp: &SocialParams,
+    diet: &DietParams,
 ) {
     let tick = time.tick;
     let next = tick + cp.replan_ticks;
@@ -221,9 +223,9 @@ pub(super) fn replan(
     }
 
     if roster.kind(c.species) == Kind::Predator {
-        replan_predator(c, spatial, world, time, roster, cp, gp, pp, view, rng, dp, rest_energy, sp);
+        replan_predator(c, spatial, world, time, roster, cp, gp, pp, view, rng, dp, rest_energy, sp, diet);
     } else {
-        replan_prey(c, spatial, world, time, roster, cp, gp, pp, view, rng, dp, rest_energy, sp);
+        replan_prey(c, spatial, world, time, roster, cp, gp, pp, view, rng, dp, rest_energy, sp, diet);
     }
 }
 
@@ -242,9 +244,10 @@ fn replan_prey(
     dp: &DiseaseParams,
     rest_energy: f32,
     sp: &SocialParams,
+    diet: &DietParams,
 ) {
     let next = time.tick + cp.replan_ticks;
-    let (p, kin) = perceive(c, spatial, world, cp, view, sp);
+    let (p, kin) = perceive(c, spatial, world, cp, view, sp, diet);
     c.kin_nearby = kin.count;
 
     // 1. Drink (enter thirst > 0.6, stay while thirst > 0.1).
@@ -264,28 +267,22 @@ fn replan_prey(
     if c.hunger > 0.5 || (c.goal == Goal::Graze && c.hunger > 0.2) {
         c.goal = Goal::Graze;
         c.rest_reason = None;
-        match p.best_graze {
-            Some((cell, score)) => {
-                let cur = world.cell(c.x, c.y);
-                let cur_score = if cur.vegetation >= cp.graze_min_vegetation {
-                    cur.vegetation
-                } else {
-                    0.0
-                };
-                c.target = if cur_score >= score * 0.9 && cur.vegetation >= cp.graze_min_vegetation {
-                    None // graze in place
-                } else {
-                    Some(cell)
-                };
-            }
-            None => {
-                if world.cell(c.x, c.y).vegetation >= cp.graze_min_vegetation {
-                    c.target = None;
-                } else {
-                    wander(c, world, time, view, gp, sp, rng, Some(kin));
-                    c.goal = Goal::Graze;
-                }
-            }
+        // Diet breadth: the current cell counts for what this animal can
+        // digest of it, the same rule `perceive` scored with.
+        let cur = world.cell(c.x, c.y);
+        let cur_edible = cur.vegetation * diet.edibility(cur.terrain, c.genome.diet_breadth());
+        if let Some((cell, score)) = p.best_graze {
+            let cur_score = if cur_edible >= cp.graze_min_vegetation { cur_edible } else { 0.0 };
+            c.target = if cur_score >= score * 0.9 && cur_edible >= cp.graze_min_vegetation {
+                None // graze in place
+            } else {
+                Some(cell)
+            };
+        } else if cur_edible >= cp.graze_min_vegetation {
+            c.target = None;
+        } else {
+            wander(c, world, time, view, gp, sp, rng, Some(kin));
+            c.goal = Goal::Graze;
         }
         c.replan_at = next;
         return;
@@ -337,9 +334,10 @@ fn replan_predator(
     dp: &DiseaseParams,
     rest_energy: f32,
     sp: &SocialParams,
+    diet: &DietParams,
 ) {
     let next = time.tick + cp.replan_ticks;
-    let (p, kin) = perceive(c, spatial, world, cp, view, sp);
+    let (p, kin) = perceive(c, spatial, world, cp, view, sp, diet);
     c.kin_nearby = kin.count;
 
     // 1. Drink (thirst > 0.6).

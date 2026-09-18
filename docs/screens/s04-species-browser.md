@@ -57,8 +57,8 @@ flowchart LR
         direction LR
         subgraph H["Trait distributions — 80 cols"]
             direction TB
-            H1["3 columns × 4 rows of 25×7 histogram blocks<br/>(one per trait)"]
-            H2["legend footer"]
+            H1["3 columns × 5 rows of 25×6 histogram blocks<br/>(one per trait, two spare)"]
+            H2["selection pressure · compared with other species"]
             H1 --> H2
         end
         subgraph D["Drift over generations — 75 cols"]
@@ -148,17 +148,17 @@ classDiagram
 
 ### S04a — Species table panel
 1. **Header row** (dim): `Species  Kind  Count  Adults  Juv  Birth/d  Death/d  Sick  Peak
-   Gen  30-day trend  Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat Mut  Diet` (`Sick` and
-   `Res` live since C7; `Soc` and `Mat` since C8).
+   Gen  30-day trend  Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat Mut Dbr  Diet` (`Sick` and
+   `Res` live since C7; `Soc` and `Mat` since C8; `Dbr` since Diet breadth).
 2. **One row per species**, starting on the second row under the header, sorted by count
    descending (the default sort; see Interaction). Columns: selection marker `►` (only on
    the selected row), species glyph upper-case in the species colour, name (8), kind
    `prey`/`pred` (6), count (6), adults (7), juveniles (6), births today (8, good colour),
    deaths today (8, bad colour), sick (6, sick colour when > 0; *live since: C7*), peak
-   (6), generation (5), a 14-cell sparkline of the 30-day
+   (6), generation (5), a 13-cell sparkline of the 30-day
    trend in the species colour followed by the trend arrow (`↑` good, `↓` bad, `↔` dim),
-   the twelve trait means as two-digit integers (value × 100) each in its trait colour, and
-   the diet text (dim). Source: species stats.
+   the thirteen trait means as two-digit integers (value × 100) each in its trait colour, and
+   the diet text (dim, 15 cells). Source: species stats.
 3. **Selected row** is drawn in the selected style across the full inner width.
 4. **Totals row** (after one blank row): `totals <total>   prey <p>  pred <q>  ratio
    <p/q>:1   births <b>  deaths <d>   net <b−d> today      trait columns are species
@@ -211,19 +211,20 @@ classDiagram
     scaled to the largest region, count. Source: living creatures × world regions.
 
 ### S04b — Trait distributions panel
-15. **Eleven histogram blocks** in a 3 × 4 grid of 25-column blocks (24-wide histograms,
-    two cells per bucket, the mean marker at `x + round(mean × 23)`), in trait order down
-    each column (*C7/C8:* the block height is exactly name + histogram + axis + labels, so
-    the former spacer row is gone and the two comparison sections below still fit inside
-    42 rows). Each block: trait name in its trait colour with
-    `min .xx mean .xx max .xx`; a 36-column histogram of the 12 buckets (3 columns per
-    bucket) built from `▄`/`█` stacks; an axis of `─` with a bright `┼` at the mean; tick
-    labels `0.0`, `0.5`, `1.0`; `n=<sum of buckets>` and `mode <bucket centre>`.
-    Source: species `hist`.
-16. **Footer legend.** `┼ mean   █ full  ▄ half bucket   each column is 1/12 of the 0..1
-    range`. *Live since: C7* — the **Selection pressure** (item 20, at most two lines) and
-    **Compared with other species** (item 21) sections are drawn under the legend in this
-    panel, since twelve traits leave the drift panel no room for them.
+15. **Thirteen histogram blocks** in a 3 × 5 grid of 25-column, 6-row blocks (24-wide
+    histograms, two cells per bucket, the mean marker at `x + round(mean × 23)`), in trait
+    order down each column, starting on the panel's first row; two blocks stay empty.
+    (*C7/C8:* the block height is exactly name + histogram + axis + labels; *Diet breadth:*
+    the histogram lost its fourth row and the grid its top spacer so a fifth grid row fits
+    and the two comparison sections below still end inside 41 rows.) Each block: trait name
+    in its trait colour (12 cells) with `.xx .xx .xx` (min mean max); a 24-column histogram
+    of the 12 buckets (2 columns per bucket, 3 rows) built from `▄`/`█` stacks; an axis of
+    `─` with a bright `┼` at the mean; tick labels `0`, `1`; `n=<sum of buckets>` and
+    `mode <bucket centre>`. Source: species `hist`.
+16. **Legend.** Carried in the panel's right-hand hint: `┼ mean █ full ▄ half; hdr min mean
+    max; 12 buckets, living`. *Live since: C7* — the **Selection pressure** (item 20, at
+    most two lines) and **Compared with other species** (item 21) sections are drawn under
+    the grid in this panel, since the traits leave the drift panel no room for them.
 
 ### S04b — Drift over generations panel
 17. **Drift sparklines.** Header `trait  gen 1  oldest … newest  g<current> change`, then
@@ -247,9 +248,10 @@ classDiagram
 20. **Selection pressure.** Two or three `§`/`¶` lines explaining which traits are moving
     and why (for example aggression rising, camouflage falling, longevity flat).
 21. **Compared with other species (mean x100).** Header built from `TRAIT_ABBR`
-    (`Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat Mut`) plus `count gen`, then one row per
+    (`Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat Mut Dbr`) plus `count gen`, then one row per
     species (all six, absent ones dimmed): glyph, name (title style for the selected
-    species), twelve means in trait colours, count and generation.
+    species), thirteen means in trait colours, count and generation. The row is exactly the
+    78-cell inner width.
     (C4 renamed the block from "Compared with other predators".)
 
 ### Status bar

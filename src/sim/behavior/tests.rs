@@ -7,7 +7,7 @@ use crate::sim::events::{EventRing};
 use crate::sim::species::testing::*;
 use crate::sim::genetics::{TickView };
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{CreaturesParams, EcologyParams, GeneticsParams, PredationParams, SocialParams};
+use crate::sim::params::{CreaturesParams, DietParams, EcologyParams, GeneticsParams, PredationParams, SocialParams};
 use crate::sim::rng::Rng;
 use crate::sim::spatial::SpatialIndex;
 use crate::sim::disease::{self, DiseaseState};
@@ -99,7 +99,7 @@ pub(super) fn empty_index(world: &World) -> SpatialIndex {
 }
 
 pub(super) fn plan(c: &mut Creature, idx: &SpatialIndex, w: &World, t: &Time, cp: &CreaturesParams, rng: &mut Rng) {
-    replan(c, idx, w, t, roster(), cp, &GeneticsParams::default(), &PredationParams::default(), &TickView::empty(), rng, &DiseaseParams::default(), disease::REST_ENERGY, &SocialParams::default());
+    replan(c, idx, w, t, roster(), cp, &GeneticsParams::default(), &PredationParams::default(), &TickView::empty(), rng, &DiseaseParams::default(), disease::REST_ENERGY, &SocialParams::default(), &DietParams::default());
 }
 
 pub(super) fn day_time(hour: u32) -> Time {
@@ -140,6 +140,7 @@ pub(super) fn tick_once(store: &mut CreatureStore, w: &mut World, time: &Time, p
         pp,
         &DiseaseParams::default(),
         &SocialParams::default(),
+        &DietParams::default(),
         &mut Rng::new(1),
         &mut tallies,
         &mut Lineage::new(),
