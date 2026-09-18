@@ -21,6 +21,7 @@ pub struct BaseGenome {
     pub sociality: f32,
     pub maturity: f32,
     pub mutability: f32,
+    pub diet_breadth: f32,
 }
 
 impl Default for BaseGenome {
@@ -45,6 +46,7 @@ impl BaseGenome {
             self.sociality,
             self.maturity,
             self.mutability,
+            self.diet_breadth,
         ])
     }
 
@@ -62,6 +64,7 @@ impl BaseGenome {
             sociality: g.0[9],
             maturity: g.0[10],
             mutability: g.0[11],
+            diet_breadth: g.0[12],
         }
     }
 }
@@ -287,7 +290,7 @@ fn default_prey() -> Vec<SpeciesParams> {
             gestation_days: 3,
             litter_max: 0.0,
             mate_cooldown_days: 60,
-            base_genome: base([0.45, 0.10, 0.40, 0.75, 0.05, 0.60, 0.90, 0.20, 0.30, 0.35, 0.5, 0.5]),
+            base_genome: base([0.45, 0.10, 0.40, 0.75, 0.05, 0.60, 0.90, 0.20, 0.30, 0.35, 0.5, 0.5, 0.35]),
             ..SpeciesParams::default()
         },
         SpeciesParams {
@@ -302,7 +305,7 @@ fn default_prey() -> Vec<SpeciesParams> {
             gestation_days: 6,
             litter_max: 1.0,
             mate_cooldown_days: 75,
-            base_genome: base([0.80, 0.25, 0.65, 0.60, 0.10, 0.55, 0.75, 0.35, 0.35, 0.25, 0.5, 0.5]),
+            base_genome: base([0.80, 0.25, 0.65, 0.60, 0.10, 0.55, 0.75, 0.35, 0.35, 0.25, 0.5, 0.5, 0.50]),
             ..SpeciesParams::default()
         },
         SpeciesParams {
@@ -317,7 +320,7 @@ fn default_prey() -> Vec<SpeciesParams> {
             gestation_days: 30,
             litter_max: 8.0,
             mate_cooldown_days: 30,
-            base_genome: base([0.65, 0.80, 0.55, 0.40, 0.20, 0.35, 0.35, 0.70, 0.45, 0.70, 0.5, 0.5]),
+            base_genome: base([0.65, 0.80, 0.55, 0.40, 0.20, 0.35, 0.35, 0.70, 0.45, 0.70, 0.5, 0.5, 0.85]),
             ..SpeciesParams::default()
         },
     ]
@@ -339,7 +342,7 @@ fn default_predators() -> Vec<SpeciesParams> {
             mate_cooldown_days: 120,
             nocturnal: true,
             prey_preference: pref(&[("vole", 0.6), ("hare", 0.4), ("deer", 0.0)]),
-            base_genome: base([0.70, 0.35, 0.80, 0.55, 0.60, 0.50, 0.50, 0.45, 0.40, 0.15, 0.5, 0.5]),
+            base_genome: base([0.70, 0.35, 0.80, 0.55, 0.60, 0.50, 0.50, 0.45, 0.40, 0.15, 0.5, 0.5, 0.5]),
             ..SpeciesParams::default()
         },
         SpeciesParams {
@@ -355,7 +358,7 @@ fn default_predators() -> Vec<SpeciesParams> {
             litter_max: 2.0,
             mate_cooldown_days: 180,
             prey_preference: pref(&[("deer", 0.5), ("hare", 0.4), ("vole", 0.1)]),
-            base_genome: base([0.75, 0.70, 0.70, 0.50, 0.85, 0.25, 0.40, 0.60, 0.50, 0.70, 0.5, 0.5]),
+            base_genome: base([0.75, 0.70, 0.70, 0.50, 0.85, 0.25, 0.40, 0.60, 0.50, 0.70, 0.5, 0.5, 0.5]),
             ..SpeciesParams::default()
         },
         SpeciesParams {
@@ -372,7 +375,7 @@ fn default_predators() -> Vec<SpeciesParams> {
             mate_cooldown_days: 180,
             nocturnal: true,
             prey_preference: pref(&[("hare", 0.6), ("vole", 0.4), ("deer", 0.0)]),
-            base_genome: base([0.72, 0.50, 0.90, 0.45, 0.75, 0.70, 0.30, 0.55, 0.45, 0.10, 0.5, 0.5]),
+            base_genome: base([0.72, 0.50, 0.90, 0.45, 0.75, 0.70, 0.30, 0.55, 0.45, 0.10, 0.5, 0.5, 0.5]),
             ..SpeciesParams::default()
         },
     ]
@@ -392,10 +395,10 @@ mod tests {
             _ => Vec::new(),
         };
         // BTreeMap sorts keys, so compare as sets against the trait names.
-        let mut want: Vec<String> = TRAIT_NAMES.iter().map(|s| s.to_lowercase()).collect();
+        let mut want: Vec<String> = TRAIT_NAMES.iter().map(|s| s.to_lowercase().replace(' ', "_")).collect();
         want.sort();
         assert_eq!(keys, want);
-        let g = Genome([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.11, 0.12, 0.13]);
+        let g = Genome([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.11, 0.12, 0.13, 0.14]);
         assert_eq!(BaseGenome::from_genome(g).genome(), g);
     }
 

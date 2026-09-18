@@ -51,7 +51,7 @@ flowchart LR
         end
         subgraph M["Genome — 52 cols"]
             direction TB
-            M1["12 traits: bar, value, delta, species range"]
+            M1["13 traits: bar, value, delta, species range"]
             M2["Mutation history"]
             M3["Derived values"]
             M4["Offspring forecast"]
@@ -212,18 +212,21 @@ classDiagram
     `since_day`) and, when `infections_survived > 0`, `☺ recovered N time(s)`.
 
 ### Middle panel — Genome
-13. **Header row.** `trait  individual  delta  species`.
-14. **One row per trait (twelve since Mutability).** Trait name (in its trait colour), a 12-cell bar
+13. **Header row.** `trait  individual  own  delta  sp. range`.
+14. **One row per trait (thirteen since Diet breadth).** Trait name (in its trait colour, a
+    13-cell label sized by `Diet breadth`), a 12-cell bar
     of the individual's value, the value to two decimals, `±<delta>` versus the species mean
     coloured good/bad/dim (|delta| ≤ 0.005 counts as dim), and an 11-cell range bar showing
     species min / mean / max. The later traits are appended in slot order, so Resistance is
     ninth (sick colour), Sociality tenth (hare colour), Maturity eleventh (seed colour) and
-    Mutability twelfth (marsh teal). There is no spacer row before Mutation history: the twelfth
-    trait and its forecast row use the column's last two spare rows.
+    Mutability twelfth (marsh teal) and Diet breadth thirteenth (forest green). There are no
+    spacer rows anywhere in the column: thirteen traits, their forecast rows and the diet line
+    fill its 41 rows exactly, and the section rules separate the blocks.
 15. **Summary lines.** `<n> traits above species mean, <8−n> below` and `most divergent:
     <trait> <±delta>`.
 16. **Mutation history section.** One `§ <text>` line per recorded mutation (for example
-    `Speed +0.06 (gen 44)`), or `none recorded`; then a dim `from <n> lines; rate 0.042  sd
+    `Speed +0.06 (gen 44)`); when there are none the section rule itself reads
+    `Mutation history: none recorded`. Then a dim `from <n> lines; rate 0.042  sd
     0.062  mut 0.56` line: this animal's *effective* mutation rate and sd with an average mate
     (the pair's mean Mutability scales the world settings), and its own Mutability.
 17. **Derived section.** Nine label/value rows computed from the genome: `sense range
@@ -234,7 +237,10 @@ classDiagram
     round(100 × `disease.resist_hunger_cost` × resistance). *Live since: C8* — `adult at
     <adult_age_days(species, genome)> days`, `litter size` now reads
     `<n> (fert {f}, mat {m})` because maturity scales it, and `kin nearby <n> (<herd|pack>)`
-    from the creature's last replan (`scattered`/`alone` when it is not herding).
+    from the creature's last replan (`scattered`/`alone` when it is not herding). *Live
+    since Diet breadth* — `diet grazes up to <terrain>; bite x<n>`: the furthest terrain on
+    the grass→browse axis this animal eats fully and its bite multiplier; a predator reads
+    `carnivore (breadth inert)`.
 18. **Offspring forecast section.** For each trait, a 22-cell range bar centred on
     `(individual + species mean) / 2` with ±0.06 spread and the same numbers in text.
     Rows beyond the panel bottom are dropped.

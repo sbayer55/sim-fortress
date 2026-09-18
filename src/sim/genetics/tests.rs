@@ -394,8 +394,8 @@ fn birth_placement() {
 fn inheritance_mean() {
     let gp = gp();
     let mut rng = Rng::new(11);
-    let mother = Genome([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.5, 0.6, 0.4, 0.5]);
-    let father = Genome([0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.4, 0.3, 0.3, 0.2, 0.6, 0.5]);
+    let mother = Genome([0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.5, 0.6, 0.4, 0.5, 0.7]);
+    let father = Genome([0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.4, 0.3, 0.3, 0.2, 0.6, 0.5, 0.3]);
     let mut sum = [0.0f64; Genome::LEN];
     let n = 10_000;
     for _ in 0..n {

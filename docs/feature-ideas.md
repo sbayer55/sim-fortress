@@ -27,13 +27,13 @@ If you want, I can write the burrows-and-dens idea up as a ninth chunk doc in th
 
 ---
 
-The current genome has twelve slots: speed, size, sense, metabolism, aggression, camouflage, fertility, longevity, resistance (C7), sociality and maturity (C8), and mutability. The most interesting additions are ones that trade off against an existing slot or against a specific mechanic, so selection can pull them in different directions in different worlds.
+The current genome has thirteen slots: speed, size, sense, metabolism, aggression, camouflage, fertility, longevity, resistance (C7), sociality and maturity (C8), mutability, and diet breadth (2026-09-17). The most interesting additions are ones that trade off against an existing slot or against a specific mechanic, so selection can pull them in different directions in different worlds.
 
 **Traits that exploit the existing environment**
 
 - **Cold tolerance.** Lower winter metabolism cost, but a higher summer cost. Harsh-winter presets would select it up, lush ones down, so the same species diverges across presets.
 - **Drought tolerance.** Thirst rises more slowly, at the price of a slower speed cap. It would make your dry-world migration events much less lethal for some lineages and not others.
-- **Diet breadth.** For herbivores, the terrain types the creature can graze on, from dense-grass specialist to forest browser. Specialists eat faster, generalists survive dieback. This also spreads deer and hares across terrain instead of stacking on the best cells.
+- ~~**Diet breadth.**~~ *Shipped 2026-09-17 as genome slot 12 (`Dbr`), the `[diet]` table and C4 FR3; plan in [diet-breadth-plan.md](diet-breadth-plan.md).* For herbivores, the terrain types the creature can graze on, from dense-grass specialist to forest browser. Specialists eat faster, generalists survive dieback. This also spreads deer and hares across terrain instead of stacking on the best cells.
 - **Nocturnality.** A phase shift on the sleep cycle. A nocturnal vole avoids a diurnal fox entirely, which is a refuge that needs no new tiles, and a nocturnal fox lineage would then be selected to chase them. Day and night tint already exists, so it is visible.
 
 **Traits that shape predator and prey encounters**

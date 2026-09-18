@@ -5,7 +5,7 @@ use crate::sim::creatures::{
 };
 use crate::sim::genetics::TickView;
 use crate::sim::geom;
-use crate::sim::params::{CreaturesParams, SocialParams};
+use crate::sim::params::{CreaturesParams, DietParams, SocialParams};
 use crate::sim::spatial::SpatialIndex;
 use crate::sim::world::World;
 
@@ -71,7 +71,10 @@ pub(super) fn kin_summary(c: &Creature, candidates: &[CreatureId], view: &TickVi
     }
 }
 
-pub(super) fn perceive(c: &Creature, spatial: &SpatialIndex, world: &World, cp: &CreaturesParams, view: &TickView, sp: &SocialParams) -> (Perception, Kin) {
+pub(super) fn perceive(c: &Creature, spatial: &SpatialIndex, world: &World, cp: &CreaturesParams, view: &TickView, sp: &SocialParams, diet: &DietParams) -> (Perception, Kin) {
+    // Diet breadth: edibility per terrain, built once here so the cell loop
+    // below is one multiply per cell and never touches the params map.
+    let edible = diet.table(c.genome.diet_breadth());
     let r = c.genome.sense_cells(); // u16
     let r_i = i32::from(r);
     let r_f = f32::from(r);
@@ -121,8 +124,9 @@ pub(super) fn perceive(c: &Creature, spatial: &SpatialIndex, world: &World, cp: 
                 nearest_water_d = d;
                 nearest_water = Some((x, y));
             }
-            if cell.vegetation >= cp.graze_min_vegetation {
-                let mut score = cell.vegetation / (1.0 + d / 4.0);
+            let food = cell.vegetation * edible[crate::cast!(cell.terrain => usize)];
+            if food >= cp.graze_min_vegetation {
+                let mut score = food / (1.0 + d / 4.0);
                 // C8 FR2: when herding, near the group's centroid scores better,
                 // so a herd grazes the same cells down (no new vegetation code).
                 if herding {

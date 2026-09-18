@@ -1,45 +1,45 @@
  S03a  Creature Inspector - prey (Deer)                                                                                                                    
 ╔ Identity & Vitals ═══════════════════════════════╗╔ Genome ════════════════════════════ vs Deer mean ╗╔ Life ═══════════════════════════════════════════╗
-║ D Tansy  d#460  prey                             ║║ trait       individual  own  delta  species range║║ days alive  743          ┌ Surroundings ───────┐║
-║   Deer  ♂ male  adult  diet: grass, leaves       ║║ Speed      [████████░░] 0.75 ±+0.10 [░░░░▒█▒░░]  ║║ offspring   15           │",,,*♠♣♣",,*,,*,,*"~≡│║
-║                                                  ║║ Size       [████████░░] 0.78 ±-0.02 [░░░░░▒█▒░]  ║║ distance    12 cells     │"*,.,"♣"",*****,,,"♣~│║
-║ age  [█████████████████░]    92% 743 / 810 days  ║║ Sense      [████░░░░░░] 0.44 ±-0.08 [░░░░█▒░░░]  ║║ last ate    1d 9h ago    │",,***"""╬.╬.*.*,*""~│║
-║       2.1 years old   generation 1               ║║ Metabolism [████░░░░░░] 0.39 ±+0.01 [░░▒█▒░░░░]  ║║ last drank  1h ago       │♣,,.**""♣"D**...,*"~≡│║
-║                                                  ║║ Aggression [██░░░░░░░░] 0.24 ±+0.05 [▒▒█░░░░░░]  ║║ last slept  3h ago       │♣",,*""""╬"╬.**,*""~~│║
-║─ Family ─────────────────────────────────────────║║ Camouflage [████░░░░░░] 0.42 ±+0.05 [░░▒█▒░░░░]  ║║                          │♠♠♠≡≡♠♠∙∙∙∙",*.F,"≡~≡│║
-║ mother  founder            father  founder       ║║ Fertility  [████░░░░░░] 0.40 ±+0.04 [░░▒█▒░░░░]  ║║                          │≡≡D~~~D∙≡≡♣"****,"~~♠│║
-║ offspring  15    ¶ lineage: [l]                  ║║ Longevity  [███████░░░] 0.66 ±-0.04 [░░░░░▒█▒░]  ║║                          └─────────────────────┘║
-║                                                  ║║ Resistance [████░░░░░░] 0.44 ±-0.05 [░░▒▒█▒░░░]  ║║                                                 ║
-║─ Location ───────────────────────────────────────║║ Sociality  [██████░░░░] 0.64 ±-0.05 [░░░░░▒█░░]  ║║─ Survival ──────────────────────────────────────║
-║ (122, 29)  Southern Savanna   , sparse grass     ║║ Maturity   [█████░░░░░] 0.54 ±+0.05 [░░░▒█▒░░░]  ║║ chased 65 times, escaped 65 (100%)              ║
-║ goal    wandering                                ║║ Mutability [█████░░░░░] 0.48 ±-0.03 [░░░▒█▒░░░]  ║║ grew wary of predators 325 times                ║
-║ target  ♦ (127, 24)  6 cells                     ║║─ Mutation history ───────────────────────────────║║ escape rate    [██████████████]   100%          ║
-║ trail   (122,29) (121,30) (120,31) (121,31) (122,║║ none recorded                                    ║║─ Threats seen ──────────────────────────────────║
-║                                                  ║║ from 1 lines; rate 0.040  sd 0.060  mut 0.48     ║║ Foxes          [██████████░░░░]    74% 48 times ║
-║─ Vitals ─────────────────────────────────────────║║                                                  ║║ Wolves         [███░░░░░░░░░░░]    25% 16 times ║
-║ health  [██████████████████████]   100%          ║║─ Derived ────────────────────────────────────────║║ Lynxes         [░░░░░░░░░░░░░░]     2% 1 times  ║
-║ hunger  [███████████░░░░░░░░░░░]    48%          ║║ sense range       6 cells                        ║║                                                 ║
-║ thirst  [█░░░░░░░░░░░░░░░░░░░░░]     2%          ║║ move speed        2.0 cells/tick                 ║║─ Legacy ────────────────────────────────────────║
-║ energy  [█████████████████████░]    97%          ║║ daily food need   0.22 biomass                   ║║ 15 offspring, 5 living descendants, 0 notable   ║
-║ sicknesshealthy                                  ║║ adult at          187 days                       ║║ no notable mutations among descendants          ║
-║ immune  none                                     ║║ max lifespan      810 days                       ║║                                                 ║
-║ ∩ parasites[░░░░░░░░░░░░░░░░░░░░░░]     1% light ║║ litter size       4 (fert 0.40, mat 0.54)        ║║─ Kin nearby ────────────────────────────────────║
-║                                                  ║║ mate cooldown     30 days                        ║║ no kin within 15 cells                          ║
-║─ Condition ──────────────────────────────────────║║ resistance cost   +4 % food                      ║║                                                 ║
-║ predation risk  [█████░░░░░░░░░]    38%          ║║ kin nearby        4 (herd)                       ║║─ Recent events ─────────────────────────────────║
-║ contagion risk  [░░░░░░░░░░░░░░]     0%          ║║                                                  ║║ no events for this creature                     ║
-║ local forage    [████░░░░░░░░░░]    31%          ║║─ Offspring forecast (with an average mate) ──────║║                                                 ║
-║ nearest water —   nearest den —                  ║║ Speed       [░░░░░░░░░░░▒▒█▒▒░░░░] 0.60..0.81    ║║                                                 ║
-║                                                  ║║ Size        [░░░░░░░░░░░░░░▒█▒░░░] 0.72..0.86    ║║                                                 ║
-║─ Behaviour ──────────────────────────────────────║║ Sense       [░░░░░░░▒▒█▒▒░░░░░░░░] 0.38..0.58    ║║                                                 ║
-║ wandering                                        ║║ Metabolism  [░░░░░░▒█▒▒░░░░░░░░░░] 0.33..0.45    ║║                                                 ║
-║                                                  ║║ Aggression  [░░▒▒█▒▒░░░░░░░░░░░░░] 0.13..0.30    ║║                                                 ║
-║─ Timeline ───────────────────────────────────────║║ Camouflage  [░░░░░░▒▒█▒░░░░░░░░░░] 0.31..0.48    ║║                                                 ║
-║ ♥ founder   placed as a founder                  ║║ Fertility   [░░░░░░▒█▒▒░░░░░░░░░░] 0.30..0.46    ║║                                                 ║
-║ ♥ Y1 D033   litter of 3                          ║║ Longevity   [░░░░░░░░░░░▒▒█▒░░░░░] 0.60..0.76    ║║                                                 ║
-║ ♥ Y1 D066   litter of 4                          ║║ Resistance  [░░░░░░░▒▒█▒░░░░░░░░░] 0.38..0.55    ║║                                                 ║
-║ ♥ Y1 D099   litter of 4                          ║║ Sociality   [░░░░░░░░░░░▒▒█▒░░░░░] 0.58..0.76    ║║                                                 ║
-║ ♥ Y1 D189   litter of 4                          ║║ Maturity    [░░░░░░░░▒▒█▒░░░░░░░░] 0.43..0.60    ║║                                                 ║
-║                                                  ║║ Mutability  [░░░░░░░░▒█▒▒░░░░░░░░] 0.42..0.57    ║║                                                 ║
+║ D Mallow  d#451  prey                            ║║ trait         individual  own  delta  sp. range  ║║ days alive  582          ┌ Surroundings ───────┐║
+║   Deer  ♂ male  adult  diet: grass, leaves       ║║ Speed        [██████░░░░] 0.61 ±-0.04 [░░░░▒█▒░░]║║ offspring   9            │H**H**V***DD*≡≡♣♣♣♣♣*│║
+║                                                  ║║ Size         [████████░░] 0.84 ±+0.04 [░░░░░▒█▒▒]║║ distance    12 cells     │▲▲▲▲▲▲▲Ω*ΩΩVV*DV♣H♣♣"│║
+║ age  [████████████░░░░░░]    67% 582 / 864 days  ║║ Sense        [██████░░░░] 0.57 ±+0.01 [░░░░█▒░░░]║║ last ate    12h ago      │▲▲▲▲▲▲▲*∙╬H╬,D♣♠♠♣♣♣"│║
+║       1.6 years old   generation 1               ║║ Metabolism   [████░░░░░░] 0.38 ±-0.02 [░░▒█▒░░░░]║║ last drank  1d 13h ago   │▲▲▲▲▲▲▲**∙V∙♦V♣≡♠♠♣♣♣│║
+║                                                  ║║ Aggression   [██░░░░░░░░] 0.21 ±+0.03 [▒█▒▒░░░░░]║║ last slept  1h ago       │**"▲▲▲***╬V╬∙~~♠♠♠♣"♣│║
+║─ Family ─────────────────────────────────────────║║ Camouflage   [███░░░░░░░] 0.31 ±-0.07 [░░▒█▒░░░░]║║                          │***♣♣♣****""♠∙♠♠♠♠♣"♣│║
+║ mother  founder            father  founder       ║║ Fertility    [███░░░░░░░] 0.29 ±-0.07 [░░▒█▒░░░░]║║                          │♣*L♣♣♠"**"♣∙∙∙∙♠♠♠♠♠♠│║
+║ offspring  9    ¶ lineage: [l]                   ║║ Longevity    [████████░░] 0.80 ±+0.09 [░░░░░▒█▒░]║║                          └─────────────────────┘║
+║                                                  ║║ Resistance   [█████░░░░░] 0.53 ±+0.09 [░░▒▒█▒░░░]║║                                                 ║
+║─ Location ───────────────────────────────────────║║ Sociality    [███████░░░] 0.70 ±-0.02 [░░░░░▒█▒░]║║─ Survival ──────────────────────────────────────║
+║ (12, 13)  Western Forest   , sparse grass        ║║ Maturity     [████░░░░░░] 0.39 ±-0.09 [░░░▒█▒░░░]║║ chased 49 times, escaped 49 (100%)              ║
+║ goal    wandering                                ║║ Mutability   [█████░░░░░] 0.52 ±+0.02 [░░░▒█▒░░░]║║ grew wary of predators 432 times                ║
+║ target  ♦ (14, 13)  1 cells                      ║║ Diet breadth [█████████░] 0.91 ±+0.04 [░░░░░░▒█▒]║║ escape rate    [██████████████]   100%          ║
+║ trail   (12,13) (11,13) (10,12) (11,12) (12,12)  ║║─ Mutation history: none recorded ────────────────║║─ Threats seen ──────────────────────────────────║
+║                                                  ║║ from 1 lines; rate 0.040  sd 0.060  mut 0.52     ║║ Foxes          [████░░░░░░░░░░]    27% 13 times ║
+║─ Vitals ─────────────────────────────────────────║║─ Derived ────────────────────────────────────────║║ Wolves         [█████████░░░░░]    67% 33 times ║
+║ health  [██████████████████████]   100%          ║║ sense range       7 cells                        ║║ Lynxes         [█░░░░░░░░░░░░░]     6% 3 times  ║
+║ hunger  [██████░░░░░░░░░░░░░░░░]    28%          ║║ move speed        1.7 cells/tick                 ║║                                                 ║
+║ thirst  [██████████░░░░░░░░░░░░]    46%          ║║ daily food need   0.23 biomass                   ║║─ Legacy ────────────────────────────────────────║
+║ energy  [██████████████████░░░░]    82%          ║║ adult at          160 days                       ║║ 9 offspring, 1 living descendants, 0 notable    ║
+║ sicknesshealthy                                  ║║ max lifespan      864 days                       ║║ no notable mutations among descendants          ║
+║ immune  none                                     ║║ litter size       3 (fert 0.29, mat 0.39)        ║║                                                 ║
+║ ∩ parasites[░░░░░░░░░░░░░░░░░░░░░░]     0% light ║║ mate cooldown     30 days                        ║║─ Kin nearby ────────────────────────────────────║
+║                                                  ║║ resistance cost   +5 % food                      ║║ D Mallow  d#1508  13 cells E  child             ║
+║─ Condition ──────────────────────────────────────║║ kin nearby        7 (herd)                       ║║                                                 ║
+║ predation risk  [█████████░░░░░]    61%          ║║ diet              grazes up to forest; bite x1.05║║─ Recent events ─────────────────────────────────║
+║ contagion risk  [░░░░░░░░░░░░░░]     0%          ║║─ Offspring forecast (with an average mate) ──────║║ no events for this creature                     ║
+║ local forage    [███░░░░░░░░░░░]    20%          ║║ Speed       [░░░░░░░░░░▒▒█▒▒░░░░░] 0.55..0.71    ║║                                                 ║
+║ nearest water —   nearest den —                  ║║ Size        [░░░░░░░░░░░░░░▒▒█▒░░] 0.73..0.90    ║║                                                 ║
+║                                                  ║║ Sense       [░░░░░░░░░▒▒█▒░░░░░░░] 0.50..0.63    ║║                                                 ║
+║─ Behaviour ──────────────────────────────────────║║ Metabolism  [░░░░░░▒█▒▒░░░░░░░░░░] 0.32..0.46    ║║                                                 ║
+║ wandering                                        ║║ Aggression  [░░▒▒█▒░░░░░░░░░░░░░░] 0.12..0.27    ║║                                                 ║
+║                                                  ║║ Camouflage  [░░░░░▒▒█▒░░░░░░░░░░░] 0.25..0.44    ║║                                                 ║
+║─ Timeline ───────────────────────────────────────║║ Fertility   [░░░░▒▒█▒▒░░░░░░░░░░░] 0.23..0.41    ║║                                                 ║
+║ ♥ founder   placed as a founder                  ║║ Longevity   [░░░░░░░░░░░░▒▒█▒▒░░░] 0.64..0.86    ║║                                                 ║
+║ ♥ Y1 D032   litter of 3                          ║║ Resistance  [░░░░░░░▒▒█▒▒░░░░░░░░] 0.38..0.59    ║║                                                 ║
+║ ♥ Y1 D096   litter of 3                          ║║ Sociality   [░░░░░░░░░░░░▒█▒▒░░░░] 0.64..0.78    ║║                                                 ║
+║ ♥ Y1 D134   litter of 3                          ║║ Maturity    [░░░░░░▒▒█▒▒░░░░░░░░░] 0.33..0.54    ║║                                                 ║
+║                                                  ║║ Mutability  [░░░░░░░░▒▒█▒░░░░░░░░] 0.43..0.58    ║║                                                 ║
+║                                                  ║║ Diet breadth[░░░░░░░░░░░░░░░▒▒█▒░] 0.81..0.97    ║║                                                 ║
 ╚══════════════════════════════════════════════════╝╚══════════════════════════════════════════════════╝╚═════════════════════════════════════════════════╝
- [f] follow  [l] lineage  [Tab] next creature  [←→] panel  [↑↓] scroll  [Esc] back                             Tansy d#460  Year 2, Day 1 of Spring  06:00 
+ [f] follow  [l] lineage  [Tab] next creature  [←→] panel  [↑↓] scroll  [Esc] back                            Mallow d#451  Year 2, Day 1 of Spring  06:00 

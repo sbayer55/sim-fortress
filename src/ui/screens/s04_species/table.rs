@@ -21,7 +21,7 @@ const fn kind_label(kind: Kind) -> &'static str {
 }
 
 /// The columns after the Marker: glyph, name, kind, the counts, the trend
-/// strip and arrow, the twelve trait means and the diet.
+/// strip and arrow, the thirteen trait means and the diet.
 fn columns() -> Vec<Column> {
     let mut cols = vec![
         Column::new(Fixed(2)),
@@ -36,15 +36,16 @@ fn columns() -> Vec<Column> {
         Column::titled("Peak", Fixed(6)).right(),
         Column::titled("Gen", Fixed(5)).right(),
         Column::new(Fixed(2)),
-        Column::titled("30-day trend", Fixed(14)),
+        Column::titled("30-day trend", Fixed(13)),
         Column::new(Fixed(1)),
         Column::new(Fixed(1)),
     ];
-    // Twelve genome columns (C8 made it eleven, Mutability twelve), so the
-    // header comes from `TRAIT_ABBR` (never hand-typed) and the trend strip is
-    // trimmed to 14 cells to keep the row inside 153.
+    // Thirteen genome columns (C8 made it eleven, Mutability twelve, Diet
+    // breadth thirteen), so the header comes from `TRAIT_ABBR` (never
+    // hand-typed); the trend strip is trimmed to 13 cells and the pre-Diet
+    // spacer to 2 to keep the row inside 153 with a 15-cell diet.
     cols.extend(TRAIT_ABBR.iter().map(|a| Column::titled(a, Fixed(4)).right()));
-    cols.push(Column::new(Fixed(3)));
+    cols.push(Column::new(Fixed(2)));
     cols.push(Column::titled(" Diet", Fill(1)));
     cols
 }

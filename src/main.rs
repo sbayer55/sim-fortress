@@ -197,6 +197,10 @@ fn summary_header(roster: &Roster) -> String {
     for id in roster.ids() {
         cols.push(format!("sterile_{}", roster.name(id)));
     }
+    // Diet breadth: the grazing-range trait's mean (inert for predators).
+    for id in roster.ids() {
+        cols.push(format!("diet_breadth_{}", roster.name(id)));
+    }
     // C8 follow-up: the group sizes the cohesion rule actually produces.
     for id in roster.ids() {
         let n = roster.name(id);
@@ -246,6 +250,9 @@ fn summary_row(sim: &Sim, seed: u64, years: f64) -> String {
     }
     for i in 0..n {
         cols.push(census.sterile[i].to_string());
+    }
+    for i in 0..n {
+        cols.push(format!("{:.3}", census.genome_mean[i].diet_breadth()));
     }
     for i in 0..n {
         cols.push(format!("{:.2}", sim.group_stats.mean[i]));

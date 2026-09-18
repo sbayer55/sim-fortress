@@ -4,17 +4,17 @@ use crate::sim::creatures::{
     Creature, Goal,
 };
 use crate::sim::events::{Event, EventKind, EventRing};
-use crate::sim::params::{CreaturesParams, Roster};
+use crate::sim::params::{CreaturesParams, DietParams, Roster};
 use crate::sim::rng::Rng;
 use crate::sim::disease::{self};
 use crate::sim::params::DiseaseParams;
 use crate::sim::time::Time;
 use crate::sim::world::{Terrain, World};
 
-pub(super) fn act(c: &mut Creature, world: &mut World, events: &mut EventRing, time: &Time, roster: &Roster, cp: &CreaturesParams, dp: &DiseaseParams, rng: &mut Rng) {
+pub(super) fn act(c: &mut Creature, world: &mut World, events: &mut EventRing, time: &Time, roster: &Roster, cp: &CreaturesParams, dp: &DiseaseParams, diet: &DietParams, rng: &mut Rng) {
     match c.goal {
         Goal::Graze => {
-            if graze(c, world, cp) {
+            if graze(c, world, cp, diet) {
                 c.last_ate = Some(time.tick);
             }
             disease::parasite_uptake(c, world, dp);
@@ -35,13 +35,18 @@ pub(super) fn act(c: &mut Creature, world: &mut World, events: &mut EventRing, t
     }
 }
 
-/// Eat from the cell; `true` when there was anything to eat.
-pub(super) fn graze(c: &mut Creature, world: &mut World, cp: &CreaturesParams) -> bool {
+/// One hour of grazing. Diet breadth sets the bite (specialists bite faster)
+/// and how much of this terrain's vegetation the animal can digest: the cell
+/// loses the whole bite, hunger falls by the edible share of it.
+/// Returns `true` when the animal got any digestible food.
+pub(super) fn graze(c: &mut Creature, world: &mut World, cp: &CreaturesParams, diet: &DietParams) -> bool {
+    let breadth = c.genome.diet_breadth();
     let cell = world.cell_mut(c.x, c.y);
-    let g = cell.vegetation.min(cp.graze_per_hour);
+    let edibility = diet.edibility(cell.terrain, breadth);
+    let g = cell.vegetation.min(cp.graze_per_hour * diet.bite(breadth));
     cell.vegetation -= g;
-    c.hunger = (c.hunger - cp.graze_nutrition * g).max(0.0);
-    g > 0.0
+    c.hunger = (c.hunger - cp.graze_nutrition * g * edibility).max(0.0);
+    g * edibility > 0.0
 }
 
 /// Drink if standing on a shore; `true` when the creature drank.

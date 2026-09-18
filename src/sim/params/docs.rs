@@ -216,6 +216,10 @@ pub(super) const FIELD_DOCS: &[(&str, &str)] = &[
             ("social.pack_kill_bonus", "Kill chance added per extra participant (max 3)."),
             ("social.pack_share", "Hunger relief a non-killer participant gets, as a share of a kill."),
             ("social.pack_share_cheb", "Chebyshev distance within which a hunter counts as a participant."),
+            // ---- diet (genome slot 12)
+            ("diet.terrain_position", "Grass-to-browse position of each vegetated terrain, 0..1; a creature eats terrain at or below its Diet breadth."),
+            ("diet.edge", "Width of the soft edge above a creature's reach: edibility falls 1 to 0 over it."),
+            ("diet.specialist_bonus", "Bite multiplier at breadth 0: bite = 1 + (1 - breadth) x this."),
             // ---- [[species]] (one block per species; overlays merge by name, new names append)
             ("species.name", "Lowercase singular key (vole); prey_preference and pathogen hosts refer to it."),
             ("species.plural", "Display plural (Voles)."),
@@ -243,4 +247,5 @@ pub(super) const FIELD_DOCS: &[(&str, &str)] = &[
             ("species.base_genome.sociality", "Baseline Sociality trait."),
             ("species.base_genome.maturity", "Baseline Maturity trait (0.5 is balance-neutral)."),
             ("species.base_genome.mutability", "Baseline Mutability trait (0.5 is balance-neutral)."),
+            ("species.base_genome.diet_breadth", "Baseline Diet breadth: grazing reach along the grass-to-browse terrain axis (prey only)."),
         ];

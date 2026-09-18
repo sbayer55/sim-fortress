@@ -33,8 +33,9 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// build) and the `[ai]` block inside the saved `UiParams`; version 13 added
 /// the world's named features (ocean, lakes, rivers, ranges) and their
 /// per-cell map; version 14 added the per-creature last-ate, last-drank and
-/// last-slept tick stamps.
-pub const VERSION: u16 = 14;
+/// last-slept tick stamps; version 15 added the `[diet]` table and the
+/// thirteenth genome slot, Diet breadth.
+pub const VERSION: u16 = 15;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 

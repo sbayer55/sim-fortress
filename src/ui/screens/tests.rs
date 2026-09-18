@@ -168,13 +168,14 @@ fn s09_width_and_height_fields_adjust_with_arrows() {
     // Up/Down are no longer a second axis for the size.
     s.handle_key(KeyEvent::new(KeyCode::Up, KeyModifiers::NONE), &mut app);
     assert_eq!(s.form_params().world.height, h0);
-    // Tab to Map height: Left/Right change the height.
+    // Tab to Map height: Left/Right change the height, in steps of 10 like
+    // the width since the larger world-generation limits landed.
     s.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE), &mut app);
     s.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
     s.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
-    assert_eq!(s.form_params().world.height, (h0 + 10).min(1000));
+    assert_eq!(s.form_params().world.height, (h0 + 20).min(1000));
     s.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE), &mut app);
-    assert_eq!(s.form_params().world.height, (h0 + 5).min(1000));
+    assert_eq!(s.form_params().world.height, (h0 + 10).min(1000));
 }
 
 #[test]

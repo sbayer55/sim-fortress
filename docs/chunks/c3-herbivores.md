@@ -125,7 +125,9 @@ Evaluated on replan, first match wins:
    every drink), else Wander.
 2. `Graze` if hunger > 0.5; satisfied when hunger ≤ 0.2. Target = seen cell maximising
    `vegetation / (1 + dist / 4)` among cells with vegetation ≥ `graze_min_vegetation`; if
-   the current cell scores within 10 % of the best, graze in place.
+   the current cell scores within 10 % of the best, graze in place. *Since Diet breadth
+   (C4 FR3, 2026-09-17):* `vegetation` in both rules is the edible share for this animal's
+   terrain reach, and the bite in `graze` scales with its specialism.
 3. `Rest` if energy < 0.25, or `is_night()` (diurnal species; C5 adds nocturnal ones);
    energy-triggered rest ends at energy ≥ 0.9, night-triggered rest ends at sunrise. Target = nearest den in `world.dens` within
    2 × sense range, else rest in place.

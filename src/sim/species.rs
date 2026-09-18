@@ -7,14 +7,15 @@
 use serde::{Deserialize, Serialize};
 
 /// Number of genome traits (C7 added Resistance; Sociality and Maturity are 9
-/// and 10; Mutability is 11).
-pub const N_TRAITS: usize = 12;
+/// and 10; Mutability is 11; Diet breadth is 12).
+pub const N_TRAITS: usize = 13;
 
 /// Trait indices that code outside this module refers to by name.
 pub const IDX_RESISTANCE: usize = 8;
 pub const IDX_SOCIALITY: usize = 9;
 pub const IDX_MATURITY: usize = 10;
 pub const IDX_MUTABILITY: usize = 11;
+pub const IDX_DIET_BREADTH: usize = 12;
 
 /// The closed range every trait value is clamped into.
 pub const TRAIT_MIN: f32 = 0.02;
@@ -23,12 +24,12 @@ pub const TRAIT_MAX: f32 = 0.98;
 /// Trait names, indexed by the `Genome` array order.
 pub const TRAIT_NAMES: [&str; N_TRAITS] = [
     "Speed", "Size", "Sense", "Metabolism", "Aggression", "Camouflage", "Fertility", "Longevity", "Resistance", "Sociality",
-    "Maturity", "Mutability",
+    "Maturity", "Mutability", "Diet breadth",
 ];
 
 /// Three-letter trait abbreviations for the table headers, in `Genome` order.
 /// Headers are built from this, never hand-typed.
-pub const TRAIT_ABBR: [&str; N_TRAITS] = ["Spd", "Siz", "Sen", "Met", "Agg", "Cam", "Fer", "Lon", "Res", "Soc", "Mat", "Mut"];
+pub const TRAIT_ABBR: [&str; N_TRAITS] = ["Spd", "Siz", "Sen", "Met", "Agg", "Cam", "Fer", "Lon", "Res", "Soc", "Mat", "Mut", "Dbr"];
 
 /// Built-in prey name pool, used by prey species with an empty `names` list.
 pub const PREY_NAMES: &[&str] = &[
@@ -117,6 +118,12 @@ impl Genome {
     pub const fn mutability(&self) -> f32 {
         self.0[IDX_MUTABILITY]
     }
+    /// Diet breadth (herbivores): how far along the grass→browse terrain axis
+    /// the animal can graze; specialists bite faster, generalists reach further.
+    /// Inert for predators.
+    pub const fn diet_breadth(&self) -> f32 {
+        self.0[IDX_DIET_BREADTH]
+    }
     /// Sense range in map cells.
     pub fn sense_cells(&self) -> u16 {
         2 + crate::cast!((self.sense() * 10.0) => u16)
@@ -180,6 +187,8 @@ mod tests {
         assert!(TRAIT_ABBR.iter().all(|a| a.len() == 3), "abbreviations must be 3 chars");
         assert_eq!(TRAIT_NAMES[IDX_MUTABILITY], "Mutability");
         assert_eq!(TRAIT_ABBR[IDX_MUTABILITY], "Mut");
+        assert_eq!(TRAIT_NAMES[IDX_DIET_BREADTH], "Diet breadth");
+        assert_eq!(TRAIT_ABBR[IDX_DIET_BREADTH], "Dbr");
     }
 
     #[test]
@@ -195,10 +204,15 @@ mod tests {
             assert_eq!(g.sociality(), g.0[IDX_SOCIALITY]);
             assert_eq!(g.maturity(), g.0[IDX_MATURITY]);
             assert_eq!(g.mutability(), g.0[IDX_MUTABILITY]);
+            assert_eq!(g.diet_breadth(), g.0[IDX_DIET_BREADTH]);
             // Maturity and Mutability 0.5 everywhere is what keeps the starting
             // balance unchanged (both are neutral multipliers at 0.5).
             assert_eq!(g.maturity(), 0.5, "{id:?} must start at maturity 0.5");
             assert_eq!(g.mutability(), 0.5, "{id:?} must start at mutability 0.5");
+            // Diet breadth is inert for predators, so they sit at the midpoint.
+            if r.kind(id) == Kind::Predator {
+                assert_eq!(g.diet_breadth(), 0.5, "{id:?} predators carry a neutral diet breadth");
+            }
         }
     }
 }
