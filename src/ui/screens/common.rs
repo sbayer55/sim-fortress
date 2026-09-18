@@ -124,3 +124,18 @@ pub fn day_stamp(day: i64, season_days: u32) -> String {
     let year_len = i64::from(4 * season_days);
     format!("Y{} D{:03}", day.div_euclid(year_len) + 1, day % year_len + 1)
 }
+
+/// `now`, `3h ago`, `2d 5h ago` or `never`: how long since the tick stamp
+/// `stamp` (a tick is an hour), for the "last ate / drank / slept" lines.
+pub fn ago(stamp: Option<u64>, now: u64, ticks_per_day: u32) -> String {
+    let Some(stamp) = stamp else {
+        return "never".to_string();
+    };
+    let elapsed = now.saturating_sub(stamp);
+    let per_day = u64::from(ticks_per_day.max(1));
+    match (elapsed.div_euclid(per_day), elapsed.rem_euclid(per_day)) {
+        (0, 0) => "now".to_string(),
+        (0, h) => format!("{h}h ago"),
+        (d, h) => format!("{d}d {h}h ago"),
+    }
+}

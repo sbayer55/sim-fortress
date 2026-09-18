@@ -32,8 +32,9 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// chronicle table (C9, decorative and optional: an empty table loads in any
 /// build) and the `[ai]` block inside the saved `UiParams`; version 13 added
 /// the world's named features (ocean, lakes, rivers, ranges) and their
-/// per-cell map.
-pub const VERSION: u16 = 13;
+/// per-cell map; version 14 added the per-creature last-ate, last-drank and
+/// last-slept tick stamps.
+pub const VERSION: u16 = 14;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 

@@ -1,45 +1,45 @@
  S04b  Species Browser - species detail (Fox)                                                                                                              
-╔ Fox: trait distributions ═════════════ 12 buckets, living adults + juveniles ╗╔ Drift over generations ══════════════════════════ 1 sampled generations ╗
-║                                                                              ║║ trait       g1      oldest                        newest  g1   change   ║
-║ Speed      .63 .69 .75    Aggression .53 .65 .74    Resistance .21 .36 .49   ║║ Speed       0.72    ▓▓▓                                   0.72   +0.00  ║
-║                 █                         █                 █                ║║ Size        0.34    ▓▓▓                                   0.34   +0.00  ║
-║                 █                         █                 █                ║║ Sense       0.78    ▓▓▓                                   0.78   +0.00  ║
-║               █ █ █                   █ █ █             █   █ █              ║║ Metabolism  0.58    ▓▓▓                                   0.58   +0.00  ║
-║               █ █ █                   █ █ █             █   █ █              ║║ Aggression  0.60    ▓▓▓                                   0.60   +0.00  ║
-║ ────────────────┼───────  ───────────────┼────────  ────────┼─────────────── ║║ Camouflage  0.50    ▓▓▓                                   0.50   +0.00  ║
-║ 0 n=4      mode .71    1  0 n=4      mode .71    1  0 n=4      mode .38    1 ║║ Fertility   0.46    ▓▓▓                                   0.46   +0.00  ║
-║ Size       .27 .33 .38    Camouflage .39 .50 .61    Sociality  .12 .18 .23   ║║ Longevity   0.48    ▓▓▓                                   0.48   +0.00  ║
-║       █ █                         █ █ █ █               █                    ║║ Resistance  0.31    ▓▓▓                                   0.31   +0.00  ║
-║       █ █                         █ █ █ █               █                    ║║ Sociality   0.15    ▓▓▓                                   0.15   +0.00  ║
-║       █ █                         █ █ █ █             ▄ █                    ║║ Maturity    0.51    ▓▓▓                                   0.51   +0.00  ║
-║       █ █                         █ █ █ █             █ █                    ║║ Mutability  0.52    ▓▓▓                                   0.52   +0.00  ║
-║ ────────┼───────────────  ───────────┼────────────  ────┼─────────────────── ║║                                                                         ║
-║ 0 n=4      mode .38    1  0 n=4      mode .63    1  0 n=4      mode .21    1 ║║                                                                         ║
-║ Sense      .69 .74 .84    Fertility  .38 .42 .47    Maturity   .39 .49 .56   ║║─ Per-generation means (x100) ───────────────────────────────────────────║
-║                 █                   █                           █            ║║              g1                                                         ║
-║                 █                   █                           █            ║║ Speed        72                                                         ║
-║                 █   ▄             ▄ █                       █ █ █            ║║ Size         34                                                         ║
-║                 █   █             █ █                       █ █ █            ║║ Sense        78                                                         ║
-║ ─────────────────┼──────  ──────────┼─────────────  ───────────┼──────────── ║║ Metabolism   58                                                         ║
-║ 0 n=4      mode .71    1  0 n=4      mode .46    1  0 n=4      mode .54    1 ║║ Aggression   60                                                         ║
-║ Metabolism .56 .58 .59    Longevity  .37 .47 .57    Mutability .48 .52 .54   ║║ Camouflage   50                                                         ║
-║             █ █                       █                         █            ║║ Fertility    46                                                         ║
-║             █ █                       █                         █            ║║ Longevity    48                                                         ║
-║             █ █                   █ █ █                       ▄ █            ║║ Resistance   31                                                         ║
-║             █ █                   █ █ █                       █ █            ║║ Sociality    15                                                         ║
-║ ─────────────┼──────────  ───────────┼────────────  ────────────┼─────────── ║║ Maturity     51                                                         ║
-║ 0 n=4      mode .63    1  0 n=4      mode .54    1  0 n=4      mode .54    1 ║║ Mutability   52                                                         ║
+╔ Fox: trait distributions ═════════════ 12 buckets, living adults + juveniles ╗╔ Drift over generations ══════════════════════════ 2 sampled generations ╗
+║                                                                              ║║ trait       g1      oldest                        newest  g4   change   ║
+║ Speed      .65 .77 .84    Aggression .51 .58 .65    Resistance .31 .45 .63   ║║ Speed       0.73    ░░░███                                0.74   +0.01  ║
+║                   █                   █                       █              ║║ Size        0.33    ▓▓▓▓▓▓                                0.33   -0.00  ║
+║                   █                   █                       █              ║║ Sense       0.84    ███░░░                                0.83   -0.01  ║
+║                 █ █                   █ █                   █ █              ║║ Metabolism  0.60    ▓▓▓▓▓▓                                0.60   +0.01  ║
+║                 █ █                   █ █                 ▄ █ █ ▄ █          ║║ Aggression  0.59    ░░░███                                0.60   +0.01  ║
+║ ──────────────────┼─────  ─────────────┼──────────  ──────────┼───────────── ║║ Camouflage  0.51    ███░░░                                0.49   -0.02  ║
+║ 0 n=28     mode .79    1  0 n=28     mode .54    1  0 n=28     mode .46    1 ║║ Fertility   0.53    ▓▓▓▓▓▓                                0.53   +0.00  ║
+║ Size       .19 .31 .39    Camouflage .38 .48 .60    Sociality  .08 .15 .29   ║║ Longevity   0.42    ███░░░                                0.41   -0.01  ║
+║         █                             █               █                      ║║ Resistance  0.44    ░░░███                                0.45   +0.01  ║
+║         █                             █               █                      ║║ Sociality   0.16    ▓▓▓▓▓▓                                0.16   -0.00  ║
+║     ▄ ▄ █                         █   █               █   ▄                  ║║ Maturity    0.47    ░░░███                                0.48   +0.01  ║
+║     █ █ █                         █   █ ▄           ▄ █ █ █                  ║║ Mutability  0.50    ███░░░                                0.46   -0.04  ║
+║ ───────┼────────────────  ───────────┼────────────  ───┼──────────────────── ║║                                                                         ║
+║ 0 n=28     mode .38    1  0 n=28     mode .54    1  0 n=28     mode .13    1 ║║                                                                         ║
+║ Sense      .73 .82 .89    Fertility  .49 .55 .61    Maturity   .39 .49 .56   ║║─ Per-generation means (x100) ───────────────────────────────────────────║
+║                   █                   █                       ▄ █            ║║              g1  g3                                                     ║
+║                   █ ▄                 █                       █ █            ║║ Speed        73  74                                                     ║
+║                   █ █                 █ ▄                     █ █            ║║ Size         33  33                                                     ║
+║                 █ █ █               █ █ █                   ▄ █ █            ║║ Sense        84  83                                                     ║
+║ ───────────────────┼────  ─────────────┼──────────  ───────────┼──────────── ║║ Metabolism   60  60                                                     ║
+║ 0 n=28     mode .79    1  0 n=28     mode .54    1  0 n=28     mode .54    1 ║║ Aggression   59  60                                                     ║
+║ Metabolism .51 .62 .68    Longevity  .33 .41 .49    Mutability .40 .50 .60   ║║ Camouflage   51  49                                                     ║
+║               █                   █ ▄                       ▄     █          ║║ Fertility    53  53                                                     ║
+║             █ █ ▄                 █ █                       █     █          ║║ Longevity    42  41                                                     ║
+║             █ █ █                 █ █                       █ █ ▄ █          ║║ Resistance   44  45                                                     ║
+║             █ █ █               ▄ █ █                       █ █ █ █          ║║ Sociality    16  16                                                     ║
+║ ──────────────┼─────────  ─────────┼──────────────  ───────────┼──────────── ║║ Maturity     47  48                                                     ║
+║ 0 n=28     mode .63    1  0 n=28     mode .38    1  0 n=28     mode .63    1 ║║ Mutability   50  46                                                     ║
 ║ ┼ mean  █ full  ▄ half  columns = 1/12 of 0..1  header: min mean max         ║║ green = rose vs previous sample, red = fell                             ║
 ║─ Selection pressure ─────────────────────────────────────────────────────────║║                                                                         ║
-║ ¶ no trait moving more than 0.02                                             ║║                                                                         ║
+║ § Mutability falling (-0.04 over 2 generations): genes settling (fewer, small║║                                                                         ║
 ║                                                                              ║║                                                                         ║
 ║─ Compared with other species (mean x100) ────────────────────────────────────║║                                                                         ║
-║              Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat Mut   count  gen    ║║ 4  (4 adults, 0 juveniles)  peak 8 (50%)  generation 1                  ║
-║ V Vole        45  10  40  75   6  61  90  21  30  36  50  49     140    6    ║║ births today 0  deaths today 0   ↔ over 30 days (see S04a)              ║
-║ H Hare        80  25  65  59  10  56  75  35  35  25  50  51     172    4    ║║                                                                         ║
-║ D Deer        66  79  53  37  20  34  35  69  48  70  47  51      37    2    ║║─ Disease ───────────────────────────────────────────────────────────────║
-║ F Fox         69  33  74  58  65  50  42  47  36  18  49  52       4    1    ║║ active 0 · immune 0 (0%) · disease deaths yesterday 0                   ║
-║ W Wolf        74  69  75  52  85  25  40  67  49  78  50  53       2    2    ║║ no outbreaks in the last 3 years                                        ║
-║ L Lynx        75  46  85  43  74  77  25  58  52  12  51  43       3    2    ║║                                                                         ║
+║              Spd Siz Sen Met Agg Cam Fer Lon Res Soc Mat Mut   count  gen    ║║ 28  (24 adults, 4 juveniles)  peak 86 (32%)  generation 4               ║
+║ V Vole        47  23  47  80   6  73  92  23  20  51  45  52       0    7    ║║ births today 0  deaths today 2   ↓ over 30 days (see S04a)              ║
+║ H Hare        77  16  61  58  12  61  82  35  21  19  52  51       0    4    ║║                                                                         ║
+║ D Deer        66  80  52  39  19  37  36  70  49  70  49  51      35    2    ║║─ Disease ───────────────────────────────────────────────────────────────║
+║ F Fox         77  31  82  62  58  48  55  41  45  15  49  50      28    4    ║║ active 0 · immune 0 (0%) · disease deaths yesterday 0                   ║
+║ W Wolf        78  72  68  50  83  25  44  61  53  68  53  52       7    3    ║║ no outbreaks in the last 3 years                                        ║
+║ L Lynx        70  50  86  45  77  57  20  62  45  14  50  50       1    3    ║║                                                                         ║
 ╚══════════════════════════════════════════════════════════════════════════════╝╚═════════════════════════════════════════════════════════════════════════╝
  [←→] other species  [Esc] back                                                                                 Fox detail  Year 2, Day 1 of Spring  06:00 

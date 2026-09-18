@@ -78,6 +78,7 @@ fn fail_hunt(c: &mut Creature, time: &Time, pp: &PredationParams, tallies: &mut 
 /// joining a pack worth the risk.
 fn join_kill(c: &mut Creature, time: &Time, pp: &PredationParams, prey_size: f32, sp: &SocialParams) {
     c.hunger -= pp.hunger_per_kill(prey_size) * sp.pack_share;
+    c.last_ate = Some(time.tick);
     c.hunt_cooldown_until = time.tick + u64::from(pp.hunt_cooldown_hours);
     c.hunt_phase = HuntPhase::Stalk;
     c.hunt_target = None;
@@ -324,6 +325,7 @@ fn resolve_kill(
         // FR4: `hunger −= hunger_per_kill` — allowed to go negative, so a
         // big kill extends the satiation period and bounds the hunt rate.
         p.hunger -= pp.hunger_per_kill(prey_size);
+        p.last_ate = Some(time.tick);
     }
     // C8 FR4: the pack shares the kill. Rewards are not attempts, so this
     // never goes through `fail_hunt`; the kill itself is counted once.
@@ -397,6 +399,7 @@ pub(super) fn scavenge_contacts(store: &mut CreatureStore, world: &World, events
         let nutrition = pp.carcass_nutrition * (1.0 - decay);
         if let Some(c) = store.get_mut(id) {
             c.hunger = (c.hunger - nutrition).max(0.0);
+            c.last_ate = Some(time.tick);
             c.scavenge_target = None;
             c.goal = Goal::Patrol;
             c.target = None;
