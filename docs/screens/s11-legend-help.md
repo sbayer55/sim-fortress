@@ -95,7 +95,7 @@ flowchart TB
      `Shift+Tab` previous species / pathogen · `Esc` clear overlays.
    - **Speed**: `Space` pause / resume · `+ / -` faster / slower · `.` step one tick · `p`
      controls, options, AI.
-   - **Screens**: `s` species & traits · `g` graphs & charts · `y` ecology & regions · `e`
+   - **Screens**: `s` species & traits · `g` graphs & charts · `t` traits & fates · `y` ecology & regions · `e`
      event log (c: chronicle) · `l` lineage tree · `w` world generation · `?` this help ·
      `q` quit.
 10. The column is exactly filled (5 rules + 31 rows = 36 of 36 rows). The whole content

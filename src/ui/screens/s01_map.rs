@@ -376,6 +376,7 @@ impl WorldMap {
         rows.extend(resources_section(app, world, time));
         rows.push(Box::new(Divider::new("Notable")));
         rows.push(Box::new(Text::new(" [k] look · [e] events · [g] charts").style(theme::dim_text())));
+        rows.push(Box::new(Text::new(" [s] species · [t] traits & fates").style(theme::dim_text())));
         rows.push(Box::new(Spacer::rows(1)));
         rows.push(Box::new(Divider::new("Overlay")));
         rows.push(Box::new(Text::new(" press o to open the switcher").style(theme::dim_text())));

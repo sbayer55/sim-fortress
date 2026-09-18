@@ -24,6 +24,7 @@ pub mod s11_help;
 pub mod s12_alert;
 pub mod s13_zoom;
 pub mod s14_switcher;
+pub mod s15_traits;
 
 #[derive(Debug)]
 pub enum Action {

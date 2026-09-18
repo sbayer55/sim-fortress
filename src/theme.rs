@@ -93,6 +93,19 @@ pub fn ramp(stops: &[Color], t: f32) -> Color {
     lerp(stops[i], stops[i + 1], scaled - crate::cast!(i => f32))
 }
 
+/// Diverging background ramp for signed effects (the S15 matrix cells).
+///
+/// `t` in −1..=1: panel background at 0, a dimmed `BAD` toward −1 and a dimmed
+/// `GOOD` toward +1, so a strong effect reads as a coloured cell under bright text.
+pub fn diverge_bg(t: f32) -> Color {
+    let t = t.clamp(-1.0, 1.0);
+    if t >= 0.0 {
+        lerp(PANEL_BG, dim(GOOD, 0.45), t)
+    } else {
+        lerp(PANEL_BG, dim(BAD, 0.45), -t)
+    }
+}
+
 /// Cold-to-hot ramp used for pressure/density overlays.
 pub fn heat(t: f32) -> Color {
     ramp(
@@ -249,5 +262,12 @@ mod tests {
             }
         }
         assert_eq!(region(8), region(0));
+    }
+
+    #[test]
+    fn diverge_bg_is_panel_at_zero_and_leans_by_sign() {
+        assert_eq!(diverge_bg(0.0), PANEL_BG);
+        assert_eq!(diverge_bg(1.0), dim(GOOD, 0.45));
+        assert_eq!(diverge_bg(-3.0), dim(BAD, 0.45));
     }
 }

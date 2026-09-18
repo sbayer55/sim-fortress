@@ -9,6 +9,7 @@ use crate::sim::species::{Genome, Kind, SpeciesId, TRAIT_NAMES};
 use std::fmt::Write as _;
 
 pub mod groups;
+pub mod outcomes;
 pub use crate::sim::lineage::{Lineage, LineageNode, Tree, TreeItem};
 pub use groups::{group_census, GroupCensus, GROUP_HIST};
 
@@ -547,6 +548,7 @@ fn mean_subtract(v: &[f32]) -> Vec<f32> {
 }
 
 /// Pearson correlation of `y[t + lag]` against `x[t]`, `t ∈ 0..(n − lag)`.
+/// `stats::outcomes` uses it with lag 0.
 fn pearson(x: &[f32], y: &[f32], lag: usize) -> f32 {
     let n = x.len().min(y.len());
     let m = n.saturating_sub(lag);

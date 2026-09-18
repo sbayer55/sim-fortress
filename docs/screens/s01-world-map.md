@@ -121,7 +121,7 @@ flowchart TB
 | `o` | open the overlay switcher | [S14](s14-overlay-switcher.md) |
 | `Space`, `+/-` | pause, change speed | — |
 | `p` | open the controls modal | [S10](s10-simulation-controls.md) |
-| `s` `g` `y` `e` `l` | species, graphs, ecology, events, lineage | [S04](s04-species-browser.md), [S05](s05-population-charts.md), [S06](s06-ecology.md), [S07](s07-event-log.md), [S08](s08-lineage.md) |
+| `s` `g` `t` `y` `e` `l` | species, graphs, traits & fates, ecology, events, lineage | [S04](s04-species-browser.md), [S05](s05-population-charts.md), [S15](s15-traits-fates.md), [S06](s06-ecology.md), [S07](s07-event-log.md), [S08](s08-lineage.md) |
 | `w` | world generation | [S09](s09-world-generation.md) |
 | `?` | help overlay | [S11](s11-legend-help.md) |
 | `←→` (map) | scroll the viewport | — |
