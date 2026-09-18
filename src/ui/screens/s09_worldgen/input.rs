@@ -40,25 +40,23 @@ pub(super) fn adjust(form: &mut WorldGenForm, focus: usize, dir: i32) {
     let w = &mut form.world;
     match focus {
         // Left/Right adjust the width and height fields, like every other field.
-        F_WIDTH => w.width = crate::cast!(clamp_i64(crate::cast!(w.width => i64) + d * 10, 100, 1000) => usize),
-        F_HEIGHT => w.height = crate::cast!(clamp_i64(crate::cast!(w.height => i64) + d * 5, 30, 1000) => usize),
-        F_WATER => w.water_pct = crate::cast!(clamp_i64(i64::from(w.water_pct) + d, 0, 60) => u8),
-        F_FOREST => w.forest_pct = crate::cast!(clamp_i64(i64::from(w.forest_pct) + d, 0, 50) => u8),
-        F_ROCK => w.rock_pct = crate::cast!(clamp_i64(i64::from(w.rock_pct) + d, 0, 30) => u8),
-        F_AGE => w.age = crate::cast!(clamp_i64(i64::from(w.age) + d, 0, 30) => u8),
+        F_WIDTH => w.width = crate::cast!(clamp_i64(crate::cast!(w.width => i64) + d * 10, 30, 1000) => usize),
+        F_HEIGHT => w.height = crate::cast!(clamp_i64(crate::cast!(w.height => i64) + d * 10, 30, 1000) => usize),
+        F_WATER => w.water_pct = crate::cast!(clamp_i64(i64::from(w.water_pct) + d, 0, 100) => u8),
+        F_FOREST => w.forest_pct = crate::cast!(clamp_i64(i64::from(w.forest_pct) + d, 0, 100) => u8),
+        F_ROCK => w.rock_pct = crate::cast!(clamp_i64(i64::from(w.rock_pct) + d, 0, 100) => u8),
+        F_AGE => w.age = crate::cast!(clamp_i64(i64::from(w.age) + d, 0, 200) => u8),
         F_RAINFALL => cycle_rainfall(&mut w.rainfall, dir),
-        F_SEASON => form.season_days = crate::cast!(clamp_i64(i64::from(form.season_days) + d * 10, 30, 180) => u32),
-        // Founder counts step one individual at a time: the default predator
-        // founders are single digits, so a coarser step could not reach them.
+        F_SEASON => form.season_days = crate::cast!(clamp_i64(i64::from(form.season_days) + d * 10, 30, 360) => u32),
         F_SPECIES.. if focus < form.tail() => {
             let i = focus - F_SPECIES;
             form.counts[i] = crate::cast!(clamp_i64(i64::from(form.counts[i]) + d, 0, 999) => u32);
         }
         _ => match focus - form.tail() {
-            T_MUTATION_RATE => form.genetics.mutation_rate = clamp_f32(form.genetics.mutation_rate + crate::cast!(dir => f32) * 0.01, 0.0, 0.2),
-            T_MUTATION_STRENGTH => form.genetics.mutation_strength = clamp_f32(form.genetics.mutation_strength + crate::cast!(dir => f32) * 0.01, 0.0, 0.2),
+            T_MUTATION_RATE => form.genetics.mutation_rate = clamp_f32(form.genetics.mutation_rate + crate::cast!(dir => f32) * 0.01, 0.0, 1.0),
+            T_MUTATION_STRENGTH => form.genetics.mutation_strength = clamp_f32(form.genetics.mutation_strength + crate::cast!(dir => f32) * 0.01, 0.0, 1.0),
             T_DIFFICULTY => cycle_difficulty(&mut form.predation.difficulty, dir),
-            T_REGROWTH => form.regrowth_rate = clamp_f32(form.regrowth_rate + crate::cast!(dir => f32) * 0.1, 0.2, 2.0),
+            T_REGROWTH => form.regrowth_rate = clamp_f32(form.regrowth_rate + crate::cast!(dir => f32) * 0.1, 0.0, 10.0),
             _ => {}
         },
     }
