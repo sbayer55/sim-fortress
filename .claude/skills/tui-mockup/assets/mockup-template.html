@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MOCKUP_TITLE</title>
+<style>
+  :root { --bg:#0c0c10; --panel:#121218; --border:#606076; --focus:#d6b254; --title:#ecce76; --text:#cecece; --bright:#f5f5f0; --dim:#70707e; --accent:#f2b83e; --key:#ffe678; --select:#463c1e; --cw:8.4px; --ch:17px; }
+  html, body { margin:0; background:#08080b; color:var(--text); font-family: ui-monospace, Menlo, Consolas, "DejaVu Sans Mono", monospace; }
+  body { padding:16px; }
+  header { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; margin-bottom:12px; }
+  header h1 { font-size:15px; margin:0; color:var(--title); font-weight:600; }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; }
+  .tab { border:1px solid var(--border); background:var(--panel); color:var(--text); padding:6px 12px; cursor:pointer; font:inherit; font-size:13px; }
+  .tab.on { border-color:var(--focus); color:var(--bright); background:var(--select); }
+  .blurb { font-size:12.5px; color:var(--dim); line-height:1.5; max-width:1300px; margin:0 0 10px; }
+  .blurb b { color:var(--text); font-weight:600; } .blurb kbd { color:var(--key); font-weight:600; }
+  .fps { font-size:12px; color:var(--dim); display:flex; align-items:center; gap:6px; }
+  #wrap { width:100%; overflow:hidden; }
+  #term { width:calc(155 * var(--cw)); height:calc(45 * var(--ch)); background:var(--bg); transform-origin:top left; line-height:var(--ch); font-size:13.5px; user-select:none; cursor:default; }
+  .r { height:var(--ch); white-space:nowrap; }
+  /* Every cell is a fixed-width inline-block so a glyph that falls back to another font cannot break the grid. */
+  .c { display:inline-block; width:var(--cw); height:var(--ch); text-align:center; overflow:hidden; vertical-align:top; }
+  .b { font-weight:700; }
+  footer { margin-top:10px; font-size:12px; color:var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sim Fortress · MOCKUP_TITLE</h1>
+  <div class="tabs" id="tabs"></div>
+  <label class="fps"><input type="checkbox" id="smooth"> 60 fps (off = 20 fps, what a TUI redraw loop would get)</label>
+</header>
+<p class="blurb" id="blurb"></p>
+<div id="wrap"><div id="term"></div></div>
+<footer>Strict 155×45 grid, CP437 glyphs only, theme colours copied from <code>src/theme.rs</code>. Click the terminal first so it has keyboard focus. Throwaway mockup, no real code touched.</footer>
+
+<script>
+// =====================================================================================
+// THEME — copied from src/theme.rs. Re-check against the file before trusting a value.
+// =====================================================================================
+const C = {
+  BG:[12,12,16], PANEL:[18,18,24], BORDER:[96,96,118], FOCUS:[214,178,84], TITLE:[236,206,118],
+  TEXT:[206,206,206], BRIGHT:[245,245,240], DIM:[112,112,126], ACCENT:[242,184,62], KEY:[255,230,120],
+  GOOD:[96,200,96], WARN:[236,160,48], BAD:[226,72,64], INFO:[96,168,236], MAGENTA:[220,96,220],
+  HEADER_BG:[40,40,60], HEADER_FG:[255,240,200], STATUS:[28,28,40], SELECT:[70,60,30],
+  DEEP_FG:[58,96,178], DEEP_BG:[14,30,78], SHAL_FG:[96,150,210], SHAL_BG:[24,58,120],
+  SAND_FG:[206,186,126], SAND_BG:[72,64,40], DIRT_FG:[150,118,78], DIRT_BG:[48,38,26],
+  GS_FG:[112,150,66], G_FG:[92,168,68], GD_FG:[66,190,80], G_BG:[22,40,20],
+  FOR_FG:[36,118,52], FOR_BG:[12,34,18], ROCK_FG:[156,156,160], ROCK_BG:[54,54,58],
+  MARSH_FG:[78,160,128], MARSH_BG:[16,46,44], SNOW_FG:[240,244,250], SNOW_BG:[118,124,140],
+  SICK:[150,205,70], TRAIL:[255,210,90], VEGETATION:[96,196,96],
+};
+const REGION = [[120,90,200],[80,160,200],[200,120,80],[90,180,120],[200,90,140],[160,160,80],[80,140,180],[190,110,190]];
+const lerp = (a,b,t)=>[0,1,2].map(i=>Math.round(a[i]+(b[i]-a[i])*t));
+const ramp = (stops,t)=>{ t=clamp(t,0,1); const n=stops.length-1; const i=Math.min(n-1,Math.floor(t*n)); return lerp(stops[i],stops[i+1],t*n-i); };
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const heat = t=>ramp([[20,30,90],[40,110,200],[90,200,120],[240,210,60],[240,110,40],[200,40,40]],t);
+const veg  = t=>ramp([[46,36,22],[70,90,40],[66,190,80],[120,240,110]],t);
+const water= t=>ramp([[60,44,30],[40,50,60],[24,58,120],[96,150,210]],t);
+const dim  =(c,a)=>lerp(c,C.BG,a);
+const rgb  = c=>`rgb(${c[0]},${c[1]},${c[2]})`;
+const SHADES=[' ','░','▒','▓','█'];
+const shade = t=>SHADES[Math.min(4,Math.floor(t*4.999))];
+
+/** The CP437 repertoire, copied from `glyphs::CP437` in src/glyphs.rs. The code cannot draw anything outside it. */
+const CP437 = "☺☻♥♦♣♠•◘○◙♂♀♪♫☼►◄↕‼¶§▬↨↑↓→←∟↔▲▼" + " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~⌂" + "ÇüéâäàåçêëèïîìÄÅÉæÆôöòûùÿÖÜ¢£¥₧ƒáíóúñÑªº¿⌐¬½¼¡«»░▒▓│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌█▄▌▐▀" + "αßΓπΣσµτΦΘΩδ∞φε∩≡±≥≤⌠⌡÷≈°∙·√ⁿ²■";
+const CP437_SET = new Set(CP437);
+/** Every glyph in the current buffer that the terminal could not draw, with one position each. Run it for every variant and state. */
+function checkGlyphs(){ const bad={}; for(let y=0;y<H;y++) for(let x=0;x<W;x++){ const ch=buf[y][x].ch; if(!CP437_SET.has(ch)&&!(ch in bad)) bad[ch]={x,y,code:'U+'+ch.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')}; } return bad; }
+
+// =====================================================================================
+// DATA — the default roster (src/sim/params/species.rs) and pathogens (params/pathogen.rs).
+// Use real names so the mockup reads like the game; check the files if the roster changed.
+// =====================================================================================
+const SPECIES = [
+  {name:'vole', glyph:'v', color:[188,156,116], kind:'prey', n:212},
+  {name:'hare', glyph:'h', color:[228,220,196], kind:'prey', n:97},
+  {name:'deer', glyph:'d', color:[214,160,92],  kind:'prey', n:41},
+  {name:'fox',  glyph:'f', color:[246,128,42],  kind:'pred', n:23},
+  {name:'wolf', glyph:'w', color:[224,66,66],   kind:'pred', n:9},
+  {name:'lynx', glyph:'l', color:[236,110,150], kind:'pred', n:6},
+];
+const PATHOGENS = [ {name:'Greyfever', sick:19}, {name:'Redmange', sick:9}, {name:'Hoofrot', sick:0} ];
+const REGIONS = ['Fern Hollow','Rowan Ridge','Sedge Fen','Willow Bend','Hazel Wood','Birch Flats'];
+
+// =====================================================================================
+// WORLD — a seeded fake world so the map looks lived-in. Deterministic: reloads look the same.
+// =====================================================================================
+let seed = 1337; const rnd = ()=>{ seed = (seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; };
+const WW=200, WH=120;
+function noise(w,h,oct){ const g=[]; for(let o=0;o<oct;o++){ const s=1<<(o+2); const gw=Math.ceil(w/s)+2, gh=Math.ceil(h/s)+2; const grid=[]; for(let i=0;i<gw*gh;i++) grid.push(rnd()); g.push({s,gw,grid}); }
+  const out=new Float32Array(w*h); for(let y=0;y<h;y++) for(let x=0;x<w;x++){ let v=0,amp=1,tot=0; for(const {s,gw,grid} of g){ const fx=x/s, fy=y/s, x0=Math.floor(fx), y0=Math.floor(fy), tx=fx-x0, ty=fy-y0; const sm=t=>t*t*(3-2*t); const a=grid[y0*gw+x0], b=grid[y0*gw+x0+1], c=grid[(y0+1)*gw+x0], d=grid[(y0+1)*gw+x0+1]; v+=amp*((a+(b-a)*sm(tx))*(1-sm(ty))+(c+(d-c)*sm(tx))*sm(ty)); tot+=amp; amp*=0.5; } out[y*w+x]=v/tot; } return out; }
+const HEIGHT = noise(WW,WH,5), MOIST = noise(WW,WH,4), VEG = noise(WW,WH,4);
+function terrain(i){ const h=HEIGHT[i], m=MOIST[i]; if(h<0.36) return 'deep'; if(h<0.41) return 'shallow'; if(h>0.82) return 'snow'; if(h>0.72) return 'rock'; if(h<0.45&&m>0.55) return 'marsh'; if(h<0.44) return 'sand'; if(m<0.35) return 'dirt'; if(m<0.45) return 'gsparse'; if(m<0.55) return 'grass'; if(m<0.65) return 'gdense'; return 'forest'; }
+const TER = { deep:['≈',C.DEEP_FG,C.DEEP_BG], shallow:['~',C.SHAL_FG,C.SHAL_BG], sand:['·',C.SAND_FG,C.SAND_BG], dirt:['.',C.DIRT_FG,C.DIRT_BG], gsparse:[',',C.GS_FG,C.G_BG], grass:['"',C.G_FG,C.G_BG], gdense:['♣',C.GD_FG,C.G_BG], forest:['♠',C.FOR_FG,C.FOR_BG], rock:['▲',C.ROCK_FG,C.ROCK_BG], marsh:['≡',C.MARSH_FG,C.MARSH_BG], snow:['*',C.SNOW_FG,C.SNOW_BG] };
+const CREATURES=[]; while(CREATURES.length<160){ const x=Math.floor(rnd()*WW), y=Math.floor(rnd()*WH); const t=terrain(y*WW+x); if(t==='deep'||t==='shallow'||t==='rock'||t==='snow') continue; const r=rnd(); const sp = r<0.5?0:r<0.72?1:r<0.82?2:r<0.92?3:r<0.97?4:5; CREATURES.push({x,y,sp,adult:rnd()<0.6}); }
+const ORIGIN=[38,30];
+
+// =====================================================================================
+// BUFFER — a 155×45 cell grid with the drawing primitives the Rust widgets have:
+// put/text/fill, box (Panel: outer ═, inner ─, focus ═ in the focus colour), section (Divider), rampRow.
+// OFF/CLIP/FADE exist for animated variants: draw shifted, clipped, or faded toward the panel colour.
+// =====================================================================================
+const W=155,H=45; let buf;
+let OFF={x:0,y:0}, CLIP=null, FADE=1;
+function clear(){ buf=[]; for(let y=0;y<H;y++){ const r=[]; for(let x=0;x<W;x++) r.push({ch:' ',fg:C.TEXT,bg:C.BG,b:false}); buf.push(r);} }
+const warned=new Set();
+function put(x,y,ch,fg,bg,b){ if(!CP437_SET.has(ch)&&!warned.has(ch)){ warned.add(ch); console.warn('not CP437: '+JSON.stringify(ch)+' — pick a glyph from CP437 (see checkGlyphs())'); } x+=OFF.x; y+=OFF.y; if(x<0||y<0||x>=W||y>=H) return; if(CLIP&&(x<CLIP.x||y<CLIP.y||x>=CLIP.x+CLIP.w||y>=CLIP.y+CLIP.h)) return; const c=buf[y][x]; c.ch=ch; if(fg) c.fg=FADE<1?lerp(C.PANEL,fg,FADE):fg; if(bg) c.bg=FADE<1?lerp(C.PANEL,bg,FADE):bg; c.b=!!b; }
+function text(x,y,s,fg,bg,b){ let i=0; for(const ch of s){ put(x+i,y,ch,fg,bg,b); i++; } return i; }
+function fill(x,y,w,h,bg){ for(let j=0;j<h;j++) for(let i=0;i<w;i++) put(x+i,y+j,' ',C.TEXT,bg,false); }
+function box(x,y,w,h,kind,title,hint){ const d=kind!=='inner'; const fg=kind==='focus'?C.FOCUS:C.BORDER; const [tl,tr,bl,br,hz,vt]=d?['╔','╗','╚','╝','═','║']:['┌','┐','└','┘','─','│']; fill(x,y,w,h,C.PANEL);
+  for(let i=1;i<w-1;i++){ put(x+i,y,hz,fg,C.PANEL); put(x+i,y+h-1,hz,fg,C.PANEL);} for(let j=1;j<h-1;j++){ put(x,y+j,vt,fg,C.PANEL); put(x+w-1,y+j,vt,fg,C.PANEL);} put(x,y,tl,fg,C.PANEL); put(x+w-1,y,tr,fg,C.PANEL); put(x,y+h-1,bl,fg,C.PANEL); put(x+w-1,y+h-1,br,fg,C.PANEL);
+  if(title) text(x+1,y,' '+title+' ',C.TITLE,C.PANEL,true); if(hint){ const s=' '+hint+' '; text(x+w-1-s.length,y,s,C.DIM,C.PANEL);} }
+function section(x,y,w,title){ for(let i=0;i<w;i++) put(x+i,y,'─',C.BORDER,C.PANEL); text(x+1,y,' '+title+' ',C.ACCENT,C.PANEL); }
+function rampRow(x,y,fn,n){ for(let i=0;i<n;i++){ const t=(i+0.5)/n; put(x+i,y,shade(t),fn(t),dim(fn(t),0.75)); } }
+function inter(a,b){ if(!b) return a; const x=Math.max(a.x,b.x), y=Math.max(a.y,b.y); return {x,y,w:Math.max(0,Math.min(a.x+a.w,b.x+b.w)-x),h:Math.max(0,Math.min(a.y+a.h,b.y+b.h)-y)}; }
+/** Draw `fn` shifted right by `dx`, clipped to `rect` (in the current, un-shifted frame). */
+function withClip(rect,dx,fn){ const o={...OFF}, c=CLIP; CLIP=inter({x:rect.x+OFF.x,y:rect.y+OFF.y,w:rect.w,h:rect.h},CLIP); OFF={x:OFF.x+dx,y:OFF.y}; fn(); OFF=o; CLIP=c; }
+/** Cell-exact text of a region, for pasting into a requirements doc. Call from the browser console or javascript_tool. */
+function dump(y0,y1,x0,x1){ const out=[]; for(let y=y0;y<=y1;y++){ let s=''; for(let x=x0;x<=x1;x++) s+=buf[y][x].ch; out.push(s.replace(/\s+$/,'')); } return out.join('\n'); }
+
+// =====================================================================================
+// SCREEN CHROME — the S01 map screen: 112×42 map panel, 43×42 sidebar, ticker row 42, status row 44.
+// Replace or extend for a data screen (full-width panel, no ticker).
+// =====================================================================================
+const MAP_W=112, MAP_ROWS=42, SIDE_X=112, SIDE_W=43;
+function drawMap(title, hint){ box(0,0,MAP_W,MAP_ROWS,'outer',title||'Ashfall',hint||`x ${ORIGIN[0]}-${ORIGIN[0]+109} of ${WW}   ← → scroll`);
+  const iw=MAP_W-2, ih=MAP_ROWS-2;
+  for(let j=0;j<ih;j++) for(let i=0;i<iw;i++){ const wx=ORIGIN[0]+i, wy=ORIGIN[1]+j; const [ch,fg,bg]=TER[terrain(wy*WW+wx)]; put(1+i,1+j,ch,fg,bg); }
+  for(const c of CREATURES){ const i=c.x-ORIGIN[0], j=c.y-ORIGIN[1]; if(i<0||j<0||i>=iw||j>=ih) continue; const sp=SPECIES[c.sp]; put(1+i,1+j,c.adult?sp.glyph.toUpperCase():sp.glyph,sp.color,buf[1+j][1+i].bg,c.adult); } }
+function drawStatusSidebar(){ const x=SIDE_X, w=SIDE_W; box(x,0,w,MAP_ROWS,'outer','Status',''); const ix=x+1, iw=w-2; let row=1;
+  section(ix,row++,iw,'Clock'); text(ix+1,row++,'Year 4  Day 213     ☼ Summer',C.TEXT,C.PANEL); text(ix+1,row++,'14:00  ☼ day      ►► x2  running',C.TEXT,C.PANEL); row++;
+  section(ix,row++,iw,'Population'); for(const s of SPECIES){ text(ix+1,row,` ${s.glyph.toUpperCase()} ${s.name.padEnd(6)}`,s.color,C.PANEL,true); text(ix+11,row,String(s.n).padStart(4)+'  ',C.TEXT,C.PANEL); const n=Math.round(s.n/212*22); for(let i=0;i<22;i++) put(ix+17+i,row,i<n?'█':'░',i<n?s.color:C.DIM,C.PANEL); row++; } row++;
+  section(ix,row++,iw,'Notable'); text(ix+1,row++,' [k] look · [e] events · [g] charts',C.DIM,C.PANEL); return row; }
+function drawTicker(){ const y=MAP_ROWS; for(let i=0;i<W;i++) put(i,y,' ',C.TEXT,C.BG); text(1,y,'♥',[236,110,150],C.BG,true); text(3,y,'day 213 · a hare litter of 3 was born in Fern Hollow',C.DIM,C.BG); }
+/** `[key] label` pairs from the left, a coloured message on the right — widgets::StatusBar. */
+function drawStatus(keys, right, rightFg){ const sy=H-1; for(let i=0;i<W;i++) put(i,sy,' ',C.TEXT,C.STATUS); let x=1; for(const [k,l] of keys){ x+=text(x,sy,'['+k+']',C.KEY,C.STATUS,true); x+=text(x,sy,' '+l+'  ',C.TEXT,C.STATUS); } right=right||'☼ 14:20 · summer '; text(W-right.length-1,sy,right,rightFg||[250,210,70],C.STATUS); }
+/** A Focus modal centred on `area` ({x,y,w,h}), like widgets::Modal. Returns the inner rect. */
+function modal(area,w,h,title,hint){ const x=area.x+Math.floor((area.w-w)/2), y=area.y+Math.floor((area.h-h)/2); box(x,y,w,h,'focus',title,hint); return {x:x+1,y:y+1,w:w-2,h:h-2,outer:{x,y,w,h}}; }
+/** The modal backdrop: every cell dimmed 0.55 toward BG, as render_stack does. Skip it when the screen beneath is a live preview. */
+function dimAll(){ for(const r of buf) for(const c of r){ c.fg=dim(c.fg,0.55); c.bg=dim(c.bg,0.55); } }
+
+// =====================================================================================
+// ANIMATION (optional) — tweens quantised to 50 ms so motion looks like a 20 fps TUI redraw loop.
+// tween(name, from, to, ms) starts one; av(name, default) reads it; anims[name] tells you it is running.
+// =====================================================================================
+const easeOut=t=>1-(1-t)*(1-t), easeIn=t=>t*t, easeInOut=t=>t<0.5?2*t*t:1-2*(1-t)*(1-t), linear=t=>t;
+let anims={}, finals={}, smooth=false, running=false;
+const FRAME=()=>smooth?16:50;
+const tnow=()=>smooth?performance.now():Math.floor(performance.now()/50)*50;
+function tween(name,from,to,dur,ease){ anims[name]={from,to,start:tnow(),dur,ease:ease||easeOut}; kick(); }
+function av(name,dflt){ const a=anims[name]; if(a){ const t=clamp((tnow()-a.start)/a.dur,0,1); return a.from+(a.to-a.from)*a.ease(t); } return name in finals?finals[name]:dflt; }
+function prune(){ for(const n in anims){ const a=anims[n]; if(tnow()-a.start>=a.dur){ finals[n]=a.to; delete anims[n]; } } }
+function kick(){ if(!running){ running=true; setTimeout(tick,FRAME()); } }
+function tick(){ render(); prune(); if(Object.keys(anims).length) setTimeout(tick,FRAME()); else { running=false; render(); } }
+function resetAnims(){ anims={}; finals={}; }
+/** Freeze a tween at `v` for screenshots: hold('modal', 0.45); render(). */
+function hold(n,v){ anims[n]={from:v,to:v,start:tnow(),dur:1e7,ease:linear}; }
+
+// =====================================================================================
+// VARIANTS — one object per tab. Each has its own state, draw() and keys(k, e).
+// draw() is called after the chrome; keys() returns nothing and mutates state; render() runs after every key.
+// Keep every variant answering the SAME questions the user was asked, so the tabs compare like for like.
+// =====================================================================================
+const state = { v:0 };
+const VARIANTS = [
+  {
+    id: 'example', name: '1 · Example',
+    blurb: '<b>Variant 1 · example.</b> Replace this with a one-paragraph description of the idea and its keys: <kbd>o</kbd> opens, <kbd>Esc</kbd> closes.',
+    st: { open:false, cur:0 },
+    draw(){ const s=this.st; drawMap(); drawStatusSidebar(); drawTicker();
+      drawStatus(s.open ? [['↑↓','move'],['Enter','select'],['Esc','close']] : [['k','look'],['Tab','wide'],['←→↑↓','scroll'],['o','overlay'],['Space','pause'],['?','help']]);
+      if(!s.open) return;
+      const m=modal({x:0,y:0,w:MAP_W,h:MAP_ROWS},50,10,'Example','o or Esc closes');
+      ['first choice','second choice','third choice'].forEach((label,i)=>{ const on=i===s.cur; fill(m.x,m.y+1+i,m.w,1,on?C.SELECT:C.PANEL); text(m.x+3,m.y+1+i,(on?'► ':'  ')+label,on?C.BRIGHT:C.TEXT,on?C.SELECT:C.PANEL,on); });
+      text(m.x+1,m.y+m.h-1,'↑↓ move  Enter select  Esc close',C.DIM,C.PANEL); },
+    keys(k){ const s=this.st; if(!s.open){ if(k==='o') s.open=true; return; } if(k==='Escape'||k==='o'||k==='Enter'){ s.open=false; return; } if(k==='ArrowDown') s.cur=(s.cur+1)%3; if(k==='ArrowUp') s.cur=(s.cur+2)%3; },
+  },
+];
+
+// =====================================================================================
+// RENDER + INPUT — do not edit below unless a variant needs a new hook.
+// Key names are normalised so Space is ' ' and Enter is 'Enter' whatever the browser sends.
+// =====================================================================================
+const term=document.getElementById('term'), blurb=document.getElementById('blurb'), tabs=document.getElementById('tabs');
+function render(){ clear(); VARIANTS[state.v].draw();
+  let html=''; for(let y=0;y<H;y++){ html+='<div class="r">'; let pk=''; for(let x=0;x<W;x++){ const c=buf[y][x]; const k=rgb(c.fg)+'|'+rgb(c.bg)+'|'+c.b; const ch=c.ch===' '?'&nbsp;':c.ch==='<'?'&lt;':c.ch==='&'?'&amp;':c.ch; if(k!==pk){ if(pk) html+='</span>'; html+=`<span style="color:${rgb(c.fg)};background:${rgb(c.bg)}"${c.b?' class="b"':''}>`; pk=k; } html+='<span class="c">'+ch+'</span>'; } html+='</span></div>'; } term.innerHTML=html; blurb.innerHTML=VARIANTS[state.v].blurb; }
+function fit(){ const wrap=document.getElementById('wrap'); const s=Math.min(1,wrap.clientWidth/(155*8.4)); term.style.transform=`scale(${s})`; wrap.style.height=(45*17*s)+'px'; }
+VARIANTS.forEach((v,i)=>{ const b=document.createElement('button'); b.className='tab'+(i===state.v?' on':''); b.textContent=v.name; b.dataset.v=i; b.addEventListener('click',()=>{ document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on',t===b)); state.v=i; resetAnims(); render(); term.focus(); }); tabs.appendChild(b); });
+term.tabIndex=0;
+window.addEventListener('keydown',e=>{ if(e.target.tagName==='BUTTON'||e.target.tagName==='INPUT') return;
+  const k = e.code==='Space'||e.key==='Spacebar'||e.key==='Space' ? ' ' : (e.code==='Enter'||e.code==='NumpadEnter'||e.key==='Return') ? 'Enter' : e.key;
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','Tab'].includes(k)) e.preventDefault();
+  VARIANTS[state.v].keys(k,e); render(); });
+document.getElementById('smooth').addEventListener('change',e=>{ smooth=e.target.checked; term.focus(); });
+window.addEventListener('resize',fit);
+render(); fit(); term.focus();
+</script>
+</body>
+</html>
