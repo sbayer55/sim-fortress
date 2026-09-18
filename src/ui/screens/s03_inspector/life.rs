@@ -6,7 +6,7 @@ use ratatui::style::{Modifier, Style};
 use crate::sim::creatures::{Creature, CreatureId};
 use crate::sim::disease::Stage;
 use crate::sim::{Kind, Sim, TRAIT_NAMES};
-use crate::ui::screens::common::day_stamp;
+use crate::ui::screens::common::{ago, day_stamp};
 use crate::ui::style::{EventKindStyle, SpeciesStyle};
 use crate::widgets::map::{self, MapOptions, OverlayStack};
 use crate::widgets::{Component, Kind as PanelKind, LabeledBar, Panel, Rows, Text};
@@ -86,6 +86,9 @@ impl Component for Header<'_> {
             vec![sp(" days alive  ", theme::dim_text()), sp(format!("{age}"), theme::text())],
             vec![sp(" offspring   ", theme::dim_text()), sp(format!("{}", c.offspring), theme::text())],
             vec![sp(" distance    ", theme::dim_text()), sp(format!("{} cells", c.trail.len()), theme::text())],
+            vec![sp(" last ate    ", theme::dim_text()), sp(ago(c.last_ate, sim.time.tick, sim.time.ticks_per_day), theme::text())],
+            vec![sp(" last drank  ", theme::dim_text()), sp(ago(c.last_drank, sim.time.tick, sim.time.ticks_per_day), theme::text())],
+            vec![sp(" last slept  ", theme::dim_text()), sp(ago(c.last_slept, sim.time.tick, sim.time.ticks_per_day), theme::text())],
         ];
         for (i, spans) in lines.into_iter().enumerate() {
             let y = stats.y + crate::cast!(i => u16);

@@ -241,6 +241,12 @@ pub struct Creature {
     pub mutations: Vec<Mutation>,
     /// Remembered drinking spot, set on every successful drink (FR5).
     pub last_water: Option<(usize, usize)>,
+    /// Tick of the last meal (graze, kill, shared kill or scavenge); S01e / S03 "last ate".
+    pub last_ate: Option<u64>,
+    /// Tick of the last drink; S01e / S03 "last drank".
+    pub last_drank: Option<u64>,
+    /// Tick of the last hour spent resting; S01e / S03 "last slept".
+    pub last_slept: Option<u64>,
     /// Fractional movement accumulator (FR6).
     pub move_budget: f32,
     /// Remaining planned steps (next step last) when the greedy step stalled
@@ -465,6 +471,9 @@ fn founder(species: SpeciesId, n_species: usize, name: NameId, sex: Sex, pos: (u
                 decay: 0.0,
                 mutations: Vec::new(),
                 last_water: None,
+                last_ate: None,
+                last_drank: None,
+                last_slept: None,
                 move_budget: 0.0,
                 path: Vec::new(),
                 rest_reason: None,

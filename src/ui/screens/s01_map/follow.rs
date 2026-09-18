@@ -7,6 +7,7 @@ use ratatui::Frame;
 use crate::sim::creatures::CreatureId;
 use crate::sim::Sim;
 use crate::ui::app::AppState;
+use crate::ui::screens::common::ago;
 use crate::ui::style::{EventKindStyle, SpeciesStyle};
 use crate::widgets::map::{self};
 use crate::widgets::{bars, panel, util};
@@ -47,6 +48,18 @@ fn corpse_summary(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, c: &c
             WorldMap::follow_events(f, inner, row, sim, id);
 }
 
+/// The `last ate` / `last drank` / `last slept` lines; returns the next free row.
+fn last_needs(f: &mut Frame<'_>, inner: Rect, mut row: u16, sim: &Sim, c: &crate::sim::creatures::Creature) -> u16 {
+    for (label, stamp) in [("last ate", c.last_ate), ("last drank", c.last_drank), ("last slept", c.last_slept)] {
+        util::line(f, inner, row, Line::from(vec![
+            Span::styled(format!(" {label:<11}"), theme::dim_text()),
+            Span::styled(ago(stamp, sim.time.tick, sim.time.ticks_per_day), theme::text()),
+        ]));
+        row += 1;
+    }
+    row
+}
+
 /// Vitals bars, then the predator Danger line or the Hunt line.
 #[allow(clippy::too_many_arguments)]
 fn follow_condition(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState, sim: &Sim, c: &crate::sim::creatures::Creature, id: CreatureId) -> u16 {
@@ -65,7 +78,8 @@ fn follow_condition(f: &mut Frame<'_>, inner: Rect, mut row: u16, app: &AppState
         bars::labeled(f.buffer_mut(), inner, row, " risk", c.predation_risk, bars::vital_color(c.predation_risk, true), 9, 20);
         row += 1;
         bars::labeled(f.buffer_mut(), inner, row, " forage", local_forage(sim, c.x, c.y), theme::VEGETATION, 9, 20);
-        row += 2;
+        row = last_needs(f, inner, row + 1, sim, c);
+        row += 1;
 
         // 4. Danger line for prey (FR12), hunt line for predators.
         if sim.roster().kind(c.species) == Kind::Prey {

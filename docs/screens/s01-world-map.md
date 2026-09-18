@@ -80,8 +80,9 @@ flowchart TB
      (`drinking  · thirst 0.71, heading for Lake Ulmar`).
    - S01e: "Following" — name, tag, species, sex glyph, position and region, goal and
      target, four vital bars (health, hunger, thirst, energy; hunger/thirst inverted so
-     high is red), and a danger line naming the stalking predator, its distance and
-     whether the follower has detected it.
+     high is red), the `last ate` / `last drank` / `last slept` lines (`3h ago`,
+     `2d 5h ago` or `never`), and a danger line naming the stalking predator, its
+     distance and whether the follower has detected it.
 6. **Legend section**: terrain and resource glyphs in two columns, species letters
    (upper/lower) in species colours in two rows, and the `UPPER adult   lower juvenile` note.
 7. **Look tooltip (S01c)**: a 34 × 9 focus-bordered panel placed to the right of (or left
