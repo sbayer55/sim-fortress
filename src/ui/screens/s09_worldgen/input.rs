@@ -48,9 +48,11 @@ pub(super) fn adjust(form: &mut WorldGenForm, focus: usize, dir: i32) {
         F_AGE => w.age = crate::cast!(clamp_i64(i64::from(w.age) + d, 0, 30) => u8),
         F_RAINFALL => cycle_rainfall(&mut w.rainfall, dir),
         F_SEASON => form.season_days = crate::cast!(clamp_i64(i64::from(form.season_days) + d * 10, 30, 180) => u32),
+        // Founder counts step one individual at a time: the default predator
+        // founders are single digits, so a coarser step could not reach them.
         F_SPECIES.. if focus < form.tail() => {
             let i = focus - F_SPECIES;
-            form.counts[i] = crate::cast!(clamp_i64(i64::from(form.counts[i]) + d * 10, 0, 999) => u32);
+            form.counts[i] = crate::cast!(clamp_i64(i64::from(form.counts[i]) + d, 0, 999) => u32);
         }
         _ => match focus - form.tail() {
             T_MUTATION_RATE => form.genetics.mutation_rate = clamp_f32(form.genetics.mutation_rate + crate::cast!(dir => f32) * 0.01, 0.0, 0.2),
