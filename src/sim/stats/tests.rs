@@ -308,3 +308,29 @@ fn peak_lag_on_synthetic_series() {
     let flat = vec![50.0f32; n];
     assert_eq!(peak_lag(&flat, &flat), None);
 }
+
+fn root(lin: &Lineage, id: u32) -> Option<crate::sim::CreatureId> {
+    lin.get(crate::sim::CreatureId(id)).map(|n| n.root)
+}
+
+#[test]
+fn lineage_root_follows_the_mother_line_and_survives_pruning() {
+    let mut lin = Lineage::new();
+    // Founders 1 and 2; 3 is their child, 4 is 3's child by 2; 6 has an unknown mother.
+    for (id, gen, parents, alive) in [(1, 1, None, false), (2, 1, None, false), (3, 2, Some((1, 2)), false), (4, 3, Some((3, 2)), true), (6, 3, Some((9, 2)), true)] {
+        let c = lineage_creature(id, gen, parents, alive);
+        lin.record(&c, roster(), 0.1);
+        if !alive {
+            lin.record_death(c.id, 50, crate::sim::creatures::Cause::Age, None, 0);
+        }
+    }
+    assert_eq!(root(&lin, 1), Some(crate::sim::CreatureId(1)), "a founder is its own root");
+    assert_eq!(root(&lin, 3), Some(crate::sim::CreatureId(1)), "a child takes its mother's root");
+    assert_eq!(root(&lin, 4), Some(crate::sim::CreatureId(1)), "and so does a grandchild");
+    assert_eq!(root(&lin, 6), Some(crate::sim::CreatureId(6)), "an orphan founds a new line");
+    // Prune everything dead: the living nodes keep the root id even when the chain is gone.
+    let store = CreatureStore::new();
+    lin.prune(&[20; 6], 0, &store);
+    assert_eq!(root(&lin, 4), Some(crate::sim::CreatureId(1)));
+    assert_eq!(root(&lin, 1), None, "the founder's node is gone");
+}

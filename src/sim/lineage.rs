@@ -28,6 +28,11 @@ pub struct LineageNode {
     pub genome: Genome,
     pub mutations: Vec<Mutation>,
     pub parents: Option<(CreatureId, CreatureId)>,
+    /// The founder this node descends from through mothers only: the mother's
+    /// `root`, or the node itself for founders and for a newborn whose mother's
+    /// node is absent. Set once by `record`, never changed, so the dynasty key
+    /// (S16) outlives pruning of the chain above it.
+    pub root: CreatureId,
     /// Children in birth (id) order.
     pub children: Vec<CreatureId>,
     /// Carries a notable mutation, has ≥ 10 offspring, or survived ≥ 2 infections (C7).
@@ -130,6 +135,7 @@ impl Lineage {
     /// `children` lists and flags notability (FR6).
     pub fn record(&mut self, c: &Creature, roster: &Roster, mutation_notable: f32) {
         let notable = c.mutations.iter().any(|m| m.delta.abs() >= mutation_notable);
+        let root = c.parents.map(|(m, _)| m).and_then(|m| self.nodes.get(&m).map(|n| n.root)).unwrap_or(c.id);
         self.nodes.insert(
             c.id,
             LineageNode {
@@ -144,6 +150,7 @@ impl Lineage {
                 genome: c.genome,
                 mutations: c.mutations.clone(),
                 parents: c.parents,
+                root,
                 children: Vec::new(),
                 notable,
                 cause: None,
