@@ -50,6 +50,7 @@ Widths in the *Shape* column are the canonical example width (see conventions).
 | Table | [table.md](table.md) | area | hand-laid columns in S04, S06, S07 | `Table` |
 | Histogram | [histogram.md](histogram.md) | area | `bars::histogram` + S04b axis rows | `Histogram` |
 | Chart | [chart.md](chart.md) | area | hand-drawn `▀▄` line charts in `s05_charts/{time,infections,phase,stacked,groups}.rs` | `Chart`, `StackedChart` |
+| Race Chart | [race-chart.md](race-chart.md) | area | — (new with S16) | `RaceChart`, `RaceSeries` |
 | Legend | [legend.md](legend.md) | area | `map::legend()` + `s01_map::base::legend_section` | `Legend` |
 | **Input** | | | | |
 | Menu | [menu.md](menu.md) | area | loop in S00 title, `load_world` | `Menu` |

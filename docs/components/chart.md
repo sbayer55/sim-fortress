@@ -115,9 +115,15 @@ Time and Infections (drawn by the screen through `panel::section`);
 
 ## API
 ### Today
-Every variant is hand-drawn into the buffer; no ratatui `Chart`, `Dataset` or
-`Marker` appears anywhere in `src/`. All of these are private to the S05
-module.
+The line chart is a component (`src/widgets/chart.rs`):
+```rust
+widgets::chart::Series::new(&[f32]).color(c)
+widgets::chart::Band::new(&[bool]).color(c).label(glyph, "drought")
+widgets::chart::Chart::new().series(s).band(b).reference(v, c).y_step(100.0).y_max(v).y_label(&f).x_label(&f).legend(text)
+impl Component for Chart<'_>          // pub const LABEL_W: u16 = 6
+```
+Stacked, Phase and Groups are still hand-drawn and private to the S05 module,
+as are the older `line_chart` / `multi_line_chart` helpers they share:
 ```rust
 // src/ui/screens/s05_charts/time.rs
 fn line_chart(f: &mut Frame<'_>, area: Rect, w: &Window<'_>, series: &[f32], color: Color, step: f32)
@@ -251,8 +257,8 @@ over the last one, and a blank XLab row.
 
 ## Open questions
 - Corner glyph: `└` as in the prototype and ratatui's `Axis`, or `─` as live?
-  `└` has no `glyphs::` constant (`glyphs::CORNER` is `╬`); one must be added
-  if the spec keeps it.
+  `glyphs::BOX_BL` `└` exists since the [Race Chart](race-chart.md) landed, so
+  the choice is now only which look the pinned tests fix.
 - Which axis look do the pinned tests fix, the prototype's or the live one? The
   S05a and S05b renders need regenerating either way.
 - Fixture series: a pinned test needs the 240-day series behind each example.
