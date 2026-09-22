@@ -2,13 +2,18 @@
 
 Back to the [screen overview](README.md).
 
-Status: **specified, not yet built** (Sept 2026), from variant 6, round 4 of the throwaway
+Status: **built** (Sept 2026, `src/ui/screens/s16_dynasties.rs`; render
+[S16a](renders/S16a.txt)), from variant 6, round 4 of the throwaway
 `top-dynasties-r4.html` mockup. The implementation plan is
 [../top-dynasties-plan.md](../top-dynasties-plan.md). The dynasty and member lists are
-[Tables](../components/table.md), the six race charts are a new
+[Tables](../components/table.md), the six race charts are the
 [Race Chart](../components/race-chart.md) component, and the bars are Bare
-[Labeled Bars](../components/labeled-bar.md) with a Marker; where the mockup differs from
-a sheet the sheet wins (see Components).
+[Labeled Bars](../components/labeled-bar.md) with a Marker. Deviations from the mockup,
+forced by the data or the sheets: the sidebar's *Kills by year* became **Kills by prey**
+(the sim keeps kills per prey species, not per year, for one animal); the Survival lines
+are counts (`* survived a hard winter ×1`), since the tallies carry no year; the Table
+header is the sheet's dim text, not a `HEADER_BG` band; a one-cell spacer column separates
+the numbers from the text columns that follow them.
 
 ## Purpose
 S16 makes the interesting predators easy to follow and become invested in. It ranks
@@ -59,53 +64,53 @@ Main panel, inner rows (inner row 0 is screen row 4, inner columns from the left
 | 34–38 | Member rows: `inner height − 34`, clamped to 1..=5 (five on a 45-row terminal, four in the 44-row harness) |
 
 ```
-╔ Watch ═══════════════════════════════════════════════════════════════════════════════════════════════════ 2 pinned · [p] pin the selection · [1-4] jump ╗
-║ 1 ♦ Fenrir line · 243 kills · N. Taiga · #1 in region                     │ 2 ♦ Shade f#060 · 64 kills · C. Forest · top 9% of foxes                    ║
+╔ Watch ═══════════════════════════════════════════════════════════════════════════════════════════════════ 0 pinned · [p] pin the selection · [1-4] jump ╗
+║ nothing pinned yet · [p] pins the selected dynasty or animal, it then stays selected when the ranking shifts                                            ║
 ╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
-╔ Top dynasties by region ════════════════════════════════════════════ Year 12, day 4 · kills lead the ranking ╗╔ Top member ═════════════════════════════╗
-║ ◄ Northern Taiga ►  region 1/8 · 4 dynasties · 6 foxes, 17 wolves, 4 lynx  all   F fox   W wolf   L lynx  [s]║║ W Greymaw w#017                  ♂ wolf ║
-║   #  dynasty        sp  since  gens  living   kills   terr  young  surv   age  muts   carried by    region   ║║ carries the Fenrir line                 ║
-║♦►  1 Fenrir line    W     Y1     6      12     243     84     79    10    6y     6  Greymaw w#017 N. Taiga   ║║ ♥ living · age 6y 357d · gen 20         ║
-║    2 Dusk line      F     Y5     4       6     102     48     34     6    4y     2  Greymaw f#098 N. Taiga   ║║                                         ║
-║    3 Howl line      W     Y3     4       5      89     59     30     9    6y     2  Umber w#079   N. Taiga   ║║     ▄▄     ▄▄     kills      106 #1/33  ║
-║    4 Shade line     L     Y2     5       4      87     51     32    10    5y     4  Sable l#079   N. Taiga   ║║     █▀█▄▄▄█▀█     territory   41 #1/33  ║
-║─ Fenrir line · founded Y1 by Fenrir w#003 · 6 generations · 61 members ever, 12 living ──────────────────────║║    ▐█ ■ ▄ ■ █▌    young       34 #1/33  ║
-║    ▄▄     ▄▄     standing   #1 of 4 dynasties in the Northern Taiga · #1 of 7 wolf lines in the valley       ║║     █▄▄▄▀▄▄▄█     survival     2 #5/33  ║
-║    █▀█▄▄▄█▀█     kills       243 [██████████│█████████████] region #1/4 · valley #1/7 · mean 97 · best 243   ║║      ▀██▄▄██▀     age         6y #1/33  ║
-║   ▐█ ■ ▄ ■ █▌    territory    84 [██████████████████│█████] region #1/4 · valley #1/7 · mean 63 · best 84    ║║        ▀██▀       mutations    1 #1/33  ║
-║    █▄▄▄▀▄▄▄█     young        79 [██████████│█████████████] region #1/4 · valley #1/7 · mean 32 · best 79    ║║         ▀▀        [p] pin               ║
-║     ▀██▄▄██▀     survival     10 [███████████████│██░░░░░░] region #1/4 · valley #2/7 · mean 8 · best 13     ║║                                         ║
-║       ▀██▀       age          6y [██████████████████████│█] region #1/4 · valley #1/7 · mean 6y · best 6y    ║║─ Against living wolves ─────────────────║
-║        ▀▀        mutations     6 [██████████████│█████████] region #1/4 · valley #1/7 · mean 4 · best 6      ║║ kills    [███│██████████████]   top 3%  ║
-║                  carried by Greymaw w#017 · 106 of 243 kills · 41 of 84 cells · age 6y 357d · gen 20         ║║ territory[██████│███████████]   top 3%  ║
-║                  ♦ pinned · [p] unpins                      │ valley mean of the species' lines              ║║ young    [███│██████████████]   top 3%  ║
-║─ Race since Y1 ─── ■ Fenrir line  ∙ Dusk line  ∙ Howl line  ∙ Shade line ────────────────────────────────────║║ survival [████████│███░░░░░░]  top 45%  ║
-║ kills ■243 ∙102 ∙89 ∙87             territory ■84 ∙48 ∙59 ∙51           young ■79 ∙34 ∙30 ∙32                ║║ age      [██████████│███████]   top 3%  ║
-║ │243                ┌■─■            │84                   ┌■            │79                 ┌■─■             ║║ mutations[████████████│█████]  top 67%  ║
-║ │               ┌■─■┘               │                 ┌∙┐ │∙            │               ┌■─■┘                ║║ │ species mean · bar = share of the best║
-║ │         ┌■─■─■┘   ┌∙─∙            │         ┌∙─∙─∙─∙┌■─■┘∙            │         ┌■─■─■┘ ┌∙─∙─∙             ║║                                         ║
-║ │     ┌■─■┘∙─∙─∙─∙─∙─∙─∙            │  ∙┌■─■─■─■─■─■─■┘                 │   ┌■─■─■┘∙─∙─∙─∙┘∙┘                ║║─ Kills by year ─────────────────────────║
-║ │■─■─■┘∙─∙┘∙┘                       │■─■┘                               │■─■┘∙─∙┘∙─∙┘∙┘                      ║║ ██  ██  ▄▄                              ║
-║ └1───3───5───7───9───11──────────── └1───3───5───7───9───11──────────── └1───3───5───7───9───11────────────  ║║ ██  ██  ██  ██  ··  ██  ██  ··          ║
-║ survival ■10 ∙6 ∙9 ∙10              age ■7 ∙6 ∙8 ∙7                     mutations ■6 ∙2 ∙2 ∙4                ║║ Y5  Y6  Y7  Y8  Y9  Y10 Y11 Y12         ║
-║ │10                 ┌■─■            │8          ┌■┐     ┌∙┌■            │6                  ┌■─■             ║║ 22  25  21  13  3   11  10  1           ║
-║ │             ┌∙┌■─■┘               │       ┌■─■┘ │ ┌∙┌■─■┘∙            │               ┌■─■┘ ┌∙             ║║                                         ║
-║ │     ┌∙─∙┌■─■─■┘∙─∙─∙─∙            │   ┌■─■┘∙┐ ┌∙└■─■┘∙┘               │           ┌∙┌■┘∙─∙─∙┘              ║║─ Territory ─────────────────────────────║
-║ │   ┌∙┌■─■┘   ┌∙┘                   │■─■┘∙┘∙─∙└∙─∙┘∙┘                   │ ┌■─■─■─■─■─■┘∙─∙─∙─∙─∙             ║║ 41 cells · 49% of the line · won 9 lost 2
-║ │■─■─■┘  ∙─∙─∙┘                     │                                   │■┘∙┘∙─∙─∙┘                          ║║                                         ║
-║ └1───3───5───7───9───11──────────── └1───3───5───7───9───11──────────── └1───3───5───7───9───11────────────  ║║─ Survival ──────────────────────────────║
-║ totals: kills, young, survival, mutations · year-end levels: territory = cells the living hold, age = oldest ║║ ☺ gained immunity, Y9                   ║
-║─ Living members · 12, the top 5 by kills ────────────────────────────────────────────────────────────────────║║ ¡ survived a drought, Y8                ║
-║   name     tag    sex  gen   kills  terr  young  surv   age  muts   kills vs living wolves                   ║║                                         ║
-║ · Greymaw  w#017   ♂   g20     106    41     34     2    6y     1  [███│████████████████] top 3% · #1 of 33  ║║─ Genetics ──────────────────────────────║
-║   Ashfang  w#042   ♂   g23      36    19      9     1    3y     1  [███│███░░░░░░░░░░░░░] top 6% · #2 of 33  ║║ § Aggression +.07 at birth (g20)        ║
-║   Cinder   w#051   ♀   g24      23     9      7     0    2y     1  [███│░░░░░░░░░░░░░░░░] top 24% · #7 of 33 ║║ inherited: Size +.05                    ║
-║   Rook     w#058   ♂   g24      22    11      7     1    2y     1  [███│░░░░░░░░░░░░░░░░] top 27% · #9 of 33 ║║                                         ║
-║   Talon    w#076   ♂   g25      11     4      3     1    0y     1  [██░│░░░░░░░░░░░░░░░░] top 64% · #19 of 33║║ [f] follow on map  [l] lineage          ║
+╔ Top dynasties by region ═════════════════════════════════════════════ Year 2, day 1 · kills lead the ranking ╗╔ Top member ═════════════════════════════╗
+║ ◄ Western Forest ►  region 1/8 · 4 dynasties · 1 foxes, 2 wolves, 1 lynxes    all F fox W wolf L lynx    [s] ║║ W Fenrir w#953                   ♂ wolf ║
+║     #dynasty        sp  since  gens  living   kills   terr  young  surv   age  muts carried by     region    ║║ carries the Cinder line                 ║
+║ ►  1 Cinder line    W      Y1     2       2      63     24      4     2    0y     1 Fenrir w#953   W. Forest ║║ ♥ living · age 0y 294d · gen 2          ║
+║    2 Rook line      W      Y1     2       3      59     49      2     3    1y     1 Rook w#520     W. Forest ║║                                         ║
+║    3 Ember line     L      Y1     2       2      33     33      2    22    1y     0 Ember l#528    W. Forest ║║     ▄▄     ▄▄     kills       21 #5/11  ║
+║    4 Dusk line      F      Y1     1       1      19     18      0    12    1y     0 Dusk f#513     W. Forest ║║     █▀█▄▄▄█▀█     territory   10 #11/11 ║
+║─ Cinder line · founded Y1 by Cinder w#523 · 2 generations · 3 members ever, 2 living ────────────────────────║║    ▐█ ■ ▄ ■ █▌    young        2 #2/11  ║
+║    ▄▄     ▄▄     standing   #1 of 4 dynasties in the Western Forest · #2 of 5 wolf lines in the valley       ║║     █▄▄▄▀▄▄▄█     survival     1 #1/11  ║
+║    █▀█▄▄▄█▀█     kills        63 [████████████│█░░░░░░░░░░] region #1/4 · valley #2/5 · mean 55 · best 107   ║║      ▀██▄▄██▀     age         0y #6/11  ║
+║   ▐█ ■ ▄ ■ █▌    territory    24 [████████░░░│░░░░░░░░░░░░] region #3/4 · valley #3/5 · mean 36 · best 76    ║║        ▀██▀       mutations    0 #7/11  ║
+║    █▄▄▄▀▄▄▄█     young         4 [██████████████│█░░░░░░░░] region #1/4 · valley #2/5 · mean 4 · best 6      ║║         ▀▀        [p] pin               ║
+║     ▀██▄▄██▀     survival      2 [████████████░│░░░░░░░░░░] region #4/4 · valley #3/5 · mean 2 · best 4      ║║                                         ║
+║       ▀██▀       age          0y [██████████░░░░│░░░░░░░░░] region #4/4 · valley #5/5 · mean 1y · best 2y    ║║─ Against living wolves ─────────────────║
+║        ▀▀        mutations     1 [█████░│░░░░░░░░░░░░░░░░░] region #1/4 · valley #2/5 · mean 1 · best 5      ║║ kills    [████████████│██░░░]   top 46% ║
+║                  carried by Fenrir w#953 · 21 of 63 kills · 10 of 24 cells · age 0y 294d · gen 2             ║║ territory[████████░░░░│░░░░░]  top 100% ║
+║                  [p] pins this line to the Watch strip      │ valley mean of the species' lines              ║║ young    [█████│███░░░░░░░░░]   top 19% ║
+║─ Race since Y1 ── ■ Cinder line  ∙ Rook line  ∙ Ember line  ∙ Dusk line ─────────────────────────────────────║║ survival [█████████████████│]   top 10% ║
+║ kills ■63 ∙59 ∙33 ∙19               territory ■24 ∙49 ∙33 ∙18           young ■4 ∙2 ∙2 ∙0                    ║║ age      [███████│░░░░░░░░░░]   top 55% ║
+║ │■─■                                │∙─∙                                │■─■                                 ║║ mutations[░░░░░│░░░░░░░░░░░░]   top 64% ║
+║ │                                   │∙─∙                                │                                    ║║ │ species mean · bar = share of the best║
+║ │∙─∙                                │■─■                                │∙─∙                                 ║║                                         ║
+║ │∙─∙                                │∙─∙                                │                                    ║║─ Kills by prey ─────────────────────────║
+║ │                                   │                                   │∙─∙                                 ║║         ███                             ║
+║ └1───────────────────────────────── └1───────────────────────────────── └1─────────────────────────────────  ║║ ··      ███                             ║
+║ survival ■2 ∙3 ∙22 ∙12              age ■0y ∙1y ∙1y ∙1y                 mutations ■1 ∙1 ∙0 ∙0                ║║ V   H   D                               ║
+║ │∙─∙                                │∙─∙                                │■─■                                 ║║ 0   2   19                              ║
+║ │                                   │∙─∙                                │                                    ║║                                         ║
+║ │∙─∙                                │■─■                                │                                    ║║─ Territory ─────────────────────────────║
+║ │∙─∙                                │                                   │                                    ║║ 10 cells · 41% of line · won 0 lost 0   ║
+║ │■─■                                │                                   │∙─∙                                 ║║                                         ║
+║ └1───────────────────────────────── └1───────────────────────────────── └1─────────────────────────────────  ║║─ Survival ──────────────────────────────║
+║ totals: kills, young, survival, mutations · year-end levels: territory = cells the living hold, age = oldest ║║ * survived a hard winter ×1             ║
+║─ Living members · 2, the top 2 by kills ─────────────────────────────────────────────────────────────────────║║                                         ║
+║   name     tag    sex   gen  kills  terr  young  surv   age  muts kills vs the living                        ║║─ Genetics ──────────────────────────────║
+║ · Fenrir   w#953  ♂      g2     21    10      2     1    0y     0 [██████████████│█░░░░]                     ║║ no mutation at birth                    ║
+║   Vex      w#952  ♀      g2     19    14      0     1    0y     1 [██████████████│░░░░░]                     ║║                                         ║
+║                                                                                                              ║║                                         ║
+║                                                                                                              ║║ [f] follow on map  [l] lineage          ║
 ╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝╚═════════════════════════════════════════╝
- [←→] region  [↑↓] pick  [Tab] members  [s] species  [p] pin  [1-4] watch  [f] follow  [l] lineage  [Esc] back          N. Taiga · Fenrir line · dynasties
+ [←→] region  [↑↓] pick  [Tab] members  [s] species  [p] pin  [1-4] watch  [f] follow  [l] lineage  [Esc] back        W. Forest · Cinder line · dynasties
+
 ```
-*S16a on the mockup's fake data: region 1, the Fenrir line selected, the dynasty list focused, two pins.*
+*S16a: seed 7 after one year, region 1, its first line by kills, the dynasty list focused, nothing pinned. The 44-row harness shows the member rows the height leaves; two lines live in this one.*
 
 **Watch item anatomy.** Slots of `⌊153 / n⌋` cells from inner column 0, a `│` in the last
 cell of every slot but the last. Inside a slot: the digit at 0 in the key colour, `♦` at 2
@@ -195,13 +200,14 @@ best living animal of its species with a `│` marker at the species mean, and t
 18. **Against living <plural>.** Six 18-cell bracketed bars, fill = value / best living,
     marker at the species mean, `top <p>%` right-aligned (good colour from the top 10 %);
     then `│ species mean · bar = share of the best`.
-19. **Kills by year.** A two-row [Histogram](../components/histogram.md) of the animal's
-    kills per year of its life (`col_w(4)`), `Y<y>` labels and counts beneath; a year with
-    no kills shows `··`.
+19. **Kills by prey.** A two-row [Histogram](../components/histogram.md) of the animal's
+    kills per prey species (`col_w(4)`), the prey glyphs and counts beneath; a species it
+    never killed shows `··`.
 20. **Territory.** `<t> cells · <p>% of the line · won <w> lost <l>`.
-21. **Survival.** Up to two lines from the tallies, newest first: `☺ gained immunity`,
-    `» escaped a predator`, `¡ survived a drought`, `* survived a hard winter`, `contests
-    won`; `nothing survived yet, nothing lost` when all are zero.
+21. **Survival.** Up to three lines from the tallies, in this order and only when
+    non-zero: `☺ gained immunity ×n`, `» escaped a predator ×n`, `¡ survived a drought ×n`,
+    `* survived a hard winter ×n`, `► won a contest ×n`; `nothing survived yet, nothing
+    lost` when all are zero.
 22. **Genetics.** `§ <Trait> <±.nn> at birth (g<n>)` per mutation, or `no mutation at
     birth`; then `inherited: <Trait> <±.nn>, …` from the line's earlier mutations.
 23. **Footer** on the last inner row: `[f] follow on map  [l] lineage`.
@@ -234,10 +240,10 @@ best living animal of its species with a `│` marker at the species mean, and t
 | Panels | [Panel](../components/panel.md) (Outer, Focus, Outer) | — |
 | Dividers, section rules | [Divider](../components/divider.md) | The race legend and the focus colour are drawn over the rule after it; Divider has no colour option (gap) |
 | Species chips | [Filter Strip](../components/filter-strip.md) | Chips show the roster glyph; hint `[s]` |
-| Dynasty and member lists | [Table](../components/table.md) | The header is the Table's dim header, not the mockup's `HEADER_BG` band; the Table owns the Marker column, so `♦` is drawn one cell to its left by the screen |
+| Dynasty and member lists | [Table](../components/table.md) | The header is the Table's dim header, not the mockup's `HEADER_BG` band; the Table owns the Marker column, so `♦` is drawn one cell to its left by the screen; a one-cell spacer column sits between a numeric column and the text column after it |
 | Stat bars, member bars, sidebar bars | [Labeled Bar](../components/labeled-bar.md), Bare with Marker | Label, value and suffix are laid out by the screen around a `Bar` |
 | Race charts | [Race Chart](../components/race-chart.md) | New component; the sheet is the spec |
-| Kills by year | [Histogram](../components/histogram.md) | `rows(2)`, `col_w(4)`; labels drawn by the screen |
+| Kills by prey | [Histogram](../components/histogram.md) | `rows(2)`, `col_w(4)`; labels drawn by the screen |
 | Lines | [Text](../components/text.md) | — |
 | Status row | [Status Bar](../components/status-bar.md) | — |
 | Watch slots, portraits | drawn into the buffer | No component |

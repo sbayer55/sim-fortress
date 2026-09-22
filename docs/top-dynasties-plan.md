@@ -2,6 +2,14 @@
 
 *Validated against `main` at 0e6d3e9 (the territory merge, PR #29) on 2026-09-22.*
 
+*Implemented 2026-09-22 (branch `claude/s16-top-dynasties`). Deviations from the text
+below: steps 10 to 16 landed as one commit and 17 to 18 as another, since the façade
+declares its modules; the sidebar's Kills by year became Kills by prey (no per-animal
+yearly kills exist) and its Survival lines are counts; `RaceSeries` values for a line
+are its closed year rows followed by its current totals; the Table gained no header
+option, so the header is dim text; a spacer column separates numeric columns from the
+text columns after them; the Watch strip cuts labels at ` · ` boundaries.*
+
 **Goal.** Build [S16 Top Dynasties](screens/s16-top-dynasties.md): one region at a time,
 its four best dynasties by kills, a banner with portrait and six stats against the valley
 mean, six cumulative race charts against the region's other lines, the living members, a
