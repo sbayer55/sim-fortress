@@ -143,6 +143,7 @@ pub struct Sim {
 impl Sim {
     pub fn new(seed: u64, params: Params) -> Self {
         let mut world = World::generate(seed, &params.world);
+        world.init_scent(params.species.len());
         let time = Time::new(
             params.time.start_hour,
             params.time.season_days,
@@ -291,6 +292,7 @@ impl Sim {
             &self.params.disease,
             &self.params.social,
             &self.params.diet,
+            &self.params.territory,
             &mut self.creature_rng,
             &mut self.deaths,
             &mut self.lineage,
@@ -334,6 +336,7 @@ impl Sim {
             &self.params.creatures,
             &self.params.genetics,
             &self.params.disease,
+            &self.params.territory,
             &mut self.deaths,
             &mut self.lineage,
             &mut self.disease,

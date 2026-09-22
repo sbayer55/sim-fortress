@@ -58,9 +58,9 @@ fn tab_flips_tabs() {
     assert_eq!((s.tab, s.cur), (Tab::Marks, 0));
     s.handle_key(key(KeyCode::BackTab), &mut app);
     assert_eq!(s.tab, Tab::Base);
-    // Up wraps to the last row, Down back to the first.
+    // Up wraps to the last row (the seventh base, Scent), Down back to the first.
     s.handle_key(key(KeyCode::Up), &mut app);
-    assert_eq!(s.cur, 5);
+    assert_eq!(s.cur, 6);
     s.handle_key(key(KeyCode::Down), &mut app);
     assert_eq!(s.cur, 0);
 }

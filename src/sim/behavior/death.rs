@@ -5,7 +5,7 @@ use crate::sim::creatures::{
 };
 use crate::sim::events::EventRing;
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{CreaturesParams, Roster};
+use crate::sim::params::{CreaturesParams, Roster, TerritoryParams};
 use crate::sim::species::Kind;
 use crate::sim::params::DiseaseParams;
 use crate::sim::time::Time;
@@ -28,7 +28,7 @@ pub(super) fn maybe_die(c: &mut Creature, world: &mut World, events: &mut EventR
     }
 }
 
-pub(super) fn pressure(c: &Creature, world: &mut World, roster: &Roster, cp: &CreaturesParams) {
+pub(super) fn pressure(c: &Creature, world: &mut World, roster: &Roster, cp: &CreaturesParams, tp: &TerritoryParams) {
     match roster.kind(c.species) {
         Kind::Prey => {
             let cell = world.cell_mut(c.x, c.y);
@@ -37,6 +37,8 @@ pub(super) fn pressure(c: &Creature, world: &mut World, roster: &Roster, cp: &Cr
         Kind::Predator => {
             let cell = world.cell_mut(c.x, c.y);
             cell.pred_pressure = (cell.pred_pressure + cp.pressure_per_creature_tick).min(1.0);
+            // C5 FR13: the scent mark rides the same write.
+            super::territory::deposit(c, world, tp);
         }
     }
 }

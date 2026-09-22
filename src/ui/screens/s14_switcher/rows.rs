@@ -127,7 +127,7 @@ impl SubPick {
 /// The entry the stack remembers for `layer` (S14 item 10).
 pub fn chosen(layer: Layer, stack: &OverlayStack) -> Option<Pick> {
     match layer {
-        Layer::Base(Base::Species) => Some(Pick::Species(stack.species)),
+        Layer::Base(Base::Species | Base::Scent) => Some(Pick::Species(stack.species)),
         Layer::Sense => stack.sense_subject.map(Pick::Predator),
         Layer::Disease => Some(Pick::Pathogen(stack.pathogen)),
         _ => None,
@@ -139,7 +139,7 @@ pub fn chosen(layer: Layer, stack: &OverlayStack) -> Option<Pick> {
 pub fn sub_pick(layer: Layer, app: &AppState) -> Option<SubPick> {
     let sim = app.sim.as_ref()?;
     match layer {
-        Layer::Base(Base::Species) => Some(species_list(sim)),
+        Layer::Base(Base::Species | Base::Scent) => Some(species_list(sim)),
         Layer::Sense => Some(predator_list(sim, app.overlay.sense_subject)),
         Layer::Disease => Some(pathogen_list(sim)),
         _ => None,

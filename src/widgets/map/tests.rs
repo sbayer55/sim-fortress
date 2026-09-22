@@ -43,6 +43,7 @@ fn two_region_world(w: usize, h: usize) -> World {
         falls: vec![],
         history: vec![],
         names: crate::sim::world::Names::default(),
+        scent: vec![],
     }
 }
 

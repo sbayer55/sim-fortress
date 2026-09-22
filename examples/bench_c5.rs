@@ -5,7 +5,9 @@
 //!
 //! Keys: `kill_base`, `chase_max_ticks`, `chase_speed_bonus`, `hunt_cooldown_hours`,
 //! `hunger_per_kill_base`, `hunger_per_kill_per_size`, `fox`, `wolf`, `lynx`
-//! (predator founders), `rain=dry|normal|wet`, `params=<file.toml>`.
+//! (predator founders), `rain=dry|normal|wet`, `params=<file.toml>`, and the
+//! C5 FR13 territory levers `mark_per_tick`, `avoid_w`, `resident_bonus`,
+//! `contest_injury` plus `territory=off` for the neutral control.
 //!
 //! The summary reports: species counts at each year end, how many species are alive
 //! at year 5 and at the end, local maxima on the smoothed prey/predator totals,
@@ -84,6 +86,16 @@ fn main() {
                 let v: u32 = v.parse().unwrap();
                 for s in params.species.0.iter_mut().filter(|s| s.kind == sim_fortress::sim::Kind::Predator) {
                     s.mate_cooldown_days = v;
+                }
+            }
+            // C5 FR13 territory levers and the neutral control.
+            "mark_per_tick" => params.territory.mark_per_tick = v.parse().unwrap(),
+            "avoid_w" => params.territory.avoid_w = v.parse().unwrap(),
+            "resident_bonus" => params.territory.resident_bonus = v.parse().unwrap(),
+            "contest_injury" => params.territory.contest_injury = v.parse().unwrap(),
+            "territory" => {
+                if v == "off" {
+                    params.territory.neutral();
                 }
             }
             "rain" => {
@@ -235,10 +247,15 @@ fn main() {
             println!("{:5} deaths in ring: starved {} thirst {} age {} predation {}", sim.roster().name(id), c[0], c[1], c[2], c[3]);
         }
     }
+    // C5 FR13: contests fought and the adult nearest-neighbour spacing per predator.
+    let mut territory = String::new();
+    for id in sim.roster().predator_ids() {
+        let _ = write!(territory, " {}:{}c/{:.1}nn", sim.roster().name(id), sim.deaths.contests[id.index()], sim.group_stats.nn_mean[id.index()]);
+    }
     let ov: Vec<String> = overrides.iter().map(|(k, v)| format!("{k}={v}")).collect();
     let last = year_end.last().cloned().unwrap_or_default();
     println!(
-        "seed={seed} [{}] alive5={alive5} aliveEnd={alive_end} end={:?} maxima={prey_max}/{pred_max} lag={:?} hunt{hunt}",
+        "seed={seed} [{}] alive5={alive5} aliveEnd={alive_end} end={:?} maxima={prey_max}/{pred_max} lag={:?} hunt{hunt} territory{territory}",
         ov.join(" "),
         last,
         lag

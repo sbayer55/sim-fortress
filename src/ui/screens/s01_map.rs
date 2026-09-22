@@ -63,7 +63,7 @@ impl WorldMap {
     /// species in roster order, wrapping, extinct species included. Returns
     /// false when the base is not Species.
     pub(super) fn cycle_species(app: &mut AppState, backwards: bool) -> bool {
-        if app.overlay.base != Base::Species {
+        if !matches!(app.overlay.base, Base::Species | Base::Scent) {
             return false;
         }
         let n = app.params.species.len().max(1);
@@ -266,7 +266,7 @@ fn status_keys(app: &AppState, stack: &OverlayStack) -> &'static [(&'static str,
         &[("↑↓←→", "move"), ("Enter", "inspect"), ("f", "follow"), ("z", "zoom"), ("Esc", "exit look")]
     } else if stack.sense {
         &[("Tab", "next predator"), ("i", "inspect"), ("f", "follow"), ("o", "overlay"), ("Esc", "clear"), ("Space", "pause")]
-    } else if stack.base == Base::Species {
+    } else if matches!(stack.base, Base::Species | Base::Scent) {
         &[("Tab", "next species"), ("Shift+Tab", "previous"), ("←→↑↓", "scroll"), ("o", "overlay"), ("Esc", "clear"), ("Space", "pause")]
     } else if stack.disease.is_on() {
         &[("Tab", "next pathogen"), ("Shift+Tab", "previous"), ("←→↑↓", "scroll"), ("k", "look"), ("o", "overlay"), ("Esc", "clear"), ("Space", "pause")]
@@ -306,7 +306,7 @@ fn map_options(sim: &Sim, app: &AppState, stack: &OverlayStack, origin: (usize, 
         origin,
         creatures: true,
         selected_region: stack.regions.then_some(region_sel),
-        species_color: if stack.base == Base::Species { sim.roster().color(stack.species) } else { theme::TEXT },
+        species_color: if matches!(stack.base, Base::Species | Base::Scent) { sim.roster().color(stack.species) } else { theme::TEXT },
         // Disease first when both want a creature's colour (S14 item 17).
         creature_tint: match stack.disease {
             Disease::On(shown) => Some(disease_tints(sim, shown)),
@@ -399,5 +399,6 @@ mod health;
 mod disease_overlay;
 mod parasites;
 mod regions;
+mod scent;
 #[cfg(test)]
 mod tests;

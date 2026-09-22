@@ -45,6 +45,10 @@ pub struct GroupCensus {
     /// Group-size distribution: `hist[species][k]` counts groups of `k + 1`
     /// members (index 0 = alone), with `GROUP_HIST` and above in the last bucket.
     pub hist: Vec<[u32; GROUP_HIST]>,
+    /// C5 FR13: mean distance from each living adult to the nearest other
+    /// living adult of its species (`0.0` with fewer than two adults). The
+    /// spacing number territory is measured by.
+    pub nn_mean: Vec<f32>,
 }
 
 impl GroupCensus {
@@ -56,6 +60,7 @@ impl GroupCensus {
             mean: vec![0.0; n_species],
             max: vec![0; n_species],
             hist: vec![[0; GROUP_HIST]; n_species],
+            nn_mean: vec![0.0; n_species],
         }
     }
 
@@ -128,7 +133,35 @@ pub fn group_census(store: &CreatureStore, sp: &SocialParams, n_species: usize) 
             None => list.push(Cluster::new(c.x, c.y)),
         }
     }
-    reduce(&clusters)
+    let mut out = reduce(&clusters);
+    out.nn_mean = nearest_neighbour_mean(store, n_species);
+    out
+}
+
+/// C5 FR13: per species, the mean over living adults of the distance to the
+/// nearest other living adult of the same species.
+///
+/// `0.0` below two adults. Quadratic per species, once a day, over
+/// populations in the hundreds.
+pub fn nearest_neighbour_mean(store: &CreatureStore, n_species: usize) -> Vec<f32> {
+    let mut adults: Vec<Vec<(usize, usize)>> = (0..n_species).map(|_| Vec::new()).collect();
+    for c in store.living().filter(|c| c.adult) {
+        adults[c.species.index()].push((c.x, c.y));
+    }
+    adults
+        .iter()
+        .map(|pts| {
+            if pts.len() < 2 {
+                return 0.0;
+            }
+            let sum: f32 = pts
+                .iter()
+                .enumerate()
+                .map(|(i, &(x, y))| pts.iter().enumerate().filter(|&(j, _)| j != i).map(|(_, &(ox, oy))| geom::dist(x, y, ox, oy)).fold(f32::INFINITY, f32::min))
+                .sum();
+            sum / crate::cast!(pts.len() => f32)
+        })
+        .collect()
 }
 
 /// The nearest cluster a creature of this sense range can reach without taking

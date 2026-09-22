@@ -6,7 +6,7 @@ use crate::sim::creatures::{
 use crate::sim::events::{EventRing};
 use crate::sim::species::testing::*;
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{CreaturesParams, DietParams, EcologyParams, GeneticsParams, PredationParams };
+use crate::sim::params::{CreaturesParams, DietParams, EcologyParams, GeneticsParams, PredationParams, TerritoryParams};
 use crate::sim::rng::Rng;
 use crate::sim::disease::{DiseaseState};
 use crate::sim::params::DiseaseParams;
@@ -238,7 +238,7 @@ fn pressure_decay() {
     w.cell_mut(50, 10).prey_pressure = 1.0;
     w.cell_mut(50, 10).pred_pressure = 0.0;
     let cp = CreaturesParams::default();
-    day_boundary(&mut store, &mut w, &mut events, &day_time(0), roster(), &cp, &GeneticsParams::default(), &DiseaseParams::default(), &mut tallies, &mut Lineage::new(), &mut DiseaseState::new(&DiseaseParams::default(), roster()), &mut Rng::new(1));
+    day_boundary(&mut store, &mut w, &mut events, &day_time(0), roster(), &cp, &GeneticsParams::default(), &DiseaseParams::default(), &TerritoryParams::default(), &mut tallies, &mut Lineage::new(), &mut DiseaseState::new(&DiseaseParams::default(), roster()), &mut Rng::new(1));
     assert!((w.cell(50, 10).prey_pressure - cp.pressure_decay_per_day).abs() < 1e-6);
 }
 
@@ -248,11 +248,11 @@ fn pressure_clamped() {
     let cp = CreaturesParams { pressure_per_creature_tick: 1.0, ..CreaturesParams::default() };
     let mut wolf = test_creature(75, 20);
     wolf.species = WOLF;
-    pressure(&wolf, &mut w, roster(), &cp);
+    pressure(&wolf, &mut w, roster(), &cp, &TerritoryParams::default());
     assert_eq!(w.cell(75, 20).pred_pressure, 1.0, "predator traffic clamps at 1.0");
     let mut vole = test_creature(75, 20);
     vole.species = VOLE;
-    pressure(&vole, &mut w, roster(), &cp);
+    pressure(&vole, &mut w, roster(), &cp, &TerritoryParams::default());
     assert_eq!(w.cell(75, 20).prey_pressure, 1.0, "prey traffic clamps at 1.0");
 }
 

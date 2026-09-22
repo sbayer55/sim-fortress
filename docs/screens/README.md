@@ -17,7 +17,7 @@ letter is the variant. The prototype binary shows the id on row 0.
 |-----|---------------------------|------------------------------------------------|-----------------------------------------------------------------|
 | S00 | Title / Main Menu         | [s00-title.md](s00-title.md)                   | a: default                                                      |
 | S01 | World Map                 | [s01-world-map.md](s01-world-map.md)           | a: default · b: wide · c: look mode · d: winter/night · e: follow |
-| S02 | Map Overlay               | [s02-map-overlay.md](s02-map-overlay.md)       | a: vegetation · b: pressure · c: moisture · d: sense range · e: regions · f: species density · g: health · h: disease · i: parasites |
+| S02 | Map Overlay               | [s02-map-overlay.md](s02-map-overlay.md)       | a: vegetation · b: pressure · c: moisture · d: sense range · e: regions · f: species density · g: health · h: disease · i: parasites · j: scent |
 | S03 | Creature Inspector        | [s03-creature-inspector.md](s03-creature-inspector.md) | a: prey · b: predator · c: corpse                        |
 | S04 | Species Browser           | [s04-species-browser.md](s04-species-browser.md) | a: table · b: species detail                                  |
 | S05 | Population Charts         | [s05-population-charts.md](s05-population-charts.md) | a: over time · b: phase plot · c: stacked area · d: infections · e: group sizes |

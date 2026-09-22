@@ -188,6 +188,114 @@ full `Series` and shows `–` on `None`.
 Nearest predator whose target is the followed prey, its `cheb` distance, and whether the
 prey has detected it (prey rule).
 
+### FR13 Territory: scent, avoidance and contests (2026-09-21)
+Plan and decisions in [territory-plan.md](../territory-plan.md); the first slice of the
+territory brainstorm in [feature-ideas.md](../feature-ideas.md). The `[territory]` table
+(`sim::params::TerritoryParams`, fourteen tunables with field docs) drives three mechanics:
+
+- **Scent grid.** `World.scent` holds one `Mark { strength, holder }` per species per cell
+  (species block `s` at `s × cells`, sized by `World::init_scent` once the roster is known;
+  prey blocks stay empty). Every living **adult** predator adds `mark_per_tick` to its
+  species' mark under it on the same write as `pred_pressure` (`behavior::death::pressure`),
+  capped at 1; a kill adds `kill_mark` at the kill cell. The holder changes to the depositor
+  only while the mark is below `hold_min`, or when a contest is won. Every mark is multiplied
+  by `decay_per_day` at the day boundary beside the pressure decay (0.90: a full mark falls
+  under `hold_min = 0.15` on the nineteenth day of absence). No RNG.
+- **Scent avoidance** (`behavior::territory::Scent`). A reader below the herding gate
+  (`sociality < social.cohesion_min`: fox and lynx at their base genomes) treats same-species
+  scent held by anyone else at or above `notice_min` as *foreign*; a social reader (wolf)
+  reads nothing. `avoid = avoid_w × aggression × (1 − sociality) × (1 − hunger)`, so a
+  starving animal trespasses. Two sites: the `perceive` patrol score becomes
+  `prey_pressure × (1 − min(1, avoid × foreign))`, and the `pick_hunt_target` score is
+  divided by `1 + avoid × foreign` under the prey. `wander`, Rest and every prey rule are
+  untouched.
+- **Challenge and contest.** A solitary adult that holds the cell it stands on and sees a
+  same-species adult (not its mate) on ground it holds enters `Goal::Challenge` after Hunt
+  and Scavenge and before Mate, walks at it for at most `challenge_ticks`, and gives up when
+  the intruder dies, leaves sense range or steps off held ground. `territory::contest_contacts`
+  runs after `hunt_contacts` and before `scavenge_contacts`: for each challenger adjacent
+  (`cheb ≤ 1`) to its target, in ascending id, one `rng.chance` on the creature stream with
+  the resident winning at `1 / (1 + exp(−contest_k × (aggression × size + resident_bonus −
+  intruder's aggression × size)))`. Both pay `contest_energy`; the loser loses
+  `contest_injury × winner size` of hp clamped at `hp_floor` (contests never kill), is evicted
+  through the prey flee fields unchanged (`threatened_by` = the winner, `flee_until = tick +
+  evict_ticks`, `preempt_predator` keeps it fleeing), and both wait
+  `contest_cooldown_days`. The winner over-marks the loser's cell to strength 1. One
+  `EventKind::Contest` per contest, subject the winner, `detail = winner:loser:region`;
+  `DeathTallies::contests` accumulates per species.
+- **Neutral control.** `mark_per_tick = 0` and `kill_mark = 0` (`TerritoryParams::neutral`)
+  lays no scent, so no ground is foreign, nobody is resident, no challenge is raised and no
+  contest draw happens: the run is bit for bit the pre-FR13 run, pinned by
+  `behavior::tests_territory::neutral_territory_reproduces_the_old_checksum` against the
+  previous default checksum `0xf883_9b51_57e3_c3f8`. The default checksum was re-baselined.
+- **Seeing it.** S02j, the `Scent` base on S14 (shares the species sub-pick with S02f; `Tab`
+  cycles); S03b `territory holds N cells · resident here | off its ground` and `contests won W
+  lost L`, the Behaviour line while challenging or evicted; `Contest` in S07 (the avoidance
+  chip) and S11; `--summary` columns `contests_<species>` and `nn_dist_<species>` (mean
+  distance from each living adult to its nearest same-species adult, from
+  `stats::nearest_neighbour_mean` in the midnight census); `bench_c5` keys `mark_per_tick`,
+  `avoid_w`, `resident_bonus`, `contest_injury` and `territory=off`.
+- **Save `VERSION = 17`**: the grid, the five per-creature fields (`challenge_target`,
+  `challenge_until`, `contest_cooldown_until`, `contests_won`, `contests_lost`) and the table.
+
+**Measured (one year, release, `bench_c5 <seed> 1 [territory=off]`, 2026-09-21).** Counts are
+`[vole, hare, deer, fox, wolf, lynx]` at the year's end; `nn` is the adult fox nearest-neighbour
+distance; contests are the fox tally.
+
+| seed | territory | end counts | fox nn | fox contests | fox hunt success |
+|---:|---|---|---:|---:|---:|
+| 42 | on | 14, 187, 82, 28, 6, 3 | 4.2 | 206 | 70 % |
+| 42 | off | 1, 116, 69, 39, 11, 4 | 2.9 | 0 | 59 % |
+| 1 | on | 0, 65, 47, 15, 6, 0 | 8.2 | 205 | 57 % |
+| 1 | off | 0, 42, 48, 4, 3, 2 | 10.2 | 0 | 64 % |
+| 2 | on | 80, 101, 59, 0, 0, 0 | — | 26 | 75 % |
+| 2 | off | 2, 25, 68, 0, 1, 0 | — | 0 | 70 % |
+
+Voles end year one far higher with territory on two of the three seeds (14 vs 1, 80 vs 2)
+and foxes lower on seed 42; the nearest-neighbour number is confounded by the fox count
+(seed 1 keeps 15 foxes against 4).
+
+**Sweeps (`scripts/sweep.sh 1 6 Y`, release, defaults vs the neutral overlay, 2026-09-21).**
+One year, seeds 1–6; `nn` is the adult fox nearest-neighbour distance in cells:
+
+| seed | territory | vole | hare | deer | fox | wolf | lynx | fox contests | fox nn |
+|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | on | 0 | 65 | 47 | 15 | 6 | 0 | 205 | 8.2 |
+| 1 | off | 0 | 42 | 48 | 4 | 3 | 2 | 0 | 10.2 |
+| 2 | on | 80 | 101 | 59 | 0 | 0 | 0 | 26 | — |
+| 2 | off | 2 | 25 | 68 | 0 | 1 | 0 | 0 | — |
+| 3 | on | 36 | 189 | 68 | 8 | 2 | 1 | 59 | 15.8 |
+| 3 | off | 17 | 203 | 33 | 19 | 0 | 0 | 0 | 8.2 |
+| 4 | on | 2 | 185 | 60 | 28 | 9 | 3 | 173 | 4.8 |
+| 4 | off | 3 | 186 | 32 | 34 | 8 | 3 | 0 | 4.3 |
+| 5 | on | 2 | 128 | 15 | 19 | 7 | 3 | 134 | 7.8 |
+| 5 | off | 6 | 107 | 15 | 10 | 7 | 3 | 0 | 11.0 |
+| 6 | on | 0 | 12 | 32 | 41 | 10 | 5 | 332 | 4.2 |
+| 6 | off | 0 | 85 | 57 | 41 | 5 | 4 | 0 | 4.7 |
+
+- **Spacing: not shown.** The plan's claim was a higher fox nearest-neighbour distance on at
+  least five of six seeds. Raw `nn` is higher with territory on seeds 3 and 4 (and 42), lower
+  on 1, 5 and 6, and on seed 6, the one seed with equal fox counts (41 each), it is *lower*
+  (4.2 vs 4.7). Contests are frequent (26–332 fox contests a year), so foxes do meet on held
+  ground, but the mean nearest-neighbour distance follows the fox count and the prey
+  distribution more than the mechanic. A count-normalised spacing index (Clark–Evans) is the
+  follow-up before any spacing claim is made.
+- **Voles: better where it matters, not everywhere.** Year-one voles 80 vs 2 (seed 2), 36 vs
+  17 (seed 3), 14 vs 1 (seed 42); a handful either way on seeds 4 and 5; extinct on both on
+  seeds 1 and 6. Total year-one extinctions are equal (6 vs 6 over the six seeds).
+- **Two years:** foxes are extinct by year two on five of six seeds under both conditions
+  (seed 3 keeps 3 either way); voles survive only on seed 2 with territory (16 vs 0).
+  Extinctions 23 vs 23 over the six seeds. **Five years:** every predator extinct on every
+  seed under both conditions; extinctions 27 with territory vs 28 without (seed 2 keeps
+  hares). The C5 collapse is untouched by this slice and the population bands above keep
+  their status; the ignored tests' reasons still hold.
+- **Cost:** `--profile` at seed 1 over 20 000 ticks: 0.5007 s per 1 000 ticks with territory
+  against 0.4986 under the neutral overlay (+0.4 %), below the 2 % the plan allowed, so
+  `docs/PERFORMANCE.md` is unchanged.
+- **Tests:** `tests/predators.rs::{contests_are_non_lethal_and_logged,
+  territory_spaces_foxes_on_seed_42}`; the second pins the one-year seed-42 measurement
+  (4.2 vs 2.9) and says in its comment that the sweep does not generalise it.
+
 ## Acceptance criteria
 - Seed 42, default params, 10 years headless: all six species alive at year 5 and at
   least five at year 10; on the smoothed series both prey and predator totals have ≥ 3

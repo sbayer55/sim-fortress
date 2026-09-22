@@ -62,7 +62,7 @@ impl OverlaySwitcher {
     /// Open from the map: a sub-pick whose layer is off is refreshed by the
     /// S02f / S02d default rules so every row says what would come on.
     pub fn open(app: &mut AppState) -> Self {
-        if app.overlay.base != Base::Species {
+        if !matches!(app.overlay.base, Base::Species | Base::Scent) {
             app.overlay.species = WorldMap::default_species(app);
         }
         if !app.overlay.sense && !subject_alive(app, app.overlay.sense_subject) {
@@ -98,13 +98,14 @@ impl OverlaySwitcher {
         }
     }
 
-    /// `Enter` in the list: pick the entry and turn its layer on.
-    const fn pick(pick: Pick, app: &mut AppState) {
+    /// `Enter` in the list: pick the entry and turn its layer on. A species
+    /// picked from the Scent row turns Scent on, not Species (both share it).
+    const fn pick(pick: Pick, layer: Layer, app: &mut AppState) {
         let stack = &mut app.overlay;
         match pick {
             Pick::Species(sp) => {
                 stack.species = sp;
-                stack.base = Base::Species;
+                stack.base = if matches!(layer, Layer::Base(Base::Scent)) { Base::Scent } else { Base::Species };
             }
             Pick::Predator(id) => {
                 stack.sense_subject = Some(id);
@@ -140,15 +141,16 @@ impl OverlaySwitcher {
     }
 
     fn list_key(&mut self, code: KeyCode, app: &mut AppState, rows: &[RowSpec]) -> Action {
-        let list = rows.get(self.cur).and_then(|row| sub_pick(row.layer, app));
+        let layer = rows.get(self.cur).map(|row| row.layer);
+        let list = layer.and_then(|l| sub_pick(l, app));
         let n = list.as_ref().map_or(0, |l| l.entries.len()).max(1);
         match code {
             KeyCode::Up => self.list_cur = (self.list_cur + n - 1) % n,
             KeyCode::Down => self.list_cur = (self.list_cur + 1) % n,
             KeyCode::Left => self.focus = Focus::Rows,
             KeyCode::Enter | KeyCode::Char(' ') => {
-                if let Some(entry) = list.as_ref().and_then(|l| l.entries.get(self.list_cur)) {
-                    Self::pick(entry.pick, app);
+                if let (Some(entry), Some(layer)) = (list.as_ref().and_then(|l| l.entries.get(self.list_cur)), layer) {
+                    Self::pick(entry.pick, layer, app);
                 }
                 self.focus = Focus::Rows;
             }

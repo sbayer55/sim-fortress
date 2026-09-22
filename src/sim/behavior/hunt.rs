@@ -7,7 +7,8 @@ use crate::sim::events::EventRing;
 use crate::sim::genetics::{self, TickView};
 use crate::sim::geom;
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{PredationParams, Roster, SocialParams};
+use crate::sim::params::{PredationParams, Roster, SocialParams, TerritoryParams};
+use super::territory::{self, Scent};
 use crate::sim::predation::{self};
 use crate::sim::rng::Rng;
 use crate::sim::species::{Kind, SpeciesId};
@@ -90,7 +91,9 @@ fn join_kill(c: &mut Creature, time: &Time, pp: &PredationParams, prey_size: f32
 
 /// Highest `preference × pack bonus / (1 + dist/4)` prey (preference 0 = never).
 /// C8 FR4: a prey already hunted by a same-species packmate counts as detected and
-/// scores a join bonus, which is what seeds pack hunting.
+/// scores a join bonus, which is what seeds pack hunting. C5 FR13: the score
+/// is divided by `1 + avoid × foreign scent` under the prey, so a solitary
+/// hunter prefers prey on its own ground.
 pub(super) fn pick_hunt_target(
     c: &Creature,
     candidates: &[CreatureId],
@@ -99,6 +102,7 @@ pub(super) fn pick_hunt_target(
     roster: &Roster,
     pp: &PredationParams,
     sp: &SocialParams,
+    scent: &Scent<'_>,
 ) -> Option<(CreatureId, (usize, usize))> {
     let mut ids: Vec<CreatureId> = candidates.to_vec();
     ids.sort_unstable();
@@ -136,7 +140,7 @@ pub(super) fn pick_hunt_target(
         }
         let d = geom::dist(c.x, c.y, peer.x, peer.y);
         let join = 1.0 + sociality * sp.pack_join_bonus * crate::cast!(packed.min(3) => f32);
-        let score = pref * join / (1.0 + d / 4.0);
+        let score = pref * join / (1.0 + d / 4.0) / scent.hunt_divisor(scent.foreign(world, peer.x, peer.y));
         if best.is_none_or(|b| score > b.2) {
             best = Some((id, (peer.x, peer.y), score));
         }
@@ -191,6 +195,7 @@ pub(super) fn hunt_contacts(
     pp: &PredationParams,
     dp: &DiseaseParams,
     sp: &SocialParams,
+    tp: &TerritoryParams,
     rng: &mut Rng,
     tallies: &mut DeathTallies,
     lineage: &mut Lineage,
@@ -220,7 +225,7 @@ pub(super) fn hunt_contacts(
         .clamp(pp.kill_min, pp.kill_max);
         let chase_ticks = snap.chase_start.map_or(0, |s| crate::cast!(time.tick.saturating_sub(s) => u16));
         if rng.chance(chance) {
-            resolve_kill(store, world, events, time, roster, pp, dp, sp, tallies, lineage, dstate, drng, pred_id, prey_id, &snap, participants, extra, chase_ticks);
+            resolve_kill(store, world, events, time, roster, pp, dp, sp, tp, tallies, lineage, dstate, drng, pred_id, prey_id, &snap, participants, extra, chase_ticks);
         } else {
             resolve_miss(store, world, time, pp, tallies, pred_id, prey_id, snap.pred_at);
         }
@@ -285,6 +290,7 @@ fn resolve_kill(
     pp: &PredationParams,
     dp: &DiseaseParams,
     sp: &SocialParams,
+    tp: &TerritoryParams,
     tallies: &mut DeathTallies,
     lineage: &mut Lineage,
     dstate: &mut DiseaseState,
@@ -327,6 +333,8 @@ fn resolve_kill(
         p.hunger -= pp.hunger_per_kill(prey_size);
         p.last_ate = Some(time.tick);
     }
+    // C5 FR13: a kill marks the ground for the killer.
+    territory::deposit_kill(snap.pred_at.2, pred_id, px, py, world, tp);
     // C8 FR4: the pack shares the kill. Rewards are not attempts, so this
     // never goes through `fail_hunt`; the kill itself is counted once.
     for pid in participants {

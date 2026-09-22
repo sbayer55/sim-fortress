@@ -207,6 +207,13 @@ fn summary_header(roster: &Roster) -> String {
         cols.push(format!("group_mean_{n}"));
         cols.push(format!("group_max_{n}"));
     }
+    // C5 FR13 territory: contests fought and the adult spacing it produces.
+    for id in roster.ids() {
+        cols.push(format!("contests_{}", roster.name(id)));
+    }
+    for id in roster.ids() {
+        cols.push(format!("nn_dist_{}", roster.name(id)));
+    }
     cols.join(",")
 }
 
@@ -257,6 +264,12 @@ fn summary_row(sim: &Sim, seed: u64, years: f64) -> String {
     for i in 0..n {
         cols.push(format!("{:.2}", sim.group_stats.mean[i]));
         cols.push(sim.group_stats.max[i].to_string());
+    }
+    for i in 0..n {
+        cols.push(sim.deaths.contests[i].to_string());
+    }
+    for i in 0..n {
+        cols.push(format!("{:.2}", sim.group_stats.nn_mean[i]));
     }
     cols.join(",")
 }

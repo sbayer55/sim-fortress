@@ -30,6 +30,9 @@ pub enum EventKind {
     /// C5 `FR5b`: prey avoidance of predators that are not currently hunting.
     /// Aggregated to at most one event per region per day.
     Wary,
+    /// C5 FR13: a territorial contest between two same-species predators;
+    /// the subject is the winner, `detail` is `winner:loser:region`.
+    Contest,
 }
 
 impl EventKind {
@@ -62,6 +65,7 @@ impl EventKind {
             Self::EpidemicOver => "burnt out",
             Self::Recovery => "recovery",
             Self::Wary => "wary",
+            Self::Contest => "contest",
         }
     }
 }

@@ -7,7 +7,7 @@ use crate::sim::events::EventRing;
 use crate::sim::genetics::{self, TickView};
 use crate::sim::geom;
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{CreaturesParams, DietParams, EcologyParams, GeneticsParams, PredationParams, Roster, SocialParams};
+use crate::sim::params::{CreaturesParams, DietParams, EcologyParams, GeneticsParams, PredationParams, Roster, SocialParams, TerritoryParams};
 use crate::sim::rng::Rng;
 use crate::sim::spatial::SpatialIndex;
 use crate::sim::species::Kind;
@@ -22,6 +22,7 @@ use super::vitals::act;
 use super::death::{maybe_die, pressure};
 use super::threat::{flee_target, wary_target};
 use super::hunt::{pick_hunt_target, pick_scavenge_target, update_hunt_stalk};
+use super::territory::{self, Scent};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn update_one(
@@ -38,6 +39,7 @@ pub(super) fn update_one(
     dp: &DiseaseParams,
     sp: &SocialParams,
     diet: &DietParams,
+    tp: &TerritoryParams,
     view: &TickView,
     rng: &mut Rng,
     tallies: &mut DeathTallies,
@@ -45,8 +47,11 @@ pub(super) fn update_one(
 ) {
     let fx = disease::effects(c, dp);
     // FR5: Flee pre-empts every goal for prey; FR5b adds the wary tier below it.
+    // C5 FR13: an evicted predator flees the contest winner the same way.
     if roster.kind(c.species) == Kind::Prey {
         preempt_prey(c, world, time, pp, tallies);
+    } else {
+        territory::preempt_predator(c, world, time, pp);
     }
 
     // Eat phase: the predator walks onto the carcass cell (`target`, set at the
@@ -70,11 +75,15 @@ pub(super) fn update_one(
     }
     // Replan when due.
     if time.tick >= c.replan_at {
-        replan(c, spatial, world, time, roster, cp, gp, pp, view, rng, dp, fx.rest_energy, sp, diet);
+        replan(c, spatial, world, time, roster, cp, gp, pp, view, rng, dp, fx.rest_energy, sp, diet, tp);
     }
     // Track the current prey target while hunting (Stalk → Chase).
     if c.goal == Goal::Hunt && c.hunt_phase != HuntPhase::Eat {
         update_hunt_stalk(c, view, time, pp, tallies);
+    }
+    // C5 FR13: track the intruder while challenging.
+    if c.goal == Goal::Challenge {
+        territory::update_challenge(c, view, world, time, tp);
     }
     // Move toward the target.
     move_toward(c, world, time, cp, pp, fx.speed_factor);
@@ -85,7 +94,7 @@ pub(super) fn update_one(
     // Death.
     maybe_die(c, world, events, time, roster, tallies, lineage, dp);
     // Pressure and parasite shedding.
-    pressure(c, world, roster, cp);
+    pressure(c, world, roster, cp, tp);
     disease::parasite_shed(c, world, dp);
 }
 
@@ -176,6 +185,8 @@ fn goal_satisfied(c: &Creature, time: &Time, roster: &Roster, pp: &PredationPara
             || time.tick >= c.wary_until
             || c.wary_by.is_none_or(|(px, py, _)| geom::dist(c.x, c.y, px, py) > pp.wary_distance * pp.wary_release_factor),
         Goal::Migrate => time.tick >= c.migrate_until || c.migrate_target.is_none(),
+        // C5 FR13: the timer here; `update_challenge` ends it on the intruder.
+        Goal::Challenge => c.challenge_target.is_none() || time.tick >= c.challenge_until,
         // Hunt / Scavenge / Patrol are ended by their dedicated passes.
         Goal::Hunt | Goal::Scavenge | Goal::Patrol => false,
     }
@@ -197,6 +208,7 @@ pub(super) fn replan(
     rest_energy: f32,
     sp: &SocialParams,
     diet: &DietParams,
+    tp: &TerritoryParams,
 ) {
     let tick = time.tick;
     let next = tick + cp.replan_ticks;
@@ -223,7 +235,7 @@ pub(super) fn replan(
     }
 
     if roster.kind(c.species) == Kind::Predator {
-        replan_predator(c, spatial, world, time, roster, cp, gp, pp, view, rng, dp, rest_energy, sp, diet);
+        replan_predator(c, spatial, world, time, roster, cp, gp, pp, view, rng, dp, rest_energy, sp, diet, tp);
     } else {
         replan_prey(c, spatial, world, time, roster, cp, gp, pp, view, rng, dp, rest_energy, sp, diet);
     }
@@ -247,7 +259,7 @@ fn replan_prey(
     diet: &DietParams,
 ) {
     let next = time.tick + cp.replan_ticks;
-    let (p, kin) = perceive(c, spatial, world, cp, view, sp, diet);
+    let (p, kin) = perceive(c, spatial, world, cp, view, sp, diet, &Scent::NONE);
     c.kin_nearby = kin.count;
 
     // 1. Drink (enter thirst > 0.6, stay while thirst > 0.1).
@@ -335,9 +347,12 @@ fn replan_predator(
     rest_energy: f32,
     sp: &SocialParams,
     diet: &DietParams,
+    tp: &TerritoryParams,
 ) {
     let next = time.tick + cp.replan_ticks;
-    let (p, kin) = perceive(c, spatial, world, cp, view, sp, diet);
+    // C5 FR13: what this predator makes of its species' scent this replan.
+    let scent = territory::scent_view(c, world, tp, sp);
+    let (p, kin) = perceive(c, spatial, world, cp, view, sp, diet, &scent);
     c.kin_nearby = kin.count;
 
     // 1. Drink (thirst > 0.6).
@@ -355,7 +370,7 @@ fn replan_predator(
 
     // 2. Hunt (hunger > hunt_hunger_min and a detectable prey in range).
     if c.hunger > pp.hunt_hunger_min && time.tick >= c.hunt_cooldown_until {
-        if let Some((prey, pos)) = pick_hunt_target(c, &p.creatures, view, world, roster, pp, sp) {
+        if let Some((prey, pos)) = pick_hunt_target(c, &p.creatures, view, world, roster, pp, sp, &scent) {
             c.goal = Goal::Hunt;
             c.rest_reason = None;
             c.hunt_phase = HuntPhase::Stalk;
@@ -377,6 +392,20 @@ fn replan_predator(
             c.replan_at = next;
             return;
         }
+    }
+
+    // 3b. Challenge (C5 FR13): a solitary resident walks at a same-species
+    // adult standing on its ground. Hunger has had its say above.
+    if let Some((intruder, pos)) = territory::pick_intruder(c, &p.creatures, view, world, time, tp, sp) {
+        if c.goal != Goal::Challenge || c.challenge_target != Some(intruder) {
+            c.challenge_until = time.tick + u64::from(tp.challenge_ticks);
+        }
+        c.goal = Goal::Challenge;
+        c.rest_reason = None;
+        c.challenge_target = Some(intruder);
+        c.target = Some(pos);
+        c.replan_at = next;
+        return;
     }
 
     // 4. Mate (C4 rules; the vegetation gate does not apply to predators).

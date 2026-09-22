@@ -18,11 +18,13 @@ pub enum Base {
     /// Population density of the stack's remembered species (S02f).
     Species,
     Parasites,
+    /// C5 FR13: the scent grid of the stack's remembered species (S02j).
+    Scent,
 }
 
 impl Base {
     /// Every base row of the S14 Base heatmap tab, in row order.
-    pub const ALL: [Self; 6] = [Self::None, Self::Vegetation, Self::Pressure, Self::Moisture, Self::Species, Self::Parasites];
+    pub const ALL: [Self; 7] = [Self::None, Self::Vegetation, Self::Pressure, Self::Moisture, Self::Species, Self::Parasites, Self::Scent];
 
     /// The row name as the S14 tab and the sidebar Stack section write it.
     pub const fn name(self) -> &'static str {
@@ -33,6 +35,7 @@ impl Base {
             Self::Moisture => "Moisture",
             Self::Species => "Species",
             Self::Parasites => "Parasites",
+            Self::Scent => "Scent",
         }
     }
 }
@@ -79,6 +82,7 @@ impl Layer {
             Self::Base(Base::Moisture) => "soil moisture, open water saturated",
             Self::Base(Base::Species) => "population density of one species",
             Self::Base(Base::Parasites) => "parasite load heatmap",
+            Self::Base(Base::Scent) => "one predator species' scent and holders",
             Self::Sense => "one predator's sense-range rings",
             Self::Regions => "named regions, tinted with labels",
             Self::Health => "creatures by their weakest vital",
@@ -86,9 +90,10 @@ impl Layer {
         }
     }
 
-    /// Whether the row carries a sub-pick list (Species, Sense, Disease).
+    /// Whether the row carries a sub-pick list (Species, Scent, Sense, Disease).
+    /// Species and Scent share the stack's remembered species.
     pub const fn has_sub_pick(self) -> bool {
-        matches!(self, Self::Base(Base::Species) | Self::Sense | Self::Disease)
+        matches!(self, Self::Base(Base::Species | Base::Scent) | Self::Sense | Self::Disease)
     }
 }
 
@@ -112,7 +117,7 @@ impl Disease {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct OverlayStack {
     pub base: Base,
-    /// Remembered even while `base != Species`.
+    /// Remembered even while the base is neither Species nor Scent.
     pub species: SpeciesId,
     pub sense: bool,
     /// Remembered even while `sense` is off; a dead subject is replaced by the
@@ -195,6 +200,7 @@ impl OverlayStack {
             Layer::Base(Base::Moisture) => "moisture".into(),
             Layer::Base(Base::Species) => roster.plural(self.species).to_lowercase(),
             Layer::Base(Base::Parasites) => "parasites".into(),
+            Layer::Base(Base::Scent) => format!("{} scent", roster.name(self.species)),
             Layer::Sense => "sense range".into(),
             Layer::Regions => "regions".into(),
             Layer::Health => "health".into(),

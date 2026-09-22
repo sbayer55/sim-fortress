@@ -8,7 +8,7 @@ use crate::sim::creatures::{
 use crate::sim::events::{Event, EventKind, EventRing};
 use crate::sim::genetics::{self, TickView};
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{CreaturesParams, DietParams, EcologyParams, GeneticsParams, PredationParams, Roster, SocialParams};
+use crate::sim::params::{CreaturesParams, DietParams, EcologyParams, GeneticsParams, PredationParams, Roster, SocialParams, TerritoryParams};
 use crate::sim::rng::Rng;
 use crate::sim::spatial::SpatialIndex;
 use crate::sim::species::SpeciesId;
@@ -25,7 +25,8 @@ pub use perception::{Kin, Perception};
 pub use migration::migration_daily;
 
 /// Advance every living creature one tick, in slot order (FR9), then run the
-/// C4/C5 passes: hunt contacts (kill/eat), scavenging, consummation and delivery.
+/// C4/C5 passes: hunt contacts (kill/eat), territorial contests, scavenging,
+/// consummation and delivery.
 #[allow(clippy::too_many_arguments)]
 pub fn tick_creatures(
     store: &mut CreatureStore,
@@ -41,6 +42,7 @@ pub fn tick_creatures(
     dp: &DiseaseParams,
     sp: &SocialParams,
     diet: &DietParams,
+    tp: &TerritoryParams,
     rng: &mut Rng,
     tallies: &mut DeathTallies,
     lineage: &mut Lineage,
@@ -52,12 +54,14 @@ pub fn tick_creatures(
     // FR5: predator-first threat marking (bucket-bounded; never per-prey scans).
     mark_threats(store, spatial, world, time.tick, roster, pp, sp);
     for c in store.living_mut() {
-        update_one(c, spatial, world, events, time, roster, cp, ep, gp, pp, dp, sp, diet, &view, rng, tallies, lineage);
+        update_one(c, spatial, world, events, time, roster, cp, ep, gp, pp, dp, sp, diet, tp, &view, rng, tallies, lineage);
     }
     // C7 FR4: infectious-first contagion over the same spatial snapshot.
     disease::contagion_pass(store, spatial, world, time, dp, dstate, drng);
     genetics::consummate(store, time, roster, gp, events, &view, soft_cap_noted);
-    hunt_contacts(store, world, events, time, roster, pp, dp, sp, rng, tallies, lineage, dstate, drng);
+    hunt_contacts(store, world, events, time, roster, pp, dp, sp, tp, rng, tallies, lineage, dstate, drng);
+    // C5 FR13: territorial contests, after the hunts and before scavenging.
+    territory::contest_contacts(store, world, events, time, roster, pp, tp, rng, tallies);
     scavenge_contacts(store, world, events, time, roster, pp, dp, dstate, drng);
     genetics::deliver(store, world, events, time, roster, gp, dp, rng, tallies, lineage, dstate, drng);
 }
@@ -74,6 +78,7 @@ pub fn day_boundary(
     cp: &CreaturesParams,
     gp: &GeneticsParams,
     dp: &DiseaseParams,
+    tp: &TerritoryParams,
     tallies: &mut DeathTallies,
     lineage: &mut Lineage,
     dstate: &mut DiseaseState,
@@ -116,6 +121,8 @@ pub fn day_boundary(
         cell.prey_pressure *= cp.pressure_decay_per_day;
         cell.pred_pressure *= cp.pressure_decay_per_day;
     }
+    // C5 FR13: scent fades the same way, one species block at a time.
+    territory::decay(world, tp);
     disease::decay_cells(world, dp);
 }
 
@@ -325,6 +332,7 @@ mod death;
 mod threat;
 mod hunt;
 mod migration;
+mod territory;
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests;
@@ -349,3 +357,6 @@ mod tests_social;
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests_diet;
+#[cfg(test)]
+#[allow(clippy::float_cmp)]
+mod tests_territory;

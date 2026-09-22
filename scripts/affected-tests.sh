@@ -53,6 +53,8 @@ for f in $changed; do
             units[sim::predation]=1; units[sim::behavior]=1; chunks[predators]=1 ;;
         src/sim/behavior/migration.rs|src/sim/behavior/tests_migration.rs)
             units[sim::behavior]=1; chunks[predators]=1 ;;
+        src/sim/behavior/territory.rs|src/sim/behavior/tests_territory.rs)
+            units[sim::behavior]=1; chunks[predators]=1 ;;
         src/sim/behavior*)                        units[sim::behavior]=1; chunks[herbivores]=1 ;;
         src/sim/ecology.rs)                       units[sim::ecology]=1; chunks[ecology]=1 ;;
         src/sim/params*)                          units[sim::params]=1; chunks[headless]=1 ;;

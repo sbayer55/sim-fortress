@@ -150,6 +150,13 @@ fn hunt_stats(sim: &Sim, c: &Creature) -> Rows<'static> {
         sp(" avg chase ", theme::dim_text()),
         sp(format!("{avg} ticks; longest {} (Year {})", c.chase_stats.1, c.chase_longest_year), theme::text()),
     ]));
+    // C5 FR13: ground held on the species' scent grid and the contest record.
+    let tp = &sim.params.territory;
+    let held = sim.world.scent_block(c.species).iter().filter(|m| m.holder == c.id && m.strength >= tp.hold_min).count();
+    let here = sim.world.mark(c.species, c.x, c.y);
+    let standing = if here.holder == c.id && here.strength >= tp.hold_min { "resident here" } else { "off its ground" };
+    rows.push(line(vec![sp(" territory ", theme::dim_text()), sp(format!("holds {held} cells · {standing}"), theme::text())]));
+    rows.push(line(vec![sp(" contests ", theme::dim_text()), sp(format!("won {} lost {}", c.contests_won, c.contests_lost), theme::text())]));
     rows.push(blank(1));
     rows
 }

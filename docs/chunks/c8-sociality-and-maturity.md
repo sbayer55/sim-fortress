@@ -70,6 +70,8 @@ earlier, smaller litters (r).
   any social decision; C4's parents/siblings remain a display-only fact.
 - Group defence, cooperative breeding, alloparenting or shared dens (dens are C5/Vole-refuge
   territory and pack dens remain the top candidate in [feature ideas](../feature-ideas.md)).
+  *Territory itself landed on 2026-09-21 as [C5 FR13](c5-predators.md#fr13-territory-scent-avoidance-and-contests-2026-09-21):
+  the herding gate decides who reads scent as foreign, so social predators share ground.*
 - Any save migration: pre-C8 (v2) files are refused, not converted.
 
 ## Dependencies

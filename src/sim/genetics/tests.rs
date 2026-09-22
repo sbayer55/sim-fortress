@@ -112,6 +112,11 @@ fn adult(x: usize, y: usize, sex: Sex) -> Creature {
             died_infected: None,
         migrate_target: None,
         path_for: None,
+        challenge_target: None,
+        challenge_until: 0,
+        contest_cooldown_until: 0,
+        contests_won: 0,
+        contests_lost: 0,
     }
 }
 

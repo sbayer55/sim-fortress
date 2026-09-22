@@ -30,6 +30,7 @@ starving here?", "can that wolf see the hare yet?") that the plain map cannot sh
 | S02g | health                             | the Health mark is on                                                    |
 | S02h | disease                            | the Disease mark is on; `Tab` cycles the pathogen                        |
 | S02i | parasites                          | the Parasites base is on                                                 |
+| S02j | scent                              | the Scent base is on; `Tab` cycles the species (shared with S02f)         |
 
 Each variant is one layer on its own (the sidebars below are drawn with exactly one layer
 on). With two or more layers the map composes them (S14 item 16) and the sidebar is the
@@ -43,7 +44,9 @@ computed from the living creatures rather than a stored cell value. S02g is a **
 tint**: the terrain is dimmed and every living creature is recoloured by its condition.
 S02h is a creature tint too, on the S02g path, recolouring every living creature by its
 infection state for one pathogen (or all). S02i is a **heatmap** of the stored
-`cell.parasite_load`, with the creatures on top recoloured by their own load.
+`cell.parasite_load`, with the creatures on top recoloured by their own load. S02j is a
+**heatmap** of one species' block of the stored scent grid (C5 FR13), on that species' own
+ramp, so a fox's territory reads in fox colour.
 
 ## Layout
 Same frame split as the world map. Only the sidebar contents and the map title change.
@@ -176,6 +179,14 @@ collapsed.
 24. **Creatures** draw on top recoloured by their own load band: `< 0.2` species colour dimmed
     55 %, `0.2–0.5` `WARN`, `≥ 0.5` `BAD` bold; resources fade 50 %.
 
+### Map panel — scent (S02j)
+25. **Per-cell value** `t = world.mark(species, x, y).strength` on `theme::species_ramp(colour,
+    t)`, exactly as S02f paints its density field: shade glyphs, the 75 % dimmed background,
+    deep water and rock keeping their dimmed glyphs. A prey species has an empty block and
+    paints every land cell at `t = 0`.
+26. **Creatures** draw as on S02f (shown species bright, others faded); the map title reads
+    `overlay: ‹species› scent`.
+
 ### Sidebar — heatmaps (S02a–c)
 Sections from the top, in order; all fit in the 40 inner rows without scrolling.
 
@@ -302,6 +313,23 @@ Sections from the top, in order; 35 of the 40 rows.
 - **Reading the map** (1 row, no rule): `k look = exact cell load · Esc restores`.
 - The **Stack** section as item 17 (`1. Parasites (base)`), after one blank row.
 
+### Sidebar — scent (S02j)
+Sections from the top, in order; about 30 of the 40 rows.
+
+- **‹Species› scent** (3 rows): section rule, then `adults mark where they walk and kill; marks`
+  / `fade daily and the strongest recent marker holds`.
+- **Legend** (3 rows): the 24-cell species ramp built from the map's shade glyphs, then
+  `faint … strong   held from ‹hold_min›%  ▲ rock`.
+- **By region** (10 rows): one labelled bar per region (18-column label, 14-column bar in the
+  species colour) of the share of the region's cells held at or above `territory.hold_min`,
+  then `N cells held  of the land, by any holder`.
+- **Holders** (up to 4 rows): the three largest holders as `‹glyph› ‹tag› ‹name› N cells  won
+  W lost L`; `prey lay no scent` for a prey species, `no ground is held yet` when nobody holds.
+- **Species** (7 rows): every species as `‹UPPER glyph› Name count  N cells held` (`no scent`
+  for prey), the shown one bright; `Tab` cycles it, as on S02f.
+- **Reading the map** (1 row, no rule): `Tab next species · k look · Esc restores`.
+- The **Stack** section as item 17 (`1. Scent · fox (base)`), after one blank row.
+
 ### Sidebar — sense ring (S02d)
 18. **Sense range** (3 rows): a two-line explanation that the ring is how far the selected
     creature can see, hear or smell other creatures.
@@ -423,6 +451,15 @@ three.
 | `o`     | open the overlay switcher                       | [S14](s14-overlay-switcher.md) |
 | `←→↑↓`  | scroll the map                                  | stays here |
 | `k`     | look mode with the overlay still active; the cursor tooltip shows the cell | [S01c Look mode](s01-world-map.md) |
+
+### S02j
+| Key         | Action                                      | Goes to |
+|-------------|---------------------------------------------|---------|
+| `Tab`       | next species (the S02f pick, shared)        | stays here |
+| `Shift+Tab` | previous species                            | stays here |
+| `o`         | open the overlay switcher                   | [S14](s14-overlay-switcher.md) |
+| `←→↑↓`      | scroll the map                              | stays here |
+| `Esc`       | close the overlay                           | [S01 World Map](s01-world-map.md) |
 | `Esc`   | close the overlay                               | [S01 World Map](s01-world-map.md) |
 
 ### S02d

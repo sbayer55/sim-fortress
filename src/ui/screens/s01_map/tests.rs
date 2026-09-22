@@ -363,3 +363,47 @@ fn long_title_is_cut_before_the_hint() {
     assert!(top.contains(&format!("{}", glyphs::DOT)), "the title is cut with a dot: {top}");
     assert!(!top.contains("greyfever"), "the tail of the title is gone: {top}");
 }
+
+#[test]
+fn s02j_scent_overlay_render() {
+    // C5 FR13: a fox-held cell in view, shaded on the fox ramp, with the
+    // holder listed in the sidebar.
+    let mut sim = Sim::new(7, Params::default());
+    let w = sim.world.width();
+    let fox = crate::sim::SpeciesId(3);
+    let holder = sim.creatures.living().find(|c| c.species == fox).map(|c| c.id).expect("a living fox");
+    let idx = (0..sim.world.cells.len())
+        .find(|&i| {
+            let t = sim.world.cells[i].terrain;
+            let (x, y) = (i % w, i.div_euclid(w));
+            !t.is_water() && t != Terrain::Rock && x < 110 && y < 40
+        })
+        .expect("a land cell in the viewport");
+    let (x, y) = (idx % w, idx.div_euclid(w));
+    *sim.world.mark_mut(fox, x, y).unwrap() = crate::sim::world::Mark { strength: 0.9, holder };
+    let color = sim.roster().color(fox);
+
+    let mut app = AppState::new(Params::default());
+    app.sim = Some(sim);
+    app.overlay = OverlayStack { base: Base::Scent, species: fox, ..OverlayStack::PLAIN };
+    let screen = WorldMap::new("Test".into());
+    let buf = draw(&screen, &app);
+    assert!(row_text(&buf, 0).contains("overlay: fox scent"), "{}", row_text(&buf, 0));
+    let (sx, sy) = (crate::cast!(x => u16) + 1, crate::cast!(y => u16) + 1);
+    let occupied = app.sim.as_ref().unwrap().creatures.living().any(|c| (c.x, c.y) == (x, y));
+    if !occupied {
+        assert_eq!(buf[(sx, sy)].fg, theme::species_ramp(color, 0.9), "the held cell is shaded on the species ramp");
+    }
+    let side: Vec<String> = (1..41).map(|y| row_text(&buf, y).chars().skip(112).collect::<String>()).collect();
+    assert!(side.iter().any(|l| l.contains("Fox scent")), "{side:?}");
+    assert!(side.iter().any(|l| l.contains("By region")));
+    assert!(side.iter().any(|l| l.contains("Holders")));
+    assert!(side.iter().any(|l| l.contains("1 cells")), "the holder's one cell is listed: {side:?}");
+    assert!(side.iter().any(|l| l.contains("Tab next species")));
+    assert_stack_section(&side, &["1. Scent     (base)"]);
+    // Tab cycles the species under the Scent base, as under Species.
+    let mut screen = screen;
+    screen.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE), &mut app);
+    assert_eq!(app.overlay.species, crate::sim::SpeciesId(4));
+    assert_eq!(app.overlay.base, Base::Scent);
+}

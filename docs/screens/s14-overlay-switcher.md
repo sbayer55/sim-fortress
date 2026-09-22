@@ -20,7 +20,7 @@ by `Tab` after the overlay is up. The switcher replaces all of that with a modal
 map that separates the overlays into two kinds:
 
 - a **base heatmap** — at most one, because it recolours every cell: vegetation, pressure,
-  moisture, species density, parasites, or none;
+  moisture, species density, parasites, scent, or none;
 - **marks** — any number, because each draws *on top of* whatever is beneath it: the sense
   ring, region tints and labels, the health recolouring of creatures, the disease
   recolouring of creatures.
@@ -68,7 +68,7 @@ The inner area is 82 × 19 and is split into a fixed left column and a right col
 ║  (•) Moisture                    │   w wolf                   9 alive            ║
 ║  ( ) Species     hare         ›  │   l lynx                   6 alive            ║
 ║  ( ) Parasites                   │                                               ║
-║                                  │ → steps into this list, ← back                ║
+║  ( ) Scent       hare         ›  │ → steps into this list, ← back                ║
 ║                                  │ Enter picks it and switches the layer on      ║
 ║                                  │ Space on the left toggles without picking     ║
 ║                                  │                                               ║
@@ -92,12 +92,12 @@ the **name** at column 6 padded to 11, the **sub-pick value** at column 18 cut t
 
 ### Left column — layer rows
 1. **Base heatmap tab** lists, in this order: `None`, `Vegetation`, `Pressure`,
-   `Moisture`, `Species`, `Parasites`. Exactly one is on. The mark is a radio, `(•)` on and
+   `Moisture`, `Species`, `Parasites`, `Scent`. Exactly one is on. The mark is a radio, `(•)` on and
    `( )` off.
 2. **Marks tab** lists, in this order: `Sense`, `Regions`, `Health`, `Disease`. Any number
    may be on. The mark is a [Checkbox](../components/checkbox.md) mark, `[x]` on and `[ ]`
    off.
-3. **Sub-pick value.** `Species`, `Sense` and `Disease` rows show their current choice in
+3. **Sub-pick value.** `Species`, `Scent`, `Sense` and `Disease` rows show their current choice in
    the value slot even when the layer is off, so the row says what would come on: the
    species' lowercase name; the predator's name; `All pathogens` or the pathogen's name.
    The value is the remembered choice (see State), never blank.
@@ -154,6 +154,7 @@ the **name** at column 6 padded to 11, the **sub-pick value** at column 18 cut t
 | Moisture   | base | soil moisture, open water saturated         | —        |
 | Species    | base | population density of one species           | species  |
 | Parasites  | base | parasite load heatmap                       | —        |
+| Scent      | base | one predator species' scent and holders     | species  |
 | Sense      | mark | one predator's sense-range rings            | predator |
 | Regions    | mark | named regions, tinted with labels           | —        |
 | Health     | mark | creatures by their weakest vital            | —        |
@@ -181,7 +182,7 @@ the **name** at column 6 padded to 11, the **sub-pick value** at column 18 cut t
     today.
 19. **Map title**: `‹world› · overlay: ‹stack›` where the stack is the active layers in
     composition order joined by ` + `, named as S02 names them: `vegetation`, `pressure`,
-    `moisture`, the species' lowercase plural, `parasites`, `sense range`, `regions`,
+    `moisture`, the species' lowercase plural, `parasites`, `‹species› scent`, `sense range`, `regions`,
     `health`, `disease` or `disease: ‹pathogen›`. When the title plus the scroll hint would
     not fit the top border, the title is cut with `…` so the hint survives.
 20. **Sidebar.** The **Overlays selector** section (S02 item 16) is removed from every

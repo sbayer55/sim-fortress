@@ -7,11 +7,61 @@ The roadmap's eight chunks are all shipped, so the next feature is genuinely ope
 - **Carcasses and scavenging as real objects.** Scavenge is already a goal, but a kill could leave a decaying carcass tile that foxes and voles compete over, and that fertilises the vegetation beneath it. Cheap to add, and it produces the kind of emergent scene players screenshot.
 - **Weather beyond drought.** Snow cover that hides grass in winter, floods that push rivers outward, wildfire that burns forest into sparse grass and regrows. Fire in particular is visually striking in CP437 and interacts with every layer already there.
 - **Speciation.** When two lineages of the same species drift far enough apart in genome distance, they stop interbreeding and the browser shows a split. The lineage screen and genome already exist, so this is mostly a distance check plus a naming scheme.
-- **Territory and scent marking.** Predators leave a decaying scent field that repels rivals and attracts mates. It naturally spaces predators out and gives you a new map overlay.
+- ~~**Territory and scent marking.**~~ *First slice shipped 2026-09-21 as C5 FR13 (plan in [territory-plan.md](territory-plan.md)): the per-species scent grid, scent avoidance and the intrusion response. The sweep did not show the spacing the sentence below promises; see the plan's Result section. The rest of the brainstorm is parked under [Territory follow-ups](#territory-follow-ups).* Predators leave a decaying scent field that repels rivals and attracts mates. It naturally spaces predators out and gives you a new map overlay.
 
 **C8 follow-ups: seeing sociality and packs.** The mechanics shipped, and S04a/S05e now count groups, but a pack still has no identity of its own. This idea does not change behaviour; it makes the behaviour that already exists legible and testable.
 
 - **Pack identity tracking.** A pack today is inferred fresh each tick from `hunt_target` and `kin_nearby`, so it has no name, no members and no continuity: two wolves on the same deer are a pack this tick and strangers the next, and the event log can only say "a pack of 4 wolves" when they happen to migrate together. A persistent pack record — members, a leader, a tag like `W#110`, and formed/dissolved events — would let the inspector show "pack: Ashfall, 4 members, leader Y10", let the lineage screen group by pack rather than by family, and let the map draw members together. It is also the stable group that the dens idea above and territory marking both need to attach to.
+
+### Territory follow-ups
+
+Parked on 2026-09-21 when the territory brainstorm was narrowed to the scent grid, scent
+avoidance and the intrusion response. Each of these builds on that slice; none is needed for it.
+
+*Other ways to represent a territory.* The scent grid is deliberately ownerless. These add
+ownership, in increasing order of weight:
+
+- **Home anchor per creature.** `Creature.home: Option<(x, y)>`, set at adulthood or first kill,
+  with a spring bias back toward it in `wander`/`patrol` and a radius scaled by size and local prey
+  density. No new world state; a territory is just the set of anchors. The natural place to hang
+  "distance from home" and "range quality" in S03.
+- **Explicit territory records.** `World.territories: Vec<Territory>` with owner (creature or
+  pack), centre, radius, species and claim day, in the style of `world.dens`. Claim, lose,
+  inherit and abandon become events. Group territories need *pack identity tracking* above first.
+- **Region tenure.** Cap residents per (species, region) and let `migration_daily` enforce it.
+  Crude and invisible beyond S02e, but a one-afternoon experiment on whether spacing predators
+  moves the C5 bands at all.
+
+*Behaviours that hang off a territory.*
+
+- **Boundary patrol.** Patrol today heads for the highest `prey_pressure` cell; bias it toward the
+  rim of the home range where foreign scent is strongest, which is literal patrolling and reads
+  differently on the map.
+- **Dispersal at adulthood.** Juveniles walk out of the natal range until scent is low. This is
+  what actually spaces predators out, creates a floater population, and gives wolves and lynxes
+  a reason to travel toward other territories (the C5 mate-encounter problem). Pairs with the
+  *Dispersal* trait below.
+- **Mating at boundaries.** Holders of adjacent ranges of opposite sex meet at the shared edge, or
+  a mated pair shares one anchor; a den could be the pair's anchor, tying this to burrows and dens.
+- **Range quality and abandonment.** Sum vegetation or prey pressure over the range each day; a
+  holder whose range quality collapses abandons it and falls into the migration path, so territory
+  and migration stop being separate systems.
+- **Landscape of fear for prey.** Let prey read predator scent as risk in their graze score, not
+  only live predators, so voles concentrate in the gaps between fox ranges. Prey home ranges
+  anchored on the existing dens give the same refuge from the other side.
+- **Kill-site defence.** A carcass inside the holder's range deters rival scavengers, so
+  scavenging becomes spatially structured.
+
+*Measuring it.* The raw mean nearest-neighbour distance (`nn_dist_<species>`) follows the
+population count, which is why the first slice could not show spacing. A **Clark–Evans
+index** (observed mean nearest-neighbour distance over the expected value for that many
+animals on that much land) would make territory's spacing effect comparable across seeds
+and years; one more `--summary` column and a line on S04a.
+
+*Seeing it.* The S02j scent overlay, the S03 territory rows and the `Contest` event shipped
+with the first slice. Still open: S03 rows for home, distance from home and range quality;
+event kinds for claimed, usurped and abandoned feeding S07 and the chronicle prompt; and
+`--summary` columns for mean range size and floater share per species.
 
 **Player-facing ideas, if you want a break from ecology:**
 
@@ -52,6 +102,7 @@ The current genome has thirteen slots: speed, size, sense, metabolism, aggressio
 
 - **Toxicity or spines,** a cost to the predator on a kill. Gives prey a defence that is not running or hiding.
 - **Coat colour** as a numeric value matched against the terrain palette under the creature. Camouflage becomes terrain specific, so a forest vole and a meadow vole drift apart, and you could tint the glyph with the value.
+- **Range fidelity** (nomad 0 … resident 1), once territory exists. Residents remember their water and dens so their needs cost less; nomads survive local dieback. Harsh presets and lush presets should select it in opposite directions. Note the UI budget: a fourteenth slot needs the S03/S04 genome redesign recorded in the diet-breadth notes, so until then territoriality is best derived from existing genes (aggression × (1 − sociality), range radius from size, mark reach from sense).
 
 If you want the most result for the least code, I'd take nocturnality, boldness and mutation rate first. All three slot into behaviour code that already exists, and each one can be watched drifting on the charts screen without any new UI.
 
