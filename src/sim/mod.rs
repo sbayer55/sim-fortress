@@ -27,7 +27,7 @@ pub use {geom::{cheb, dist}, time::{Season, Time}};
 pub use params::{Difficulty, GeneticsParams, Params, PredationParams, Preset, Rainfall, Roster, SpeciesParams, PRESETS};
 pub use {rng::Rng, spatial::SpatialIndex};
 pub use species::{Genome, Kind, SpeciesId, TRAIT_NAMES};
-pub use lineage::{Lineage, LineageNode, Tree, TreeItem};
+pub use lineage::{dynasties::Dynasties, Lineage, LineageNode, Tree, TreeItem};
 pub use stats::{census, group_census, Census, GroupCensus, Sample, Series, SpeciesStats};
 pub use world::{Cell, RegionRect, Terrain, World};
 

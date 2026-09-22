@@ -214,6 +214,7 @@ pub(crate) fn kill(
     world.carcasses.push((c.x, c.y));
     tallies.deaths[c.species.index()] += 1;
     lineage.record_death(c.id, crate::cast!(time.day_index() => u32), cause, if cause == Cause::Disease { outbreak } else { None }, c.infections_survived);
+    lineage.record_dynasty_death(c, roster, crate::cast!(time.day_index() => u32));
     lineage.record_life(crate::sim::lineage::LifeRecord::from_creature(c, cause, crate::cast!(time.day_index() => u32)));
     tallies.last_death[c.species.index()] = Some(crate::sim::creatures::ExtinctionRecord {
         species: c.species,
