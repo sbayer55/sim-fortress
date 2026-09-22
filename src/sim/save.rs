@@ -512,6 +512,11 @@ mod tests {
             // The checksum does not cover the lineage, so the life log (save 16) is compared directly.
             assert!(!sim.lineage.lives().is_empty(), "seed {seed}: no deaths logged in {N} ticks");
             assert_eq!(loaded.lineage.lives(), sim.lineage.lives(), "seed {seed} life log round-trip");
+            // The dynasties (save 18) and the mother-line root likewise.
+            assert!(!sim.lineage.dynasties().is_empty(), "seed {seed}: no predator lines in {N} ticks");
+            assert_eq!(loaded.lineage.dynasties(), sim.lineage.dynasties(), "seed {seed} dynasties round-trip");
+            let root_of = |s: &Sim| s.lineage.nodes().map(|n| (n.id, n.root)).collect::<Vec<_>>();
+            assert_eq!(root_of(&loaded), root_of(&sim), "seed {seed} roots round-trip");
             // `load(save(sim))` then N ticks equals `sim` then N ticks.
             for _ in 0..N {
                 sim.step();
