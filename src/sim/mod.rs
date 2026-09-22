@@ -9,6 +9,7 @@ pub mod ecology;
 pub mod events;
 pub mod genetics;
 pub mod geom;
+pub mod hunt_watch;
 pub mod lineage;
 pub mod params;
 pub mod predation;
