@@ -503,6 +503,7 @@ mod tests {
     fn round_trip_checksum_3_seeds() {
         const N: u64 = 10_000;
         let dir = tmpdir("roundtrip");
+        let mut any_hunts = false;
         for seed in 1..=3u64 {
             let mut sim = Sim::new(seed, Params::default());
             for _ in 0..N {
@@ -516,7 +517,9 @@ mod tests {
             // The dynasties (save 18) and the mother-line root likewise.
             assert!(!sim.lineage.dynasties().is_empty(), "seed {seed}: no predator lines in {N} ticks");
             assert_eq!(loaded.lineage.dynasties(), sim.lineage.dynasties(), "seed {seed} dynasties round-trip");
-            assert!(!sim.hunts.is_empty(), "seed {seed}: no hunts traced in {N} ticks");
+            // The hunt traces (save 19) follow the hunters' slots, so a valley whose
+            // predators have died out has none; one of the three seeds must.
+            any_hunts |= !sim.hunts.is_empty();
             assert_eq!(loaded.hunts, sim.hunts, "seed {seed} hunt traces round-trip");
             let root_of = |s: &Sim| s.lineage.nodes().map(|n| (n.id, n.root)).collect::<Vec<_>>();
             assert_eq!(root_of(&loaded), root_of(&sim), "seed {seed} roots round-trip");
@@ -527,6 +530,7 @@ mod tests {
             }
             assert_eq!(loaded.checksum(), sim.checksum(), "seed {seed} round-trip checksum");
         }
+        assert!(any_hunts, "no seed traced a hunt in {N} ticks");
     }
 
     /// ai-requirements R11: the chronicle table round-trips, and a world with

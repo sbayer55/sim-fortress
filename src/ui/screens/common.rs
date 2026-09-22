@@ -8,6 +8,26 @@ use ratatui::text::Span;
 use crate::widgets::Component;
 use crate::{glyphs, theme};
 
+/// Greedy word wrap to `w` cells: [Text](../../../docs/components/text.md) is one
+/// row and there is no wrapping component yet (S15, S17).
+pub fn wrap(s: &str, w: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut line = String::new();
+    for word in s.split(' ') {
+        if !line.is_empty() && line.chars().count() + 1 + word.chars().count() > w {
+            out.push(std::mem::take(&mut line));
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(word);
+    }
+    if !line.is_empty() {
+        out.push(line);
+    }
+    out
+}
+
 /// A one-cell vertical rule between columns, the full height of its area
 /// (S11 and S14).
 #[derive(Debug, Clone, Copy)]

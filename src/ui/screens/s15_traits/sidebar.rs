@@ -159,24 +159,7 @@ fn in_words(buf: &mut Buffer, inner: Rect, y: u16, v: &View<'_>) -> u16 {
     y
 }
 
-/// Greedy word wrap to `w` cells (Text is one row; there is no wrapping component yet).
-fn wrap(s: &str, w: usize) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut line = String::new();
-    for word in s.split(' ') {
-        if !line.is_empty() && line.chars().count() + 1 + word.chars().count() > w {
-            out.push(std::mem::take(&mut line));
-        }
-        if !line.is_empty() {
-            line.push(' ');
-        }
-        line.push_str(word);
-    }
-    if !line.is_empty() {
-        out.push(line);
-    }
-    out
-}
+use crate::ui::screens::common::wrap;
 
 /// The same cell's r on all days, crowded days and sparse days, as bars either side of zero.
 fn crowding(buf: &mut Buffer, inner: Rect, y: u16, v: &View<'_>) -> u16 {
