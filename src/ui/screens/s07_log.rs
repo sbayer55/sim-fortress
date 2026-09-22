@@ -364,6 +364,7 @@ impl EventLog {
                 winter: false,
                 cursor: Some((x, y)),
                 follow: None,
+                pins: Vec::new(),
                 origin: (ox, oy),
                 creatures: true,
                 selected_region: None,

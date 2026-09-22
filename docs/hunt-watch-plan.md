@@ -2,6 +2,15 @@
 
 *Validated against `main` at 9c38900 (the S16 Top Dynasties merge, PR #30) on 2026-09-22.*
 
+*Implemented 2026-09-22 (branch `claude/hunt-watch-s16`). Deviations from the text below:
+steps 9 to 11 landed as one commit (the façade declares its modules); the S17 render has
+its own ignored generator, `regenerate_screen_renders_hunts`, because the shared one hit the
+80-line limit; the S01 `[h]` hint replaces the blank row under Notable (the sidebar had no
+spare row); the save round-trip requires hunt traces in at least one of its three seeds,
+not every seed, since a valley whose predators died out has none; the odds parts line omits
+zero parts; a dead hunter's trace is pruned with its carcass slot rather than after four
+ticks, so a pinned dead row can be held.*
+
 **Goal.** Build [S17 Hunt Watch](screens/s17-hunt-watch.md): one row per predator that is
 hunting or has just failed, a hunter column, a ribbon that plots the chase tick by tick, a
 prey column, a details panel for the selected row, pins shared with S16's Watch strip, and a

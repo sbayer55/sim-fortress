@@ -12,6 +12,7 @@ use crate::ui::app::{AppState, ConfirmRequest, ConfirmYes};
 use crate::ui::config::{load_ui_from, save_ui_to};
 use crate::ui::screens::confirm::ConfirmModal;
 use crate::ui::screens::s00_title::Title;
+use crate::ui::screens::s17_hunts::HuntWatch;
 use crate::ui::screens::{Action, Screen};
 
 fn key(c: KeyCode) -> KeyEvent {
@@ -228,6 +229,43 @@ fn regenerate_screen_renders() {
         ),
     ];
     for (path, title, text) in files {
+        std::fs::write(path, text).unwrap_or_else(|e| panic!("write {path} ({title}): {e}"));
+    }
+}
+
+/// S17a and S17b: the year-1 world stepped on to the first chase in progress
+/// (cap thirty days), so the lanes have a hunt to show. Same command as above.
+#[test]
+#[ignore = "writes docs/screens/renders/S17*.txt; run explicitly to refresh the snapshots"]
+fn regenerate_screen_renders_hunts() {
+    use ratatui::backend::TestBackend;
+    use ratatui::layout::Rect;
+    use ratatui::Terminal;
+
+    let mut sim = Sim::new(7, Params::default());
+    for _ in 0..8640 {
+        sim.step();
+    }
+    let mut n = 0;
+    while !sim.hunts.traces().any(crate::sim::HuntTrace::is_open) && n < 720 {
+        sim.step();
+        n += 1;
+    }
+    let mut app = AppState::new(Params::default());
+    app.sim = Some(sim);
+    for (path, title, screen) in [
+        ("docs/screens/renders/S17a.txt", "S17a  Hunt Watch - lanes with details", HuntWatch::new()),
+        ("docs/screens/renders/S17b.txt", "S17b  Hunt Watch - lanes only", HuntWatch::lanes_only()),
+    ] {
+        let mut terminal = Terminal::new(TestBackend::new(155, 45)).unwrap();
+        terminal
+            .draw(|f| {
+                f.buffer_mut().set_stringn(0, 0, format!(" {title:<154}"), 155, ratatui::style::Style::default());
+                screen.render(&app, f, Rect::new(0, 1, 155, 44));
+            })
+            .unwrap();
+        let buf = terminal.backend().buffer();
+        let text: String = (0..45).map(|y| (0..155).map(|x| buf[(x, y)].symbol().to_string()).collect::<String>() + "\n").collect();
         std::fs::write(path, text).unwrap_or_else(|e| panic!("write {path} ({title}): {e}"));
     }
 }

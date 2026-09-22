@@ -11,6 +11,7 @@ use crate::sim::params::DayNightTint;
 use crate::sim::{Season, Sim, SpeciesId, World};
 use crate::ui::app::AppState;
 use crate::ui::screens::s14_switcher::OverlaySwitcher;
+use crate::ui::screens::s16_dynasties::Pin;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::{clock_status, EventKindStyle, SpeciesStyle};
 use crate::ui::viewport::{self, GUTTER_W, MAP_CHROME_ROWS, MIN_MAP_W, SIDEBAR_W};
@@ -303,6 +304,7 @@ fn map_options(sim: &Sim, app: &AppState, stack: &OverlayStack, origin: (usize, 
         winter,
         cursor: app.look_cursor,
         follow: app.follow,
+        pins: pinned_creatures(app),
         origin,
         creatures: true,
         selected_region: stack.regions.then_some(region_sel),
@@ -314,6 +316,14 @@ fn map_options(sim: &Sim, app: &AppState, stack: &OverlayStack, origin: (usize, 
             Disease::Off => None,
         },
     }
+}
+
+/// The animals pinned on S16 or S17, for the map's pin marks and the Notable row.
+fn pinned_creatures(app: &AppState) -> Vec<CreatureId> {
+    app.pins.iter().filter_map(|p| match p {
+        Pin::Member(id) => Some(*id),
+        Pin::Dynasty(_) => None,
+    }).collect()
 }
 
 /// The viewport origin (follow-centre or clamped scroll) and the map title,
@@ -377,7 +387,9 @@ impl WorldMap {
         rows.push(Box::new(Divider::new("Notable")));
         rows.push(Box::new(Text::new(" [k] look · [e] events · [g] charts").style(theme::dim_text())));
         rows.push(Box::new(Text::new(" [s] species · [t] traits · [d] dynasties").style(theme::dim_text())));
-        rows.push(Box::new(Spacer::rows(1)));
+        let pinned = pinned_creatures(app).len();
+        let hunts = if pinned > 0 { format!(" [h] hunt watch · {} {pinned} pinned", crate::glyphs::DIAMOND) } else { " [h] hunt watch".to_string() };
+        rows.push(Box::new(Text::new(hunts).style(theme::dim_text())));
         rows.push(Box::new(Divider::new("Overlay")));
         rows.push(Box::new(Text::new(" press o to open the switcher").style(theme::dim_text())));
         rows.push(Box::new(Text::new(" Tab flips between base and marks").style(theme::dim_text())));

@@ -113,6 +113,11 @@ impl HuntWatch {
         Self { selected: None, details: true, note: None, lanes: RefCell::default() }
     }
 
+    /// S17b: the details panel hidden, eight lanes.
+    pub fn lanes_only() -> Self {
+        Self { details: false, ..Self::new() }
+    }
+
     /// The selected hunter among the occupied lanes, else the first of them.
     fn selection(&self, occupied: &[CreatureId]) -> Option<CreatureId> {
         self.selected.filter(|id| occupied.contains(id)).or_else(|| occupied.first().copied())
@@ -233,8 +238,9 @@ impl Screen for HuntWatch {
             let dy = inner.y + crate::cast!(cap => u16) * LANE_H;
             details::draw(buf, inner, dy, key_y, sel.and_then(|id| views.iter().find(|v| v.id() == id)));
         }
-        put(buf, inner.x + HUNTER_X, key_y, 116, KEY_LINE, theme::dim_text());
         let hidden = occupied.len().saturating_sub(cap);
+        let key_w = if hidden > 0 { 116 } else { inner.width.saturating_sub(HUNTER_X + 1) };
+        put(buf, inner.x + HUNTER_X, key_y, key_w, KEY_LINE, theme::dim_text());
         if hidden > 0 {
             put(buf, inner.x + 119, key_y, 30, &format!("+{hidden} more: hide details"), fg(theme::WARN));
         }

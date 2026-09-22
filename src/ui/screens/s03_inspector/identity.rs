@@ -18,7 +18,7 @@ pub(super) const fn identity_title(c: &Creature) -> &'static str {
 }
 
 /// The identity column's rows.
-pub(super) fn rows(sim: &Sim, c: &Creature) -> Rows<'static> {
+pub(super) fn rows(sim: &Sim, c: &Creature, pinned: bool) -> Rows<'static> {
     let mut rows = Rows::new();
     let state = if !c.alive {
         sp("  DEAD", Style::default().fg(theme::BAD).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD))
@@ -31,6 +31,7 @@ pub(super) fn rows(sim: &Sim, c: &Creature) -> Rows<'static> {
         sp(format!(" {} ", if c.alive { sim.roster().adult_glyph(c.species) } else { glyphs::CARCASS }), sim.roster().style(c.species)),
         sp(c.name_str(sim.roster()).to_string(), theme::title()),
         sp(format!("  {}", c.tag(sim.roster())), theme::label()),
+        sp(if pinned { format!(" {}", glyphs::DIAMOND) } else { String::new() }, Style::default().fg(theme::ACCENT).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
         state,
     ]));
     let (sex_g, sex_name) = match c.sex {

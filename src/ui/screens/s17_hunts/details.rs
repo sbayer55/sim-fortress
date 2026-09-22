@@ -227,16 +227,9 @@ fn odds_column(buf: &mut Buffer, x: u16, y0: u16, bottom: u16, v: &HuntView<'_>)
             odds_bar(buf, x, y, W_C, &o);
             y += 1;
         }
-        let parts = format!(
-            "base {} · speed {} · aggression {} · prey size {} · pack {} · sick {} = {}%",
-            signed(o.base),
-            signed(o.speed),
-            signed(o.aggression),
-            signed(o.size),
-            signed(o.pack),
-            signed(o.sick),
-            pct(o.total)
-        );
+        let named = [("base", o.base), ("speed", o.speed), ("aggression", o.aggression), ("prey size", o.size), ("pack", o.pack), ("sick", o.sick)];
+        let shown: Vec<String> = named.iter().filter(|(_, v)| v.abs() >= 0.005).map(|(n, v)| format!("{n} {}", signed(*v))).collect();
+        let parts = format!("{} = {}%", shown.join(" · "), pct(o.total));
         let mut col = Column { buf, x, y, w: W_C, bottom };
         col.line(&parts, theme::dim_text());
         if let Some([gap, clock, legs]) = v.escape_routes() {

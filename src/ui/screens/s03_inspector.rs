@@ -174,7 +174,7 @@ impl Screen for Inspector {
             let i = pane.index();
             let inner = Panel::inner(rect);
             let rows = match pane {
-                Pane::Identity => identity::rows(sim, c),
+                Pane::Identity => identity::rows(sim, c, app.pins.contains(&crate::ui::screens::s16_dynasties::Pin::Member(self.id))),
                 Pane::Genome => genome::rows(sim, c),
                 Pane::Life => life::rows(sim, c, self.id, inner.width),
             };

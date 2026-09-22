@@ -2,8 +2,9 @@
 
 Back to the [screen overview](README.md).
 
-Status: **specified, not yet built**, from variant 7d ("hunter | ribbon | prey") of the
-throwaway `hunt-watch-mockup.html` mockup (Sept 2026, twelve variants over four rounds).
+Status: **built** (Sept 2026, `src/ui/screens/s17_hunts.rs`; renders [S17a](renders/S17a.txt),
+[S17b](renders/S17b.txt)), from variant 7d ("hunter | ribbon | prey") of the throwaway
+`hunt-watch-mockup.html` mockup (Sept 2026, twelve variants over four rounds).
 The implementation plan is [../hunt-watch-plan.md](../hunt-watch-plan.md). The ribbon is a
 new [Ribbon](../components/ribbon.md) component; the energy bars are Bare
 [Labeled Bars](../components/labeled-bar.md); the rest is [Panel](../components/panel.md),
@@ -11,7 +12,9 @@ new [Ribbon](../components/ribbon.md) component; the energy bars are Bare
 [Status Bar](../components/status-bar.md). Two deviations from the mockup are forced by the
 sim: a fifth hunt outcome, *dropped* (the hunter's replan switched goals mid-hunt, which the
 sim does not count as an attempt), and the "kin" line, which shows the prey's `kin_nearby`
-count rather than named fawns.
+count rather than named fawns. Two more from the build: the S01 Notable block had no spare
+row, so `[h] hunt watch` replaces the blank row under it rather than joining the second
+row; and the odds parts line omits parts that are zero (no pack, no sickness).
 
 ## Purpose
 The map shows a hunt as two letters converging. S17 shows the hunts as contests: for every
@@ -288,9 +291,9 @@ inspect  [Space] pause  [.] step  [-/=] speed  [Esc] back` with `<hh>:00 <☼|�
 
 **Effects on other screens:**
 - `h` is added to the global table next to `d`.
-- The S01 sidebar's Notable rows gain `[h] hunts`; the map draws pinned creatures in
-  `theme::ACCENT` the way it highlights the followed creature, and the Following/Notable
-  section lists `♦ pinned: <names>`.
+- The S01 sidebar's Notable block gains a third row, ` [h] hunt watch`, with ` · ♦ <n> pinned`
+  appended while animals are pinned; the map draws pinned creatures bold in `theme::ACCENT`
+  (the followed creature's highlight still wins when both apply).
 - S03's identity header shows ` ♦` after the tag when the creature is pinned.
 - The S11 Screens group gains `h  hunt watch`.
 - S16's Watch strip already lists `Pin::Member` pins, so a hunter pinned here appears there.
