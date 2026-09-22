@@ -104,3 +104,40 @@ fn year_rows_add_the_living_cap_at_forty_and_drop_extinct_lines_after_ten_years(
     d.close_year(58, 58 * 360, 360, &BTreeMap::new());
     assert!(d.is_empty(), "eleven years on, dropped");
 }
+
+#[test]
+fn the_first_day_of_a_year_closes_a_row_on_every_line() {
+    use crate::sim::params::Params;
+    let mut p = Params::default();
+    p.species.clear_initial_counts();
+    p.species.set_initial_count("fox", 4);
+    p.time.season_days = 2; // eight-day years
+    let mut sim = Sim::new(3, p);
+    assert_eq!(sim.lineage.dynasties().len(), 4, "four founders, four lines");
+    assert!(sim.lineage.dynasties().iter().all(|l| l.years.is_empty()));
+    let ticks_per_year = 8 * u64::from(sim.time.ticks_per_day);
+    for _ in 0..ticks_per_year + 8 {
+        sim.step();
+    }
+    assert_eq!(sim.time.year(), 2);
+    let living = living_totals(&sim);
+    let living_foxes = sim.creatures.living().count();
+    let d = sim.lineage.dynasties();
+    assert_eq!(d.iter().map(|l| l.members_living).sum::<u32>(), crate::cast!(living_foxes => u32), "incremental living count matches the store");
+    for line in d.iter() {
+        assert_eq!(line.years.len(), 1, "{}: one closed year", line.founder);
+        let row = line.years.first().copied().expect("row");
+        assert_eq!(row.year, 1);
+        // A founder alive at the close was at least eight days old; a line that
+        // starved out before the close carries the zero age of its dead.
+        let died_before_close = line.died_out_day.is_some_and(|d| d <= 8);
+        assert!(row.stats.age >= 8 || died_before_close, "{}: age {} at the close", line.founder, row.stats.age);
+        // Age is a day-level quantity, so for a line still alive the row closed
+        // today matches the living pass; a line that lost its last fox since
+        // the close keeps the age it had.
+        if let Some(live) = living.get(&line.root) {
+            assert_eq!(row.stats.age, live.age, "{}: oldest living member", line.founder);
+        }
+        assert!(row.stats.kills >= line.dead.kills);
+    }
+}

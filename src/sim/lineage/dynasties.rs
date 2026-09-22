@@ -15,7 +15,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::sim::creatures::{Creature, CreatureId};
 use crate::sim::params::Roster;
-use crate::sim::species::SpeciesId;
+use crate::sim::species::{Kind, SpeciesId};
+use crate::sim::Sim;
 
 #[cfg(test)]
 mod tests;
@@ -171,4 +172,29 @@ impl Dynasties {
         let keep_days = EXTINCT_KEEP_YEARS.saturating_mul(year_days);
         self.lines.retain(|_, d| d.died_out_day.is_none_or(|dd| day.saturating_sub(dd) <= keep_days));
     }
+}
+
+/// Cells held per creature for every predator species: one pass per block.
+fn held_cells(sim: &Sim) -> BTreeMap<CreatureId, u32> {
+    let hold_min = sim.params.territory.hold_min;
+    sim.roster().predator_ids().flat_map(|sp| sim.world.held_cells_by_holder(sp, hold_min)).collect()
+}
+
+/// Per root, the six stats of its living members: one pass over the living
+/// plus one scent pass per predator species. No RNG, no events.
+pub fn living_totals(sim: &Sim) -> BTreeMap<CreatureId, Tally> {
+    let held = held_cells(sim);
+    let day = sim.time.day_index();
+    let mut out: BTreeMap<CreatureId, Tally> = BTreeMap::new();
+    for c in sim.creatures.living() {
+        if sim.roster().kind(c.species) != Kind::Predator {
+            continue;
+        }
+        let Some(root) = sim.lineage.get(c.id).map(|n| n.root) else { continue };
+        let mut t = Tally::totals_of(c);
+        t.terr = held.get(&c.id).copied().unwrap_or(0);
+        t.age = c.age_days(day);
+        out.entry(root).or_default().add(t);
+    }
+    out
 }

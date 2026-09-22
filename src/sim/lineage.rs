@@ -142,6 +142,11 @@ impl Lineage {
         &self.dynasties
     }
 
+    /// Close a year of every dynasty (S16); see `Dynasties::close_year`.
+    pub fn close_year(&mut self, year: u32, day: u32, year_days: u32, living: &BTreeMap<CreatureId, dynasties::Tally>) {
+        self.dynasties.close_year(year, day, year_days, living);
+    }
+
     /// A predator died: fold its running totals into its dynasty (S16). Prey
     /// and creatures without a node are ignored.
     pub fn record_dynasty_death(&mut self, c: &Creature, roster: &Roster, day: u32) {

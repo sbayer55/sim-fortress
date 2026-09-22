@@ -323,9 +323,22 @@ impl Sim {
     fn run_midnight(&mut self, alerts: &mut Vec<Alert>) {
         let c = self.day_boundary_update();
         self.midnight_systems(&c, alerts);
+        // S16: the first day of a year closes the previous one for every dynasty,
+        // after the day's deaths and the scent decay have run.
+        if self.time.day_of_year() == 1 {
+            self.close_dynasty_year();
+        }
         // Refresh last: the midnight disease pass can still kill after the day
         // boundary, and the census must describe the set the tick ends with.
         self.refresh_group_stats();
+    }
+
+    /// Push a `YearRow` (dead + living totals) onto every dynasty (S16).
+    fn close_dynasty_year(&mut self) {
+        let living = lineage::dynasties::living_totals(self);
+        let year = self.time.year().saturating_sub(1);
+        let day = crate::cast!(self.time.day_index() => u32);
+        self.lineage.close_year(year, day, 4 * self.time.season_days, &living);
     }
 
     /// Midnight: age/behaviour day boundary, census and species statistics.
