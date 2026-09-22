@@ -141,3 +141,55 @@ fn the_first_day_of_a_year_closes_a_row_on_every_line() {
         assert!(row.stats.kills >= line.dead.kills);
     }
 }
+
+#[test]
+fn rank_partitions_the_living_predators_and_is_deterministic() {
+    use crate::sim::params::Params;
+    let mut p = Params::default();
+    p.species.clear_initial_counts();
+    p.species.set_initial_count("fox", 6);
+    p.species.set_initial_count("vole", 30);
+    let mut a = Sim::new(7, p.clone());
+    let mut b = Sim::new(7, p);
+    for _ in 0..300 {
+        a.step();
+        b.step();
+    }
+    let ra = rank(&a);
+    assert_eq!(ra, rank(&b), "same seed, same ranking");
+    let living_predators = a.creatures.living().filter(|c| a.roster().kind(c.species) == Kind::Predator).count();
+    assert_eq!(ra.iter().map(|d| d.members.len()).sum::<usize>(), living_predators, "every living predator is in exactly one line");
+    assert!(ra.windows(2).all(|w| matches!(w, [x, y] if x.totals.kills >= y.totals.kills)), "kills descending");
+    let lt = living_totals(&a);
+    for d in &ra {
+        let dead = a.lineage.dynasties().get(d.root).map(|l| l.dead).unwrap_or_default();
+        assert_eq!(d.totals, dead.plus(lt.get(&d.root).copied().unwrap_or_default()), "{}: totals are dead + living", d.founder);
+        assert_eq!(d.members_living, crate::cast!(d.members.len() => u32));
+        assert!(d.members.windows(2).all(|w| matches!(w, [x, y] if x.stats.kills >= y.stats.kills)));
+        match d.region {
+            Some(r) => assert!(d.members.iter().any(|m| m.region == r), "{}: the region holds a member", d.founder),
+            None => assert!(d.members.is_empty()),
+        }
+        assert_eq!(d.years.len(), 0, "no year has closed after 300 ticks");
+    }
+}
+
+#[test]
+fn plurality_region_prefers_the_lowest_index_on_ties() {
+    let member = |region: u8| DynastyMember {
+        id: CreatureId(1),
+        label: String::new(),
+        sex: Sex::Female,
+        generation: 1,
+        region,
+        stats: Tally::default(),
+        contests: (0, 0),
+        survival: Survival::default(),
+        mutations: Vec::new(),
+        kills_by_species: Vec::new(),
+    };
+    assert_eq!(plurality_region(&[]), None);
+    assert_eq!(plurality_region(&[member(3)]), Some(3));
+    assert_eq!(plurality_region(&[member(5), member(2), member(5)]), Some(5));
+    assert_eq!(plurality_region(&[member(6), member(2), member(6), member(2)]), Some(2));
+}

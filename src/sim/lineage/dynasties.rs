@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::sim::creatures::{Creature, CreatureId};
+use crate::sim::creatures::{Creature, CreatureId, Mutation, Sex};
 use crate::sim::params::Roster;
 use crate::sim::species::{Kind, SpeciesId};
 use crate::sim::Sim;
@@ -180,21 +180,147 @@ fn held_cells(sim: &Sim) -> BTreeMap<CreatureId, u32> {
     sim.roster().predator_ids().flat_map(|sp| sim.world.held_cells_by_holder(sp, hold_min)).collect()
 }
 
+/// A living predator's six stats plus its territory cells and age, and the
+/// root of its line.
+fn member_tally(sim: &Sim, held: &BTreeMap<CreatureId, u32>, c: &Creature) -> Option<(CreatureId, Tally)> {
+    if sim.roster().kind(c.species) != Kind::Predator {
+        return None;
+    }
+    let root = sim.lineage.get(c.id).map(|n| n.root)?;
+    let mut t = Tally::totals_of(c);
+    t.terr = held.get(&c.id).copied().unwrap_or(0);
+    t.age = c.age_days(sim.time.day_index());
+    Some((root, t))
+}
+
 /// Per root, the six stats of its living members: one pass over the living
 /// plus one scent pass per predator species. No RNG, no events.
 pub fn living_totals(sim: &Sim) -> BTreeMap<CreatureId, Tally> {
     let held = held_cells(sim);
-    let day = sim.time.day_index();
     let mut out: BTreeMap<CreatureId, Tally> = BTreeMap::new();
     for c in sim.creatures.living() {
-        if sim.roster().kind(c.species) != Kind::Predator {
-            continue;
+        if let Some((root, t)) = member_tally(sim, &held, c) {
+            out.entry(root).or_default().add(t);
         }
-        let Some(root) = sim.lineage.get(c.id).map(|n| n.root) else { continue };
-        let mut t = Tally::totals_of(c);
-        t.terr = held.get(&c.id).copied().unwrap_or(0);
-        t.age = c.age_days(day);
-        out.entry(root).or_default().add(t);
     }
+    out
+}
+
+/// The five survival counters of one animal, for the sidebar's Survival lines.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Survival {
+    pub infections: u8,
+    pub escapes: u32,
+    pub contests_won: u16,
+    pub droughts: u16,
+    pub winters: u16,
+}
+
+/// A living member of a dynasty, as the screen shows it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DynastyMember {
+    pub id: CreatureId,
+    /// `Name tag`.
+    pub label: String,
+    pub sex: Sex,
+    pub generation: u32,
+    /// Where it stands now.
+    pub region: u8,
+    /// Its own six stats: `age` in days, `terr` in cells.
+    pub stats: Tally,
+    pub contests: (u16, u16),
+    pub survival: Survival,
+    pub mutations: Vec<Mutation>,
+    /// Kills per prey species (roster order), for the sidebar's Kills by prey.
+    pub kills_by_species: Vec<u32>,
+}
+
+/// A dynasty with its living members, as the screen ranks it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DynastyView {
+    pub root: CreatureId,
+    pub species: SpeciesId,
+    pub founder: String,
+    pub founded_day: i32,
+    pub generations: u32,
+    pub members_ever: u32,
+    pub members_living: u32,
+    /// The region holding the plurality of living members (lowest index on
+    /// ties); `None` when nobody is alive.
+    pub region: Option<u8>,
+    /// Dead plus living, as of now.
+    pub totals: Tally,
+    /// Closed years, oldest first.
+    pub years: Vec<YearRow>,
+    /// Living members, kills descending then id.
+    pub members: Vec<DynastyMember>,
+}
+
+fn member_view(sim: &Sim, c: &Creature, stats: Tally) -> DynastyMember {
+    DynastyMember {
+        id: c.id,
+        label: c.label(sim.roster()),
+        sex: c.sex,
+        generation: c.generation,
+        region: crate::cast!(sim.world.region_index(c.x, c.y).min(7) => u8),
+        stats,
+        contests: (c.contests_won, c.contests_lost),
+        survival: Survival { infections: c.infections_survived, escapes: c.escaped, contests_won: c.contests_won, droughts: c.droughts_survived, winters: c.winters_survived },
+        mutations: c.mutations.clone(),
+        kills_by_species: c.kills_by_species.clone(),
+    }
+}
+
+/// The region most of `members` stand in, lowest index on ties.
+fn plurality_region(members: &[DynastyMember]) -> Option<u8> {
+    let mut counts = [0u32; 8];
+    for m in members {
+        if let Some(n) = counts.get_mut(usize::from(m.region)) {
+            *n += 1;
+        }
+    }
+    let best = counts.iter().copied().max().filter(|&n| n > 0)?;
+    counts.iter().position(|&n| n == best).map(|i| crate::cast!(i => u8))
+}
+
+/// Every dynasty with its living members, ranked for the screen.
+///
+/// Kills descending, then young, then the oldest founding, then root id. One
+/// pass over the living plus one scent pass per predator species; the screen
+/// caches it per day.
+pub fn rank(sim: &Sim) -> Vec<DynastyView> {
+    let held = held_cells(sim);
+    let mut members: BTreeMap<CreatureId, Vec<DynastyMember>> = BTreeMap::new();
+    for c in sim.creatures.living() {
+        if let Some((root, t)) = member_tally(sim, &held, c) {
+            members.entry(root).or_default().push(member_view(sim, c, t));
+        }
+    }
+    let mut out: Vec<DynastyView> = sim
+        .lineage
+        .dynasties()
+        .iter()
+        .map(|d| {
+            let mut ms = members.remove(&d.root).unwrap_or_default();
+            ms.sort_by(|a, b| b.stats.kills.cmp(&a.stats.kills).then(a.id.cmp(&b.id)));
+            let totals = ms.iter().fold(d.dead, |acc, m| acc.plus(m.stats));
+            DynastyView {
+                root: d.root,
+                species: d.species,
+                founder: d.founder.clone(),
+                founded_day: d.founded_day,
+                generations: d.generations(),
+                members_ever: d.members_ever,
+                members_living: crate::cast!(ms.len() => u32),
+                region: plurality_region(&ms),
+                totals,
+                years: d.years.clone(),
+                members: ms,
+            }
+        })
+        .collect();
+    out.sort_by(|a, b| {
+        b.totals.kills.cmp(&a.totals.kills).then(b.totals.young.cmp(&a.totals.young)).then(a.founded_day.cmp(&b.founded_day)).then(a.root.cmp(&b.root))
+    });
     out
 }
