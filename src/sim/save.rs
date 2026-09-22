@@ -38,8 +38,10 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// log (the deaths of the last 240 days with their outcome counters, for S15
 /// Traits & Fates); version 17 added the `[territory]` table, the world's
 /// per-species scent grid and the per-creature challenge and contest state
-/// (C5 FR13).
-pub const VERSION: u16 = 17;
+/// (C5 FR13); version 18 added the lineage's mother-line `root`, the persisted
+/// predator dynasties (S16 Top Dynasties) and the per-creature droughts and
+/// winters survived tallies.
+pub const VERSION: u16 = 18;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 

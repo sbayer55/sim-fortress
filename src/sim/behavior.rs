@@ -23,6 +23,7 @@ use threat::mark_threats;
 use hunt::{hunt_contacts, scavenge_contacts};
 pub use perception::{Kin, Perception};
 pub use migration::migration_daily;
+pub use survival::{droughts_eased, winter_survived};
 
 /// Advance every living creature one tick, in slot order (FR9), then run the
 /// C4/C5 passes: hunt contacts (kill/eat), territorial contests, scavenging,
@@ -332,10 +333,13 @@ mod death;
 mod threat;
 mod hunt;
 mod migration;
+mod survival;
 mod territory;
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests;
+#[cfg(test)]
+mod tests_survival;
 #[cfg(test)]
 #[allow(clippy::float_cmp)]
 mod tests_vitals;

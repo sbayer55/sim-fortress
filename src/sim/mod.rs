@@ -260,6 +260,10 @@ impl Sim {
         }
         if let Some(season) = self.time.advance() {
             self.push_season_event(season);
+            if season == Season::Spring {
+                // S16: every animal alive when spring returns came through the winter.
+                behavior::winter_survived(&mut self.creatures);
+            }
         }
         self.run_behavior();
         if self.time.hour() == 0 {
@@ -401,6 +405,7 @@ impl Sim {
     /// The midnight ecology update and its series sample.
     fn ecology_step(&mut self, c: &Census) {
         let t0 = std::time::Instant::now();
+        let drought_before = self.drought;
         ecology::daily_update(
             &mut self.world,
             &mut self.rng,
@@ -415,6 +420,8 @@ impl Sim {
             &self.deaths,
             &self.disease,
         );
+        // S16: a drought that eased today was survived by everyone standing in it.
+        behavior::droughts_eased(&mut self.creatures, &self.world, drought_before, self.drought);
         if self.profile_enabled {
             self.profile.ecology_ns += crate::cast!(t0.elapsed().as_nanos() => u64);
         }
