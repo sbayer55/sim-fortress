@@ -128,3 +128,94 @@ headless flags — that every later idea reuses. Neither touches `src/sim`.
 
 **Ranked by payoff per line of code:** species designer, chronicle, named places, post-mortem,
 bio, preset-from-prompt, field guide, thoughts, ask-the-world, scenarios, balance agent.
+
+---
+
+## Cause of death by species and lineage
+
+*Idea logged 2026-09-21. Not planned; the notes below are what the code already gives us
+and what a build would need.*
+
+**The question it answers.** Today you can find out *what* killed one creature (S03c, the
+S07b death detail) and *which trait* correlates with each cause across one species (S15).
+What nobody can see is the middle scale: for a species as a whole, and for each bloodline
+within it, what is killing them, and how that mix shifts season by season. "Why did the
+lynx die out?" is an S12 alert with no answer. "Are the Fenrir line dying of hunger while
+the Howl line gets eaten?" is a question the lineage store could answer and no screen
+asks. A cause-of-death breakdown is the piece that turns the death counts on S04a into an
+explanation.
+
+**What is already recorded.** No new simulation state is needed for the species half.
+
+- `Cause` (`src/sim/creatures.rs`) has six variants: Starved, Thirst, Age, Injury,
+  Predation, Disease. `Death` on the creature carries the cause, the day, the killer's id
+  and the chase length.
+- The life log (`src/sim/lineage/lifelog.rs`) keeps every death of the last 240 days per
+  species with cause, genome, born day and the outcome counters, capped at 50 000 records,
+  and is saved with the world (format 16).
+- Every `LineageNode` carries `cause: Option<Cause>`, `outbreak` and `died_day`, and its
+  `parents` link, so any node can be walked up to its oldest surviving ancestor.
+- The event ring buffer has `DeathStarved`, `DeathThirst`, `DeathPredation`, `DeathAge`
+  and `DeathDisease` events, each with a species, for the seasonal series.
+
+**Two gaps worth closing first.**
+
+1. **A death record does not remember the killer's species.** `Death.killer` is a
+   `CreatureId` and the life log drops it entirely, so "predation" cannot be split into
+   "by foxes" and "by lynxes" once the killer's slot is reused. Add `killer_species:
+   Option<SpeciesId>` to `LifeRecord` (and to the lineage node). One field, snapshot at
+   `behavior::kill`, save-format bump.
+2. **A creature has no lineage id.** A lineage is only reconstructable by walking
+   `parents` to the root, and `Lineage::prune` drops old generations, so two descendants
+   of the same founder stop sharing a root once it is pruned. Give every founder a
+   `LineageId` (its own `CreatureId`) and inherit the mother's at birth, stored on the
+   creature, the lineage node and the life record. Cheap, deterministic, and the same key
+   the speciation and pack-identity ideas above want.
+
+**Species view: extend S04b or S15.** The species detail already shows births, deaths and
+disease deaths; the natural home for the breakdown is a section on S04b, or the
+`Population` bar at the bottom of the S15 sidebar promoted to a panel. Proposed content
+for one species:
+
+- A 240-day cause bar and table: cause, count, share, and the mean age at death, in the
+  same order as S15's outcome columns so the two screens read alike.
+- Predation split by killer species (needs gap 1): `preyed  63%  by foxes 51%, by lynxes
+  12%`.
+- A seasonal strip, one column per season over the last two years, with the dominant
+  cause's letter and share, built from the death events (which outlive the 240-day window).
+  Winter starvation against summer predation is the pattern this should make obvious.
+- Age at death by cause as a small histogram, so "old age" and "starved young" separate.
+
+**Lineage view: a column on S08.** The S08 "By generation" table (`gen wolves alive sick
+mutations members`) gains a `died of` cell per generation: the commonest cause's letter and
+share, using the node's `cause`. The focused-creature sidebar gains a `Line` section:
+deaths of this lineage over the window by cause, against the species mean, so a bloodline
+that dies differently from its species stands out. Rows whose lineage share of one cause
+is well above the species share get the cause letter in the `BAD` colour in the tree.
+Grouping the whole species by lineage id (gap 2) also enables an S04b sub-table, one row
+per lineage still alive: members, founder, dominant cause, and the one trait that differs
+most from the species mean, which is the link back to S15.
+
+**Headless.** A `--causes` column set in `summary.csv`: per species, deaths by cause per
+year, plus predation by killer species. This is the number the C5 predator balance notes
+keep wanting ("do wolves die of hunger or of not finding a mate?" is answerable only with
+a cause breakdown per species per year), and it makes the AI post-mortem idea above far
+better grounded.
+
+**Determinism and cost.** Reading side only, apart from the two snapshot fields; no RNG,
+no events, no change to the checksum. The per-species aggregation is one pass over at
+most 50 000 life records, computed on screen entry and cached per day like S15's matrix.
+Per-lineage grouping is a `BTreeMap<LineageId, [u32; 6]>` over the same pass.
+
+**Open questions.**
+
+- `Injury` is real but invisible: `behavior/death.rs` assigns it when hp reaches zero with
+  no hunger, thirst or parasite cause, yet `kill` emits no event for it (the comment still
+  says "no event until C5"). The life log and lineage node do record it, so the 240-day
+  views will show it, but the seasonal strip built from events will not. Add a
+  `DeathInjury` event, or fold it into the strip from the log, before shipping.
+- Window: 240 days matches S15 but hides slow trends. The seasonal strip from the event
+  buffer covers longer spans; decide whether the lineage view needs the same.
+- Whether a lineage id should follow the mother only (simple, deterministic, one line per
+  creature) or record both parents' lines (truer, but a creature then belongs to two
+  lineages and every table needs a rule for it). Mother-only is the recommendation.
