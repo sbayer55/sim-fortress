@@ -120,8 +120,13 @@ pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
     let living = source.living_creatures();
     let stack = &opts.stack;
 
-    // Species-density field (S02f), computed once per frame from the living set.
-    let density = (stack.base == Base::Species).then(|| (stack.species, opts.species_color, density_field(world, &living, stack.species)));
+    // Species-density field (S02f), computed once per frame from the living
+    // set, or the species' scent grid (S02j): both paint the species ramp.
+    let density = match stack.base {
+        Base::Species => Some((stack.species, opts.species_color, density_field(world, &living, stack.species))),
+        Base::Scent => Some((stack.species, opts.species_color, overlay::scent_field(world, stack.species))),
+        _ => None,
+    };
 
     draw_terrain(buf, area, world, opts, density.as_ref());
 
@@ -187,8 +192,8 @@ fn base_cell(world: &World, wx: usize, wy: usize, opts: &MapOptions, density: Op
         (None, base @ (Base::Vegetation | Base::Pressure | Base::Moisture | Base::Parasites)) => overlay_cell(cell, base).unwrap_or_else(|| world_cell(world, wx, wy, opts.winter)),
         // Health and Disease over plain terrain draw the terrain without the
         // waterfall mark, as the single overlays did.
-        (None, Base::None | Base::Species) if opts.stack.health || opts.stack.disease.is_on() => terrain_cell(cell, opts.winter),
-        (None, Base::None | Base::Species) => world_cell(world, wx, wy, opts.winter),
+        (None, Base::None | Base::Species | Base::Scent) if opts.stack.health || opts.stack.disease.is_on() => terrain_cell(cell, opts.winter),
+        (None, Base::None | Base::Species | Base::Scent) => world_cell(world, wx, wy, opts.winter),
     }
 }
 

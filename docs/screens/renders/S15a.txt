@@ -1,41 +1,41 @@
  S15a  Traits & Fates - trait by outcome matrix                                                                                                            
-╔ Traits and outcomes: Hares ════════════════════════════════════════════ 855 lives in 240 days, 121 alive now ╗╔ Selected ═══════════════════════════════╗
+╔ Traits and outcomes: Hares ════════════════════════════════════════════ 832 lives in 240 days, 119 alive now ╗╔ Selected ═══════════════════════════════╗
 ║ V vole H hare D deer F fox W wolf L lynx           [1-6] species    all days   crowded   sparse     [c] days ║║─ Cell ──────────────────────────────────║
 ║                               ─ what they achieved ── ─ how they died: share of deaths ──────────────        ║║ Speed against lifespan                  ║
-║ trait       living      mean   Life    Young  Escape  Starve  Thirst  OldAge  Preyed  Disease Injury         ║║ r -.00  no link                         ║
-║»Speed            █      .81  ▐ -.00  ▌ +.03    +.08    +.06    +.05    +.01    -.11    +.00    none          ║║ from 734 deaths                         ║
-║                ▄▄███▄        ▐       ▌                                                                       ║║                                         ║
-║ Size           █▄       .25    -.10    +.11    +.01    +.12    +.02    -.08    -.10    -.04    none          ║║─ By trait third ────────────────────────║
-║              █▄████▄                                     ↑                                                   ║║ low  <.78      [██████████████]   183d  ║
-║ Sense          ██ ▄     .67    +.01    +.00    -.04    -.01    +.05    +.02    -.04    +.09    none          ║║ mid  .78-.83   [█████████████░]   165d  ║
-║               ██████                                                                                         ║║ high >.83      [█████████████░]   176d  ║
-║ Metabolism       █      .60    -.03    +.05    +.03    +.10    +.08    -.03    -.14    +.01    none          ║║                                         ║
-║               ▄▄██▄█▄                                                            ↓                           ║║─ In words ──────────────────────────────║
-║ Aggression  █▄█ █       .09    -.00    +.08    -.06    +.05    -.04    +.02    -.05    -.02    none          ║║ Hares in the top third for speed lived  ║
-║             █████▄█▄▄▄                                                                                       ║║ 176d on average; the bottom third lived ║
-║ Camouflage      ▄█ ▄    .56    +.01    +.00    -.03    -.00    +.07    +.01    -.04    -.04    none          ║║ 183d.                                   ║
-║                █████▄▄                                                                                       ║║                                         ║
-║ Fertility       ▄█      .76    -.03    +.02    -.01    +.03    -.04    -.03    -.01    +.09    none          ║║─ Crowding ──────────────────────────────║
-║             ▄▄██████▄▄                                                                                       ║║ all days             │           -.00   ║
-║ Longevity       ███     .35    +.00    +.03    +.05    +.09    +.02    -.09    -.06    +.02    none          ║║ crowded              │           -.01   ║
-║              ▄█████▄                                                                                         ║║ sparse               │█          +.04   ║
-║ Resistance      ▄█      .37    +.01    +.02    +.01    +.06    -.08    -.02    -.02    -.03    none          ║║             less ◄   ► more             ║
-║               ▄█████▄                                                                                        ║║                                         ║
-║ Sociality     ▄█▄ ▄█    .25    +.03    -.02    -.00    +.02    +.06    -.03    -.04    -.04    none          ║║─ Strongest links, hares ────────────────║
-║             ▄████▄███▄                                                                                       ║║ Metabolism   ↓ predation          -.14  ║
-║ Maturity        ▄█▄█    .50    -.01    -.01    -.01    -.04    +.00    -.02    +.06    +.05    none          ║║ Size         ↑ starvation         +.12  ║
-║               ▄█████▄                                                                                        ║║ Size         ↑ young per year     +.11  ║
-║ Mutability    ▄ █▄█     .51    -.00    -.04    -.05    -.03    +.00    +.00    +.03    -.04    none          ║║ Speed        ↓ predation          -.11  ║
-║             ▄▄█▄████ ▄                                                                                       ║║ Metabolism   ↑ starvation         +.10  ║
-║ Diet breadth   ▄█▄      .51    +.02    -.10    +.03    -.05    +.03    +.04    +.01    +.03    none          ║║ Size         ↓ lifespan           -.10  ║
-║              ▄▄███▄▄                                                                                         ║║                                         ║
+║ trait       living      mean   Life    Young  Escape  Starve  Thirst  OldAge  Preyed  Disease Injury         ║║ r -.02  no link                         ║
+║»Speed            ██     .82  ▐ -.02  ▌ +.01    +.07    +.11    +.00    +.02    -.14    +.04    none          ║║ from 713 deaths                         ║
+║                █████         ▐       ▌                                           ↓                           ║║                                         ║
+║ Size         ▄ █▄█▄     .24    +.01    +.04    +.05    +.04    +.03    -.04    -.03    -.03    none          ║║─ By trait third ────────────────────────║
+║              ██████                                                                                          ║║ low  <.78      [██████████████]   178d  ║
+║ Sense          ▄▄█▄     .67    -.00    -.04    -.02    +.00    -.00    -.04    +.02    +.00    none          ║║ mid  .78-.84   [█████████████░]   169d  ║
+║             ▄▄▄████▄                                                                                         ║║ high >.84      [██████████████]   176d  ║
+║ Metabolism     █▄▄      .60    -.05    +.00    +.04    +.12    +.02    -.09    -.09    +.00    none          ║║                                         ║
+║             ▄▄█████▄                                     ↑                                                   ║║─ In words ──────────────────────────────║
+║ Aggression  ▄ ██▄       .10    +.04    -.01    -.04    -.07    -.01    +.04    +.07    -.00    none          ║║ Hares in the top third for speed lived  ║
+║             ██████▄▄                                                                                         ║║ 176d on average; the bottom third lived ║
+║ Camouflage      ▄█▄     .54    +.01    +.06    -.00    +.06    -.03    +.01    -.06    -.01    none          ║║ 178d.                                   ║
+║              ▄▄██████▄                                                                                       ║║                                         ║
+║ Fertility      ▄██▄     .75    -.03    +.08    +.04    +.04    +.05    -.01    -.08    +.02    none          ║║─ Crowding ──────────────────────────────║
+║              ▄██████▄                                                                                        ║║ all days             │           -.02   ║
+║ Longevity      ▄█▄      .35    -.04    +.06    -.07    +.03    -.04    -.08    +.03    -.03    none          ║║ crowded              │           -.02   ║
+║                ████▄                                                                                         ║║ sparse               │           -.00   ║
+║ Resistance     ███      .35    +.06    +.01    +.03    +.02    -.04    +.04    -.01    -.10    none          ║║             less ◄   ► more             ║
+║              ▄▄████▄                                                                                         ║║                                         ║
+║ Sociality     ▄█        .26    -.01    -.07    +.03    -.03    +.11    -.06    +.01    +.02    none          ║║─ Strongest links, hares ────────────────║
+║             ▄▄████████                                           ↑                                           ║║ Speed        ↓ predation          -.14  ║
+║ Maturity        ██▄     .50    +.03    -.06    +.02    -.06    +.03    +.03    +.05    -.06    none          ║║ Metabolism   ↑ starvation         +.12  ║
+║               ▄████▄                                                                                         ║║ Sociality    ↑ thirst             +.11  ║
+║ Mutability     ████▄    .49    -.02    +.02    +.04    -.05    +.06    +.02    +.02    -.03    none          ║║ Speed        ↑ starvation         +.11  ║
+║               ▄█████▄▄                                                                                       ║║ Resistance   ↓ disease            -.10  ║
+║ Diet breadth    ▄██     .51    -.01    -.00    -.00    -.04    +.02    +.02    +.03    -.03    none          ║║ Metabolism   ↓ predation          -.09  ║
+║               █████ ▄                                                                                        ║║                                         ║
 ║─ Speed across ages, living hares ────────────────────────────────────────────────────────────────────────────║║─ Population ────────────────────────────║
-║ age         0d                  120d                240d                360d                480d             ║║ alive now 121    died 734               ║
-║ living now                                ████                                                               ║║ ███████████████████████████████████████ ║
-║                                           ████ ▄▄▄▄ ▄▄▄▄ ████      ▄▄▄▄                                      ║║                                         ║
-║ mean Spd     ·    ·    ·    ·    ·   .82  .80  .80  .81  .81   ·   .81   ·    ·    ·    ·    ·    ·          ║║                                         ║
-║ died of     s86  s82  s60  s90  s85  s54  s90  s72  s56  s81  s57  s42  s70  s57  a56  a57  a75  a80         ║║                                         ║
-║ Youngest fifth of the living average .81, oldest fifth .81: within noise, no sign of selection with age.     ║║                                         ║
+║ age         0d                  120d                240d                360d                480d             ║║ alive now 119    died 713               ║
+║ living now                                ████           ▄▄▄▄                                                ║║ ███████████████████████████████████████ ║
+║                                      ▄▄▄▄ ████ ▄▄▄▄ ▄▄▄▄ ████      ▄▄▄▄                                      ║║                                         ║
+║ mean Spd     ·    ·    ·    ·    ·   .83  .81  .79  .82  .83   ·   .79   ·   .83   ·    ·    ·    ·          ║║                                         ║
+║ died of     s74  s82  s69  s82  s73  s48  s84  s57  s52  s68  s60  p58  s50  s66  a55  s50  a66  a84         ║║                                         ║
+║ Youngest fifth of the living average .80, oldest fifth .81: within noise, no sign of selection with age.     ║║                                         ║
 ║─ Key ────────────────────────────────────────────────────────────────────────────────────────────────────────║║                                         ║
 ║              hurts ◄ ► helps   cell = r of trait and outcome   n/a = under 30 lives   none = all the same    ║║                                         ║
 ║ ↑ more of the outcome as the trait rises, ↓ less    crowded / sparse = population above / below its median   ║║                                         ║

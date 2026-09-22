@@ -64,7 +64,12 @@ fn checksum_is_fnv_stable() {
     // Re-baselined for Diet breadth: the genome grew to thirteen traits,
     // so every founder draws one more jitter gaussian, and grazing now
     // depends on terrain, so every later draw shifts.
-    assert_eq!(a.checksum(), 0xf883_9b51_57e3_c3f8);
+    // Re-baselined for territory (C5 FR13): solitary predators discount
+    // patrol and hunt targets on a rival's scent and roll contests on the
+    // creature stream, so predator trajectories and every later draw move.
+    // `behavior::tests_territory::neutral_territory_reproduces_the_old_checksum`
+    // still pins the previous value under the neutral overlay.
+    assert_eq!(a.checksum(), 0xf9ea_eb02_3e27_c085);
 }
 
 #[test]

@@ -103,7 +103,8 @@ impl ChipFilter {
             EventKind::Extinction => self.kinds[4],
             EventKind::Drought | EventKind::DroughtEased => self.kinds[5],
             EventKind::Outbreak | EventKind::Spillover | EventKind::Epidemic | EventKind::EpidemicOver | EventKind::Recovery => self.kinds[6],
-            EventKind::Wary => self.kinds[7],
+            // C5 FR13: contests share the avoidance chip with the wary tier.
+            EventKind::Wary | EventKind::Contest => self.kinds[7],
             EventKind::Season | EventKind::Note => false,
         }
     }

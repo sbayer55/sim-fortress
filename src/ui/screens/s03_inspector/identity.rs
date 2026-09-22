@@ -203,6 +203,12 @@ fn goal_line(sim: &Sim, c: &Creature) -> String {
             Some((px, py, _)) => format!(" {} — a predator {:.0} cells away", c.goal.label(false), crate::sim::dist(c.x, c.y, px, py)),
             None => format!(" {}", c.goal.label(false)),
         },
+        // C5 FR13: a resident walking at an intruder, or an evicted predator.
+        Goal::Challenge => match c.challenge_target {
+            Some(t) => format!(" {} — driving off {}", c.goal.label(false), kin_name(sim, t)),
+            None => format!(" {}", c.goal.label(false)),
+        },
+        Goal::Flee if sim.roster().kind(c.species) == Kind::Predator => format!(" {} — driven off a rival's ground", c.goal.label(false)),
         _ => {
             if !c.adult && c.mother.is_some_and(|m| sim.creatures.get(m).is_some_and(|m| m.alive)) && c.age_days(sim.time.day_index()) < sim.params.genetics.follow_mother_days {
                 " wandering near its mother".to_string()

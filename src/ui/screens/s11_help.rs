@@ -110,7 +110,7 @@ const TERRAIN_NOTES: [&str; 14] = [
     "regrowing this season",
 ];
 
-const EVENTS: [(EventKind, &str); 11] = [
+const EVENTS: [(EventKind, &str); 12] = [
     (EventKind::Birth, "birth / litter"),
     (EventKind::DeathPredation, "death by predation"),
     (EventKind::DeathStarved, "death by starvation / thirst"),
@@ -122,6 +122,7 @@ const EVENTS: [(EventKind, &str); 11] = [
     (EventKind::Outbreak, "outbreak / epidemic / death by disease"),
     (EventKind::Recovery, "recovery (now immune)"),
     (EventKind::Wary, "prey giving predators room"),
+    (EventKind::Contest, "territorial contest between predators"),
 ];
 
 const MARKS: [(char, Color, &str); 7] = [

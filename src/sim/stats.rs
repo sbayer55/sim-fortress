@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 pub mod groups;
 pub mod outcomes;
 pub use crate::sim::lineage::{Lineage, LineageNode, Tree, TreeItem};
-pub use groups::{group_census, GroupCensus, GROUP_HIST};
+pub use groups::{group_census, nearest_neighbour_mean, GroupCensus, GROUP_HIST};
 
 /// Trait histogram: 8 traits × 12 buckets.
 pub type Hist = [[u16; 12]; Genome::LEN];

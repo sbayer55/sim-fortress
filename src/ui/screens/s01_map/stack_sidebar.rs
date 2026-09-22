@@ -30,7 +30,7 @@ pub fn stack_section(stack: &OverlayStack) -> Rows<'static> {
 /// without one.
 pub fn sub_pick_text(layer: Layer, stack: &OverlayStack, sim: &Sim) -> String {
     match layer {
-        Layer::Base(Base::Species) => sim.roster().name(stack.species).to_string(),
+        Layer::Base(Base::Species | Base::Scent) => sim.roster().name(stack.species).to_string(),
         Layer::Sense => stack.sense_subject.and_then(|id| sim.creatures.get(id)).map_or_else(|| "no predators".to_string(), |c| c.name_str(sim.roster()).to_string()),
         Layer::Disease => match stack.disease {
             Disease::On(Some(p)) => sim.disease.name(p).to_string(),
@@ -107,6 +107,10 @@ pub fn layer_legend(layer: Layer, stack: &OverlayStack, sim: &Sim) -> Rows<'stat
             ramp_rows(&move |t| theme::species_ramp(color, t))
         }
         Layer::Base(Base::Parasites) => ramp_rows(&theme::parasite),
+        Layer::Base(Base::Scent) => {
+            let color = sim.roster().color(stack.species);
+            ramp_rows(&move |t| theme::species_ramp(color, t))
+        }
         Layer::Sense => vec![Box::new(Text::new(format!(" {} ring edge   tinted cells are in range", glyphs::RING)).style(theme::dim_text()))],
         Layer::Regions => region_legend(sim),
         Layer::Health => health_legend(),

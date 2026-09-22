@@ -198,3 +198,46 @@ fn performance_budget() {
     eprintln!("ten years headless: {elapsed:?}");
     assert!(elapsed.as_secs_f64() < 300.0, "10 years took {elapsed:?}, budget 300 s");
 }
+
+/// C5 FR13: territorial contests happen, are logged with `winner:loser:region`,
+/// and never kill (hp is clamped at `hp_floor`, so no `Injury` death appears).
+#[test]
+fn contests_are_non_lethal_and_logged() {
+    let sim = run(42, Params::default(), 360 * 24); // one year
+    let contests: Vec<_> = sim.events.iter().filter(|e| e.kind == EventKind::Contest).collect();
+    assert!(!contests.is_empty(), "a year of foxes on one map should produce contests");
+    for e in &contests {
+        let parts: Vec<&str> = e.detail.split(':').collect();
+        assert_eq!(parts.len(), 3, "detail is winner:loser:region: {}", e.detail);
+        let winner: u32 = parts[0].parse().expect("winner id");
+        let loser: u32 = parts[1].parse().expect("loser id");
+        assert_ne!(winner, loser);
+        assert_eq!(e.subject.map(|s| s.0), Some(winner), "the subject is the winner");
+        assert!(e.text.contains("drove"), "{}", e.text);
+    }
+    let fought: u32 = sim.roster().ids().map(|id| sim.deaths.contests[id.index()]).sum();
+    assert!(fought > 0, "the cumulative tally follows the events");
+    assert!(sim.events.iter().all(|e| e.kind != EventKind::Contest || e.species.is_some()));
+    // Non-lethal: no creature ever died of injury, in the ring or the life log.
+    assert!(sim.lineage.lives().records().all(|l| l.cause != sim_fortress::sim::Cause::Injury), "a contest injury killed someone");
+}
+
+/// C5 FR13: a pinned measurement, not a general claim. On seed 42 after one
+/// year adult foxes sit 4.2 cells from their nearest neighbour with scent on
+/// against 2.9 under the neutral overlay. The six-seed sweep recorded in the
+/// C5 doc does *not* generalise this (raw nearest-neighbour distance follows
+/// the fox count), so this test guards the mechanic on one seed and the
+/// neutral overlay's silence, nothing more.
+#[test]
+fn territory_spaces_foxes_on_seed_42() {
+    let with = run(42, Params::default(), 360 * 24);
+    let mut off = Params::default();
+    off.territory.neutral();
+    let without = run(42, off, 360 * 24);
+    let fox = SpeciesId(3);
+    let (a, b) = (with.group_stats.nn_mean[fox.index()], without.group_stats.nn_mean[fox.index()]);
+    eprintln!("fox adult nearest-neighbour distance: territory {a:.2}, neutral {b:.2}");
+    assert!(a > 0.0 && b > 0.0, "both runs keep adult foxes alive at year 1");
+    assert!(a > b * 1.1, "territory should space foxes out: {a:.2} vs {b:.2}");
+    assert!(without.events.iter().all(|e| e.kind != EventKind::Contest), "the neutral overlay never rolls a contest");
+}

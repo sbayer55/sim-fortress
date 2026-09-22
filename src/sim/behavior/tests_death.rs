@@ -6,7 +6,7 @@ use crate::sim::creatures::{
 use crate::sim::events::{EventRing};
 use crate::sim::species::testing::*;
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{CreaturesParams, GeneticsParams  };
+use crate::sim::params::{CreaturesParams, GeneticsParams, TerritoryParams};
 use crate::sim::rng::Rng;
 use crate::sim::disease::{DiseaseState};
 use crate::sim::params::DiseaseParams;
@@ -50,7 +50,7 @@ fn age_death_at_day_boundary() {
     let mut events = EventRing::new(100);
     let mut tallies = DeathTallies::new(N_SPECIES);
     let t = day_time(0);
-    day_boundary(&mut store, &mut w, &mut events, &t, roster(), &CreaturesParams::default(), &GeneticsParams::default(), &DiseaseParams::default(), &mut tallies, &mut Lineage::new(), &mut DiseaseState::new(&DiseaseParams::default(), roster()), &mut Rng::new(1));
+    day_boundary(&mut store, &mut w, &mut events, &t, roster(), &CreaturesParams::default(), &GeneticsParams::default(), &DiseaseParams::default(), &TerritoryParams::default(), &mut tallies, &mut Lineage::new(), &mut DiseaseState::new(&DiseaseParams::default(), roster()), &mut Rng::new(1));
     let c = store.get(id).unwrap();
     assert!(!c.alive);
     assert_eq!(c.death.unwrap().cause, Cause::Age);
@@ -70,7 +70,7 @@ fn carcass_decay_frees_slot() {
     let id = store.insert(c);
     let mut events = EventRing::new(100);
     let mut tallies = DeathTallies::new(N_SPECIES);
-    day_boundary(&mut store, &mut w, &mut events, &day_time(0), roster(), &CreaturesParams::default(), &GeneticsParams::default(), &DiseaseParams::default(), &mut tallies, &mut Lineage::new(), &mut DiseaseState::new(&DiseaseParams::default(), roster()), &mut Rng::new(1));
+    day_boundary(&mut store, &mut w, &mut events, &day_time(0), roster(), &CreaturesParams::default(), &GeneticsParams::default(), &DiseaseParams::default(), &TerritoryParams::default(), &mut tallies, &mut Lineage::new(), &mut DiseaseState::new(&DiseaseParams::default(), roster()), &mut Rng::new(1));
     assert!(store.get(id).is_none(), "decayed carcass slot should be freed");
     assert!(!w.carcasses.contains(&(75, 20)));
 }

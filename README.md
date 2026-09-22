@@ -69,7 +69,9 @@ cargo run --release -- --headless --seed 1 --ticks 100000 --profile     # per-sy
 ```
 
 `summary.csv` columns: `seed, years,` then one final count per species,
-`extinctions`, `lag_days` (predator–prey lag) and `speed_<species>` per species.
+`extinctions`, `lag_days` (predator–prey lag) and `speed_<species>` per species, followed by
+the disease, mutability, diet-breadth and group-size columns and, since C5 FR13,
+`contests_<species>` and `nn_dist_<species>` (adult nearest-neighbour spacing).
 `scripts/sweep.sh <first> <last> <years>` runs each seed as its own process with
 `xargs -P $(nproc)`.
 

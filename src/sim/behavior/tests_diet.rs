@@ -40,7 +40,7 @@ fn specialist_ignores_forest_and_walks_to_grass() {
     let diet = DietParams::default();
     // Standing in forest, four cells from the grass edge, with grass in sense range.
     let c = hungry_at(33, 0.2);
-    let (p, _) = perceive(&c, &idx, &w, &cp, &TickView::empty(), &SocialParams::default(), &diet);
+    let (p, _) = perceive(&c, &idx, &w, &cp, &TickView::empty(), &SocialParams::default(), &diet, &super::territory::Scent::NONE);
     let (cell, _) = p.best_graze.expect("grass is in range");
     assert!(cell.0 < 30, "a specialist's best graze cell must be grass, got {cell:?}");
     assert!(w.cell(cell.0, cell.1).terrain == Terrain::Grass);
@@ -104,7 +104,7 @@ fn neutral_diet_reproduces_the_old_score() {
     let mut w = grass_and_forest();
     let idx = empty_index(&w);
     let c = hungry_at(33, 0.2);
-    let (p, _) = perceive(&c, &idx, &w, &cp, &TickView::empty(), &SocialParams::default(), &diet);
+    let (p, _) = perceive(&c, &idx, &w, &cp, &TickView::empty(), &SocialParams::default(), &diet, &super::territory::Scent::NONE);
     let (cell, score) = p.best_graze.expect("everything is food");
     assert_eq!(cell, (33, 5), "the cell under it scores best at distance 0");
     assert_eq!(score, 0.5, "vegetation / (1 + 0/4)");

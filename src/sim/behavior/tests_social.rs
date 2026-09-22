@@ -8,7 +8,8 @@ use crate::sim::species::testing::*;
 use crate::sim::genetics::{TickView };
 use crate::sim::geom;
 use crate::sim::lineage::Lineage;
-use crate::sim::params::{GeneticsParams, PredationParams, SocialParams};
+use crate::sim::params::{GeneticsParams, PredationParams, SocialParams, TerritoryParams};
+use super::territory::Scent;
 use crate::sim::rng::Rng;
 use crate::sim::spatial::SpatialIndex;
 use crate::sim::disease::{DiseaseState};
@@ -111,12 +112,12 @@ fn pack_joins_the_shared_target() {
     // The perception id list holds prey *and* packmates; the packmate is what
     // marks the shared target.
     let candidates = vec![far_id, near_id, mate_id];
-    let (picked, _) = pick_hunt_target(store.get(focal_id).unwrap(), &candidates, &view, &w, roster(), &pp, &sp).unwrap();
+    let (picked, _) = pick_hunt_target(store.get(focal_id).unwrap(), &candidates, &view, &w, roster(), &pp, &sp, &Scent::NONE).unwrap();
     assert_eq!(picked, far_id, "the pack's target beats the nearer open prey");
     // Without the pack bonus the nearer, visible deer would win.
     let mut alone = store.get(focal_id).unwrap().clone();
     alone.genome.0[IDX_SOCIALITY] = 0.0;
-    let (solo, _) = pick_hunt_target(&alone, &candidates, &view, &w, roster(), &pp, &sp).unwrap();
+    let (solo, _) = pick_hunt_target(&alone, &candidates, &view, &w, roster(), &pp, &sp, &Scent::NONE).unwrap();
     assert_eq!(solo, near_id, "no pack bonus, no join: the visible prey wins");
 }
 
@@ -158,6 +159,7 @@ fn pack_shares_the_kill() {
         &pp,
         &DiseaseParams::default(),
         &sp,
+        &TerritoryParams::default(),
         &mut Rng::new(1),
         &mut tallies,
         &mut lineage,

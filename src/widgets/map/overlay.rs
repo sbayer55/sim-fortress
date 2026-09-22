@@ -25,7 +25,7 @@ pub fn overlay_cell(cell: &Cell, base: Base) -> Option<(char, Color, Color)> {
             (t, theme::water(t))
         }
         Base::Parasites => return Some(parasite_cell(cell)),
-        Base::None | Base::Species => return None,
+        Base::None | Base::Species | Base::Scent => return None,
     };
     if cell.terrain == Terrain::DeepWater && base != Base::Moisture {
         return Some((glyphs::DEEP_WATER, theme::dim(theme::DEEP_WATER_FG, 0.4), theme::dim(theme::DEEP_WATER_BG, 0.4)));
@@ -68,6 +68,16 @@ pub fn density_field(world: &World, creatures: &[MapCreature<'_>], species: Spec
         *v = (*v / DENSITY_CAP).min(1.0);
     }
     field
+}
+
+/// Scent field (S02j): the strength of `species`' mark on every world cell,
+/// straight from the grid; empty blocks read as all zero.
+pub(super) fn scent_field(world: &World, species: SpeciesId) -> Vec<f32> {
+    let block = world.scent_block(species);
+    if block.is_empty() {
+        return vec![0.0; world.width() * world.height()];
+    }
+    block.iter().map(|m| m.strength.clamp(0.0, 1.0)).collect()
 }
 
 /// Glyph and colors for a cell under the species-density overlay, given the

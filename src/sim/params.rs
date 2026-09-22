@@ -13,6 +13,7 @@ pub use predation::{Difficulty, PredationParams};
 pub use genetics::GeneticsParams;
 pub use social::SocialParams;
 pub use diet::DietParams;
+pub use territory::TerritoryParams;
 pub use ecology::EcologyParams;
 pub use pathogen::{DiseaseParams, PathogenParams};
 pub use presets::{PRESETS, Preset};
@@ -35,6 +36,8 @@ pub struct Params {
     pub social: SocialParams,
     /// Diet breadth: which terrains a herbivore can graze (genome slot 12).
     pub diet: DietParams,
+    /// Territory: the scent grid, scent avoidance and the contest (C5 FR13).
+    pub territory: TerritoryParams,
     /// The species roster (`[[species]]`); position is the `SpeciesId`.
     pub species: Roster,
 }
@@ -91,6 +94,7 @@ mod predation;
 mod genetics;
 mod social;
 mod diet;
+mod territory;
 mod ecology;
 mod pathogen;
 mod docs;

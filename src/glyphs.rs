@@ -85,6 +85,8 @@ pub const EXTINCTION: char = '‼';
 pub const DROUGHT: char = '¡';
 pub const ALERT: char = '!';
 pub const NOTE: char = '¶';
+/// C5 FR13: a territorial contest between two predators.
+pub const CONTEST: char = '↔';
 pub const DISEASE: char = '☻';
 pub const IMMUNE: char = '☺';
 pub const PARASITE: char = '∩';

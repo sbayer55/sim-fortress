@@ -31,6 +31,7 @@ impl Params {
                 }
             }
         }
+        self.territory.validate()?;
         for p in &self.disease.pathogens {
             for host in p.hosts.keys() {
                 if roster.position(host).is_none() {

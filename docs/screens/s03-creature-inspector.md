@@ -260,7 +260,12 @@ classDiagram
     <region>`, `♦ current target: <name tag>, <d> cells` and `avg chase <n> ticks; longest
     <n> ticks (Year <y>)`. *Live since: C7* — the current-target line appends
     ` (+.NN sick prey)` in the sick colour when the target is infectious
-    (`kill_sick_bonus × severity`).
+    (`kill_sick_bonus × severity`). *Live since: C5 FR13* — two rows follow: `territory
+    holds <n> cells · resident here | off its ground` (cells of the species' scent grid this
+    animal holds at or above `territory.hold_min`, and whether it holds the cell it stands on)
+    and `contests won <w> lost <l>`. The Behaviour line reads `challenging — driving off
+    <name>` while it walks at an intruder and `fleeing — driven off a rival's ground` while
+    evicted.
 22. **Survival (S03a only).** `chased <n> times, escaped <n> (<pct>%)`, an `escape rate`
     bar (good colour), `grew wary of predators <n> times` (C5 `FR5b`), a `threats seen`
     list with one bar per predator species and its

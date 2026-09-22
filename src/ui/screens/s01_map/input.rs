@@ -55,6 +55,7 @@ impl WorldMap {
             Layer::Base(Base::Vegetation | Base::Pressure | Base::Moisture) => Self::overlay_sidebar(f, side, world, stack),
             Layer::Base(Base::Species) => Self::species_sidebar(f, side, sim, stack),
             Layer::Base(Base::Parasites) => Self::parasite_sidebar(f, side, sim, stack),
+            Layer::Base(Base::Scent) => Self::scent_sidebar(f, side, sim, stack),
             Layer::Sense => {
                 if let Some(id) = stack.sense_subject {
                     Self::sense_sidebar(f, side, app, sim, id, stack);

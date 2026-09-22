@@ -267,7 +267,7 @@ fn regenerate_screen_renders_overlays() {
     };
     let map = || -> Box<dyn Screen> { Box::new(WorldMap::new(world.to_string())) };
     let mut files: Vec<(&str, String)> = Vec::new();
-    let single: [(&str, &str, OverlayStack); 9] = [
+    let single: [(&str, &str, OverlayStack); 10] = [
         ("S01a", "World Map - default", OverlayStack::PLAIN),
         ("S02a", "Map Overlay - vegetation density", OverlayStack { base: Base::Vegetation, ..OverlayStack::PLAIN }),
         ("S02b", "Map Overlay - population pressure", OverlayStack { base: Base::Pressure, ..OverlayStack::PLAIN }),
@@ -277,6 +277,7 @@ fn regenerate_screen_renders_overlays() {
         ("S02g", "Map Overlay - health", OverlayStack { health: true, ..OverlayStack::PLAIN }),
         ("S02h", "Map Overlay - disease", OverlayStack { disease: crate::widgets::map::Disease::On(None), ..OverlayStack::PLAIN }),
         ("S02i", "Map Overlay - parasites", OverlayStack { base: Base::Parasites, ..OverlayStack::PLAIN }),
+        ("S02j", "Map Overlay - scent", OverlayStack { base: Base::Scent, species: SpeciesId(3), ..OverlayStack::PLAIN }),
     ];
     for (id, title, stack) in single {
         app.overlay = stack;

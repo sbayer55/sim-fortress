@@ -8,6 +8,7 @@ use crate::sim::geom;
 use crate::sim::params::{CreaturesParams, DietParams, SocialParams};
 use crate::sim::spatial::SpatialIndex;
 use crate::sim::world::World;
+use super::territory::Scent;
 
 /// What a creature can see at a replan. Creature ids feed mate selection (C4)
 /// and predation (C5).
@@ -16,7 +17,8 @@ pub struct Perception {
     pub nearest_water: Option<(usize, usize)>,
     pub best_graze: Option<((usize, usize), f32)>,
     pub nearest_den: Option<(usize, usize)>,
-    /// Highest `prey_pressure` cell within sense range (predator Patrol, C5).
+    /// Highest `prey_pressure` cell within sense range (predator Patrol, C5),
+    /// discounted by foreign scent for a solitary predator (C5 FR13).
     pub best_patrol: Option<(usize, usize)>,
     pub creatures: Vec<CreatureId>,
 }
@@ -71,7 +73,7 @@ pub(super) fn kin_summary(c: &Creature, candidates: &[CreatureId], view: &TickVi
     }
 }
 
-pub(super) fn perceive(c: &Creature, spatial: &SpatialIndex, world: &World, cp: &CreaturesParams, view: &TickView, sp: &SocialParams, diet: &DietParams) -> (Perception, Kin) {
+pub(super) fn perceive(c: &Creature, spatial: &SpatialIndex, world: &World, cp: &CreaturesParams, view: &TickView, sp: &SocialParams, diet: &DietParams, scent: &Scent<'_>) -> (Perception, Kin) {
     // Diet breadth: edibility per terrain, built once here so the cell loop
     // below is one multiply per cell and never touches the params map.
     let edible = diet.table(c.genome.diet_breadth());
@@ -138,8 +140,11 @@ pub(super) fn perceive(c: &Creature, spatial: &SpatialIndex, world: &World, cp: 
                     best_graze = Some(((x, y), score));
                 }
             }
-            if cell.prey_pressure > best_patrol_score {
-                best_patrol_score = cell.prey_pressure;
+            // C5 FR13: foreign scent scales the patrol score down for a
+            // solitary predator; `Scent::NONE` leaves it exactly as it was.
+            let patrol = cell.prey_pressure * scent.patrol_factor(scent.foreign_at(row + x));
+            if patrol > best_patrol_score {
+                best_patrol_score = patrol;
                 best_patrol = Some((x, y));
             }
         }

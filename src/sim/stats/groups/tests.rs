@@ -37,6 +37,26 @@ fn implied_population(g: &GroupCensus, i: usize) -> u32 {
 }
 
 #[test]
+fn nearest_neighbour_mean_is_over_adults_only() {
+    // Two adult foxes four columns apart (ellipse distance 2) and a pup in
+    // between: the pup neither counts nor is counted.
+    let mut a = creature_at(FOX, 10, 5, 0.1, 0.5);
+    a.adult = true;
+    let mut b = creature_at(FOX, 14, 5, 0.1, 0.5);
+    b.adult = true;
+    let mut pup = creature_at(FOX, 12, 5, 0.1, 0.5);
+    pup.adult = false;
+    let nn = nearest_neighbour_mean(&store_of(&[a, b, pup]), N_SPECIES);
+    assert_eq!(nn[FOX.index()], 2.0);
+    assert_eq!(nn[WOLF.index()], 0.0, "no adults: 0");
+    let mut lone = creature_at(LYNX, 3, 3, 0.1, 0.5);
+    lone.adult = true;
+    assert_eq!(nearest_neighbour_mean(&store_of(&[lone]), N_SPECIES)[LYNX.index()], 0.0, "one adult: 0");
+    let g = group_census(&store_of(&[creature_at(FOX, 10, 5, 0.1, 0.5)]), &SocialParams::default(), N_SPECIES);
+    assert_eq!(g.nn_mean.len(), N_SPECIES);
+}
+
+#[test]
 fn social_neighbours_form_one_group() {
     // Three deer well inside each other's sense range (sense 0.5 → 7 cells).
     let deer = DEER;

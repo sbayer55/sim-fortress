@@ -16,7 +16,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::sim::creatures::CreatureId;
 use crate::sim::params::WorldParams;
+use crate::sim::species::SpeciesId;
 use crate::sim::rng::Rng;
 
 mod biome;
@@ -123,6 +125,21 @@ pub struct Cell {
     pub parasite_load: f32,
 }
 
+/// One cell of one predator species' scent (C5 FR13): how strong the mark is
+/// and which creature holds it. `CreatureId` has no `Default`, so the empty
+/// mark is [`Mark::NONE`].
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Mark {
+    pub strength: f32,
+    /// The holder; `CreatureId(0)` is never issued, so it means "nobody".
+    pub holder: CreatureId,
+}
+
+impl Mark {
+    /// No scent, no holder.
+    pub const NONE: Self = Self { strength: 0.0, holder: CreatureId(0) };
+}
+
 /// A named region's bounding box: (name, x0, y0, x1, y1), half-open.
 ///
 /// Regions are drainage basins, so the box is only a bound: membership is
@@ -157,6 +174,11 @@ pub struct World {
     /// The named features (ocean, lakes, rivers, ranges) and which cell
     /// belongs to which.
     pub names: Names,
+    /// C5 FR13: one [`Mark`] per species per cell, species block `s` at
+    /// `s × cells`, row-major within it. Prey blocks stay empty. Empty until
+    /// `init_scent` runs (the roster length is not known at generation).
+    #[serde(default)]
+    pub scent: Vec<Mark>,
 }
 
 impl World {
@@ -325,8 +347,39 @@ impl World {
             falls,
             history: relief.history,
             names,
+            scent: Vec::new(),
         };
         world.refresh_shore();
         world
+    }
+
+    /// Size the scent grid for `n_species` (all marks `NONE`). Called once the
+    /// roster is known; a grid already of that size is left alone.
+    pub fn init_scent(&mut self, n_species: usize) {
+        let len = n_species * self.cells.len();
+        if self.scent.len() != len {
+            self.scent = vec![Mark::NONE; len];
+        }
+    }
+
+    /// The scent mark of `species` at `(x, y)`; `NONE` when the grid is not sized.
+    pub fn mark(&self, species: SpeciesId, x: usize, y: usize) -> Mark {
+        let cells = self.cells.len();
+        let i = species.index() * cells + y * self.width + x;
+        self.scent.get(i).copied().unwrap_or(Mark::NONE)
+    }
+
+    /// The scent mark of `species` at `(x, y)`, or `None` when the grid is not sized.
+    pub fn mark_mut(&mut self, species: SpeciesId, x: usize, y: usize) -> Option<&mut Mark> {
+        let cells = self.cells.len();
+        let i = species.index() * cells + y * self.width + x;
+        self.scent.get_mut(i)
+    }
+
+    /// The species block of the scent grid, or an empty slice when not sized.
+    pub fn scent_block(&self, species: SpeciesId) -> &[Mark] {
+        let cells = self.cells.len();
+        let start = species.index() * cells;
+        self.scent.get(start..start + cells).unwrap_or(&[])
     }
 }

@@ -45,6 +45,9 @@ pub enum Goal {
     /// C5 `FR5b`: the low-exertion avoidance tier — a predator that is not
     /// currently a danger is nearby and the prey is giving it room.
     Wary,
+    /// C5 FR13: a resident predator walking at a same-species intruder on its
+    /// ground; the contest pass resolves it.
+    Challenge,
 }
 
 /// The phase of a predator's current hunt (C5 FR4).
@@ -102,6 +105,8 @@ pub struct DeathTallies {
     pub hunt_attempts: Vec<u32>,
     /// Cumulative kills per predator species (C5).
     pub hunt_kills: Vec<u32>,
+    /// C5 FR13: cumulative territorial contests per species (one per pair).
+    pub contests: Vec<u32>,
     /// The most recent death per species (C5 FR8).
     pub last_death: Vec<Option<ExtinctionRecord>>,
     /// C5 `FR5b`: wary encounters today, keyed `(region index, prey species,
@@ -119,6 +124,7 @@ impl DeathTallies {
             deaths: vec![0; n_species],
             hunt_attempts: vec![0; n_species],
             hunt_kills: vec![0; n_species],
+            contests: vec![0; n_species],
             last_death: vec![None; n_species],
             ..Self::default()
         }
@@ -130,6 +136,7 @@ impl DeathTallies {
         Self {
             hunt_attempts: self.hunt_attempts.clone(),
             hunt_kills: self.hunt_kills.clone(),
+            contests: self.contests.clone(),
             last_death: self.last_death.clone(),
             ..Self::new(self.births.len())
         }
@@ -158,6 +165,7 @@ impl Goal {
             Self::Migrate => "migrating",
             Self::Patrol => "patrolling",
             Self::Wary => "wary",
+            Self::Challenge => "challenging",
         }
     }
 }
@@ -313,6 +321,15 @@ pub struct Creature {
     pub infections_survived: u8,
     /// Set at death when the creature was infectious: carcass transmission and S03c.
     pub died_infected: Option<PathogenId>,
+    // ---- C5 FR13 territory ----
+    /// The same-species intruder this resident is walking at while `Challenge`.
+    pub challenge_target: Option<CreatureId>,
+    /// Tick at which the challenge is abandoned.
+    pub challenge_until: u64,
+    /// Neither side challenges again before this tick.
+    pub contest_cooldown_until: u64,
+    pub contests_won: u16,
+    pub contests_lost: u16,
 }
 
 impl Creature {
@@ -513,6 +530,11 @@ fn founder(species: SpeciesId, n_species: usize, name: NameId, sex: Sex, pos: (u
                 died_infected: None,
                 migrate_target: None,
                 path_for: None,
+                challenge_target: None,
+                challenge_until: 0,
+                contest_cooldown_until: 0,
+                contests_won: 0,
+                contests_lost: 0,
             }
 }
 
