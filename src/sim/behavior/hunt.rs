@@ -225,13 +225,12 @@ pub(super) fn hunt_contacts(
         }
         // C8 FR4: a pack converging on one prey kills more reliably, and the meal
         // is shared with the packmates within `pack_share_cheb` of the kill.
-        let participants = pack_participants(store, pred_id, snap.pred_at.2, prey_id, snap.px, snap.py, sp);
+        let pair = predation::HuntPair { pred: pred_id, pred_species: snap.pred_at.2, prey: prey_id, prey_at: (snap.px, snap.py) };
+        let participants = predation::pack_participants(store, pair, sp);
         let extra = participants.len().min(3);
-        // C7 FR6: a sick prey is easier to catch.
-        let chance = (pp.kill_chance(snap.pred_speed, snap.prey_speed, snap.pred_aggr, snap.prey_size)
-            + snap.sick_bonus
-            + sp.pack_kill_bonus * crate::cast!(extra => f32))
-        .clamp(pp.kill_min, pp.kill_max);
+        // C7 FR6: a sick prey is easier to catch. One formula, shared with S17.
+        let contest = predation::Contest { pred_speed: snap.pred_speed, pred_aggression: snap.pred_aggr, prey_speed: snap.prey_speed, prey_size: snap.prey_size, extra, sick: snap.sick_bonus };
+        let chance = predation::odds(pp, sp, contest).total;
         let chase_ticks = snap.chase_start.map_or(0, |s| crate::cast!(time.tick.saturating_sub(s) => u16));
         if rng.chance(chance) {
             resolve_kill(store, world, events, time, roster, pp, dp, sp, tp, ledgers, lineage, dstate, drng, pred_id, prey_id, &snap, participants, extra, chase_ticks);
@@ -262,30 +261,6 @@ fn hunt_snapshot(store: &CreatureStore, pred_id: CreatureId, prey_id: CreatureId
         pred_at: (p.x, p.y, p.species),
         sick_bonus: disease::effects(q, dp).kill_bonus,
     })
-}
-
-/// Packmates hunting the same prey within sharing range of the kill.
-fn pack_participants(
-    store: &CreatureStore,
-    pred_id: CreatureId,
-    pred_species: SpeciesId,
-    prey_id: CreatureId,
-    px: usize,
-    py: usize,
-    sp: &SocialParams,
-) -> Vec<CreatureId> {
-    store
-        .living()
-        .filter(|o| {
-            o.id != pred_id
-                && o.species == pred_species
-                && o.goal == Goal::Hunt
-                && o.hunt_phase != HuntPhase::Eat
-                && o.hunt_target == Some(prey_id)
-                && geom::cheb(o.x, o.y, px, py) <= sp.pack_share_cheb
-        })
-        .map(|o| o.id)
-        .collect()
 }
 
 /// A successful catch: kill, credit the hunter, share with the pack, feed.

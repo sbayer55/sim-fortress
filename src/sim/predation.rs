@@ -5,10 +5,13 @@
 //! a predator detects a prey within its sense range unless the prey is hidden
 //! by cover × camouflage, or is resting on a den cell while `den_protects`.
 
-use crate::sim::creatures::{Creature, Goal};
+use crate::sim::creatures::{Creature, CreatureId, CreatureStore, Goal, HuntPhase};
+use crate::sim::disease;
 use crate::sim::geom;
-use crate::sim::params::PredationParams;
+use crate::sim::params::{PredationParams, SocialParams};
+use crate::sim::species::SpeciesId;
 use crate::sim::world::World;
+use crate::sim::Sim;
 
 /// The largest possible sense range. The sense trait is clamped to 0.02..0.98,
 /// so `sense_cells = 2 + floor(sense × 10)` tops out at 11; one extra cell of
@@ -62,6 +65,99 @@ pub fn prey_detects_pred_at(prey: &Creature, px: usize, py: usize, pred_camoufla
         return false;
     }
     pred_camouflage < prey.genome.sense()
+}
+
+/// The parts of the contact roll at `behavior::hunt::hunt_contacts`, in the
+/// order they are summed, so S17 can show the same number the sim rolls under.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct OddsParts {
+    /// `effective_kill_base()`.
+    pub base: f32,
+    /// `kill_speed_w × (pred.speed − prey.speed)`.
+    pub speed: f32,
+    /// `kill_aggression_w × pred.aggression`.
+    pub aggression: f32,
+    /// `−kill_size_w × prey.size`.
+    pub size: f32,
+    /// `kill_chance(..)`: the four parts, clamped.
+    pub formula: f32,
+    /// `pack_kill_bonus × min(participants, 3)`.
+    pub pack: f32,
+    /// The prey's disease `kill_bonus`.
+    pub sick: f32,
+    /// `(formula + sick + pack).clamp(kill_min, kill_max)`: what the roll uses.
+    pub total: f32,
+}
+
+/// The raw facts of one contest, as `hunt_contacts` snapshots them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Contest {
+    pub pred_speed: f32,
+    pub pred_aggression: f32,
+    pub prey_speed: f32,
+    pub prey_size: f32,
+    /// Packmates at the kill, already capped at three.
+    pub extra: usize,
+    pub sick: f32,
+}
+
+/// The contact roll's parts. `total` is computed with the exact expression
+/// `hunt_contacts` used before this function existed, so the checksum holds.
+pub fn odds(pp: &PredationParams, sp: &SocialParams, c: Contest) -> OddsParts {
+    let formula = pp.kill_chance(c.pred_speed, c.prey_speed, c.pred_aggression, c.prey_size);
+    let pack = sp.pack_kill_bonus * crate::cast!(c.extra => f32);
+    OddsParts {
+        base: pp.effective_kill_base(),
+        speed: pp.kill_speed_w * (c.pred_speed - c.prey_speed),
+        aggression: pp.kill_aggression_w * c.pred_aggression,
+        size: -pp.kill_size_w * c.prey_size,
+        formula,
+        pack,
+        sick: c.sick,
+        total: (formula + c.sick + pack).clamp(pp.kill_min, pp.kill_max),
+    }
+}
+
+/// Who is hunting whom, and where the prey stands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HuntPair {
+    pub pred: CreatureId,
+    pub pred_species: SpeciesId,
+    pub prey: CreatureId,
+    pub prey_at: (usize, usize),
+}
+
+/// Packmates hunting the same prey within sharing range of it (C8 FR4).
+pub fn pack_participants(store: &CreatureStore, pair: HuntPair, sp: &SocialParams) -> Vec<CreatureId> {
+    store
+        .living()
+        .filter(|o| {
+            o.id != pair.pred
+                && o.species == pair.pred_species
+                && o.goal == Goal::Hunt
+                && o.hunt_phase != HuntPhase::Eat
+                && o.hunt_target == Some(pair.prey)
+                && geom::cheb(o.x, o.y, pair.prey_at.0, pair.prey_at.1) <= sp.pack_share_cheb
+        })
+        .map(|o| o.id)
+        .collect()
+}
+
+/// The odds the hunter would roll under if it made contact now: the S17 entry.
+/// `None` when either creature is gone.
+pub fn kill_odds(sim: &Sim, pred: CreatureId, prey: CreatureId) -> Option<OddsParts> {
+    let (p, q) = (sim.creatures.get(pred)?, sim.creatures.get(prey)?);
+    let pair = HuntPair { pred, pred_species: p.species, prey, prey_at: (q.x, q.y) };
+    let extra = pack_participants(&sim.creatures, pair, &sim.params.social).len().min(3);
+    let contest = Contest {
+        pred_speed: p.genome.speed(),
+        pred_aggression: p.genome.aggression(),
+        prey_speed: q.genome.speed(),
+        prey_size: q.genome.size(),
+        extra,
+        sick: disease::effects(q, &sim.params.disease).kill_bonus,
+    };
+    Some(odds(&sim.params.predation, &sim.params.social, contest))
 }
 
 fn in_den(world: &World, x: usize, y: usize) -> bool {
