@@ -9,7 +9,7 @@ use ratatui::text::Span;
 use sim_fortress::widgets::Constraint::{Fill, Fixed, Min};
 use sim_fortress::widgets::{
     util, Align, Bar, Block, ButtonRow, Chart, Checkbox, Column, Columns, Component, Divider, FilterStrip, HStack, Histogram, Inverted, KeyHint, Kind,
-    LabeledBar, Legend, Menu, Modal, Panel, RaceChart, RaceSeries, RangeBar, Row, ScrollRegion, Series, Spacer, Sparkline, StatusBar, Stepper, Table, TableCell, TableRow,
+    LabeledBar, Legend, Menu, Modal, Panel, RaceChart, RaceSeries, RangeBar, Ribbon, RibbonEnd, Row, ScrollRegion, Series, Spacer, Sparkline, StatusBar, Stepper, Table, TableCell, TableRow,
     Text, TextField, Ticker, TrendArrow, VStack,
 };
 use sim_fortress::sim::Params;
@@ -890,6 +890,26 @@ fn race_chart() -> Vec<Entry> {
     ]
 }
 
+fn ribbon() -> Vec<Entry> {
+    vec![
+        bare("ribbon", "A live chase closing on the kill (30 columns)", |b, a| {
+            Ribbon::new(&[0.30, 0.35], &[0.40, 0.45, 0.55, 0.60, 0.70, 0.80, 0.85]).stalk_ticks(2).chase_max(12).render(b, a);
+        }),
+        bare("ribbon", "Resolved and remembered (30 columns)", |b, a| {
+            Ribbon::new(&[0.30, 0.30], &[0.35, 0.30, 0.25, 0.20, 0.10])
+                .stalk_ticks(2)
+                .chase_max(12)
+                .outcome(Some(RibbonEnd::Escaped))
+                .live(false)
+                .caption("cooldown 5 h")
+                .render(b, a);
+        }),
+        bare("ribbon", "The S17 lane (74 columns)", |b, a| {
+            Ribbon::new(&[0.35, 0.38, 0.42, 0.45, 0.48, 0.50], &[0.52, 0.55, 0.60, 0.62, 0.70, 0.72, 0.78, 0.85]).render(b, a);
+        }),
+    ]
+}
+
 fn text() -> Vec<Entry> {
     vec![
         rows("text", "Plain (43 columns)", |b, a| Text::new(" Hello!").render(b, a)),
@@ -943,6 +963,7 @@ pub fn examples() -> Vec<Entry> {
     v.extend(histogram());
     v.extend(chart());
     v.extend(race_chart());
+    v.extend(ribbon());
     v.extend(text());
     v.sort_by_key(|e| (e.sheet, e.heading));
     v
