@@ -67,6 +67,8 @@ pub const CROSS: char = '┼';
 pub const T_DOWN: char = '╤';
 /// The foot of a vertical rule.
 pub const T_UP: char = '┴';
+/// The chase clock expiring at the right edge of a ribbon (S17).
+pub const CLOCK_OUT: char = '┤';
 /// Single-line box corners: the steps of a race chart line (S16) and its foot.
 pub const BOX_TL: char = '┌';
 pub const BOX_TR: char = '┐';
@@ -145,7 +147,7 @@ mod tests {
         DEEP_WATER, SHALLOW_WATER, SAND, DIRT, GRASS_SPARSE, GRASS, GRASS_DENSE, FOREST, ROCK, MARSH,
         FALLS, HILL, SNOW, SHADE_1, SHADE_2, SHADE_3, SHADE_4, HALF_UPPER, HALF_LOWER, HALF_LEFT, HALF_RIGHT, FULL_BLOCK,
         SQUARE, CARCASS, DEN, SEED, CURSOR, CORNER, TRAIL,
-        RING, DOT, BULLET, BAR_L, BAR_R, BAR_FILL, BAR_EMPTY, H_LINE, V_LINE, CROSS, T_DOWN, T_UP,
+        RING, DOT, BULLET, BAR_L, BAR_R, BAR_FILL, BAR_EMPTY, H_LINE, V_LINE, CROSS, T_DOWN, T_UP, CLOCK_OUT,
         BOX_TL, BOX_TR, BOX_BL, BOX_BR, SPRING,
         SUMMER, AUTUMN, WINTER, SUN, MOON, BIRTH, DEATH, MUTATION, MIGRATION, EXTINCTION,
         DROUGHT, ALERT, NOTE, PLAY, REWIND, HAPPY, UNHAPPY, MALE, FEMALE, UP, DOWN, FLAT, LEFT,

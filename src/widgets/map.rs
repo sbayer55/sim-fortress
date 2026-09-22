@@ -53,6 +53,8 @@ pub struct MapOptions {
     pub cursor: Option<(usize, usize)>,
     /// Creature id to highlight and draw a trail for.
     pub follow: Option<CreatureId>,
+    /// Pinned creatures (S16 Watch, S17 rows): drawn bold in `theme::ACCENT`.
+    pub pins: Vec<CreatureId>,
     /// Top-left world cell shown at the top-left of the area.
     pub origin: (usize, usize),
     /// Draw creatures (false for pure terrain/overlay views).
@@ -77,6 +79,7 @@ impl Default for MapOptions {
             winter: false,
             cursor: None,
             follow: None,
+            pins: Vec::new(),
             origin: (0, 0),
             creatures: true,
             selected_region: None,
@@ -327,6 +330,11 @@ fn draw_creatures(buf: &mut Buffer, area: Rect, living: &[MapCreature<'_>], opts
             let tint = opts.creature_tint.as_ref().and_then(|m| m.get(&c.id));
             let (color, force_bold) = creature_color(&opts.stack, c, tint);
             put_cell(buf, area, ox, oy, c.x, c.y, c.glyph, tint_color(color, opts.night), c.adult || force_bold);
+            if opts.pins.contains(&c.id) {
+                if let Some(cell) = cell_at(buf, area, opts, c.x, c.y) {
+                    cell.set_style(Style::default().fg(theme::ACCENT).add_modifier(Modifier::BOLD));
+                }
+            }
             if opts.follow == Some(c.id) {
                 followed_pos = Some((c.x, c.y));
             }

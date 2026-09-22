@@ -1,11 +1,12 @@
 //! Hunt and scavenge resolution, packs and kill outcomes.
 
 use crate::sim::creatures::{
-    Cause, Creature, CreatureId, CreatureStore, DeathTallies, Goal, HuntPhase,
+    Cause, Creature, CreatureId, CreatureStore, Goal, HuntPhase,
 };
 use crate::sim::events::EventRing;
 use crate::sim::genetics::{self, TickView};
 use crate::sim::geom;
+use crate::sim::hunt_watch::{HuntKey, HuntOutcome};
 use crate::sim::lineage::Lineage;
 use crate::sim::params::{PredationParams, Roster, SocialParams, TerritoryParams};
 use super::territory::{self, Scent};
@@ -18,6 +19,7 @@ use crate::sim::time::Time;
 use crate::sim::world::World;
 use super::kill;
 use super::threat::flee_target;
+use super::Ledgers;
 
 /// Facts about a predator/prey pair, snapshotted before either is mutated.
 struct HuntSnap {
@@ -37,14 +39,16 @@ struct HuntSnap {
 
 /// Chase the current hunt target: keep it targeted, transition Stalk → Chase at
 /// `chase_trigger_cheb`, and fail on timeout or when the prey leaves sense range.
-pub(super) fn update_hunt_stalk(c: &mut Creature, view: &TickView, time: &Time, pp: &PredationParams, tallies: &mut DeathTallies) {
+pub(super) fn update_hunt_stalk(c: &mut Creature, view: &TickView, time: &Time, pp: &PredationParams, ledgers: &mut Ledgers<'_>) {
     let Some(prey_id) = c.hunt_target else { return };
+    // S17: the trace opens on the first tick the target is held (a no-op after).
+    ledgers.hunts.begin(HuntKey { hunter: c.id, species: c.species, prey: prey_id }, time.tick);
     let Some(prey) = view.get(prey_id) else {
-        fail_hunt(c, time, pp, tallies);
+        fail_hunt(c, time, pp, ledgers, HuntOutcome::Lost);
         return;
     };
     if geom::dist(c.x, c.y, prey.x, prey.y) > f32::from(c.genome.sense_cells()) {
-        fail_hunt(c, time, pp, tallies);
+        fail_hunt(c, time, pp, ledgers, HuntOutcome::Lost);
         return;
     }
     c.target = Some((prey.x, prey.y));
@@ -55,16 +59,21 @@ pub(super) fn update_hunt_stalk(c: &mut Creature, view: &TickView, time: &Time, 
     if c.hunt_phase == HuntPhase::Chase {
         if let Some(start) = c.chase_start_tick {
             if time.tick.saturating_sub(start) >= u64::from(pp.chase_max_ticks) {
-                fail_hunt(c, time, pp, tallies);
+                fail_hunt(c, time, pp, ledgers, HuntOutcome::Timeout);
             }
         }
     }
 }
 
-/// Record a failed hunt and re-arm for the next decision (FR4).
-fn fail_hunt(c: &mut Creature, time: &Time, pp: &PredationParams, tallies: &mut DeathTallies) {
+/// Record a failed hunt and re-arm for the next decision (FR4). `why` is what
+/// the S17 trace remembers; the sim's own state does not distinguish.
+fn fail_hunt(c: &mut Creature, time: &Time, pp: &PredationParams, ledgers: &mut Ledgers<'_>, why: HuntOutcome) {
+    if let Some(prey) = c.hunt_target {
+        let chase_ticks = c.chase_start_tick.map_or(0, |s| crate::cast!(time.tick.saturating_sub(s).min(u64::from(u16::MAX)) => u16));
+        ledgers.hunts.end(HuntKey { hunter: c.id, species: c.species, prey }, why, time.tick, chase_ticks);
+    }
     c.attempts += 1;
-    tallies.hunt_attempts[c.species.index()] += 1;
+    ledgers.tallies.hunt_attempts[c.species.index()] += 1;
     c.hunt_cooldown_until = time.tick + u64::from(pp.hunt_cooldown_hours);
     c.hunt_phase = HuntPhase::Stalk;
     c.hunt_target = None;
@@ -197,7 +206,7 @@ pub(super) fn hunt_contacts(
     sp: &SocialParams,
     tp: &TerritoryParams,
     rng: &mut Rng,
-    tallies: &mut DeathTallies,
+    ledgers: &mut Ledgers<'_>,
     lineage: &mut Lineage,
     dstate: &mut DiseaseState,
     drng: &mut Rng,
@@ -216,18 +225,17 @@ pub(super) fn hunt_contacts(
         }
         // C8 FR4: a pack converging on one prey kills more reliably, and the meal
         // is shared with the packmates within `pack_share_cheb` of the kill.
-        let participants = pack_participants(store, pred_id, snap.pred_at.2, prey_id, snap.px, snap.py, sp);
+        let pair = predation::HuntPair { pred: pred_id, pred_species: snap.pred_at.2, prey: prey_id, prey_at: (snap.px, snap.py) };
+        let participants = predation::pack_participants(store, pair, sp);
         let extra = participants.len().min(3);
-        // C7 FR6: a sick prey is easier to catch.
-        let chance = (pp.kill_chance(snap.pred_speed, snap.prey_speed, snap.pred_aggr, snap.prey_size)
-            + snap.sick_bonus
-            + sp.pack_kill_bonus * crate::cast!(extra => f32))
-        .clamp(pp.kill_min, pp.kill_max);
+        // C7 FR6: a sick prey is easier to catch. One formula, shared with S17.
+        let contest = predation::Contest { pred_speed: snap.pred_speed, pred_aggression: snap.pred_aggr, prey_speed: snap.prey_speed, prey_size: snap.prey_size, extra, sick: snap.sick_bonus };
+        let chance = predation::odds(pp, sp, contest).total;
         let chase_ticks = snap.chase_start.map_or(0, |s| crate::cast!(time.tick.saturating_sub(s) => u16));
         if rng.chance(chance) {
-            resolve_kill(store, world, events, time, roster, pp, dp, sp, tp, tallies, lineage, dstate, drng, pred_id, prey_id, &snap, participants, extra, chase_ticks);
+            resolve_kill(store, world, events, time, roster, pp, dp, sp, tp, ledgers, lineage, dstate, drng, pred_id, prey_id, &snap, participants, extra, chase_ticks);
         } else {
-            resolve_miss(store, world, time, pp, tallies, pred_id, prey_id, snap.pred_at);
+            resolve_miss(store, world, time, pp, ledgers, pred_id, prey_id, snap.pred_at);
         }
     }
 }
@@ -255,30 +263,6 @@ fn hunt_snapshot(store: &CreatureStore, pred_id: CreatureId, prey_id: CreatureId
     })
 }
 
-/// Packmates hunting the same prey within sharing range of the kill.
-fn pack_participants(
-    store: &CreatureStore,
-    pred_id: CreatureId,
-    pred_species: SpeciesId,
-    prey_id: CreatureId,
-    px: usize,
-    py: usize,
-    sp: &SocialParams,
-) -> Vec<CreatureId> {
-    store
-        .living()
-        .filter(|o| {
-            o.id != pred_id
-                && o.species == pred_species
-                && o.goal == Goal::Hunt
-                && o.hunt_phase != HuntPhase::Eat
-                && o.hunt_target == Some(prey_id)
-                && geom::cheb(o.x, o.y, px, py) <= sp.pack_share_cheb
-        })
-        .map(|o| o.id)
-        .collect()
-}
-
 /// A successful catch: kill, credit the hunter, share with the pack, feed.
 #[allow(clippy::too_many_arguments)]
 fn resolve_kill(
@@ -291,7 +275,7 @@ fn resolve_kill(
     dp: &DiseaseParams,
     sp: &SocialParams,
     tp: &TerritoryParams,
-    tallies: &mut DeathTallies,
+    ledgers: &mut Ledgers<'_>,
     lineage: &mut Lineage,
     dstate: &mut DiseaseState,
     drng: &mut Rng,
@@ -307,15 +291,15 @@ fn resolve_kill(
     let prey_size = snap.prey_size;
     if let Some(prey) = store.get_mut(prey_id) {
         if prey.alive {
-            kill(prey, Cause::Predation, world, events, time, roster, tallies, lineage, Some(pred_id), chase_ticks, Some(&snap.killer_label));
+            kill(prey, Cause::Predation, world, events, time, roster, ledgers.tallies, lineage, Some(pred_id), chase_ticks, Some(&snap.killer_label));
         }
     }
     if let Some(p) = store.get_mut(pred_id) {
         p.kills += 1;
         p.kills_by_species[prey_species.index()] += 1;
         p.attempts += 1;
-        tallies.hunt_attempts[p.species.index()] += 1;
-        tallies.hunt_kills[p.species.index()] += 1;
+        ledgers.tallies.hunt_attempts[p.species.index()] += 1;
+        ledgers.tallies.hunt_kills[p.species.index()] += 1;
         p.chase_stats.0 += u32::from(chase_ticks);
         if u32::from(chase_ticks) > p.chase_stats.1 {
             p.chase_stats.1 = u32::from(chase_ticks);
@@ -326,7 +310,9 @@ fn resolve_kill(
         p.hunt_phase = HuntPhase::Eat;
         p.hunt_target = None;
         p.chase_start_tick = None;
-        p.eat_until = Some(time.tick + u64::from(pp.eat_hours(prey_size)));
+        let eat_until = time.tick + u64::from(pp.eat_hours(prey_size));
+        p.eat_until = Some(eat_until);
+        ledgers.hunts.end(HuntKey { hunter: pred_id, species: p.species, prey: prey_id }, HuntOutcome::Kill { eat_until }, time.tick, chase_ticks);
         p.target = Some((px, py));
         // FR4: `hunger −= hunger_per_kill` — allowed to go negative, so a
         // big kill extends the satiation period and bounds the hunt rate.
@@ -357,13 +343,13 @@ fn resolve_miss(
     world: &World,
     time: &Time,
     pp: &PredationParams,
-    tallies: &mut DeathTallies,
+    ledgers: &mut Ledgers<'_>,
     pred_id: CreatureId,
     prey_id: CreatureId,
     pred_at: (usize, usize, SpeciesId),
 ) {
     if let Some(p) = store.get_mut(pred_id) {
-        fail_hunt(p, time, pp, tallies);
+        fail_hunt(p, time, pp, ledgers, HuntOutcome::Miss);
     }
     // The prey enters Flee regardless of whether it had detected the
     // predator: the threat is forced in so the away-vector exists, and

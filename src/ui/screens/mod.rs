@@ -26,6 +26,7 @@ pub mod s13_zoom;
 pub mod s14_switcher;
 pub mod s15_traits;
 pub mod s16_dynasties;
+pub mod s17_hunts;
 
 #[derive(Debug)]
 pub enum Action {

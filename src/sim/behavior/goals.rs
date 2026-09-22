@@ -22,6 +22,7 @@ use super::vitals::act;
 use super::death::{maybe_die, pressure};
 use super::threat::{flee_target, wary_target};
 use super::hunt::{pick_hunt_target, pick_scavenge_target, update_hunt_stalk};
+use super::Ledgers;
 use super::territory::{self, Scent};
 
 #[allow(clippy::too_many_arguments)]
@@ -42,14 +43,14 @@ pub(super) fn update_one(
     tp: &TerritoryParams,
     view: &TickView,
     rng: &mut Rng,
-    tallies: &mut DeathTallies,
+    ledgers: &mut Ledgers<'_>,
     lineage: &mut Lineage,
 ) {
     let fx = disease::effects(c, dp);
     // FR5: Flee pre-empts every goal for prey; FR5b adds the wary tier below it.
     // C5 FR13: an evicted predator flees the contest winner the same way.
     if roster.kind(c.species) == Kind::Prey {
-        preempt_prey(c, world, time, pp, tallies);
+        preempt_prey(c, world, time, pp, ledgers.tallies);
     } else {
         territory::preempt_predator(c, world, time, pp);
     }
@@ -79,7 +80,7 @@ pub(super) fn update_one(
     }
     // Track the current prey target while hunting (Stalk → Chase).
     if c.goal == Goal::Hunt && c.hunt_phase != HuntPhase::Eat {
-        update_hunt_stalk(c, view, time, pp, tallies);
+        update_hunt_stalk(c, view, time, pp, ledgers);
     }
     // C5 FR13: track the intruder while challenging.
     if c.goal == Goal::Challenge {
@@ -92,7 +93,7 @@ pub(super) fn update_one(
     // Needs and hp.
     needs(c, world, time, cp, ep, gp, dp, fx.hunger_factor);
     // Death.
-    maybe_die(c, world, events, time, roster, tallies, lineage, dp);
+    maybe_die(c, world, events, time, roster, ledgers.tallies, lineage, dp);
     // Pressure and parasite shedding.
     pressure(c, world, roster, cp, tp);
     disease::parasite_shed(c, world, dp);

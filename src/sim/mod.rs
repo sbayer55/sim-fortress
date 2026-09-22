@@ -9,6 +9,7 @@ pub mod ecology;
 pub mod events;
 pub mod genetics;
 pub mod geom;
+pub mod hunt_watch;
 pub mod lineage;
 pub mod params;
 pub mod predation;
@@ -28,6 +29,7 @@ pub use params::{Difficulty, GeneticsParams, Params, PredationParams, Preset, Ra
 pub use {rng::Rng, spatial::SpatialIndex};
 pub use species::{Genome, Kind, SpeciesId, TRAIT_NAMES};
 pub use lineage::{dynasties::Dynasties, Lineage, LineageNode, Tree, TreeItem};
+pub use hunt_watch::{HuntEnd, HuntOutcome, HuntSample, HuntTrace, HuntWatch};
 pub use stats::{census, group_census, Census, GroupCensus, Sample, Series, SpeciesStats};
 pub use world::{Cell, RegionRect, Terrain, World};
 
@@ -138,6 +140,10 @@ pub struct Sim {
     /// C9 season summaries: decorative, never read by the step (R11); the save VERSION carries it.
     #[serde(default)]
     pub chronicle: Vec<ChronicleEntry>,
+    /// S17 Hunt Watch: per-predator hunt traces. Passive, never read by the
+    /// step, outside the checksum; saved so a loaded world shows the same ribbons.
+    #[serde(default)]
+    pub hunts: HuntWatch,
 }
 
 impl Sim {
@@ -208,6 +214,7 @@ impl Sim {
             disease_rng,
             disease,
             chronicle: Vec::new(),
+            hunts: HuntWatch::default(),
         }
     }
 
@@ -282,6 +289,7 @@ impl Sim {
     fn run_behavior(&mut self) {
         // spatial snapshot; it is rebuilt below for the next tick and the UI).
         let t0 = std::time::Instant::now();
+        let mut ledgers = behavior::Ledgers { tallies: &mut self.deaths, hunts: &mut self.hunts };
         behavior::tick_creatures(
             &mut self.creatures,
             &self.spatial,
@@ -298,7 +306,7 @@ impl Sim {
             &self.params.diet,
             &self.params.territory,
             &mut self.creature_rng,
-            &mut self.deaths,
+            &mut ledgers,
             &mut self.lineage,
             &mut self.soft_cap_noted,
             &mut self.disease,

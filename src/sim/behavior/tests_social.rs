@@ -148,6 +148,8 @@ fn pack_shares_the_kill() {
     let prey_size = store.get(far_id).unwrap().genome.size();
     let mut events = EventRing::new(64);
     let mut tallies = DeathTallies::new(N_SPECIES);
+    let mut hunts = crate::sim::hunt_watch::HuntWatch::default();
+    let mut ledgers = super::Ledgers { tallies: &mut tallies, hunts: &mut hunts };
     let mut lineage = Lineage::new();
     let mut dstate = DiseaseState::new(&DiseaseParams::default(), roster());
     hunt_contacts(
@@ -161,7 +163,7 @@ fn pack_shares_the_kill() {
         &sp,
         &TerritoryParams::default(),
         &mut Rng::new(1),
-        &mut tallies,
+        &mut ledgers,
         &mut lineage,
         &mut dstate,
         &mut Rng::new(2),

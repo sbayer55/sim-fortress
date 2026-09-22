@@ -1,0 +1,45 @@
+ S17a  Hunt Watch - lanes with details                                                                                                                     
+╔ Chase Lanes · Scoreboard · hunter | ribbon | prey ═══════════════════════════════════════════════════════════ 1 hunting · 1 tracked · Y2 D1 06:00 ☼ day ╗
+║» Fenrir w#953                        │             │                                                            ┤ │Dill d#450                           ║
+║  energy [█████████████░░░░░░░░░░░░]  │         ■─►─│                                                            ┤ │energy [████████████░░░░░░░░░░░░░]   ║
+║  need   DESPERATE                    │             │                                                            ┤ │level  CHALLENGE                     ║
+║  state  STALK                        │             │                                                            ┤ │goal   fleeing                       ║
+║  where  Southern Savanna             │             │                    10                  20                  ┤ │gap    7  W······D                   ║
+║  row 2 · free                                                                                                                                           ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║  row 3 · free                                                                                                                                           ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║  row 4 · free                                                                                                                                           ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║  row 5 · free                                                                                                                                           ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║─ Details · Fenrir w#953 ► Dill d#450 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────║
+║  Hunter                                             Prey                                              Odds at contact 45%                               ║
+║  Fenrir w#953  wolf adult ♂                         Dill d#450  deer adult ♀                          ██████████████████████│▒▒▒▒▒▒▒▒░░░░░░░░░░░░░░░░░░ ║
+║  hunger [██████████████████]   100% DESPERATE       speed edge: slower by .04 (.69 vs .72)            base +.35 · speed +.04 · aggression +.24 · prey   ║
+║  speed .72  aggression .80  sense 8 cells           ground: Eastern Forest, sparse grass · cover 0.6  size -.18 = 45%                                   ║
+║  kills 21 of 45 attempts (47%) · avg chase 2,       x camo .40 = .24 vs sense 8: seen                 escape by gap 86% · clock 0% · legs 0%            ║
+║  longest 5 (Y1)                                     record: escaped 20 of 21 chases · size .89        ─ Play by play ────────────────────────────────── ║
+║  last 12 · · ■ ■ ■ · · ■ · ■ · ■  6 kills           stamina: 20 flight ticks vs a 30-tick clock:       -1 Fenrir picks out Dill at 7 cells in Southern  ║
+║  last kill: prey #474, 15 days ago, Northern        tiring                                                Savanna; it has not noticed                   ║
+║  Forest                                             challenge: CHALLENGE at 45% odds                  now Dill sees Fenrir and bolts                    ║
+║  hunting alone: no pack bonus                       kin: 5 nearby                                     now Dill keeps to the sparse grass                ║
+║  reserves: 43 chase ticks in the legs               goal: fleeing, 8 cells at 2x energy cost                                                            ║
+║  other prey in range: 11 · starvation is days away                                                                                                      ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║  key: ribbon: the rope marker per chase tick, ESCAPE top, KILL bottom, ┤ the clock out; grey = stalk · ♦ pinned: row held                               ║
+╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+ [↑↓] row  [p] pin  [d] details  [Enter] follow  [i/o] inspect  [Space] pause  [.] step  [-/=] speed  [Esc] back              06:00 ☼ · tick 8640 · ►► x1  

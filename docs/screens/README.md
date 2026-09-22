@@ -32,6 +32,7 @@ letter is the variant. The prototype binary shows the id on row 0.
 | S14 | Overlay Switcher          | [s14-overlay-switcher.md](s14-overlay-switcher.md) | a: base heatmap tab · b: marks tab · c: sub-pick list         |
 | S15 | Traits & Fates            | [s15-traits-fates.md](s15-traits-fates.md)     | a: trait × outcome matrix                                       |
 | S16 | Top Dynasties             | [s16-top-dynasties.md](s16-top-dynasties.md)   | a: race chart, one region                                       |
+| S17 | Hunt Watch                | [s17-hunt-watch.md](s17-hunt-watch.md)         | a: lanes with details · b: lanes only                           |
 
 ## Screen families
 
@@ -42,7 +43,8 @@ letter is the variant. The prototype binary shows the id on row 0.
 - **Modals over the map** (map stays visible, dimmed): S10 Controls, S11 Help, S12 Alert;
   S14 Overlay Switcher (map stays undimmed as a live preview).
 - **Data screens** (full-screen, replace the map): S03 Inspector, S04 Species, S05 Charts,
-  S06 Ecology, S07 Event Log, S08 Lineage, S15 Traits & Fates, S16 Top Dynasties.
+  S06 Ecology, S07 Event Log, S08 Lineage, S15 Traits & Fates, S16 Top Dynasties, S17 Hunt
+  Watch.
 
 ## Navigation
 
@@ -67,6 +69,7 @@ flowchart TD
     S08["S08 Lineage"]
     S15["S15 Traits & Fates<br/>a matrix"]
     S16["S16 Top Dynasties<br/>a race chart"]
+    S17["S17 Hunt Watch<br/>a lanes + details · b lanes"]
 
     S00 -- "New World" --> S09
     S00 -- "Load World" --> S01
@@ -107,6 +110,10 @@ flowchart TD
     S16 -- "Esc" --> S01
     S16 -- "f" --> S01
     S16 -- "l" --> S08
+    S01 -- "h" --> S17
+    S17 -- "Esc" --> S01
+    S17 -- "Enter" --> S01
+    S17 -- "i / o" --> S03
     S01 -- "g" --> S05
     S05 -- "Esc" --> S01
     S01 -- "y" --> S06
@@ -152,7 +159,7 @@ stateDiagram-v2
         Look --> Zoom : z
         Zoom --> Look : z
     }
-    WorldMap --> DataScreen : s g t d y e l Enter i
+    WorldMap --> DataScreen : s g t d h y e l Enter i
     DataScreen --> WorldMap : Esc
     WorldMap --> Modal : p ? alert
     Modal --> WorldMap : Esc / Continue
@@ -170,7 +177,7 @@ These keys work on every screen unless the screen's own requirements say otherwi
 | `Space`        | pause / resume the simulation             |
 | `+` `-`        | faster / slower                           |
 | `.`            | step one tick (while paused)              |
-| `s` `g` `t` `d` `y` `e` `l` `w` | Species, Graphs, Traits & Fates, Top Dynasties, Ecology, Events, Lineage, World generation |
+| `s` `g` `t` `d` `h` `y` `e` `l` `w` | Species, Graphs, Traits & Fates, Top Dynasties, Hunt Watch, Ecology, Events, Lineage, World generation |
 | `p`            | Simulation Controls modal (S10)           |
 | `q`            | quit to title (confirmation on the title screen) |
 
@@ -204,4 +211,5 @@ cargo test --lib -- --ignored regenerate_screen_renders
 
 which rewrites `S03a.txt` (oldest living prey), `S04a.txt` and `S04b.txt` (a predator with
 living members, else the most numerous species), `S15a.txt` (the species with the most living members, all days)
-and `S16a.txt` (region 1, its first line by kills).
+`S16a.txt` (region 1, its first line by kills) and `S17a.txt`/`S17b.txt` (the world stepped
+on from year 1 to the first chase in progress, capped at thirty days).

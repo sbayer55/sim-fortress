@@ -136,6 +136,8 @@ pub(super) fn tick_once(store: &mut CreatureStore, w: &mut World, time: &Time, p
     idx.rebuild(store, w);
     let mut events = EventRing::new(64);
     let mut tallies = DeathTallies::new(N_SPECIES);
+    let mut hunts = crate::sim::hunt_watch::HuntWatch::default();
+    let mut ledgers = super::Ledgers { tallies: &mut tallies, hunts: &mut hunts };
     let mut noted = false;
     tick_creatures(
         store,
@@ -153,7 +155,7 @@ pub(super) fn tick_once(store: &mut CreatureStore, w: &mut World, time: &Time, p
         &DietParams::default(),
         &TerritoryParams::default(),
         &mut Rng::new(1),
-        &mut tallies,
+        &mut ledgers,
         &mut Lineage::new(),
         &mut noted,
         &mut DiseaseState::new(&DiseaseParams::default(), roster()),

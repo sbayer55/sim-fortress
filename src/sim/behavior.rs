@@ -7,6 +7,7 @@ use crate::sim::creatures::{
 };
 use crate::sim::events::{Event, EventKind, EventRing};
 use crate::sim::genetics::{self, TickView};
+use crate::sim::hunt_watch::HuntWatch;
 use crate::sim::lineage::Lineage;
 use crate::sim::params::{CreaturesParams, DietParams, EcologyParams, GeneticsParams, PredationParams, Roster, SocialParams, TerritoryParams};
 use crate::sim::rng::Rng;
@@ -24,6 +25,15 @@ use hunt::{hunt_contacts, scavenge_contacts};
 pub use perception::{Kin, Perception};
 pub use migration::migration_daily;
 pub use survival::{droughts_eased, winter_survived};
+
+/// The mutable ledgers the behaviour passes write: the daily and cumulative
+/// death tallies, and the S17 hunt traces. One parameter where `tallies` used
+/// to be on the hunt path, so no signature grows.
+#[derive(Debug)]
+pub struct Ledgers<'a> {
+    pub tallies: &'a mut DeathTallies,
+    pub hunts: &'a mut HuntWatch,
+}
 
 /// Advance every living creature one tick, in slot order (FR9), then run the
 /// C4/C5 passes: hunt contacts (kill/eat), territorial contests, scavenging,
@@ -45,7 +55,7 @@ pub fn tick_creatures(
     diet: &DietParams,
     tp: &TerritoryParams,
     rng: &mut Rng,
-    tallies: &mut DeathTallies,
+    ledgers: &mut Ledgers<'_>,
     lineage: &mut Lineage,
     soft_cap_noted: &mut bool,
     dstate: &mut DiseaseState,
@@ -55,16 +65,18 @@ pub fn tick_creatures(
     // FR5: predator-first threat marking (bucket-bounded; never per-prey scans).
     mark_threats(store, spatial, world, time.tick, roster, pp, sp);
     for c in store.living_mut() {
-        update_one(c, spatial, world, events, time, roster, cp, ep, gp, pp, dp, sp, diet, tp, &view, rng, tallies, lineage);
+        update_one(c, spatial, world, events, time, roster, cp, ep, gp, pp, dp, sp, diet, tp, &view, rng, ledgers, lineage);
     }
     // C7 FR4: infectious-first contagion over the same spatial snapshot.
     disease::contagion_pass(store, spatial, world, time, dp, dstate, drng);
     genetics::consummate(store, time, roster, gp, events, &view, soft_cap_noted);
-    hunt_contacts(store, world, events, time, roster, pp, dp, sp, tp, rng, tallies, lineage, dstate, drng);
+    // S17: one sample per open hunt after everyone has moved, before the contact roll.
+    ledgers.hunts.observe(store, world, time.tick);
+    hunt_contacts(store, world, events, time, roster, pp, dp, sp, tp, rng, ledgers, lineage, dstate, drng);
     // C5 FR13: territorial contests, after the hunts and before scavenging.
-    territory::contest_contacts(store, world, events, time, roster, pp, tp, rng, tallies);
+    territory::contest_contacts(store, world, events, time, roster, pp, tp, rng, ledgers.tallies);
     scavenge_contacts(store, world, events, time, roster, pp, dp, dstate, drng);
-    genetics::deliver(store, world, events, time, roster, gp, dp, rng, tallies, lineage, dstate, drng);
+    genetics::deliver(store, world, events, time, roster, gp, dp, rng, ledgers.tallies, lineage, dstate, drng);
 }
 
 /// The day-boundary step: age death, adult re-evaluation, carcass decay/free and

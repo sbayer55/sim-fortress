@@ -200,6 +200,7 @@ const KEY_GROUPS: [(&str, &[(&str, &str)]); 5] = [
             ("g", "graphs & charts"),
             ("t", "traits & fates"),
             ("d", "top dynasties"),
+            ("h", "hunt watch"),
             ("y", "ecology & regions"),
             ("e", "event log (c: chronicle)"),
             ("l", "lineage tree"),

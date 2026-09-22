@@ -71,6 +71,7 @@ impl Component for Header<'_> {
             winter: false,
             cursor: Some((c.x, c.y)),
             follow: if c.alive { Some(self.id) } else { None },
+            pins: Vec::new(),
             origin: (ox, oy),
             creatures: true,
             selected_region: None,

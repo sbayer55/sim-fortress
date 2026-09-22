@@ -9,7 +9,7 @@ sheets say *how* the shared pieces look and behave, so a screen file can say
 **Status: shipped, screens moving.** Every sheet's component lives in
 `src/widgets` and `tests/components.rs` pins every example. The S01 status
 sidebar, S03, S04's table, S06's regions, S07, S09, S10, S11, S12, the confirm
-dialog, the title menu, Load World, S14, S15, S16 and the S01 compact overlay sidebar
+dialog, the title menu, Load World, S14, S15, S16, S17 and the S01 compact overlay sidebar
 draw through the components; the single-layer S01 overlay sidebars, S08, S13, S04b,
 the S04 summary and S05's stacked, phase and group charts still call the thin
 free-function wrappers and move next. Each
@@ -50,6 +50,7 @@ Widths in the *Shape* column are the canonical example width (see conventions).
 | Histogram | [histogram.md](histogram.md) | area | `bars::histogram` + S04b axis rows | `Histogram` |
 | Chart | [chart.md](chart.md) | area | hand-drawn `▀▄` line charts in `s05_charts/{time,infections,phase,stacked,groups}.rs` | `Chart`, `StackedChart` |
 | Race Chart | [race-chart.md](race-chart.md) | area | `RaceChart` in S16 | `RaceChart`, `RaceSeries` |
+| Ribbon | [ribbon.md](ribbon.md) | area | `Ribbon` in S17 | `Ribbon`, `RibbonEnd` |
 | Legend | [legend.md](legend.md) | area | `map::legend()` + `s01_map::base::legend_section` | `Legend` |
 | **Input** | | | | |
 | Menu | [menu.md](menu.md) | area | loop in S00 title, `load_world` | `Menu` |

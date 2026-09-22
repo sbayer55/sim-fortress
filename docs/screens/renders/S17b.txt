@@ -1,0 +1,45 @@
+ S17b  Hunt Watch - lanes only                                                                                                                             
+╔ Chase Lanes · Scoreboard · hunter | ribbon | prey ═══════════════════════════════════════════════════════════ 1 hunting · 1 tracked · Y2 D1 06:00 ☼ day ╗
+║» Fenrir w#953                        │             │                                                            ┤ │Dill d#450                           ║
+║  energy [█████████████░░░░░░░░░░░░]  │         ■─►─│                                                            ┤ │energy [████████████░░░░░░░░░░░░░]   ║
+║  need   DESPERATE                    │             │                                                            ┤ │level  CHALLENGE                     ║
+║  state  STALK                        │             │                                                            ┤ │goal   fleeing                       ║
+║  where  Southern Savanna             │             │                    10                  20                  ┤ │gap    7  W······D                   ║
+║  row 2 · free                                                                                                                                           ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║  row 3 · free                                                                                                                                           ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║  row 4 · free                                                                                                                                           ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║  row 5 · free                                                                                                                                           ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║  row 6 · free                                                                                                                                           ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║  row 7 · free                                                                                                                                           ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║  row 8 · free                                                                                                                                           ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║                                                                                                                                                         ║
+║  key: ribbon: the rope marker per chase tick, ESCAPE top, KILL bottom, ┤ the clock out; grey = stalk · ♦ pinned: row held                               ║
+╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+ [↑↓] row  [p] pin  [d] details  [Enter] follow  [i/o] inspect  [Space] pause  [.] step  [-/=] speed  [Esc] back              06:00 ☼ · tick 8640 · ►► x1  
