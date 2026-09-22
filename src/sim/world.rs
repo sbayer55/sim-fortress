@@ -382,4 +382,25 @@ impl World {
         let start = species.index() * cells;
         self.scent.get(start..start + cells).unwrap_or(&[])
     }
+
+    /// Cells of `species`' block held at or above `hold_min`, per holder,
+    /// ascending by id: one pass over the block for every holder at once
+    /// (S02j sidebar, S16 territory).
+    pub fn held_cells_by_holder(&self, species: SpeciesId, hold_min: f32) -> Vec<(CreatureId, u32)> {
+        let mut counts: Vec<(CreatureId, u32)> = Vec::new();
+        for m in self.scent_block(species) {
+            if m.strength < hold_min || m.holder == CreatureId(0) {
+                continue;
+            }
+            match counts.binary_search_by_key(&m.holder, |e| e.0) {
+                Ok(i) => {
+                    if let Some(e) = counts.get_mut(i) {
+                        e.1 += 1;
+                    }
+                }
+                Err(i) => counts.insert(i, (m.holder, 1)),
+            }
+        }
+        counts
+    }
 }
