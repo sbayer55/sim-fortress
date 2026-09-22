@@ -9,8 +9,9 @@ sheets say *how* the shared pieces look and behave, so a screen file can say
 **Status: shipped, screens moving.** Every sheet's component lives in
 `src/widgets` and `tests/components.rs` pins every example. The S01 status
 sidebar, S03, S04's table, S06's regions, S07, S09, S10, S11, S12, the confirm
-dialog, the title menu, Load World, S14 and the S01 compact overlay sidebar draw
-through the components; the single-layer S01 overlay sidebars, S08, S13, S04b,
+dialog, the title menu, Load World, S14, S15, the S01 compact overlay sidebar and
+the planned S16 ([spec](../screens/s16-top-dynasties.md), which adds a Race Chart sheet)
+draw through the components; the single-layer S01 overlay sidebars, S08, S13, S04b,
 the S04 summary and S05's stacked, phase and group charts still call the thin
 free-function wrappers and move next. Each
 sheet's *Today* section names the helper that wrapped the component; where

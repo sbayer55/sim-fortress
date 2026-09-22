@@ -31,6 +31,7 @@ letter is the variant. The prototype binary shows the id on row 0.
 | S13 | Local Zoom View           | [s13-local-zoom.md](s13-local-zoom.md)         | a: 3×3 tiles around the cursor                                  |
 | S14 | Overlay Switcher          | [s14-overlay-switcher.md](s14-overlay-switcher.md) | a: base heatmap tab · b: marks tab · c: sub-pick list         |
 | S15 | Traits & Fates            | [s15-traits-fates.md](s15-traits-fates.md)     | a: trait × outcome matrix                                       |
+| S16 | Top Dynasties             | [s16-top-dynasties.md](s16-top-dynasties.md)   | a: race chart, one region                                       |
 
 ## Screen families
 
@@ -41,7 +42,7 @@ letter is the variant. The prototype binary shows the id on row 0.
 - **Modals over the map** (map stays visible, dimmed): S10 Controls, S11 Help, S12 Alert;
   S14 Overlay Switcher (map stays undimmed as a live preview).
 - **Data screens** (full-screen, replace the map): S03 Inspector, S04 Species, S05 Charts,
-  S06 Ecology, S07 Event Log, S08 Lineage, S15 Traits & Fates.
+  S06 Ecology, S07 Event Log, S08 Lineage, S15 Traits & Fates, S16 Top Dynasties.
 
 ## Navigation
 
@@ -65,6 +66,7 @@ flowchart TD
     S07["S07 Event Log<br/>a full · b deaths"]
     S08["S08 Lineage"]
     S15["S15 Traits & Fates<br/>a matrix"]
+    S16["S16 Top Dynasties<br/>a race chart"]
 
     S00 -- "New World" --> S09
     S00 -- "Load World" --> S01
@@ -101,6 +103,10 @@ flowchart TD
     S04 -- "Esc" --> S01
     S01 -- "t" --> S15
     S15 -- "Esc" --> S01
+    S01 -- "d" --> S16
+    S16 -- "Esc" --> S01
+    S16 -- "f" --> S01
+    S16 -- "l" --> S08
     S01 -- "g" --> S05
     S05 -- "Esc" --> S01
     S01 -- "y" --> S06
@@ -146,7 +152,7 @@ stateDiagram-v2
         Look --> Zoom : z
         Zoom --> Look : z
     }
-    WorldMap --> DataScreen : s g t y e l Enter i
+    WorldMap --> DataScreen : s g t d y e l Enter i
     DataScreen --> WorldMap : Esc
     WorldMap --> Modal : p ? alert
     Modal --> WorldMap : Esc / Continue
@@ -164,7 +170,7 @@ These keys work on every screen unless the screen's own requirements say otherwi
 | `Space`        | pause / resume the simulation             |
 | `+` `-`        | faster / slower                           |
 | `.`            | step one tick (while paused)              |
-| `s` `g` `t` `y` `e` `l` `w` | Species, Graphs, Traits & Fates, Ecology, Events, Lineage, World generation |
+| `s` `g` `t` `d` `y` `e` `l` `w` | Species, Graphs, Traits & Fates, Top Dynasties, Ecology, Events, Lineage, World generation |
 | `p`            | Simulation Controls modal (S10)           |
 | `q`            | quit to title (confirmation on the title screen) |
 
@@ -197,4 +203,5 @@ cargo test --lib -- --ignored regenerate_screen_renders
 ```
 
 which rewrites `S03a.txt` (oldest living prey), `S04a.txt` and `S04b.txt` (a predator with
-living members, else the most numerous species) and `S15a.txt` (the species with the most living members, all days).
+living members, else the most numerous species), `S15a.txt` (the species with the most living members, all days)
+and `S16a.txt` (region 1, its first line by kills).
