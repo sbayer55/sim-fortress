@@ -516,6 +516,8 @@ mod tests {
             // The dynasties (save 18) and the mother-line root likewise.
             assert!(!sim.lineage.dynasties().is_empty(), "seed {seed}: no predator lines in {N} ticks");
             assert_eq!(loaded.lineage.dynasties(), sim.lineage.dynasties(), "seed {seed} dynasties round-trip");
+            assert!(!sim.hunts.is_empty(), "seed {seed}: no hunts traced in {N} ticks");
+            assert_eq!(loaded.hunts, sim.hunts, "seed {seed} hunt traces round-trip");
             let root_of = |s: &Sim| s.lineage.nodes().map(|n| (n.id, n.root)).collect::<Vec<_>>();
             assert_eq!(root_of(&loaded), root_of(&sim), "seed {seed} roots round-trip");
             // `load(save(sim))` then N ticks equals `sim` then N ticks.

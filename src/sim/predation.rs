@@ -270,7 +270,9 @@ mod tests {
     // ---- Hunt / scavenge harness: a flat Grass world with hand-placed creatures ----
 
     use crate::sim::creatures::{Cause, HuntPhase};
-    use crate::sim::{EventKind, Params, Sim};
+    use crate::sim::{EventKind, Params};
+
+    mod watch;
 
     /// A `Sim` with no founders, every cell Grass, no dens, and the given
     /// predation overrides; creatures are inserted by the test.
