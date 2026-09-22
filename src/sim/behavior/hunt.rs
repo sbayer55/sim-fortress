@@ -6,6 +6,7 @@ use crate::sim::creatures::{
 use crate::sim::events::EventRing;
 use crate::sim::genetics::{self, TickView};
 use crate::sim::geom;
+use crate::sim::hunt_watch::{HuntKey, HuntOutcome};
 use crate::sim::lineage::Lineage;
 use crate::sim::params::{PredationParams, Roster, SocialParams, TerritoryParams};
 use super::territory::{self, Scent};
@@ -40,12 +41,14 @@ struct HuntSnap {
 /// `chase_trigger_cheb`, and fail on timeout or when the prey leaves sense range.
 pub(super) fn update_hunt_stalk(c: &mut Creature, view: &TickView, time: &Time, pp: &PredationParams, ledgers: &mut Ledgers<'_>) {
     let Some(prey_id) = c.hunt_target else { return };
+    // S17: the trace opens on the first tick the target is held (a no-op after).
+    ledgers.hunts.begin(HuntKey { hunter: c.id, species: c.species, prey: prey_id }, time.tick);
     let Some(prey) = view.get(prey_id) else {
-        fail_hunt(c, time, pp, ledgers);
+        fail_hunt(c, time, pp, ledgers, HuntOutcome::Lost);
         return;
     };
     if geom::dist(c.x, c.y, prey.x, prey.y) > f32::from(c.genome.sense_cells()) {
-        fail_hunt(c, time, pp, ledgers);
+        fail_hunt(c, time, pp, ledgers, HuntOutcome::Lost);
         return;
     }
     c.target = Some((prey.x, prey.y));
@@ -56,14 +59,19 @@ pub(super) fn update_hunt_stalk(c: &mut Creature, view: &TickView, time: &Time, 
     if c.hunt_phase == HuntPhase::Chase {
         if let Some(start) = c.chase_start_tick {
             if time.tick.saturating_sub(start) >= u64::from(pp.chase_max_ticks) {
-                fail_hunt(c, time, pp, ledgers);
+                fail_hunt(c, time, pp, ledgers, HuntOutcome::Timeout);
             }
         }
     }
 }
 
-/// Record a failed hunt and re-arm for the next decision (FR4).
-fn fail_hunt(c: &mut Creature, time: &Time, pp: &PredationParams, ledgers: &mut Ledgers<'_>) {
+/// Record a failed hunt and re-arm for the next decision (FR4). `why` is what
+/// the S17 trace remembers; the sim's own state does not distinguish.
+fn fail_hunt(c: &mut Creature, time: &Time, pp: &PredationParams, ledgers: &mut Ledgers<'_>, why: HuntOutcome) {
+    if let Some(prey) = c.hunt_target {
+        let chase_ticks = c.chase_start_tick.map_or(0, |s| crate::cast!(time.tick.saturating_sub(s).min(u64::from(u16::MAX)) => u16));
+        ledgers.hunts.end(HuntKey { hunter: c.id, species: c.species, prey }, why, time.tick, chase_ticks);
+    }
     c.attempts += 1;
     ledgers.tallies.hunt_attempts[c.species.index()] += 1;
     c.hunt_cooldown_until = time.tick + u64::from(pp.hunt_cooldown_hours);
@@ -327,7 +335,9 @@ fn resolve_kill(
         p.hunt_phase = HuntPhase::Eat;
         p.hunt_target = None;
         p.chase_start_tick = None;
-        p.eat_until = Some(time.tick + u64::from(pp.eat_hours(prey_size)));
+        let eat_until = time.tick + u64::from(pp.eat_hours(prey_size));
+        p.eat_until = Some(eat_until);
+        ledgers.hunts.end(HuntKey { hunter: pred_id, species: p.species, prey: prey_id }, HuntOutcome::Kill { eat_until }, time.tick, chase_ticks);
         p.target = Some((px, py));
         // FR4: `hunger −= hunger_per_kill` — allowed to go negative, so a
         // big kill extends the satiation period and bounds the hunt rate.
@@ -364,7 +374,7 @@ fn resolve_miss(
     pred_at: (usize, usize, SpeciesId),
 ) {
     if let Some(p) = store.get_mut(pred_id) {
-        fail_hunt(p, time, pp, ledgers);
+        fail_hunt(p, time, pp, ledgers, HuntOutcome::Miss);
     }
     // The prey enters Flee regardless of whether it had detected the
     // predator: the threat is forced in so the away-vector exists, and

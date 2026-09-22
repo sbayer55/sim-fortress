@@ -70,6 +70,8 @@ pub fn tick_creatures(
     // C7 FR4: infectious-first contagion over the same spatial snapshot.
     disease::contagion_pass(store, spatial, world, time, dp, dstate, drng);
     genetics::consummate(store, time, roster, gp, events, &view, soft_cap_noted);
+    // S17: one sample per open hunt after everyone has moved, before the contact roll.
+    ledgers.hunts.observe(store, world, time.tick);
     hunt_contacts(store, world, events, time, roster, pp, dp, sp, tp, rng, ledgers, lineage, dstate, drng);
     // C5 FR13: territorial contests, after the hunts and before scavenging.
     territory::contest_contacts(store, world, events, time, roster, pp, tp, rng, ledgers.tallies);

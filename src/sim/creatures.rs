@@ -59,6 +59,16 @@ pub enum HuntPhase {
     Eat,
 }
 
+impl HuntPhase {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Stalk => "stalking",
+            Self::Chase => "chasing",
+            Self::Eat => "eating",
+        }
+    }
+}
+
 /// Why a creature is resting (FR5 distinguishes three wake conditions).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RestReason {
