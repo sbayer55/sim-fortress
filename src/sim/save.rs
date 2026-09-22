@@ -40,8 +40,9 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// per-species scent grid and the per-creature challenge and contest state
 /// (C5 FR13); version 18 added the lineage's mother-line `root`, the persisted
 /// predator dynasties (S16 Top Dynasties) and the per-creature droughts and
-/// winters survived tallies.
-pub const VERSION: u16 = 18;
+/// winters survived tallies; version 19 added the hunt traces (`Sim.hunts`, one per
+/// predator that has hunted, for S17 Hunt Watch).
+pub const VERSION: u16 = 19;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 

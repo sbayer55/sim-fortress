@@ -47,6 +47,7 @@ for f in $changed; do
             core=1 ;;
         src/main.rs)                              chunks[headless]=1 ;;
         src/sim/save.rs)                          units[sim::save]=1; chunks[headless]=1 ;;
+        src/sim/hunt_watch*)                      units[sim::hunt_watch]=1; chunks[predators]=1 ;;
         src/sim/disease*)                         units[sim::disease]=1; chunks[disease]=1 ;;
         src/sim/genetics*|src/sim/lineage*)       units[sim::genetics]=1; units[sim::lineage]=1; chunks[evolution]=1 ;;
         src/sim/predation.rs|src/sim/behavior/hunt.rs|src/sim/behavior/threat.rs)
