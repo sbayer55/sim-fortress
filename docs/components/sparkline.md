@@ -71,9 +71,10 @@ the table but unreachable, since `i` starts at 1.
 ## API
 ### Today
 ```rust
-widgets::bars::sparkline(buf, x, y, w, values: &[u16], color)
+widgets::bars::Sparkline::new(&[u16]).color(c)   // the component; height 1, draws the last `w`
+widgets::bars::sparkline(buf, x, y, w, values: &[u16], color)   // the wrapper the older callers use
 ```
-Callers: `s01_map/base.rs::population_section` (`w` 18, the last 30 samples),
+Callers of the wrapper: `s01_map/base.rs::population_section` (`w` 18, the last 30 samples),
 `s04_species/table.rs::table_row` (`w` 14, `s.trend`),
 `s04_species/summary.rs` (`w` 30, `s.trend`), `s04_species/drift.rs` (`w` 36).
 

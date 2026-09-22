@@ -337,6 +337,8 @@ fn newborn(
                 contest_cooldown_until: 0,
                 contests_won: 0,
                 contests_lost: 0,
+                droughts_survived: 0,
+                winters_survived: 0,
             }
 }
 

@@ -1,0 +1,45 @@
+ S16a  Top Dynasties - race chart                                                                                                                          
+╔ Watch ═══════════════════════════════════════════════════════════════════════════════════════════════════ 0 pinned · [p] pin the selection · [1-4] jump ╗
+║ nothing pinned yet · [p] pins the selected dynasty or animal, it then stays selected when the ranking shifts                                            ║
+╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+╔ Top dynasties by region ═════════════════════════════════════════════ Year 2, day 1 · kills lead the ranking ╗╔ Top member ═════════════════════════════╗
+║ ◄ Western Forest ►  region 1/8 · 4 dynasties · 1 foxes, 2 wolves, 1 lynxes    all F fox W wolf L lynx    [s] ║║ W Fenrir w#953                   ♂ wolf ║
+║     #dynasty        sp  since  gens  living   kills   terr  young  surv   age  muts carried by     region    ║║ carries the Cinder line                 ║
+║ ►  1 Cinder line    W      Y1     2       2      63     24      4     2    0y     1 Fenrir w#953   W. Forest ║║ ♥ living · age 0y 294d · gen 2          ║
+║    2 Rook line      W      Y1     2       3      59     49      2     3    1y     1 Rook w#520     W. Forest ║║                                         ║
+║    3 Ember line     L      Y1     2       2      33     33      2    22    1y     0 Ember l#528    W. Forest ║║     ▄▄     ▄▄     kills       21 #5/11  ║
+║    4 Dusk line      F      Y1     1       1      19     18      0    12    1y     0 Dusk f#513     W. Forest ║║     █▀█▄▄▄█▀█     territory   10 #11/11 ║
+║─ Cinder line · founded Y1 by Cinder w#523 · 2 generations · 3 members ever, 2 living ────────────────────────║║    ▐█ ■ ▄ ■ █▌    young        2 #2/11  ║
+║    ▄▄     ▄▄     standing   #1 of 4 dynasties in the Western Forest · #2 of 5 wolf lines in the valley       ║║     █▄▄▄▀▄▄▄█     survival     1 #1/11  ║
+║    █▀█▄▄▄█▀█     kills        63 [████████████│█░░░░░░░░░░] region #1/4 · valley #2/5 · mean 55 · best 107   ║║      ▀██▄▄██▀     age         0y #6/11  ║
+║   ▐█ ■ ▄ ■ █▌    territory    24 [████████░░░│░░░░░░░░░░░░] region #3/4 · valley #3/5 · mean 36 · best 76    ║║        ▀██▀       mutations    0 #7/11  ║
+║    █▄▄▄▀▄▄▄█     young         4 [██████████████│█░░░░░░░░] region #1/4 · valley #2/5 · mean 4 · best 6      ║║         ▀▀        [p] pin               ║
+║     ▀██▄▄██▀     survival      2 [████████████░│░░░░░░░░░░] region #4/4 · valley #3/5 · mean 2 · best 4      ║║                                         ║
+║       ▀██▀       age          0y [██████████░░░░│░░░░░░░░░] region #4/4 · valley #5/5 · mean 1y · best 2y    ║║─ Against living wolves ─────────────────║
+║        ▀▀        mutations     1 [█████░│░░░░░░░░░░░░░░░░░] region #1/4 · valley #2/5 · mean 1 · best 5      ║║ kills    [████████████│██░░░]   top 46% ║
+║                  carried by Fenrir w#953 · 21 of 63 kills · 10 of 24 cells · age 0y 294d · gen 2             ║║ territory[████████░░░░│░░░░░]  top 100% ║
+║                  [p] pins this line to the Watch strip      │ valley mean of the species' lines              ║║ young    [█████│███░░░░░░░░░]   top 19% ║
+║─ Race since Y1 ── ■ Cinder line  ∙ Rook line  ∙ Ember line  ∙ Dusk line ─────────────────────────────────────║║ survival [█████████████████│]   top 10% ║
+║ kills ■63 ∙59 ∙33 ∙19               territory ■24 ∙49 ∙33 ∙18           young ■4 ∙2 ∙2 ∙0                    ║║ age      [███████│░░░░░░░░░░]   top 55% ║
+║ │■─■                                │∙─∙                                │■─■                                 ║║ mutations[░░░░░│░░░░░░░░░░░░]   top 64% ║
+║ │                                   │∙─∙                                │                                    ║║ │ species mean · bar = share of the best║
+║ │∙─∙                                │■─■                                │∙─∙                                 ║║                                         ║
+║ │∙─∙                                │∙─∙                                │                                    ║║─ Kills by prey ─────────────────────────║
+║ │                                   │                                   │∙─∙                                 ║║         ███                             ║
+║ └1───────────────────────────────── └1───────────────────────────────── └1─────────────────────────────────  ║║ ··      ███                             ║
+║ survival ■2 ∙3 ∙22 ∙12              age ■0y ∙1y ∙1y ∙1y                 mutations ■1 ∙1 ∙0 ∙0                ║║ V   H   D                               ║
+║ │∙─∙                                │∙─∙                                │■─■                                 ║║ 0   2   19                              ║
+║ │                                   │∙─∙                                │                                    ║║                                         ║
+║ │∙─∙                                │■─■                                │                                    ║║─ Territory ─────────────────────────────║
+║ │∙─∙                                │                                   │                                    ║║ 10 cells · 41% of line · won 0 lost 0   ║
+║ │■─■                                │                                   │∙─∙                                 ║║                                         ║
+║ └1───────────────────────────────── └1───────────────────────────────── └1─────────────────────────────────  ║║─ Survival ──────────────────────────────║
+║ totals: kills, young, survival, mutations · year-end levels: territory = cells the living hold, age = oldest ║║ * survived a hard winter ×1             ║
+║─ Living members · 2, the top 2 by kills ─────────────────────────────────────────────────────────────────────║║                                         ║
+║   name     tag    sex   gen  kills  terr  young  surv   age  muts kills vs the living                        ║║─ Genetics ──────────────────────────────║
+║ · Fenrir   w#953  ♂      g2     21    10      2     1    0y     0 [██████████████│█░░░░]                     ║║ no mutation at birth                    ║
+║   Vex      w#952  ♀      g2     19    14      0     1    0y     1 [██████████████│░░░░░]                     ║║                                         ║
+║                                                                                                              ║║                                         ║
+║                                                                                                              ║║ [f] follow on map  [l] lineage          ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝╚═════════════════════════════════════════╝
+ [←→] region  [↑↓] pick  [Tab] members  [s] species  [p] pin  [1-4] watch  [f] follow  [l] lineage  [Esc] back        W. Forest · Cinder line · dynasties  

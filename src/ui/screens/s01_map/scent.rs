@@ -34,17 +34,7 @@ fn held_by_region(sim: &Sim, sp: SpeciesId) -> Vec<u32> {
 
 /// Every holder of `sp` with the cells it holds, most first (ties by id).
 fn holders(sim: &Sim, sp: SpeciesId) -> Vec<(CreatureId, u32)> {
-    let hold_min = sim.params.territory.hold_min;
-    let mut counts: Vec<(CreatureId, u32)> = Vec::new();
-    for m in sim.world.scent_block(sp) {
-        if m.strength < hold_min || m.holder == CreatureId(0) {
-            continue;
-        }
-        match counts.binary_search_by_key(&m.holder, |e| e.0) {
-            Ok(i) => counts[i].1 += 1,
-            Err(i) => counts.insert(i, (m.holder, 1)),
-        }
-    }
+    let mut counts = sim.world.held_cells_by_holder(sp, sim.params.territory.hold_min);
     counts.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     counts
 }

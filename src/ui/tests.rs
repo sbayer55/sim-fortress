@@ -148,6 +148,7 @@ fn regenerate_screen_renders() {
     use crate::ui::screens::s03_inspector::Inspector;
     use crate::ui::screens::s04_species::{SpeciesBrowser, SpeciesDetail};
     use crate::ui::screens::s15_traits::TraitsScreen;
+    use crate::ui::screens::s16_dynasties::DynastiesScreen;
     use crate::ui::screens::Screen;
     use crate::sim::{SpeciesId, Kind};
     use ratatui::backend::TestBackend;
@@ -219,6 +220,11 @@ fn regenerate_screen_renders() {
             "docs/screens/renders/S15a.txt",
             "S15a  Traits & Fates - trait by outcome matrix".to_string(),
             snap(&app, &TraitsScreen::for_species(traits_species.index()), "S15a  Traits & Fates - trait by outcome matrix"),
+        ),
+        (
+            "docs/screens/renders/S16a.txt",
+            "S16a  Top Dynasties - race chart".to_string(),
+            snap(&app, &DynastiesScreen::new(), "S16a  Top Dynasties - race chart"),
         ),
     ];
     for (path, title, text) in files {

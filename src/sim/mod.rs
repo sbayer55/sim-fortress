@@ -27,7 +27,7 @@ pub use {geom::{cheb, dist}, time::{Season, Time}};
 pub use params::{Difficulty, GeneticsParams, Params, PredationParams, Preset, Rainfall, Roster, SpeciesParams, PRESETS};
 pub use {rng::Rng, spatial::SpatialIndex};
 pub use species::{Genome, Kind, SpeciesId, TRAIT_NAMES};
-pub use lineage::{Lineage, LineageNode, Tree, TreeItem};
+pub use lineage::{dynasties::Dynasties, Lineage, LineageNode, Tree, TreeItem};
 pub use stats::{census, group_census, Census, GroupCensus, Sample, Series, SpeciesStats};
 pub use world::{Cell, RegionRect, Terrain, World};
 
@@ -260,6 +260,10 @@ impl Sim {
         }
         if let Some(season) = self.time.advance() {
             self.push_season_event(season);
+            if season == Season::Spring {
+                // S16: every animal alive when spring returns came through the winter.
+                behavior::winter_survived(&mut self.creatures);
+            }
         }
         self.run_behavior();
         if self.time.hour() == 0 {
@@ -319,9 +323,22 @@ impl Sim {
     fn run_midnight(&mut self, alerts: &mut Vec<Alert>) {
         let c = self.day_boundary_update();
         self.midnight_systems(&c, alerts);
+        // S16: the first day of a year closes the previous one for every dynasty,
+        // after the day's deaths and the scent decay have run.
+        if self.time.day_of_year() == 1 {
+            self.close_dynasty_year();
+        }
         // Refresh last: the midnight disease pass can still kill after the day
         // boundary, and the census must describe the set the tick ends with.
         self.refresh_group_stats();
+    }
+
+    /// Push a `YearRow` (dead + living totals) onto every dynasty (S16).
+    fn close_dynasty_year(&mut self) {
+        let living = lineage::dynasties::living_totals(self);
+        let year = self.time.year().saturating_sub(1);
+        let day = crate::cast!(self.time.day_index() => u32);
+        self.lineage.close_year(year, day, 4 * self.time.season_days, &living);
     }
 
     /// Midnight: age/behaviour day boundary, census and species statistics.
@@ -401,6 +418,7 @@ impl Sim {
     /// The midnight ecology update and its series sample.
     fn ecology_step(&mut self, c: &Census) {
         let t0 = std::time::Instant::now();
+        let drought_before = self.drought;
         ecology::daily_update(
             &mut self.world,
             &mut self.rng,
@@ -415,6 +433,8 @@ impl Sim {
             &self.deaths,
             &self.disease,
         );
+        // S16: a drought that eased today was survived by everyone standing in it.
+        behavior::droughts_eased(&mut self.creatures, &self.world, drought_before, self.drought);
         if self.profile_enabled {
             self.profile.ecology_ns += crate::cast!(t0.elapsed().as_nanos() => u64);
         }

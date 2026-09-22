@@ -9,7 +9,7 @@ use ratatui::text::Span;
 use sim_fortress::widgets::Constraint::{Fill, Fixed, Min};
 use sim_fortress::widgets::{
     util, Align, Bar, Block, ButtonRow, Chart, Checkbox, Column, Columns, Component, Divider, FilterStrip, HStack, Histogram, Inverted, KeyHint, Kind,
-    LabeledBar, Legend, Menu, Modal, Panel, RangeBar, Row, ScrollRegion, Series, Spacer, Sparkline, StatusBar, Stepper, Table, TableCell, TableRow,
+    LabeledBar, Legend, Menu, Modal, Panel, RaceChart, RaceSeries, RangeBar, Row, ScrollRegion, Series, Spacer, Sparkline, StatusBar, Stepper, Table, TableCell, TableRow,
     Text, TextField, Ticker, TrendArrow, VStack,
 };
 use sim_fortress::sim::Params;
@@ -865,6 +865,31 @@ fn chart() -> Vec<Entry> {
     })]
 }
 
+fn race_chart() -> Vec<Entry> {
+    vec![
+        bare("race-chart", "Lead and three rivals (35 columns)", |b, a| {
+            let lead = [4.0, 13.0, 27.0, 45.0, 67.0, 92.0, 113.0, 139.0, 169.0, 202.0, 240.0, 243.0];
+            let r1 = [3.0, 9.0, 17.0, 24.0, 33.0, 41.0, 52.0, 66.0, 79.0, 90.0, 99.0, 102.0];
+            let r2 = [0.0, 6.0, 15.0, 22.0, 31.0, 40.0, 49.0, 61.0, 70.0, 81.0, 88.0, 89.0];
+            let r3 = [2.0, 8.0, 12.0, 19.0, 30.0, 44.0, 56.0, 63.0, 71.0, 78.0, 85.0, 87.0];
+            RaceChart::new("kills")
+                .series(RaceSeries::new(&r1).color(theme::TAN))
+                .series(RaceSeries::new(&r2).color(theme::ROSE))
+                .series(RaceSeries::new(&r3).color(theme::PREY))
+                .series(RaceSeries::new(&lead).color(theme::PRED).lead(true))
+                .rows(5)
+                .render(b, a);
+        }),
+        bare("race-chart", "Rising and falling steps, a late start (21 columns)", |b, a| {
+            RaceChart::new("young")
+                .series(RaceSeries::new(&[1.0, 4.0, 4.0, 2.0, 6.0, 6.0, 3.0]).color(theme::PRED).lead(true))
+                .series(RaceSeries::new(&[5.0, 5.0, 2.0, 2.0, 1.0]).start(2).color(theme::TAN))
+                .rows(5)
+                .render(b, a);
+        }),
+    ]
+}
+
 fn text() -> Vec<Entry> {
     vec![
         rows("text", "Plain (43 columns)", |b, a| Text::new(" Hello!").render(b, a)),
@@ -917,6 +942,7 @@ pub fn examples() -> Vec<Entry> {
     v.extend(filter_strip());
     v.extend(histogram());
     v.extend(chart());
+    v.extend(race_chart());
     v.extend(text());
     v.sort_by_key(|e| (e.sheet, e.heading));
     v

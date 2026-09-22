@@ -22,7 +22,7 @@
 ║♠♠~♠♠♠♠♠♠♠♣""~~≈≈≈≈≈≈≈≈≈~~~♠♠♠♠"*,*,"♠♠H""≡≡~≡║ [x] auto-pause on extinction            [a]              ║~≈≈≈║║                                         ║
 ║·~~≡·♠♠♠♠♠♠♠♠♠~~~≈≈≈≈≈≈≈≈≈~~♠♠♠♠♠♣"""""***""♠♠║ [ ] log births to the event log         [b]              ║~~~~║║─ Notable ───────────────────────────────║
 ║~~~~~~·♠♠♠♠♠♠♠♠♠~~~~~~~≈≈≈≈~~♠♠♠♠♠♠V♣V",*"V"♣♠║ [x] pause when a followed creature dies [c]              ║~·♠·║║ [k] look · [e] events · [g] charts      ║
-║≈≈≈≈≈~~≡♠♠♠♠♠~♠≡♠♠♣♠♠~~~~≈≈≈~~~♠♠♠♠♠V♠♣""♣♣≡≡≡║ [x] day/night tint: status text         [t]              ║~♠♠"║║ [s] species · [t] traits & fates        ║
+║≈≈≈≈≈~~≡♠♠♠♠♠~♠≡♠♠♣♠♠~~~~≈≈≈~~~♠♠♠♠♠V♠♣""♣♣≡≡≡║ [x] day/night tint: status text         [t]              ║~♠♠"║║ [s] species · [t] traits · [d] dynasties║
 ║≈≈≈≈≈≈~··♠♠♠~≡≡♠~♠♠♠♠♠♣~~~~~~~~~~~~~≡≡♠""≡~~~~║ [x] auto-pause on epidemic              [d]              ║~♠♠"║║                                         ║
 ║≈≈≈≈≈≈~~~~~~♠~~D♠♠♠♠♠♣"""""♠♣♠~~~~~~~≡♠""≡~~≡♠║  ◄ autosave every off      ► [←→]                        ║~♠♠♣║║─ Overlay ───────────────────────────────║
 ║≈≈≈≈≈≈≈≈≈≈~~·≡♠♠H♠♠♣♣♣"***,""♣♣♣"""♣♣♣"**♠♠~♠♠║                                                          ║♣~♠♠║║ press o to open the switcher            ║

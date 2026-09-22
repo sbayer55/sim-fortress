@@ -760,3 +760,23 @@ fn washes_are_dry_brooks_that_rewet_within_the_year() {
     let wet_again = sim.world.cells.iter().filter(|c| c.terrain.is_water()).count();
     assert!(wet_again >= sim.world.water_cells_at_generation + at_start.div_euclid(2), "{wet_again} water cells after refilling {at_start} washes");
 }
+
+#[test]
+fn held_cells_by_holder_counts_one_pass_per_species() {
+    use crate::sim::species::testing::*;
+    let mut w = World::generate(7, &WorldParams { width: 40, height: 10, ..WorldParams::default() });
+    w.init_scent(N_SPECIES);
+    let a = CreatureId(11);
+    let b = CreatureId(5);
+    for (x, y, holder, strength) in [(1, 1, a, 0.9), (2, 1, a, 0.5), (3, 1, a, 0.1), (4, 1, b, 0.2), (5, 1, CreatureId(0), 0.9)] {
+        if let Some(m) = w.mark_mut(FOX, x, y) {
+            *m = Mark { strength, holder };
+        }
+    }
+    // Ascending by id; the faint mark and the unheld mark do not count.
+    assert_eq!(w.held_cells_by_holder(FOX, 0.15), vec![(b, 1), (a, 2)]);
+    // Another species' block is untouched.
+    assert_eq!(w.held_cells_by_holder(WOLF, 0.15), Vec::new());
+    // A lower threshold admits the faint mark.
+    assert_eq!(w.held_cells_by_holder(FOX, 0.05), vec![(b, 1), (a, 3)]);
+}

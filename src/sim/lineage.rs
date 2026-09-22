@@ -5,6 +5,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+pub mod dynasties;
 pub mod lifelog;
 pub use lifelog::{LifeLog, LifeRecord, LIFE_WINDOW_DAYS};
 
@@ -12,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::sim::creatures::{Cause, Creature, CreatureId, CreatureStore, Mutation, NameId, Sex};
 use crate::sim::params::Roster;
+use dynasties::Dynasties;
 use crate::sim::species::{Genome, SpeciesId};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -28,6 +30,11 @@ pub struct LineageNode {
     pub genome: Genome,
     pub mutations: Vec<Mutation>,
     pub parents: Option<(CreatureId, CreatureId)>,
+    /// The founder this node descends from through mothers only: the mother's
+    /// `root`, or the node itself for founders and for a newborn whose mother's
+    /// node is absent. Set once by `record`, never changed, so the dynasty key
+    /// (S16) outlives pruning of the chain above it.
+    pub root: CreatureId,
     /// Children in birth (id) order.
     pub children: Vec<CreatureId>,
     /// Carries a notable mutation, has ≥ 10 offspring, or survived ≥ 2 infections (C7).
@@ -93,6 +100,10 @@ pub struct Lineage {
     /// Deaths of the last 240 days with their outcome counters (S15, save 16).
     /// Unlike `nodes` it is never pruned by generation, only by age.
     lives: LifeLog,
+    /// Predator dynasties (S16, save 18): folded at birth and death, closed
+    /// once a year; never pruned by generation.
+    #[serde(default)]
+    dynasties: Dynasties,
 }
 
 impl Lineage {
@@ -126,10 +137,31 @@ impl Lineage {
         self.lives.push(rec);
     }
 
+    /// The predator dynasties (S16).
+    pub const fn dynasties(&self) -> &Dynasties {
+        &self.dynasties
+    }
+
+    /// Close a year of every dynasty (S16); see `Dynasties::close_year`.
+    pub fn close_year(&mut self, year: u32, day: u32, year_days: u32, living: &BTreeMap<CreatureId, dynasties::Tally>) {
+        self.dynasties.close_year(year, day, year_days, living);
+    }
+
+    /// A predator died: fold its running totals into its dynasty (S16). Prey
+    /// and creatures without a node are ignored.
+    pub fn record_dynasty_death(&mut self, c: &Creature, roster: &Roster, day: u32) {
+        if roster.kind(c.species) != crate::sim::species::Kind::Predator {
+            return;
+        }
+        let Some(root) = self.nodes.get(&c.id).map(|n| n.root) else { return };
+        self.dynasties.record_death(root, c, day);
+    }
+
     /// Record a creature (founder or newborn). Links it into its parents'
     /// `children` lists and flags notability (FR6).
     pub fn record(&mut self, c: &Creature, roster: &Roster, mutation_notable: f32) {
         let notable = c.mutations.iter().any(|m| m.delta.abs() >= mutation_notable);
+        let root = c.parents.map(|(m, _)| m).and_then(|m| self.nodes.get(&m).map(|n| n.root)).unwrap_or(c.id);
         self.nodes.insert(
             c.id,
             LineageNode {
@@ -144,6 +176,7 @@ impl Lineage {
                 genome: c.genome,
                 mutations: c.mutations.clone(),
                 parents: c.parents,
+                root,
                 children: Vec::new(),
                 notable,
                 cause: None,
@@ -151,6 +184,9 @@ impl Lineage {
                 infections_survived: 0,
             },
         );
+        if roster.kind(c.species) == crate::sim::species::Kind::Predator {
+            self.dynasties.record_birth(root, c, roster);
+        }
         if let Some((m, f)) = c.parents {
             for p in <[CreatureId; 2]>::from((m, f)) {
                 let Some(n) = self.nodes.get_mut(&p) else {

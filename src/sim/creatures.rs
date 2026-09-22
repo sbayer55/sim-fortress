@@ -330,6 +330,11 @@ pub struct Creature {
     pub contest_cooldown_until: u64,
     pub contests_won: u16,
     pub contests_lost: u16,
+    // ---- S16 survival tallies ----
+    /// Droughts that eased in the region this animal stood in while alive.
+    pub droughts_survived: u16,
+    /// Springs reached alive. Every winter counts: the sim has no winter severity.
+    pub winters_survived: u16,
 }
 
 impl Creature {
@@ -351,6 +356,16 @@ impl Creature {
     /// Current age in days (derived from `born_day` and the day index).
     pub fn age_days(&self, day_index: u64) -> u32 {
         crate::cast!((crate::cast!(day_index => i64) - i64::from(self.born_day)).max(0) => u32)
+    }
+
+    /// Survival events (S16): infections survived, predator escapes, contests
+    /// won, droughts survived and winters survived.
+    pub fn survival_events(&self) -> u32 {
+        u32::from(self.infections_survived)
+            + self.escaped
+            + u32::from(self.contests_won)
+            + u32::from(self.droughts_survived)
+            + u32::from(self.winters_survived)
     }
 
     /// Maximum lifespan in days, from longevity, the C3 params and the maturity
@@ -535,6 +550,8 @@ fn founder(species: SpeciesId, n_species: usize, name: NameId, sex: Sex, pos: (u
                 contest_cooldown_until: 0,
                 contests_won: 0,
                 contests_lost: 0,
+                droughts_survived: 0,
+                winters_survived: 0,
             }
 }
 
