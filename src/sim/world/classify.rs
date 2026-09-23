@@ -129,6 +129,8 @@ pub(super) fn cells(rng: &mut Rng, grid: Grid, relief: &Relief, params: &WorldPa
                 pred_pressure: 0.0,
                 dried_from: (bodies.channel[i] == Channel::Wash).then_some(Terrain::ShallowWater),
                 parasite_load: 0.0,
+                thrive_days: 0,
+                wear_days: 0,
             }
         })
         .collect();

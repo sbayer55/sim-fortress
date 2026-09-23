@@ -235,6 +235,17 @@ pub(super) const FIELD_DOCS: &[(&str, &str)] = &[
             ("territory.evict_ticks", "Ticks the loser flees the winner."),
             ("territory.challenge_ticks", "A challenge is abandoned after this many ticks."),
             ("territory.contest_cooldown_days", "Days both sides wait before another challenge."),
+            // ---- succession (C2 FR12)
+            ("succession.trample_w", "Weight of prey pressure against the vegetation target: target x= 1 - this x pressure (0 = no trampling)."),
+            ("succession.climb_veg", "Vegetation at or above this share of today's target counts as a thriving day."),
+            ("succession.wear_veg", "Vegetation below this share of the untrampled target counts as a worn day."),
+            ("succession.trample_low", "Prey pressure below this allows a thriving day."),
+            ("succession.trample_high", "Prey pressure at or above this allows a worn day."),
+            ("succession.relax_per_day", "How far both day counters fall on a day that is neither thriving nor worn."),
+            ("succession.climb_days", "Thriving days needed to climb into each rung above dirt (sparse grass, grassland, meadow, forest)."),
+            ("succession.climb_moisture", "Cell moisture needed to climb into each rung above dirt."),
+            ("succession.wear_days_needed", "Worn days needed to drop one rung toward dirt."),
+            ("succession.flip_chance", "Daily chance a ripe cell flips one rung (0 = succession off)."),
             // ---- [[species]] (one block per species; overlays merge by name, new names append)
             ("species.name", "Lowercase singular key (vole); prey_preference and pathogen hosts refer to it."),
             ("species.plural", "Display plural (Voles)."),

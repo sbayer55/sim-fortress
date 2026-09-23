@@ -1,8 +1,9 @@
-//! Daily vegetation, moisture, drought and regrowth dynamics (FR2–FR4).
+//! Daily vegetation, moisture, drought and regrowth dynamics (FR2–FR4), and
+//! the succession and trampling step (FR12, in `succession`).
 
 use crate::sim::creatures::DeathTallies;
 use crate::sim::events::{Event, EventKind, EventRing};
-use crate::sim::params::{EcologyParams, Rainfall};
+use crate::sim::params::{EcologyParams, Rainfall, SuccessionParams};
 use crate::sim::rng::Rng;
 use crate::sim::stats::{Census, Sample, Series};
 use crate::sim::time::{Season, Time};
@@ -64,7 +65,7 @@ pub fn warm_up(world: &mut World, ecology: &EcologyParams, season: Season, days:
     let season_cap = ecology.season_cap.get(&season).copied().unwrap_or(1.0);
     let season_regrowth = ecology.season_regrowth.get(&season).copied().unwrap_or(1.0);
     for _ in 0..days {
-        step_vegetation(world, ecology, season_cap, season_regrowth, w, h);
+        step_vegetation(world, ecology, None, season_cap, season_regrowth, w, h);
     }
     for cell in &mut world.cells {
         cell.vegetation = cell.vegetation.clamp(0.0, 1.0);
@@ -84,6 +85,7 @@ pub fn daily_update(
     drought: &mut [bool; 8],
     drought_days_below: &mut [u32; 8],
     ecology: &EcologyParams,
+    succession: &SuccessionParams,
     rainfall: Rainfall,
     c: &Census,
     deaths: &DeathTallies,
@@ -99,12 +101,13 @@ pub fn daily_update(
     let season_evap = ecology.season_evaporation.get(&season).copied().unwrap_or(1.0);
     step_rain(world, rng, n_regions, rain_chance, ecology, w);
     step_water_adjacency(world, w, h);
-    step_vegetation(world, ecology, season_cap, season_regrowth, w, h);
+    let targets = step_vegetation(world, ecology, Some(succession), season_cap, season_regrowth, w, h);
     step_evaporate_clamp(world, ecology, season_evap);
     step_drought(world, time, events, n_regions, drought, drought_days_below, ecology);
     step_water_sand(world, n_regions, *drought, ecology, w);
     world.refresh_shore();
     step_regrowth_sites(world, rng, time, events, ecology, w, h);
+    succession::step_succession(world, rng, time, events, ecology, succession, &targets, w, h);
     series.push(sample_series(world, time, *drought, n_regions, c, deaths, disease));
 }
 
@@ -136,14 +139,19 @@ fn step_water_adjacency(world: &mut World, w: usize, h: usize) {
 }
 
 /// Step 3: vegetation grows toward, or decays toward, its seasonal target.
-fn step_vegetation(world: &mut World, ecology: &EcologyParams, season_cap: f32, season_regrowth: f32, w: usize, h: usize) {
+///
+/// FR12: with `trample` set, prey traffic scales the target down by its
+/// trampling factor. Returns the *untrampled* target of every cell (0 for
+/// water and rock) for the succession step to read.
+fn step_vegetation(world: &mut World, ecology: &EcologyParams, trample: Option<&SuccessionParams>, season_cap: f32, season_regrowth: f32, w: usize, h: usize) -> Vec<f32> {
     let seed_grid = seed_mask(world);
+    let mut targets = vec![0.0f32; w * h];
     for y in 0..h {
         for x in 0..w {
             let idx = y * w + x;
-            let (terrain, biome, moisture, v) = {
+            let (terrain, biome, moisture, v, pressure) = {
                 let c = &world.cells[idx];
-                (c.terrain, c.biome, c.moisture, c.vegetation)
+                (c.terrain, c.biome, c.moisture, c.vegetation, c.prey_pressure)
             };
             if terrain.is_water() {
                 continue;
@@ -152,7 +160,9 @@ fn step_vegetation(world: &mut World, ecology: &EcologyParams, season_cap: f32, 
             if max_v <= 0.0 {
                 continue;
             }
-            let target = max_v * biome.vegetation_scale() * season_cap * (moisture / 0.5).min(1.0);
+            let untrampled = max_v * biome.vegetation_scale() * season_cap * (moisture / 0.5).min(1.0);
+            targets[idx] = untrampled;
+            let target = trample.map_or(untrampled, |sp| untrampled * sp.trample_factor(pressure));
             let new_v = if v < target {
                 let rate = if seed_grid[idx] { 2.0 * ecology.growth_k } else { ecology.growth_k };
                 v + rate * ecology.regrowth_rate * season_regrowth * (target - v)
@@ -162,6 +172,7 @@ fn step_vegetation(world: &mut World, ecology: &EcologyParams, season_cap: f32, 
             world.cells[idx].vegetation = new_v;
         }
     }
+    targets
 }
 
 /// Steps 4 and 5: evaporate, then clamp moisture and vegetation to 0..1.
@@ -268,8 +279,14 @@ fn sample_series(world: &World, time: &Time, drought: [bool; 8], n_regions: usiz
     let mut veg_count = 0usize;
     let mut water_cells = 0usize;
     let mut moist_sum = 0.0;
+    let (mut forest_cells, mut bare_cells) = (0usize, 0usize);
     for c in &world.cells {
         biomass_total += c.vegetation;
+        match c.terrain {
+            Terrain::Forest => forest_cells += 1,
+            Terrain::Dirt | Terrain::Sand => bare_cells += 1,
+            _ => {}
+        }
         if c.terrain.is_water() {
             water_cells += 1;
             moist_sum += 1.0;
@@ -304,6 +321,8 @@ fn sample_series(world: &World, time: &Time, drought: [bool; 8], n_regions: usiz
         carcasses: world.carcasses.len(),
         drought_regions: drought.iter().filter(|&&f| f).count(),
         drought_flags: drought,
+        forest_cells,
+        bare_cells,
         region_veg,
         region_moist,
         population: c.population.clone(),
@@ -328,7 +347,7 @@ fn sample_series(world: &World, time: &Time, drought: [bool; 8], n_regions: usiz
 }
 
 /// An event anchored on region `ri`'s centre cell.
-fn region_event(time: &Time, kind: EventKind, world: &World, ri: usize, text: String) -> Event {
+pub(super) fn region_event(time: &Time, kind: EventKind, world: &World, ri: usize, text: String) -> Event {
     Event {
         year: time.year(),
         day: time.day_of_year(),
@@ -390,205 +409,7 @@ pub fn region_display_moisture_mean(world: &World, ri: usize) -> f32 {
     if n > 0 { sum / crate::cast!(n => f32) } else { 0.0 }
 }
 
+mod succession;
+
 #[cfg(test)]
-#[allow(clippy::float_cmp)]
-mod tests {
-
-    use super::*;
-    use crate::sim::{Cell, Params, Sim};
-
-    fn run_days(sim: &mut Sim, days: u64) {
-        for _ in 0..(days * 24) {
-            sim.step();
-        }
-    }
-
-    #[test]
-    fn growth_saturates_at_season_target() {
-        let mut sim = Sim::new(42, Params::default());
-        run_days(&mut sim, 720);
-        let eco = &sim.params.ecology;
-        for c in &sim.world.cells {
-            if c.terrain.is_water() {
-                assert_eq!(c.vegetation, 0.0);
-                continue;
-            }
-            let max_v = eco.max_vegetation.get(&c.terrain).copied().unwrap_or(0.0);
-            assert!(c.vegetation <= max_v + 0.001, "{:?} veg {} exceeds cap {}", c.terrain, c.vegetation, max_v);
-        }
-        assert!(sim.series.last().unwrap().veg_mean > 0.1, "vegetation did not grow");
-    }
-
-    #[test]
-    fn winter_lowers_equilibrium() {
-        let mut sim = Sim::new(42, Params::default());
-        run_days(&mut sim, 720);
-        let samples = sim.series.samples();
-        let summer: f32 = samples.iter().filter(|s| (450..540).contains(&s.day)).map(|s| s.veg_mean).sum::<f32>() / 90.0;
-        let winter: f32 = samples.iter().filter(|s| (630..720).contains(&s.day)).map(|s| s.veg_mean).sum::<f32>() / 90.0;
-        assert!(winter < summer * 0.8, "winter {winter} not much below summer {summer}");
-    }
-
-    #[test]
-    fn moisture_equilibria_by_rainfall() {
-        let means: Vec<f32> = [Rainfall::Dry, Rainfall::Normal, Rainfall::Wet]
-            .iter()
-            .map(|&rf| {
-                let mut p = Params::default();
-                p.world.rainfall = rf;
-                p.species.clear_initial_counts(); // pure ecology test, no grazing
-                let mut sim = Sim::new(42, p);
-                run_days(&mut sim, 720);
-                let (s, n) = sim
-                    .world
-                    .cells
-                    .iter()
-                    .filter(|c| !c.terrain.is_water())
-                    .fold((0.0f32, 0usize), |(s, n), c| (s + c.moisture, n + 1));
-                s / crate::cast!(n => f32)
-            })
-            .collect();
-        assert!(means[0] < means[1], "dry {} not < normal {}", means[0], means[1]);
-        assert!(means[1] < means[2], "normal {} not < wet {}", means[1], means[2]);
-        // The rain sequence follows the ecology RNG stream, which regrowth-site
-        // sampling advances; C4's `growth_k` retune moved the dry mean from ~0.48 to ~0.56,
-        // and the worldgen history phase (events reshape seed 42's regions) to ~0.60.
-        assert!(means[0] < 0.65, "dry too wet: {}", means[0]);
-        assert!(means[2] > 0.8, "wet too dry: {}", means[2]);
-    }
-
-    #[test]
-    fn drought_flags_after_n_days_and_recovers() {
-        let mut sim = Sim::new(42, Params::default());
-        for c in &mut sim.world.cells {
-            if !c.terrain.is_water() {
-                c.moisture = 0.0;
-            }
-        }
-        run_days(&mut sim, 8);
-        assert!(sim.drought.iter().any(|&f| f), "expected at least one region flagged");
-        for c in &mut sim.world.cells {
-            if !c.terrain.is_water() {
-                c.moisture = 1.0;
-            }
-        }
-        run_days(&mut sim, 1);
-        assert!(sim.drought.iter().all(|&f| !f), "expected drought to clear");
-    }
-
-    #[test]
-    fn water_dries_and_refills_with_marker() {
-        // Ecology only: creatures (grazing, and since C5 predation) perturb the
-        // vegetation the rain stream is drawn against, so keep the world empty.
-        let mut p = Params::default();
-        p.species.clear_initial_counts();
-        let mut sim = Sim::new(42, p);
-        for c in &mut sim.world.cells {
-            if !c.terrain.is_water() {
-                c.moisture = 0.0;
-            }
-        }
-        // Flag a drought, then keep running so water dries to sand.
-        run_days(&mut sim, 20);
-        let dried = sim.world.cells.iter().filter(|c| c.dried_from == Some(Terrain::ShallowWater)).count();
-        assert!(dried > 0, "expected some shallow water to dry to sand");
-        // Refill.
-        for c in &mut sim.world.cells {
-            if !c.terrain.is_water() {
-                c.moisture = 1.0;
-            }
-        }
-        // Refill is rate-limited to `water_changes_per_region_per_day` cells/day.
-        run_days(&mut sim, 30);
-        let still_dried = sim.world.cells.iter().filter(|c| c.dried_from == Some(Terrain::ShallowWater)).count();
-        assert_eq!(still_dried, 0, "expected dried cells to refill");
-    }
-
-    #[test]
-    fn seeds_sprout_and_clear_on_dirt() {
-        let mut p = Params::default();
-        p.species.clear_initial_counts(); // pure ecology test, no grazing
-        let mut sim = Sim::new(42, p);
-        // Sites sprout on bare dirt and sparse grass; strip both so every
-        // seed's world offers plenty of candidates.
-        for c in &mut sim.world.cells {
-            if matches!(c.terrain, Terrain::Dirt | Terrain::GrassSparse) {
-                c.vegetation = 0.0;
-            }
-        }
-        run_days(&mut sim, 10);
-        assert!(!sim.world.seeds.is_empty(), "expected regrowth sites to sprout");
-        // A site whose vegetation reaches the clear threshold is removed.
-        let (sx, sy) = sim.world.seeds[0];
-        sim.world.cells[sy * sim.world.width + sx].vegetation = 0.5;
-        run_days(&mut sim, 1);
-        assert!(!sim.world.seeds.contains(&(sx, sy)), "expected the site to clear");
-    }
-
-    #[test]
-    fn one_seed_note_per_region_per_day() {
-        let mut sim = Sim::new(42, Params::default());
-        for c in &mut sim.world.cells {
-            if matches!(c.terrain, Terrain::Dirt | Terrain::GrassSparse) {
-                c.vegetation = 0.0;
-            }
-        }
-        let before = sim.events.len();
-        run_days(&mut sim, 1);
-        // Only the regrowth notes: den discoveries are notes too and land on
-        // the same day on some worlds.
-        let notes: Vec<&Event> = sim.events.iter().skip(before).filter(|e| e.kind == EventKind::Note && e.text.contains("regrowth site")).collect();
-        assert!(!notes.is_empty());
-        assert!(notes.len() <= 8, "{} notes in one day", notes.len());
-        let mut texts: Vec<&str> = notes.iter().map(|e| e.text.as_str()).collect();
-        texts.sort_unstable();
-        texts.dedup();
-        assert_eq!(texts.len(), notes.len(), "duplicate region notes in one day");
-    }
-
-    #[test]
-    fn region_means_exclude_water() {
-        let cells = vec![
-            Cell { terrain: Terrain::ShallowWater, biome: crate::sim::world::Biome::Grassland, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.9, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 },
-            Cell { terrain: Terrain::Grass, biome: crate::sim::world::Biome::Grassland, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.1, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 },
-            Cell { terrain: Terrain::Grass, biome: crate::sim::world::Biome::Grassland, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.3, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 },
-        ];
-        let world = World {
-            cells,
-            width: 3,
-            height: 1,
-            dens: vec![],
-            carcasses: vec![],
-            seeds: vec![],
-            regions: vec![("R".to_string(), 0, 0, 3, 1)],
-            region_map: vec![],
-            wind: crate::sim::world::Wind::Westerly,
-            water_cells_at_generation: 1,
-            shore: vec![],
-            falls: vec![],
-            history: vec![],
-            names: crate::sim::world::Names::default(),
-            scent: vec![],
-        };
-        let mean = region_land_veg_mean(&world, 0);
-        assert!((mean - 0.2).abs() < 1e-6, "land veg mean {mean} should exclude the water cell");
-    }
-
-    #[test]
-    fn drought_event_has_region_centre_pos() {
-        let mut sim = Sim::new(42, Params::default());
-        for c in &mut sim.world.cells {
-            if !c.terrain.is_water() {
-                c.moisture = 0.0;
-            }
-        }
-        run_days(&mut sim, 8);
-        let droughts: Vec<&Event> = sim.events.iter().filter(|e| e.kind == EventKind::Drought).collect();
-        assert!(!droughts.is_empty());
-        for e in droughts {
-            let pos = e.pos.expect("drought event should carry a position");
-            let is_centre = (0..sim.world.regions.len()).any(|ri| sim.world.region_centre(ri) == pos);
-            assert!(is_centre, "pos {pos:?} is not a region centre");
-        }
-    }
-}
+mod tests;

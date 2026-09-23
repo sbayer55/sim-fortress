@@ -98,6 +98,18 @@ fn main() {
                     params.territory.neutral();
                 }
             }
+            // C2 FR12 succession and trampling.
+            "trample_w" => params.succession.trample_w = v.parse().unwrap(),
+            "flip_chance" => params.succession.flip_chance = v.parse().unwrap(),
+            "climb_days_forest" => {
+                params.succession.climb_days.insert(sim_fortress::sim::Terrain::Forest, v.parse().unwrap());
+            }
+            "wear_days" => params.succession.wear_days_needed = v.parse().unwrap(),
+            "succession" => {
+                if v == "off" {
+                    params.succession.neutral();
+                }
+            }
             "rain" => {
                 params.world.rainfall = match v.as_str() {
                     "dry" => Rainfall::Dry,
@@ -252,10 +264,19 @@ fn main() {
     for id in sim.roster().predator_ids() {
         let _ = write!(territory, " {}:{}c/{:.1}nn", sim.roster().name(id), sim.deaths.contests[id.index()], sim.group_stats.nn_mean[id.index()]);
     }
+    // C2 FR12 succession: forest and bare (dirt + sand) cells at the end.
+    let (mut forest, mut bare) = (0usize, 0usize);
+    for c in &sim.world.cells {
+        match c.terrain {
+            sim_fortress::sim::Terrain::Forest => forest += 1,
+            sim_fortress::sim::Terrain::Dirt | sim_fortress::sim::Terrain::Sand => bare += 1,
+            _ => {}
+        }
+    }
     let ov: Vec<String> = overrides.iter().map(|(k, v)| format!("{k}={v}")).collect();
     let last = year_end.last().cloned().unwrap_or_default();
     println!(
-        "seed={seed} [{}] alive5={alive5} aliveEnd={alive_end} end={:?} maxima={prey_max}/{pred_max} lag={:?} hunt{hunt} territory{territory}",
+        "seed={seed} [{}] alive5={alive5} aliveEnd={alive_end} end={:?} maxima={prey_max}/{pred_max} lag={:?} hunt{hunt} territory{territory} forest={forest} bare={bare}",
         ov.join(" "),
         last,
         lag

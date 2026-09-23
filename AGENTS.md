@@ -86,7 +86,7 @@ Rules:
 - **Source-to-test mapping** (`scripts/affected-tests.sh`): `src/sim/disease*` →
   `disease`; `genetics*`/`lineage` → `evolution`; `predation`, `behavior/hunt`,
   `behavior/threat`, `behavior/migration`, `behavior/territory` → `predators`; other `behavior/*` →
-  `herbivores`; `ecology` → `ecology`; `params*`, `save`, `main.rs` → `headless`;
+  `herbivores`; `ecology*` → `ecology`; `params*`, `save`, `main.rs` → `headless`;
   the shared sim primitives and `Cargo.toml` fan out to every chunk. Update the
   script's table when you add a module.
 
@@ -128,7 +128,7 @@ Do not weaken these to make a change pass. Fix the change.
   not perturb another. Quirks (`src/sim/quirks.rs`, off by default) roll from a throwaway
   per-creature `Rng` (seed ^ salt ^ id), never a stream, and hash only while enabled.
   `sim::tests::checksum_is_fnv_stable` pins the exact checksum
-  `0xf9ea_eb02_3e27_c085`; only re-baseline deliberately, with a comment saying why.
+  `0x10cd_7594_03e3_d96c`; only re-baseline deliberately, with a comment saying why.
 - **Sim/UI separation.** `src/sim` is pure data and logic: **no `ratatui`, `HashMap`
   or `HashSet`** anywhere under it. `src/sim/mod.rs` guards this by scanning every
   `.rs` file there for those substrings — **comments and strings included** — skipping
@@ -174,7 +174,7 @@ Do not weaken these to make a change pass. Fix the change.
 - **All numeric casts go through `cast!(expr => Ty)`** (defined in `src/lib.rs`).
   Bare `as` is denied; the macro is the one reviewed place that preserves `as`
   semantics and works in `const` context.
-- **Save format is versioned and never migrated.** Binary `SIMF` files, `VERSION = 21`
+- **Save format is versioned and never migrated.** Binary `SIMF` files, `VERSION = 22`
   in `src/sim/save.rs`. A version mismatch is rejected (`SaveError`), never half-read;
   old files stay listable so they can be deleted. `Params`/`Sim` serde field order and
   attributes are load-bearing — changing them means bumping `VERSION` and accepting
@@ -267,7 +267,7 @@ git diff --stat                                 # only the files you meant to to
 ```
 
 If you touched `src/sim`, re-run `cargo test --lib sim::tests::checksum_is_fnv_stable`
-and confirm the value is still `0xf9ea_eb02_3e27_c085` unless the change deliberately
+and confirm the value is still `0x10cd_7594_03e3_d96c` unless the change deliberately
 re-baselines it. If you touched `src/ai`, `src/ui/ai_bridge.rs` or the AI screens, also run
 `just test-unit-ai ai`, `just test-unit-ai ui` and `cargo test --features ai --test headless`
 (they launch `scripts/fake-gateway.js`, so `node` must be on PATH).

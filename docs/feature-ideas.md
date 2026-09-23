@@ -4,8 +4,8 @@ The roadmap's eight chunks are all shipped, so the next feature is genuinely ope
 
 **Other simulation-side ideas, roughly in order of payoff:**
 
-- **Carcasses and scavenging as real objects.** Scavenge is already a goal, but a kill could leave a decaying carcass tile that foxes and voles compete over, and that fertilises the vegetation beneath it. Cheap to add, and it produces the kind of emergent scene players screenshot.
-- **Weather beyond drought.** Snow cover that hides grass in winter, floods that push rivers outward, wildfire that burns forest into sparse grass and regrows. Fire in particular is visually striking in CP437 and interacts with every layer already there.
+- **Carcasses and scavenging as real objects.** Scavenge is already a goal, but a kill could leave a decaying carcass tile that foxes and voles compete over, and that fertilises the vegetation beneath it. Cheap to add, and it produces the kind of emergent scene players screenshot. The fertilisation half is expanded under [Plants that animals can change](#plants-that-animals-can-change).
+- **Weather beyond drought.** Snow cover that hides grass in winter, floods that push rivers outward, wildfire that burns forest into sparse grass and regrows. Fire in particular is visually striking in CP437 and interacts with every layer already there. Fire is taken further under [Plants that animals can change](#plants-that-animals-can-change).
 - **Speciation.** When two lineages of the same species drift far enough apart in genome distance, they stop interbreeding and the browser shows a split. The lineage screen and genome already exist, so this is mostly a distance check plus a naming scheme.
 - ~~**Territory and scent marking.**~~ *First slice shipped 2026-09-21 as C5 FR13 (plan in [territory-plan.md](territory-plan.md)): the per-species scent grid, scent avoidance and the intrusion response. The sweep did not show the spacing the sentence below promises; see the plan's Result section. The rest of the brainstorm is parked under [Territory follow-ups](#territory-follow-ups).* Predators leave a decaying scent field that repels rivals and attracts mates. It naturally spaces predators out and gives you a new map overlay.
 
@@ -271,3 +271,105 @@ Per-lineage grouping is a `BTreeMap<LineageId, [u32; 6]>` over the same pass.
 - Whether a lineage id should follow the mother only (simple, deterministic, one line per
   creature) or record both parents' lines (truer, but a creature then belongs to two
   lineages and every table needs a rule for it). Mother-only is the recommendation.
+
+---
+
+## Plants that animals can change
+
+*Brainstorm logged 2026-09-22. Not planned; grouped by what each idea adds, with the
+recommended first slice at the end.*
+
+**What a plant is today.** Each cell holds one scalar, `vegetation` 0..=1. Every day
+(`src/sim/ecology.rs`) it grows logistically toward a target set by the terrain cap, the
+biome scale, the season cap and moisture, or decays toward it. Grazing subtracts a bite.
+Diet breadth (`[diet]`) is keyed on *terrain*, not on the plant. Terrain never changes
+except shallow water drying to sand in drought. Regrowth sites sprout at random on bare
+cells. Carcasses and dens are points that do nothing to the ground beneath them. So animals
+cannot change the landscape at all, and the whole ecology step costs under one percent of a
+tick (`docs/PERFORMANCE.md`), which leaves a lot of headroom to spend here.
+
+**Ideas that close the animal-to-plant loop.** These make herbivores and predators matter
+to the map, which is the thing the player watches for years.
+
+- ~~**Succession.**~~ *Shipped 2026-09-22 with trampling as C2 FR12; plan and first sweep in [succession-plan.md](succession-plan.md).* Let terrain drift along Dirt → GrassSparse → Grass → GrassDense → Forest
+  when a cell stays moist and lightly grazed for long enough, and drift back under heavy
+  grazing. This is a real trophic cascade: wolves suppress deer, deer stop browsing
+  saplings, forest returns, voles get cover. It is the mechanism the C5 vole-refuge problem
+  has been missing, attacked from the habitat side rather than by tuning levers again, and
+  the player sees it as the map slowly changing colour. Cost: a per-cell "years in state"
+  counter and a save-format bump. The terrain-keyed tables in `[diet]` and `[ecology]` keep
+  working unchanged; `Cell.biome` is separate from terrain, so regions and names are
+  untouched.
+- ~~**Trampling and the piosphere.**~~ *Shipped 2026-09-22 with succession as C2 FR12; plan in [succession-plan.md](succession-plan.md).* Cells already carry `prey_pressure`. Let sustained
+  pressure lower the vegetation cap, so herds wear trails and the ground around water holes
+  and dens degrades outward in rings, the gradient range ecologists actually measure. A few
+  lines in the daily step.
+- **Fertilisation from carcasses and dung.** The carcass idea above already wants kills to
+  feed the ground. Add a per-cell nutrient scalar that a carcass pulses and resting animals
+  trickle into, and that raises the local cap. Kill sites and dens become green hotspots the
+  vegetation overlay can show.
+- **Mast years.** Once a year, per region, roll a heavy or poor seed crop for Forest cells
+  that applies through autumn as an edibility multiplier. Synchronised masts drive vole and
+  hare booms with a predator lag the following year, the best-documented boom–bust cycle in
+  temperate ecology, and give the charts a visible pulse. One draw per region per year on
+  the ecology stream, plus one event line ("Heavy mast in Sedgehollow").
+
+**Ideas that make plants themselves richer.**
+
+- **Two layers per cell, herb and woody.** Replace the single scalar with a fast grassy
+  layer and a slow browse layer. The grass→browse diet axis then reads the plants rather
+  than the terrain, and a forest floor can be lush or bare. Overgrazing the herb layer lets
+  the woody layer win, which is succession expressed as biomass rather than as a terrain
+  change; this could replace the succession idea or sit under it.
+- **A plant roster: plants as data.** Mirror `[[species]]` with a `[[plants]]` table (name,
+  glyph, growth rate, browse position, seasonality, mast behaviour) and a small fixed-size
+  biomass array per cell. Overlays could add lichen for tundra or acacia for savanna
+  without a rebuild, the way the boar overlay adds an animal. The biggest lift of the set,
+  but the version that matches the repository's "data, not code" rule.
+- **Seed rain and recovery fronts.** Weight a cell's growth by the vegetation of its
+  neighbours, so bare patches recolonise from the edges inward instead of sprouting at
+  random. Then let animals carry seeds: a deer that ate in forest and rests in grassland
+  nudges the woody layer where it lies down, so forest expands along deer ranges. Cheap and
+  very emergent.
+- **Grazing response, or plant quality.** A per-cell quality scalar that dips when bitten
+  and recovers slowly, so repeatedly grazed cells feed less per bite; or inverted as grazing
+  lawns, where moderate grazing *raises* quality, which is how many real grasses behave.
+  Either gives herbivores a reason to rotate rather than sit on the best cell.
+- **Fire.** Drought plus a standing litter field above a threshold lets fire start and
+  spread as a cellular automaton, killing creatures in burnt cells and resetting them to
+  fertilised dirt. Fire needs a dead-biomass field to be honest, but it ties drought,
+  succession and the player-intervention idea above into one system. Double-buffer the
+  spread so the result never depends on scan order.
+- **Plant evolution.** The game is about evolution; plants could join in. Give each cell
+  one heritable scalar, defence versus growth, that seeds copy from neighbours with
+  mutation. Heavily grazed meadows evolve low, tough, unpalatable grass; ungrazed ground
+  evolves tall fast growers. A herbivore detox trait could later counter it (see *Toxicity*
+  in the traits list). The most interesting idea here for this particular sim, but it rides
+  on seed dispersal existing first.
+- **The green wave.** Worldgen already computes per-cell temperature. Stagger spring
+  green-up by temperature so it sweeps uphill and poleward over weeks. `migration_daily`
+  already targets the highest-vegetation destination, so seasonal ungulate migration would
+  appear with no new behaviour code.
+
+**Constraints to plan around.**
+
+- Any new cell field bumps the save `VERSION` and old saves stop loading; batch several of
+  these into one bump.
+- The checksum tripwire moves as soon as the ecology step adds a draw or changes the
+  vegetation arithmetic, even under a neutral default. Diet breadth kept the checksum by
+  shipping a neutral overlay with no new draws; succession and mast both add draws, so plan
+  a deliberate re-baseline with a comment.
+- Keep it out of the perception loop. The graze score reads vegetation through a
+  per-terrain edibility table built once per replan (`DietParams::table`). Two layers or a
+  plant array need the same trick: a per-cell food total computed in the daily step, so the
+  hot loop still reads one number.
+- Overlays are CP437 only. Biomass bands and layers can be drawn with the punctuation and
+  card-suit glyphs already in `src/glyphs.rs`; new terrain states need `theme.rs` ramp
+  entries, not new colours.
+
+**Recommended first slice.** Succession driven by grazing pressure, plus trampling, as one
+chunk; *shipped 2026-09-22*, the plan and its result are in [succession-plan.md](succession-plan.md). Together they are the smallest change that lets animals reshape the map, they attack
+the open C5 balance problem from the habitat side, and every later idea here builds on a
+cell that can change state. Mast years are the cheapest second step and give the charts a
+story. The plant roster and plant evolution are the long-term direction if plants are to
+become a first-class part of the simulation.

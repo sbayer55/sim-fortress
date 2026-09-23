@@ -20,11 +20,13 @@ pub enum Base {
     Parasites,
     /// C5 FR13: the scent grid of the stack's remembered species (S02j).
     Scent,
+    /// C2 FR12: every ladder cell's climb toward forest or wear toward dirt (S02k).
+    Succession,
 }
 
 impl Base {
     /// Every base row of the S14 Base heatmap tab, in row order.
-    pub const ALL: [Self; 7] = [Self::None, Self::Vegetation, Self::Pressure, Self::Moisture, Self::Species, Self::Parasites, Self::Scent];
+    pub const ALL: [Self; 8] = [Self::None, Self::Vegetation, Self::Pressure, Self::Moisture, Self::Species, Self::Parasites, Self::Scent, Self::Succession];
 
     /// The row name as the S14 tab and the sidebar Stack section write it.
     pub const fn name(self) -> &'static str {
@@ -36,6 +38,7 @@ impl Base {
             Self::Species => "Species",
             Self::Parasites => "Parasites",
             Self::Scent => "Scent",
+            Self::Succession => "Succession",
         }
     }
 }
@@ -83,6 +86,7 @@ impl Layer {
             Self::Base(Base::Species) => "population density of one species",
             Self::Base(Base::Parasites) => "parasite load heatmap",
             Self::Base(Base::Scent) => "one predator species' scent and holders",
+            Self::Base(Base::Succession) => "ground climbing toward forest or wearing to dirt",
             Self::Sense => "one predator's sense-range rings",
             Self::Regions => "named regions, tinted with labels",
             Self::Health => "creatures by their weakest vital",
@@ -201,6 +205,7 @@ impl OverlayStack {
             Layer::Base(Base::Species) => roster.plural(self.species).to_lowercase(),
             Layer::Base(Base::Parasites) => "parasites".into(),
             Layer::Base(Base::Scent) => format!("{} scent", roster.name(self.species)),
+            Layer::Base(Base::Succession) => "succession".into(),
             Layer::Sense => "sense range".into(),
             Layer::Regions => "regions".into(),
             Layer::Health => "health".into(),

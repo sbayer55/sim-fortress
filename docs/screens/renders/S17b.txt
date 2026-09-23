@@ -1,20 +1,20 @@
  S17b  Hunt Watch - lanes only                                                                                                                             
-╔ Chase Lanes · Scoreboard · hunter | ribbon | prey ═══════════════════════════════════════════════════════════ 1 hunting · 1 tracked · Y2 D1 06:00 ☼ day ╗
-║» Fenrir w#953                        │             │                                                            ┤ │Dill d#450                           ║
-║  energy [█████████████░░░░░░░░░░░░]  │         ■─►─│                                                            ┤ │energy [████████████░░░░░░░░░░░░░]   ║
-║  need   DESPERATE                    │             │                                                            ┤ │level  CHALLENGE                     ║
+╔ Chase Lanes · Scoreboard · hunter | ribbon | prey ═══════════════════════════════════════════════════════════ 2 hunting · 3 tracked · Y2 D1 06:00 ☼ day ╗
+║» Dusk w#829                          │             │→─                                                          ┤ │no prey                              ║
+║  energy [██████████████████░░░░░░░]  │             │                                                            ┤ │last: Hazel h#593                    ║
+║  need   DESPERATE                    │             │       hunt cooldown: 1 h before Dusk can hunt again        ┤ │escaped 01:00                        ║
+║  state  COOLDOWN 1h                  │             │                                                            ┤ │hunt cooldown: 1 h before Dusk can   ║
+║  where  Lower Forest                 │             │                    10                  20                  ┤ │hunt again                           ║
+║  Sable w#1795                        │           ►─│                                                            ┤ │Tansy h#1118                         ║
+║  energy [█████████████████████████]  │             │                                                            ┤ │energy [███████████████░░░░░░░░░░]   ║
+║  need   HUNGRY                       │             │                                                            ┤ │level  FAIR CHASE                    ║
 ║  state  STALK                        │             │                                                            ┤ │goal   fleeing                       ║
-║  where  Southern Savanna             │             │                    10                  20                  ┤ │gap    7  W······D                   ║
-║  row 2 · free                                                                                                                                           ║
-║                                                                                                                                                         ║
-║                                                                                                                                                         ║
-║                                                                                                                                                         ║
-║                                                                                                                                                         ║
-║  row 3 · free                                                                                                                                           ║
-║                                                                                                                                                         ║
-║                                                                                                                                                         ║
-║                                                                                                                                                         ║
-║                                                                                                                                                         ║
+║  where  Western Forest               │             │                    10                  20                  ┤ │gap    10  W·········                ║
+║  Ember w#1805                        │             │                                                            ┤ │Tansy h#1175                         ║
+║  energy [█████████████████████████]  │             │                                                            ┤ │energy [██████████████████░░░░░░░]   ║
+║  need   IN NEED                      │             │                                                            ┤ │level  FAIR CHASE                    ║
+║  state  STALK                        │           ►─│                                                            ┤ │goal   wary                          ║
+║  where  Northern Tundra              │             │                    10                  20                  ┤ │gap    4  W···H                      ║
 ║  row 4 · free                                                                                                                                           ║
 ║                                                                                                                                                         ║
 ║                                                                                                                                                         ║

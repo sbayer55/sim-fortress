@@ -1,45 +1,45 @@
  S07c  Event Log — chronicle                                                                                                                               
 ╔ Chronicle ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ 4 seasons ╗
 ║ * Year 1, Winter   tally                                                                                                                                ║
-║   Voles 307→117, Hares 347→119, Deer 172→24, Foxes 7→6, Wolves 15→11, Lynxes 7→7.                                                                       ║
-║   0 births, 571 deaths (predation 169, starved 330, thirst 25, disease 2, old age 45).                                                                  ║
-║   A herd of 17 Voles migrated from Lower Forest to Northern Forest.                                                                                     ║
-║   A herd of 17 Hares migrated from Lower Forest to Northern Forest.                                                                                     ║
-║   A herd of 12 Deer migrated from Lower Forest to Northern Forest.                                                                                      ║
-║   A herd of 29 Voles migrated from Western Forest to Northern Forest.                                                                                   ║
-║   A herd of 24 Hares migrated from Western Forest to Northern Forest.                                                                                   ║
-║   A family of 3 Deer migrated from Western Forest to Northern Forest.                                                                                   ║
-║   The Deer line of Lower Forest is extinct.                                                                                                             ║
-║   A herd of 14 Voles migrated from Eastern Tundra to Eastern Forest.                                                                                    ║
+║   Voles 226→80, Hares 235→54, Deer 95→18, Foxes 6→4, Wolves 15→7, Lynxes 8→5.                                                                           ║
+║   0 births, 418 deaths (predation 141, starved 197, thirst 27, disease 2, old age 51).                                                                  ║
+║   A herd of 10 Voles migrated from Eastern Tundra to Eastern Forest.                                                                                    ║
+║   A herd of 7 Hares migrated from Eastern Tundra to Eastern Forest.                                                                                     ║
+║   A family of 3 Deer migrated from Eastern Tundra to Eastern Forest.                                                                                    ║
+║   The Deer line of Eastern Tundra is extinct.                                                                                                           ║
+║   The Wolves line of Northern Forest is extinct.                                                                                                        ║
+║   The Wolves line of Lower Forest is extinct.                                                                                                           ║
+║   A herd of 24 Voles migrated from Western Forest to Northern Forest.                                                                                   ║
+║   A herd of 16 Hares migrated from Western Forest to Northern Forest.                                                                                   ║
 ║                                                                                                                                                         ║
 ║ ♫ Year 1, Autumn   tally                                                                                                                                ║
-║   Voles 535→307, Hares 745→347, Deer 312→172, Foxes 8→7, Wolves 12→15, Lynxes 5→7.                                                                      ║
-║   43 births, 854 deaths (predation 139, starved 628, thirst 31, disease 2, old age 54).                                                                 ║
-║   The Wolves line of Northern Tundra is extinct.                                                                                                        ║
-║   A herd of 119 Voles migrated from Northern Tundra to Southern Savanna.                                                                                ║
-║   A herd of 180 Hares migrated from Northern Tundra to Southern Savanna.                                                                                ║
-║   A herd of 63 Deer migrated from Northern Tundra to Southern Savanna.                                                                                  ║
-║   A herd of 53 Voles migrated from Eastern Forest to Southern Savanna.                                                                                  ║
-║   A herd of 67 Hares migrated from Eastern Forest to Southern Savanna.                                                                                  ║
-║   A herd of 39 Deer migrated from Eastern Forest to Southern Savanna.                                                                                   ║
-║   A herd of 143 Voles migrated from Northern Forest to Lower Forest.                                                                                    ║
+║   Voles 508→226, Hares 632→235, Deer 247→95, Foxes 7→6, Wolves 11→15, Lynxes 6→8.                                                                       ║
+║   33 births, 888 deaths (predation 136, starved 611, thirst 89, disease 4, old age 48).                                                                 ║
+║   A herd of 20 Voles migrated from Lower Forest to Northern Forest.                                                                                     ║
+║   A herd of 24 Hares migrated from Lower Forest to Northern Forest.                                                                                     ║
+║   A herd of 11 Deer migrated from Lower Forest to Northern Forest.                                                                                      ║
+║   A herd of 120 Voles migrated from Northern Tundra to Southern Savanna.                                                                                ║
+║   A herd of 135 Hares migrated from Northern Tundra to Southern Savanna.                                                                                ║
+║   A herd of 50 Deer migrated from Northern Tundra to Southern Savanna.                                                                                  ║
+║   The Deer line of Lower Forest is extinct.                                                                                                             ║
+║   A herd of 57 Voles migrated from Eastern Forest to Southern Savanna.                                                                                  ║
 ║                                                                                                                                                         ║
 ║ ☼ Year 1, Summer   tally                                                                                                                                ║
-║   Voles 401→535, Hares 439→745, Deer 210→312, Foxes 8→8, Wolves 10→12, Lynxes 6→5.                                                                      ║
-║   464 births, 220 deaths (predation 109, starved 1, thirst 43, old age 67).                                                                             ║
-║   A herd of 39 Voles migrated from Eastern Tundra to Eastern Forest.                                                                                    ║
-║   A herd of 37 Hares migrated from Eastern Tundra to Eastern Forest.                                                                                    ║
-║   A herd of 17 Deer migrated from Eastern Tundra to Eastern Forest.                                                                                     ║
+║   Voles 407→508, Hares 398→632, Deer 207→247, Foxes 7→7, Wolves 10→11, Lynxes 6→6.                                                                      ║
+║   372 births, 217 deaths (predation 101, starved 4, thirst 40, old age 72).                                                                             ║
 ║   The Wolves line of Northern Forest is extinct.                                                                                                        ║
-║   The Wolves line of Northern Tundra is extinct.                                                                                                        ║
-║   The Deer line of Lower Forest is extinct.                                                                                                             ║
-║   The Wolves line of Northern Tundra is extinct.                                                                                                        ║
-║   The Deer line of Lower Forest is extinct.                                                                                                             ║
+║   A herd of 32 Voles migrated from Eastern Tundra to Eastern Forest.                                                                                    ║
+║   A herd of 35 Hares migrated from Eastern Tundra to Eastern Forest.                                                                                    ║
+║   A herd of 18 Deer migrated from Eastern Tundra to Eastern Forest.                                                                                     ║
+║   The Foxes line of Northern Forest is extinct.                                                                                                         ║
+║   The Wolves line of Northern Forest is extinct.                                                                                                        ║
+║   The Lynxes line of Northern Forest is extinct.                                                                                                        ║
+║   A herd of 31 Voles migrated from Eastern Tundra to Eastern Forest.                                                                                    ║
 ║                                                                                                                                                         ║
 ║ ♪ Year 1, Spring   tally                                                                                                                                ║
-║   Voles 240→401, Hares 179→439, Deer 90→210, Foxes 8→8, Wolves 6→10, Lynxes 4→6.                                                                        ║
-║   413 births, 135 deaths (predation 104, starved 1, thirst 27, old age 3).                                                                              ║
+║   Voles 240→407, Hares 179→398, Deer 90→207, Foxes 8→7, Wolves 6→10, Lynxes 4→6.                                                                        ║
+║   380 births, 116 deaths (predation 104, starved 2, thirst 7, old age 3).                                                                               ║
 ║   The Deer line of Southern Forest is extinct.                                                                                                          ║
-║   The Deer line of Southern Forest is extinct.                                                                                                          ║
+║   The Deer line of Western Forest is extinct.                                                                                                           ║
 ╚═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════ ↓7 ╝
  [↑↓] scroll  [c] event log  [Esc] back                                                                              Year 2, Day 1 of Spring  06:00  ☼ day 

@@ -296,6 +296,12 @@ One year, seeds 1–6; `nn` is the adult fox nearest-neighbour distance in cells
   territory_spaces_foxes_on_seed_42}`; the second pins the one-year seed-42 measurement
   (4.2 vs 2.9) and says in its comment that the sweep does not generalise it.
 
+- **Habitat-side experiment (2026-09-22).** C2 FR12 (succession and trampling,
+  [succession-plan.md](../succession-plan.md)) attacks the vole-refuge problem from the
+  other side: lightly grazed meadow closes into forest, which is cover 1.0 for prey. Its
+  first six-seed read is recorded in the C2 FR12 result; the population bands above keep
+  their status until that result says otherwise.
+
 ## Acceptance criteria
 - Seed 42, default params, 10 years headless: all six species alive at year 5 and at
   least five at year 10; on the smoothed series both prey and predator totals have ≥ 3

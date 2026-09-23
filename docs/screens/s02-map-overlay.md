@@ -31,6 +31,7 @@ starving here?", "can that wolf see the hare yet?") that the plain map cannot sh
 | S02h | disease                            | the Disease mark is on; `Tab` cycles the pathogen                        |
 | S02i | parasites                          | the Parasites base is on                                                 |
 | S02j | scent                              | the Scent base is on; `Tab` cycles the species (shared with S02f)         |
+| S02k | succession                         | the Succession base is on                                                |
 
 Each variant is one layer on its own (the sidebars below are drawn with exactly one layer
 on). With two or more layers the map composes them (S14 item 16) and the sidebar is the
@@ -46,7 +47,10 @@ S02h is a creature tint too, on the S02g path, recolouring every living creature
 infection state for one pathogen (or all). S02i is a **heatmap** of the stored
 `cell.parasite_load`, with the creatures on top recoloured by their own load. S02j is a
 **heatmap** of one species' block of the stored scent grid (C5 FR13), on that species' own
-ramp, so a fox's territory reads in fox colour.
+ramp, so a fox's territory reads in fox colour. S02k is a **signed heatmap** of the two
+per-cell succession counters (C2 FR12): ground climbing toward the next rung on the
+vegetation ramp, ground wearing toward dirt on the heat ramp, an arrow once it is ripe to
+flip, and a dimmed terrain glyph where nothing is changing.
 
 ## Layout
 Same frame split as the world map. Only the sidebar contents and the map title change.
@@ -186,6 +190,18 @@ collapsed.
     paints every land cell at `t = 0`.
 26. **Creatures** draw as on S02f (shown species bright, others faded); the map title reads
     `overlay: ‹species› scent`.
+
+### Map panel — succession (S02k)
+27. **Per-cell value** `t = thrive_days / climb_days[next rung]` for a cell with a thriving
+    count and a rung to climb into, `−wear_days / wear_days_needed` for one with a worn
+    count above dirt, both clamped to ±1, and 0 otherwise (`map::overlay::succession_field`).
+    `t > 0` paints `theme::veg(t)` with the shade glyph, or `↑` (`glyphs::UP`) at `t ≥ 1`;
+    `t < 0` paints `theme::heat(−t)` with the shade glyph, or `↓` (`glyphs::DOWN`) at
+    `t ≤ −1`; both with the 75 % dimmed background. `t = 0` draws the terrain glyph dimmed
+    to 60 % on the ladder and 45 % off it (sand, marsh); deep water and rock keep their
+    dimmed glyphs as on S02a.
+28. **Creatures** draw faded as on the other heatmaps; the map title reads
+    `overlay: succession`.
 
 ### Sidebar — heatmaps (S02a–c)
 Sections from the top, in order; all fit in the 40 inner rows without scrolling.
@@ -330,6 +346,24 @@ Sections from the top, in order; about 30 of the 40 rows.
 - **Reading the map** (1 row, no rule): `Tab next species · k look · Esc restores`.
 - The **Stack** section as item 17 (`1. Scent · fox (base)`), after one blank row.
 
+### Sidebar — succession (S02k)
+Sections from the top, in order; about 30 of the 40 rows.
+
+- **Succession** (3 rows): section rule, then `untrodden lush ground climbs to forest;` /
+  `grazed, trodden ground wears to dirt.`
+- **Legend** (4 rows): a 24-cell two-sided ramp (heat ramp falling over the left half, the
+  vegetation ramp rising over the right, shade glyphs by distance from the middle), then
+  `wearing … climbing  ↓/↑ ripe to flip` and `dim: unchanging   ▲ rock  ≈ deep water`.
+- **By region · climbing share** (10 rows): one labelled bar per region (18-column label,
+  14-column bar in `theme::veg(0.8)`) of the share of the region's ladder cells with a
+  thriving count and a rung to climb into, then `N climbing   M wearing` over the whole map
+  (a count of zero is drawn dim).
+- **Terrain** (3 rows): `♠ forest N  p%   . bare N  p%` (bare = dirt + sand) as shares of the
+  land cells, then `share of land; y ecology lists the rest`.
+- **Reading the map** (4 rows): `creatures & resources faded`, `k look names the cell's
+  terrain`, `Esc restores the plain map`.
+- The **Stack** section as item 17 (`1. Succession (base)`), after one blank row.
+
 ### Sidebar — sense ring (S02d)
 18. **Sense range** (3 rows): a two-line explanation that the ring is how far the selected
     creature can see, hear or smell other creatures.
@@ -460,6 +494,13 @@ three.
 | `o`         | open the overlay switcher                   | [S14](s14-overlay-switcher.md) |
 | `←→↑↓`      | scroll the map                              | stays here |
 | `Esc`       | close the overlay                           | [S01 World Map](s01-world-map.md) |
+
+### S02k
+| Key     | Action                                          | Goes to |
+|---------|-------------------------------------------------|---------|
+| `o`     | open the overlay switcher                       | [S14](s14-overlay-switcher.md) |
+| `←→↑↓`  | scroll the map                                  | stays here |
+| `k`     | look mode with the overlay still active; the cursor tooltip names the cell's terrain | [S01c Look mode](s01-world-map.md) |
 | `Esc`   | close the overlay                               | [S01 World Map](s01-world-map.md) |
 
 ### S02d

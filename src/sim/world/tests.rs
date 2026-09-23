@@ -780,3 +780,21 @@ fn held_cells_by_holder_counts_one_pass_per_species() {
     // A lower threshold admits the faint mark.
     assert_eq!(w.held_cells_by_holder(FOX, 0.05), vec![(b, 1), (a, 3)]);
 }
+
+#[test]
+fn succession_ladder_walks_both_ways_and_stops_off_it() {
+    use Terrain::{DeepWater, Dirt, Forest, Grass, GrassDense, GrassSparse, Marsh, Rock, Sand, ShallowWater};
+    let ladder = [Dirt, GrassSparse, Grass, GrassDense, Forest];
+    for pair in ladder.windows(2) {
+        assert_eq!(pair[0].climb(), Some(pair[1]), "{} climbs to {}", pair[0].name(), pair[1].name());
+        assert_eq!(pair[1].wear(), Some(pair[0]), "{} wears to {}", pair[1].name(), pair[0].name());
+        assert!(pair[0].on_ladder() && pair[1].on_ladder());
+    }
+    assert_eq!(Forest.climb(), None, "forest is the top");
+    assert_eq!(Dirt.wear(), None, "dirt is the floor");
+    for off in [DeepWater, ShallowWater, Sand, Marsh, Rock] {
+        assert!(!off.on_ladder(), "{} is off the ladder", off.name());
+        assert_eq!(off.climb(), None);
+        assert_eq!(off.wear(), None);
+    }
+}

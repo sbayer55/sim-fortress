@@ -73,3 +73,42 @@ fn csv_row_count() {
     assert_eq!(lines, 721, "expected 1 header + 720 data rows");
     assert!(csv.starts_with("day,biomass_total,veg_mean,water_cells"), "unexpected header");
 }
+
+// ---- C2 FR12 succession and trampling ----
+
+fn forest_count(sim: &Sim) -> usize {
+    sim.world.cells.iter().filter(|c| c.terrain == sim_fortress::sim::Terrain::Forest).count()
+}
+
+#[test]
+fn ungrazed_meadows_close_into_forest() {
+    // No grazers: every lush, moist meadow in a wooded biome is thriving, so
+    // over five years forest spreads beyond the count worldgen placed.
+    let mut p = Params::default();
+    p.species.clear_initial_counts();
+    let mut sim = Sim::new(42, p);
+    let at_generation = forest_count(&sim);
+    run_days(&mut sim, 5 * 360);
+    let last = sim.series.last().expect("a sample");
+    assert_eq!(last.forest_cells, forest_count(&sim), "the series tally is the map's count");
+    assert!(last.forest_cells > at_generation + 50, "forest {} at generation, {} after five ungrazed years", at_generation, last.forest_cells);
+    assert!(sim.events.iter().any(|e| e.text.starts_with("Scrub is closing over")), "a climb note was logged");
+}
+
+#[test]
+fn grazed_ground_wears_and_recovers() {
+    // The default roster: herds tread and graze their cells bare, so bare
+    // ground exceeds the neutral run's by the end of year one, and by year
+    // two ground they have left is climbing again.
+    let mut on = Sim::new(42, Params::default());
+    let mut off_p = Params::default();
+    off_p.succession.neutral();
+    let mut off = Sim::new(42, off_p);
+    run_days(&mut on, 360);
+    run_days(&mut off, 360);
+    let (bare_on, bare_off) = (on.series.last().map_or(0, |s| s.bare_cells), off.series.last().map_or(0, |s| s.bare_cells));
+    assert!(bare_on > bare_off, "bare cells after one year: {bare_on} with succession, {bare_off} without");
+    assert!(on.events.iter().any(|e| e.text.starts_with("Grazing wears")), "a wear note was logged in year one");
+    run_days(&mut on, 360);
+    assert!(on.events.iter().any(|e| e.text.starts_with("Scrub is closing over")), "a climb note was logged by year two");
+}

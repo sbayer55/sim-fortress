@@ -11,19 +11,25 @@ fn key(s: &mut HuntWatch, app: &mut AppState, code: KeyCode) -> Action {
     s.handle_key(KeyEvent::new(code, KeyModifiers::NONE), app)
 }
 
-/// A default world stepped until a hunt is open, from one year in (cap 4000 ticks).
+/// A default world stepped until a predator is mid-hunt, from one year in
+/// (cap 4000 ticks). An open trace alone is not enough: the details header
+/// reads `Prey` only while the selected hunter's status is `Hunting`, and
+/// which trace opens first is seed-fragile (it moved when C2 FR12 changed
+/// the default run).
 fn app_with_hunts() -> AppState {
     let mut app = AppState::new(Params::default());
     let mut sim = Sim::new(7, Params::default());
     for _ in 0..8640 {
         sim.step();
     }
+    let hunting = |sim: &Sim| model::collect(sim, &[]).iter().any(|v| v.status == Status::Hunting);
     let mut steps = 0;
-    while !sim.hunts.traces().any(HuntTrace::is_open) && steps < 4000 {
+    while !hunting(&sim) && steps < 4000 {
         sim.step();
         steps += 1;
     }
     assert!(sim.hunts.traces().any(HuntTrace::is_open), "the default world hunts");
+    assert!(hunting(&sim), "a predator is mid-hunt");
     app.sim = Some(sim);
     app
 }
@@ -73,6 +79,9 @@ fn borders_hold_and_every_cell_is_cp437_with_and_without_details() {
 fn d_toggles_the_details_panel_and_the_lane_count() {
     let app = app_with_hunts();
     let mut s = HuntWatch::new();
+    // Select the predator that is mid-hunt: the first lane is whoever was
+    // tracked first, and the header reads `Prey` only for a live hunt.
+    s.selected = model::collect(app.sim.as_ref().unwrap(), &[]).iter().find(|v| v.status == Status::Hunting).map(model::HuntView::id);
     let rows = draw(&app, &s);
     assert!(rows.iter().any(|r| r.contains("Details ·")), "the details divider is drawn");
     assert!(rows.iter().any(|r| r.contains("Hunter") && r.contains("Prey")), "the details header");

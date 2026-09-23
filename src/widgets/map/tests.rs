@@ -27,7 +27,7 @@ impl MapSource for TestSource<'_> {
 
 /// A `w`×`h` all-dirt world split into two regions down the middle.
 fn two_region_world(w: usize, h: usize) -> World {
-    let cell = Cell { terrain: Terrain::Dirt, biome: crate::sim::world::Biome::Grassland, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 };
+    let cell = Cell { terrain: Terrain::Dirt, biome: crate::sim::world::Biome::Grassland, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0, thrive_days: 0, wear_days: 0 };
     World {
         cells: vec![cell; w * h],
         width: w,

@@ -92,7 +92,7 @@ the **name** at column 6 padded to 11, the **sub-pick value** at column 18 cut t
 
 ### Left column — layer rows
 1. **Base heatmap tab** lists, in this order: `None`, `Vegetation`, `Pressure`,
-   `Moisture`, `Species`, `Parasites`, `Scent`. Exactly one is on. The mark is a radio, `(•)` on and
+   `Moisture`, `Species`, `Parasites`, `Scent`, `Succession`. Exactly one is on. The mark is a radio, `(•)` on and
    `( )` off.
 2. **Marks tab** lists, in this order: `Sense`, `Regions`, `Health`, `Disease`. Any number
    may be on. The mark is a [Checkbox](../components/checkbox.md) mark, `[x]` on and `[ ]`
@@ -155,6 +155,7 @@ the **name** at column 6 padded to 11, the **sub-pick value** at column 18 cut t
 | Species    | base | population density of one species           | species  |
 | Parasites  | base | parasite load heatmap                       | —        |
 | Scent      | base | one predator species' scent and holders     | species  |
+| Succession | base | ground climbing toward forest or wearing to dirt | —   |
 | Sense      | mark | one predator's sense-range rings            | predator |
 | Regions    | mark | named regions, tinted with labels           | —        |
 | Health     | mark | creatures by their weakest vital            | —        |

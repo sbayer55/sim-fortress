@@ -214,6 +214,9 @@ fn summary_header(roster: &Roster) -> String {
     for id in roster.ids() {
         cols.push(format!("nn_dist_{}", roster.name(id)));
     }
+    // C2 FR12 succession: forest and bare (dirt + sand) shares of the land at the end.
+    cols.push("forest_pct".to_string());
+    cols.push("bare_pct".to_string());
     cols.join(",")
 }
 
@@ -271,7 +274,29 @@ fn summary_row(sim: &Sim, seed: u64, years: f64) -> String {
     for i in 0..n {
         cols.push(format!("{:.2}", sim.group_stats.nn_mean[i]));
     }
+    let (forest, bare) = terrain_shares(sim);
+    cols.push(format!("{forest:.1}"));
+    cols.push(format!("{bare:.1}"));
     cols.join(",")
+}
+
+/// Forest and bare (dirt + sand) cells as percentages of the land cells.
+fn terrain_shares(sim: &Sim) -> (f32, f32) {
+    use sim_fortress::sim::Terrain;
+    let (mut land, mut forest, mut bare) = (0usize, 0usize, 0usize);
+    for c in &sim.world.cells {
+        if c.terrain.is_water() {
+            continue;
+        }
+        land += 1;
+        match c.terrain {
+            Terrain::Forest => forest += 1,
+            Terrain::Dirt | Terrain::Sand => bare += 1,
+            _ => {}
+        }
+    }
+    let pct = |n: usize| sim_fortress::cast!(n => f32) / sim_fortress::cast!(land.max(1) => f32) * 100.0;
+    (pct(forest), pct(bare))
 }
 
 fn print_profile(sim: &Sim) {

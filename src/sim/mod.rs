@@ -457,6 +457,7 @@ impl Sim {
             &mut self.drought,
             &mut self.drought_days_below,
             &self.params.ecology,
+            &self.params.succession,
             self.params.world.rainfall,
             c,
             &self.deaths,

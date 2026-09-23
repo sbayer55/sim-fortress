@@ -44,6 +44,8 @@ fn sample(day: u32) -> Sample {
         carcasses: 0,
         drought_regions: 0,
         drought_flags: [false; 8],
+        forest_cells: 0,
+        bare_cells: 0,
         region_veg: [0.0; 8],
         region_moist: [0.0; 8],
         population: vec![0; 6],
@@ -262,6 +264,8 @@ fn daily_sampling_fields() {
     x.water_level = 0.5;
     x.drought_regions = 2;
     x.drought_flags[0] = true;
+    x.forest_cells = 40;
+    x.bare_cells = 7;
     s.push(x);
     let last = s.last().unwrap();
     assert_eq!(last.day, 1);
@@ -272,6 +276,7 @@ fn daily_sampling_fields() {
     assert_eq!(last.drought_regions, 2);
     assert!(last.drought_flags[0]);
     assert!(!last.drought_flags[1]);
+    assert_eq!((last.forest_cells, last.bare_cells), (40, 7));
 }
 
 #[test]
