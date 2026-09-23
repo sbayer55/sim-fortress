@@ -82,7 +82,7 @@ pub(super) fn wander(
 /// normally: toward the kin centroid when the group is under its preferred size,
 /// away from it when the group is over 1.5x that size, and nowhere in between.
 fn cohesion_target(c: &Creature, world: &World, sp: &SocialParams, rng: &mut Rng, kin: Kin) -> Option<(usize, usize)> {
-    let sociality = c.genome.sociality();
+    let sociality = c.sociality();
     if kin.count == 0 || sociality < sp.cohesion_min {
         return None;
     }
@@ -151,6 +151,8 @@ fn move_speed(c: &Creature, cp: &CreaturesParams, pp: &PredationParams, speed_fa
     speed = if c.adult { speed } else { speed * 0.75 };
     // C7 FR6: sickness slows the animal; the chase bonus below is added after.
     speed *= speed_factor;
+    // Quirks (Swift, Sluggish …); exactly 1 without them.
+    speed *= c.qm.speed;
     // C5 FR5b: the wary tier is a slow backing-off, not a sprint.
     if c.goal == Goal::Wary {
         speed *= pp.wary_speed_factor;

@@ -167,6 +167,14 @@ fn creature_column(roster: &Roster) -> Rows<'static> {
             glyph_span(glyphs::MOON, theme::INFO),
             Span::styled("night (blue-shifted)", theme::dim_text()),
         ])),
+        Box::new(Spacer::rows(1)),
+        Box::new(Divider::new("Quirks (when on)")),
+        Box::new(Text::spans(vec![
+            glyph_span(glyphs::QUIRK, theme::INFO),
+            Span::styled("quirk   ", theme::text()),
+            glyph_span(glyphs::QUIRK_LEGEND, theme::MAGENTA),
+            Span::styled("legendary quirk", theme::dim_text()),
+        ])),
     ]
 }
 

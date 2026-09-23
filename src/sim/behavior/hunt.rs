@@ -35,6 +35,8 @@ struct HuntSnap {
     killer_label: String,
     pred_at: (usize, usize, SpeciesId),
     sick_bonus: f32,
+    /// Quirks: hunter kill over prey evade.
+    quirk: f32,
 }
 
 /// Chase the current hunt target: keep it targeted, transition Stalk → Chase at
@@ -47,7 +49,7 @@ pub(super) fn update_hunt_stalk(c: &mut Creature, view: &TickView, time: &Time, 
         fail_hunt(c, time, pp, ledgers, HuntOutcome::Lost);
         return;
     };
-    if geom::dist(c.x, c.y, prey.x, prey.y) > f32::from(c.genome.sense_cells()) {
+    if geom::dist(c.x, c.y, prey.x, prey.y) > f32::from(c.sense_cells()) {
         fail_hunt(c, time, pp, ledgers, HuntOutcome::Lost);
         return;
     }
@@ -131,14 +133,16 @@ pub(super) fn pick_hunt_target(
             Err(i) => tally.insert(i, (t, 1)),
         }
     }
-    let sociality = c.genome.sociality();
+    let sociality = c.sociality();
     let mut best: Option<(CreatureId, (usize, usize), f32)> = None;
     for id in ids {
         let Some(peer) = view.get(id) else { continue };
-        if roster.kind(peer.species) != Kind::Prey {
+        // Quirks: a starving Cannibal also sees its own species' juveniles as prey.
+        let cannibal = peer.species == c.species && !peer.adult && c.hunger >= c.qm.cannibal_hunger;
+        if roster.kind(peer.species) != Kind::Prey && !cannibal {
             continue;
         }
-        let pref = roster.preference(c.species, peer.species);
+        let pref = if cannibal { 1.0 } else { roster.preference(c.species, peer.species) };
         if pref <= 0.0 {
             continue;
         }
@@ -159,7 +163,7 @@ pub(super) fn pick_hunt_target(
 
 /// Nearest prey carcass within sense range (ties by id).
 pub(super) fn pick_scavenge_target(c: &Creature, view: &TickView, roster: &Roster) -> Option<(CreatureId, (usize, usize))> {
-    let r = f32::from(c.genome.sense_cells());
+    let r = f32::from(c.sense_cells());
     let mut cs: Vec<&genetics::Carcass> = view.carcasses.iter().filter(|k| roster.kind(k.species) == Kind::Prey).collect();
     cs.sort_unstable_by_key(|k| k.id);
     let mut best: Option<(CreatureId, (usize, usize))> = None;
@@ -187,7 +191,7 @@ fn force_flee(q: &mut Creature, world: &World, pp: &PredationParams, time: &Time
             q.threats_by_species[pred_at.2.index()] += 1;
         }
         q.goal = Goal::Flee;
-        q.flee_until = time.tick + u64::from(pp.flee_ticks);
+        q.flee_until = time.tick + crate::sim::quirks::scale_ticks(pp.flee_ticks, q.qm.flee);
         q.threatened_by = Some(pred_at);
         q.target = flee_target(q, world, pp);
         q.replan_at = time.tick + 1;
@@ -229,7 +233,7 @@ pub(super) fn hunt_contacts(
         let participants = predation::pack_participants(store, pair, sp);
         let extra = participants.len().min(3);
         // C7 FR6: a sick prey is easier to catch. One formula, shared with S17.
-        let contest = predation::Contest { pred_speed: snap.pred_speed, pred_aggression: snap.pred_aggr, prey_speed: snap.prey_speed, prey_size: snap.prey_size, extra, sick: snap.sick_bonus };
+        let contest = predation::Contest { pred_speed: snap.pred_speed, pred_aggression: snap.pred_aggr, prey_speed: snap.prey_speed, prey_size: snap.prey_size, extra, sick: snap.sick_bonus, quirk: snap.quirk };
         let chance = predation::odds(pp, sp, contest).total;
         let chase_ticks = snap.chase_start.map_or(0, |s| crate::cast!(time.tick.saturating_sub(s) => u16));
         if rng.chance(chance) {
@@ -260,6 +264,7 @@ fn hunt_snapshot(store: &CreatureStore, pred_id: CreatureId, prey_id: CreatureId
         killer_label: p.label(roster),
         pred_at: (p.x, p.y, p.species),
         sick_bonus: disease::effects(q, dp).kill_bonus,
+        quirk: p.qm.kill / q.qm.evade,
     })
 }
 
@@ -354,7 +359,8 @@ fn resolve_miss(
     // The prey enters Flee regardless of whether it had detected the
     // predator: the threat is forced in so the away-vector exists, and
     // `mark_threats` retains it until the flee timer expires.
-    if let Some(q) = store.get_mut(prey_id) {
+    // A juvenile predator a Cannibal missed has no flee state machine; it just carries on.
+    if let Some(q) = store.get_mut(prey_id).filter(|q| q.species != pred_at.2) {
         force_flee(q, world, pp, time, pred_at);
     }
 }

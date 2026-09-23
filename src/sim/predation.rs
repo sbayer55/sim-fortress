@@ -23,48 +23,49 @@ pub const MAX_SENSE_CELLS: u16 = 12;
 ///
 /// or the prey is resting on a den cell and `den_protects`.
 pub fn can_detect(pred: &Creature, prey: &Creature, world: &World, p: &PredationParams) -> bool {
-    if geom::dist(pred.x, pred.y, prey.x, prey.y) > f32::from(pred.genome.sense_cells()) {
+    if geom::dist(pred.x, pred.y, prey.x, prey.y) > f32::from(pred.sense_cells()) {
         return false;
     }
     if p.den_protects && prey.goal == Goal::Rest && in_den(world, prey.x, prey.y) {
         return false;
     }
     let cover = p.cover_by_terrain.get(&world.cell(prey.x, prey.y).terrain).copied().unwrap_or(0.0);
-    let hidden = prey.genome.camouflage() * cover >= pred.genome.sense() * p.effective_detect_threshold();
+    let hidden = prey.camouflage() * cover >= pred.sense() * p.effective_detect_threshold();
     !hidden
 }
 
 /// FR2 (predator rule) over a peer snapshot: same detection rule as `can_detect`,
 /// used by hunt-target selection where the prey is only available as a `Peer`.
 pub fn can_detect_peer(pred: &Creature, px: usize, py: usize, cam: f32, resting: bool, world: &World, p: &PredationParams) -> bool {
-    if geom::dist(pred.x, pred.y, px, py) > f32::from(pred.genome.sense_cells()) {
+    if geom::dist(pred.x, pred.y, px, py) > f32::from(pred.sense_cells()) {
         return false;
     }
     if p.den_protects && resting && in_den(world, px, py) {
         return false;
     }
     let cover = p.cover_by_terrain.get(&world.cell(px, py).terrain).copied().unwrap_or(0.0);
-    cam * cover < pred.genome.sense() * p.effective_detect_threshold()
+    let sense = pred.sense();
+    cam * cover < sense * p.effective_detect_threshold()
 }
 
 /// FR2 (prey rule): a prey detects a predator within its own sense range
 /// (halved while resting) when `pred.camouflage < prey.sense`.
 pub fn prey_detects_pred(prey: &Creature, pred: &Creature, p: &PredationParams) -> bool {
-    prey_detects_pred_at(prey, pred.x, pred.y, pred.genome.camouflage(), p)
+    prey_detects_pred_at(prey, pred.x, pred.y, pred.camouflage(), p)
 }
 
 /// FR2 (prey rule) against a predator snapshot `(x, y, camouflage)`; used by the
 /// per-tick predator-first threat query, which avoids cloning predators.
 pub fn prey_detects_pred_at(prey: &Creature, px: usize, py: usize, pred_camouflage: f32, p: &PredationParams) -> bool {
     let range = if prey.goal == Goal::Rest {
-        f32::from(prey.genome.sense_cells()) * p.rest_detect_factor
+        f32::from(prey.sense_cells()) * p.rest_detect_factor
     } else {
-        f32::from(prey.genome.sense_cells())
+        f32::from(prey.sense_cells())
     };
     if geom::dist(prey.x, prey.y, px, py) > range {
         return false;
     }
-    pred_camouflage < prey.genome.sense()
+    pred_camouflage < prey.sense()
 }
 
 /// The parts of the contact roll at `behavior::hunt::hunt_contacts`, in the
@@ -85,7 +86,9 @@ pub struct OddsParts {
     pub pack: f32,
     /// The prey's disease `kill_bonus`.
     pub sick: f32,
-    /// `(formula + sick + pack).clamp(kill_min, kill_max)`: what the roll uses.
+    /// Quirks: the hunter's kill multiplier over the prey's evade multiplier (1 = none).
+    pub quirk: f32,
+    /// `((formula + sick + pack) × quirk).clamp(kill_min, kill_max)`: what the roll uses.
     pub total: f32,
 }
 
@@ -99,6 +102,8 @@ pub struct Contest {
     /// Packmates at the kill, already capped at three.
     pub extra: usize,
     pub sick: f32,
+    /// `pred.qm.kill / prey.qm.evade`; exactly 1 without quirks.
+    pub quirk: f32,
 }
 
 /// The contact roll's parts. `total` is computed with the exact expression
@@ -114,7 +119,8 @@ pub fn odds(pp: &PredationParams, sp: &SocialParams, c: Contest) -> OddsParts {
         formula,
         pack,
         sick: c.sick,
-        total: (formula + c.sick + pack).clamp(pp.kill_min, pp.kill_max),
+        quirk: c.quirk,
+        total: ((formula + c.sick + pack) * c.quirk).clamp(pp.kill_min, pp.kill_max),
     }
 }
 
@@ -156,6 +162,7 @@ pub fn kill_odds(sim: &Sim, pred: CreatureId, prey: CreatureId) -> Option<OddsPa
         prey_size: q.genome.size(),
         extra,
         sick: disease::effects(q, &sim.params.disease).kill_bonus,
+        quirk: p.qm.kill / q.qm.evade,
     };
     Some(odds(&sim.params.predation, &sim.params.social, contest))
 }

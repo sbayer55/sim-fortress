@@ -52,3 +52,21 @@ fn s09_preview_shows_the_summary_and_chronicle() {
     assert!(preview.contains(" winds "), "the first chronicle line names the wind:\n{preview}");
     assert!(preview.contains(" runs from ") || preview.contains(" winds through "), "a river line:\n{preview}");
 }
+
+#[test]
+fn quirks_toggle_is_off_by_default_and_reaches_the_sim() {
+    use ratatui::crossterm::event::KeyModifiers;
+    let mut app = AppState::new(Params::default());
+    let mut s = WorldGen::new();
+    assert!(!s.form_params().quirks.enabled, "off by default");
+    let tail = s.form.borrow().tail();
+    s.form.borrow_mut().focus = tail + T_QUIRKS;
+    let _ = s.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE), &mut app);
+    assert!(s.form_params().quirks.enabled, "Right turns it on");
+    let _ = s.handle_key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE), &mut app);
+    assert!(!s.form_params().quirks.enabled, "Space turns it off again");
+    let _ = s.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::NONE), &mut app);
+    assert_eq!(s.form_params().quirks.catalog.len(), 44, "the whole table is carried, not reset");
+    let _ = s.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE), &mut app);
+    assert!(app.sim.as_ref().is_some_and(|sim| sim.params.quirks.enabled), "Generate hands the switch to the sim");
+}

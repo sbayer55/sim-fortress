@@ -313,6 +313,15 @@ impl WorldMap {
             sp(format!("  gen {}", c.generation), theme::dim_text()),
         ]));
         row += 1;
+        // Quirks, one line and only when the creature has any.
+        if !c.quirks.is_empty() {
+            let names = crate::sim::quirks::names(c.quirks, &sim.params.quirks).join(&format!(" {} ", glyphs::DOT));
+            util::line(f, inner, row, Line::from(vec![
+                sp(format!("   {} ", glyphs::QUIRK), Style::default().fg(theme::MAGENTA).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+                sp(names, theme::label()),
+            ]));
+            row += 1;
+        }
         let age = c.age_days(sim.time.day_index());
         let max_age = c.max_age_days(&sim.params.creatures, &sim.params.genetics);
         let age_t = crate::cast!(age => f32) / crate::cast!(max_age.max(1) => f32);

@@ -58,6 +58,7 @@ for f in $changed; do
             units[sim::behavior]=1; chunks[predators]=1 ;;
         src/sim/behavior*)                        units[sim::behavior]=1; chunks[herbivores]=1 ;;
         src/sim/ecology.rs)                       units[sim::ecology]=1; chunks[ecology]=1 ;;
+        src/sim/quirks*|src/sim/params/quirks*)   units[sim::quirks]=1; units[sim::params]=1; chunks[quirks]=1 ;;
         src/sim/params*)                          units[sim::params]=1; chunks[headless]=1 ;;
         src/sim/stats*)                           units[sim::stats]=1 ;;
         src/sim/*)                                units[sim]=1 ;;
@@ -74,7 +75,7 @@ for f in $changed; do
 done
 
 if [ "$core" -eq 1 ]; then
-    for c in headless ecology herbivores predators evolution disease; do chunks[$c]=1; done
+    for c in headless ecology herbivores predators evolution disease quirks; do chunks[$c]=1; done
 fi
 # file_size is always cheap and always relevant.
 chunks[file_size]=1

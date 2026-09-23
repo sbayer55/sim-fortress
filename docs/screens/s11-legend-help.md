@@ -80,6 +80,7 @@ flowchart TB
    Spring *births peak, regrowth fast*; Summer *water cells shrink*; Autumn *forage peaks then
    falls*; Winter *regrowth halved, ice* — then `☼ day / ○ night (blue-shifted)`, and the
    run-state glyphs `► running  ││ paused  ►► x2 speed`.
+7a. **Quirks (when on)** (2 rows): `φ quirk   Φ legendary quirk`, the S03 and S01e badges.
 8. **Vitals & trends** (5 rows): three `███` swatches in good / warning / bad for
    *healthy / rising*, *strained*, *critical / falling*; `↑ ↔ ↓` = 30-day population trend;
    `§` = trait differs from the species mean.

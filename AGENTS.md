@@ -125,7 +125,9 @@ Do not weaken these to make a change pass. Fix the change.
   A step is ordered: season event → creature behaviour → midnight boundary → disease
   → ecology → migration/extinction. **Never reorder or merge RNG draws.** Three RNG
   streams exist (`rng`, `creature_rng`, `disease_rng`) so enabling one subsystem does
-  not perturb another. `sim::tests::checksum_is_fnv_stable` pins the exact checksum
+  not perturb another. Quirks (`src/sim/quirks.rs`, off by default) roll from a throwaway
+  per-creature `Rng` (seed ^ salt ^ id), never a stream, and hash only while enabled.
+  `sim::tests::checksum_is_fnv_stable` pins the exact checksum
   `0xf9ea_eb02_3e27_c085`; only re-baseline deliberately, with a comment saying why.
 - **Sim/UI separation.** `src/sim` is pure data and logic: **no `ratatui`, `HashMap`
   or `HashSet`** anywhere under it. `src/sim/mod.rs` guards this by scanning every
@@ -172,7 +174,7 @@ Do not weaken these to make a change pass. Fix the change.
 - **All numeric casts go through `cast!(expr => Ty)`** (defined in `src/lib.rs`).
   Bare `as` is denied; the macro is the one reviewed place that preserves `as`
   semantics and works in `const` context.
-- **Save format is versioned and never migrated.** Binary `SIMF` files, `VERSION = 18`
+- **Save format is versioned and never migrated.** Binary `SIMF` files, `VERSION = 20`
   in `src/sim/save.rs`. A version mismatch is rejected (`SaveError`), never half-read;
   old files stay listable so they can be deleted. `Params`/`Sim` serde field order and
   attributes are load-bearing — changing them means bumping `VERSION` and accepting
@@ -232,6 +234,8 @@ Do not weaken these to make a change pass. Fix the change.
 
 ## Gotchas learned in this repository
 
+- **"Trait" means a genome slot.** The named birth oddities are *quirks*
+  (`docs/quirks-plan.md`); do not call them traits in code or UI.
 - **Submodule name collisions.** A child module named `disease` where
   `crate::sim::disease` or `use crate::sim::disease::{self, ..}` is bound breaks
   unqualified paths — hence `sim/params/pathogen.rs` and `ui/screens/s01_map/disease_overlay.rs`.

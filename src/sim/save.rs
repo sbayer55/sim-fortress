@@ -41,8 +41,10 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// (C5 FR13); version 18 added the lineage's mother-line `root`, the persisted
 /// predator dynasties (S16 Top Dynasties) and the per-creature droughts and
 /// winters survived tallies; version 19 added the hunt traces (`Sim.hunts`, one per
-/// predator that has hunted, for S17 Hunt Watch).
-pub const VERSION: u16 = 19;
+/// predator that has hunted, for S17 Hunt Watch); version 20 added quirks (the
+/// `[quirks]` table, each creature's quirk mask and folded multipliers, the
+/// lineage node's mask and the `Quirk` event kind).
+pub const VERSION: u16 = 20;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 

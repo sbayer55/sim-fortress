@@ -77,7 +77,7 @@ pub(super) fn perceive(c: &Creature, spatial: &SpatialIndex, world: &World, cp: 
     // Diet breadth: edibility per terrain, built once here so the cell loop
     // below is one multiply per cell and never touches the params map.
     let edible = diet.table(c.genome.diet_breadth());
-    let r = c.genome.sense_cells(); // u16
+    let r = c.sense_cells(); // u16
     let r_i = i32::from(r);
     let r_f = f32::from(r);
     let (cx, cy) = (c.x, c.y);
@@ -88,7 +88,7 @@ pub(super) fn perceive(c: &Creature, spatial: &SpatialIndex, world: &World, cp: 
     // already issues, and biases grazing so herds strip the same cells.
     let creatures = spatial.within(cx, cy, r);
     let kin = kin_summary(c, &creatures, view);
-    let sociality = c.genome.sociality();
+    let sociality = c.sociality();
     let herding = sp.herding(sociality, kin.count);
     let (kx, ky) = kin.centroid();
 

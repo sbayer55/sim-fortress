@@ -1,6 +1,6 @@
 //! S03 — the genome column: traits, derived values and the offspring forecast.
 
-use crate::sim::creatures::{adult_age_days, Creature};
+use crate::sim::creatures::Creature;
 use crate::sim::{Genome, Kind, Sim, TRAIT_NAMES};
 use crate::widgets::Constraint::{Fill, Fixed};
 use crate::widgets::{Bar, Block, Columns, RangeBar, Row, Rows, Spacer, Text};
@@ -74,7 +74,7 @@ fn derived(sim: &Sim, c: &Creature) -> Rows<'static> {
         ("sense range".into(), format!("{} cells", g.sense_cells())),
         ("move speed".into(), format!("{:.1} cells/tick", 0.5 + g.speed() * 2.0)),
         ("daily food need".into(), format!("{:.2} biomass", 24.0 * sim.params.creatures.hunger_per_hour(g.size(), g.metabolism(), 1.0))),
-        ("adult at".into(), format!("{} days", adult_age_days(sim.species_params(c.species), g, &sim.params.genetics))),
+        ("adult at".into(), format!("{} days", c.adult_age_days(sim.species_params(c.species), &sim.params.genetics))),
         ("max lifespan".into(), format!("{} days", c.max_age_days(&sim.params.creatures, &sim.params.genetics))),
         (
             "litter size".into(),
