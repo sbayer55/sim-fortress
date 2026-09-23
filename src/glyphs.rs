@@ -87,6 +87,9 @@ pub const MOON: char = '○';
 pub const BIRTH: char = '♥';
 pub const DEATH: char = 'x';
 pub const MUTATION: char = '§';
+/// A creature's quirk badge; the legendary form marks a legendary quirk.
+pub const QUIRK: char = 'φ';
+pub const QUIRK_LEGEND: char = 'Φ';
 pub const MIGRATION: char = '→';
 pub const EXTINCTION: char = '‼';
 pub const DROUGHT: char = '¡';
@@ -149,7 +152,7 @@ mod tests {
         SQUARE, CARCASS, DEN, SEED, CURSOR, CORNER, TRAIL,
         RING, DOT, BULLET, BAR_L, BAR_R, BAR_FILL, BAR_EMPTY, H_LINE, V_LINE, CROSS, T_DOWN, T_UP, CLOCK_OUT,
         BOX_TL, BOX_TR, BOX_BL, BOX_BR, SPRING,
-        SUMMER, AUTUMN, WINTER, SUN, MOON, BIRTH, DEATH, MUTATION, MIGRATION, EXTINCTION,
+        SUMMER, AUTUMN, WINTER, SUN, MOON, BIRTH, DEATH, MUTATION, QUIRK, QUIRK_LEGEND, MIGRATION, EXTINCTION,
         DROUGHT, ALERT, NOTE, PLAY, REWIND, HAPPY, UNHAPPY, MALE, FEMALE, UP, DOWN, FLAT, LEFT,
         RIGHT, HOUSE, INFINITY, DIAMOND, PLUS_MINUS,
     ];

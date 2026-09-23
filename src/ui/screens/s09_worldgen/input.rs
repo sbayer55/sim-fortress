@@ -6,7 +6,7 @@ use crate::sim::params::{Difficulty, Rainfall};
 use crate::sim::{Params, PRESETS};
 use crate::ui::app::AppState;
 use crate::ui::screens::Action;
-use super::{generate, WorldGenForm, F_AGE, F_HEIGHT, F_RAINFALL, F_ROCK, F_SEASON, F_SPECIES, F_WATER, F_WIDTH, F_FOREST, T_DIFFICULTY, T_MUTATION_RATE, T_MUTATION_STRENGTH, T_REGROWTH};
+use super::{generate, WorldGenForm, F_AGE, F_HEIGHT, F_RAINFALL, F_ROCK, F_SEASON, F_SPECIES, F_WATER, F_WIDTH, F_FOREST, T_DIFFICULTY, T_MUTATION_RATE, T_MUTATION_STRENGTH, T_QUIRKS, T_REGROWTH};
 
 /// Apply a preset (C6 FR7): write its values into the form fields. Balanced
 /// (index 0) resets those fields to the defaults; the name, seed and species
@@ -20,6 +20,7 @@ pub(super) fn apply_preset(form: &mut WorldGenForm, idx: usize) {
         form.genetics = d.genetics;
         form.predation = d.predation;
         form.regrowth_rate = d.ecology.regrowth_rate;
+        form.quirks.enabled = d.quirks.enabled;
     } else {
         let mut p = form.build_params();
         if let Err(e) = p.apply_overlay(preset.overlay) {
@@ -31,6 +32,7 @@ pub(super) fn apply_preset(form: &mut WorldGenForm, idx: usize) {
         form.genetics = p.genetics;
         form.predation = p.predation;
         form.regrowth_rate = p.ecology.regrowth_rate;
+        form.quirks = p.quirks;
     }
     form.dirty = true;
 }
@@ -57,6 +59,7 @@ pub(super) fn adjust(form: &mut WorldGenForm, focus: usize, dir: i32) {
             T_MUTATION_STRENGTH => form.genetics.mutation_strength = clamp_f32(form.genetics.mutation_strength + crate::cast!(dir => f32) * 0.01, 0.0, 1.0),
             T_DIFFICULTY => cycle_difficulty(&mut form.predation.difficulty, dir),
             T_REGROWTH => form.regrowth_rate = clamp_f32(form.regrowth_rate + crate::cast!(dir => f32) * 0.1, 0.0, 10.0),
+            T_QUIRKS => form.quirks.enabled = !form.quirks.enabled,
             _ => {}
         },
     }
@@ -201,6 +204,11 @@ pub(super) fn handle_adjust(form: &mut WorldGenForm, focus: usize, code: KeyCode
             let dir: i32 = if code == KeyCode::Right { 1 } else { -1 };
             adjust(form, focus, dir);
             form.dirty = true;
+            Action::None
+        }
+        // Space flips the quirks toggle (it types a value on numeric fields).
+        KeyCode::Char(' ') if focus == form.tail() + T_QUIRKS => {
+            form.quirks.enabled = !form.quirks.enabled;
             Action::None
         }
         KeyCode::Enter => generate(form, app),

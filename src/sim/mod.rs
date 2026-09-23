@@ -14,6 +14,7 @@ pub mod lineage;
 pub mod naming;
 pub mod params;
 pub mod predation;
+pub mod quirks;
 pub mod rng;
 pub mod save;
 pub mod spatial;
@@ -163,7 +164,7 @@ impl Sim {
             params.time.sunset_hour,
         );
         ecology::warm_up(&mut world, &params.ecology, time.season(), params.ecology.warm_up_days);
-        let events = EventRing::new(params.events.capacity);
+        let mut events = EventRing::new(params.events.capacity);
         let series = Series::new(params.stats.series_days);
         let rng = Rng::new(seed);
         let mut creature_rng = Rng::new(seed ^ 0x9E37_79B9_7F4A_7C15);
@@ -185,6 +186,8 @@ impl Sim {
         for c in creatures.living() {
             lineage.record(c, &params.species, params.genetics.mutation_notable);
         }
+        // Founder quirks: no-op when quirks are off; never draws from the three streams.
+        quirks::assign_from(&mut creatures, &mut lineage, &mut events, &params.species, &params.quirks, seed, &time, CreatureId(0));
         let species = SpeciesStats::all(&census(&creatures, n), &params.species, 0, params.genetics.drift_every_generations);
         let group_stats = group_census(&creatures, &params.social, n);
 
@@ -295,6 +298,7 @@ impl Sim {
     fn run_behavior(&mut self) {
         // spatial snapshot; it is rebuilt below for the next tick and the UI).
         let t0 = std::time::Instant::now();
+        let first_newborn = self.creatures.next_id();
         let mut ledgers = behavior::Ledgers { tallies: &mut self.deaths, hunts: &mut self.hunts };
         behavior::tick_creatures(
             &mut self.creatures,
@@ -317,6 +321,17 @@ impl Sim {
             &mut self.soft_cap_noted,
             &mut self.disease,
             &mut self.disease_rng,
+        );
+        // Quirks for this tick's newborns (after delivery, before anyone acts on them).
+        quirks::assign_from(
+            &mut self.creatures,
+            &mut self.lineage,
+            &mut self.events,
+            &self.params.species,
+            &self.params.quirks,
+            self.seed,
+            &self.time,
+            first_newborn,
         );
         if self.profile_enabled {
             self.profile.behavior_ns += crate::cast!(t0.elapsed().as_nanos() => u64);
@@ -623,6 +638,10 @@ impl Sim {
                 None => feed(&mut h, &[0xff, 0xff]),
             }
             feed(&mut h, &c.parasite_load.to_bits().to_le_bytes());
+            // Quirks only when on, so the default run keeps its pinned checksum.
+            if self.params.quirks.enabled {
+                feed(&mut h, &c.quirks.0.to_le_bytes());
+            }
         }
         for &d in &self.disease.last_case_day {
             feed(&mut h, &d.to_le_bytes());

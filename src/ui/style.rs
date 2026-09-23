@@ -54,6 +54,7 @@ impl EventKindStyle for EventKind {
             Self::Season => glyphs::SUMMER,
             Self::Wary => glyphs::ALERT,
             Self::Contest => glyphs::CONTEST,
+            Self::Quirk => glyphs::QUIRK,
             Self::Note => glyphs::NOTE,
         }
     }
@@ -66,7 +67,7 @@ impl EventKindStyle for EventKind {
             Self::DeathAge | Self::DroughtEased | Self::EpidemicOver => theme::DIM,
             Self::Mutation => theme::INFO,
             Self::Migration | Self::Contest => theme::ACCENT,
-            Self::Extinction | Self::Spillover => theme::MAGENTA,
+            Self::Extinction | Self::Spillover | Self::Quirk => theme::MAGENTA,
             Self::Season => theme::TITLE,
             Self::Note => theme::TEXT,
             Self::DeathDisease | Self::Outbreak | Self::Epidemic => theme::SICK,

@@ -30,7 +30,7 @@ use super::threat::flee_target;
 
 /// Below the herding gate an animal holds ground for itself alone.
 fn solitary(c: &Creature, sp: &SocialParams) -> bool {
-    c.genome.sociality() < sp.cohesion_min
+    c.sociality() < sp.cohesion_min
 }
 
 /// Add `amount` of `depositor`'s scent to a mark; a faint mark changes hands.
@@ -159,7 +159,7 @@ pub(super) fn update_challenge(c: &mut Creature, view: &TickView, world: &World,
         return;
     };
     match view.get(id) {
-        Some(p) if geom::dist(c.x, c.y, p.x, p.y) <= f32::from(c.genome.sense_cells()) && holds(c, world, p.x, p.y, tp) => {
+        Some(p) if geom::dist(c.x, c.y, p.x, p.y) <= f32::from(c.sense_cells()) && holds(c, world, p.x, p.y, tp) => {
             c.target = Some((p.x, p.y));
         }
         _ => end_challenge(c, time),

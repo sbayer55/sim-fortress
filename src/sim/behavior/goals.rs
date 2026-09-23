@@ -118,7 +118,7 @@ fn preempt_prey(c: &mut Creature, world: &World, time: &Time, pp: &PredationPara
     } else if threatened {
         if c.goal != Goal::Flee {
             c.goal = Goal::Flee;
-            c.flee_until = time.tick + u64::from(pp.flee_ticks);
+            c.flee_until = time.tick + crate::sim::quirks::scale_ticks(pp.flee_ticks, c.qm.flee);
             c.chased += 1;
             if let Some((_, _, sp)) = c.threatened_by {
                 c.threats_by_species[sp.index()] += 1;

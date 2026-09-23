@@ -78,7 +78,7 @@ impl TickView {
                 y: c.y,
                 adult: c.adult,
                 mate_ready: eligible(c, time, world, roster, gp, dp),
-                camouflage: c.genome.camouflage(),
+                camouflage: c.camouflage(),
                 goal: c.goal,
                 hunt_target: if c.goal == Goal::Hunt && c.hunt_phase != HuntPhase::Eat { c.hunt_target } else { None },
             })
@@ -339,6 +339,8 @@ fn newborn(
                 contests_lost: 0,
                 droughts_survived: 0,
                 winters_survived: 0,
+                quirks: crate::sim::quirks::QuirkSet(0),
+                qm: crate::sim::quirks::QuirkMods::IDENTITY,
                 nickname: None,
             }
 }
@@ -407,7 +409,7 @@ fn deliver_litter(
     let father_id = m.mate_id.unwrap_or(mother_id);
     // C7 FR6: parasites lower the effective fertility; C8 maturity scales the
     // litter (a slow life history has fewer, larger litters).
-    let litter = gp.litter_size(roster.get(species).litter_max, m.genome.fertility() * disease::effects(m, dp).fertility_factor, m.genome.maturity());
+    let litter = gp.litter_size(roster.get(species).litter_max, m.genome.fertility() * disease::effects(m, dp).fertility_factor * m.qm.litter, m.genome.maturity());
     let mother_label = m.label(roster);
     let mother_water = m.last_water;
     let mother_snapshot = m.clone();

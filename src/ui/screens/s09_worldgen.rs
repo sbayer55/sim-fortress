@@ -6,7 +6,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
 use ratatui::Frame;
 
-use crate::sim::params::{EcologyParams, GeneticsParams, PredationParams, Roster, TimeParams, WorldParams};
+use crate::sim::params::{EcologyParams, GeneticsParams, PredationParams, QuirkParams, Roster, TimeParams, WorldParams};
 use crate::sim::{Params, Sim, World};
 use crate::ui::app::AppState;
 use crate::ui::screens::s01_map::WorldMap;
@@ -31,13 +31,15 @@ const T_MUTATION_RATE: usize = 0;
 const T_MUTATION_STRENGTH: usize = 1;
 const T_DIFFICULTY: usize = 2;
 const T_REGROWTH: usize = 3;
-const T_PRESETS: usize = 4; // 4..=8, five presets
-const T_GENERATE: usize = 9;
-const T_RANDOMIZE: usize = 10;
-const T_BACK: usize = 11;
+/// The quirks on/off toggle (off by default).
+const T_QUIRKS: usize = 4;
+const T_PRESETS: usize = 5; // 5..=9, five presets
+const T_GENERATE: usize = 10;
+const T_RANDOMIZE: usize = 11;
+const T_BACK: usize = 12;
 /// The species-designer button (C9); present only while the feature is on.
-const T_DESIGN: usize = 12;
-const T_COUNT: usize = 13;
+const T_DESIGN: usize = 13;
+const T_COUNT: usize = 14;
 const FORM_W: u16 = 66;
 
 mod chronicle;
@@ -69,6 +71,8 @@ struct WorldGenForm {
     genetics: GeneticsParams,
     predation: PredationParams,
     regrowth_rate: f32,
+    /// The whole `[quirks]` table, so a `params.toml` catalogue survives; the form flips `enabled`.
+    quirks: QuirkParams,
     focus: usize,
     preview: World,
     dirty: bool,
@@ -131,6 +135,7 @@ impl WorldGenForm {
             genetics: params.genetics.clone(),
             predation: params.predation.clone(),
             regrowth_rate: params.ecology.regrowth_rate,
+            quirks: params.quirks.clone(),
             // Start on Map width, matching the documented default highlight and
             // so a fresh S09 quits on `q` (FR8: `q` quits when no text field is focused).
             focus: F_WIDTH,
@@ -160,6 +165,7 @@ impl WorldGenForm {
             genetics: self.genetics.clone(),
             ecology: EcologyParams { regrowth_rate: self.regrowth_rate, ..EcologyParams::default() },
             predation: self.predation.clone(),
+            quirks: self.quirks.clone(),
             ..Params::default()
         }
     }

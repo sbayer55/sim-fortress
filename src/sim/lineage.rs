@@ -44,6 +44,8 @@ pub struct LineageNode {
     /// The outbreak that killed it (absolute index into `Sim.disease.outbreaks`).
     pub outbreak: Option<u16>,
     pub infections_survived: u8,
+    /// Quirks the creature was born with (empty when quirks are off).
+    pub quirks: crate::sim::quirks::QuirkSet,
     /// The player's name for it, mirrored from `Creature::nickname` (save 20).
     pub nickname: Option<String>,
 }
@@ -196,6 +198,7 @@ impl Lineage {
                 cause: None,
                 outbreak: None,
                 infections_survived: 0,
+                quirks: c.quirks,
                 nickname: c.nickname.clone(),
             },
         );
@@ -214,6 +217,14 @@ impl Lineage {
                     n.notable = true;
                 }
             }
+        }
+    }
+
+    /// Store a creature's quirks after they are rolled; a legendary quirk is notable.
+    pub fn set_quirks(&mut self, id: CreatureId, set: crate::sim::quirks::QuirkSet, legendary: bool) {
+        if let Some(n) = self.nodes.get_mut(&id) {
+            n.quirks = set;
+            n.notable |= legendary;
         }
     }
 

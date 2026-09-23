@@ -1,7 +1,8 @@
 //! S03a/c — the identity column: family, location, vitals, death and timeline.
 
 use ratatui::style::{Color, Modifier, Style};
-use crate::sim::creatures::{adult_age_days, Creature, Goal};
+use crate::sim::creatures::{Creature, Goal};
+use crate::sim::params::QuirkTier;
 use crate::sim::disease::{PathogenId, Stage};
 use crate::sim::{Kind, Sim};
 use crate::ui::screens::common::day_stamp;
@@ -32,6 +33,7 @@ pub(super) fn rows(sim: &Sim, c: &Creature, pinned: bool) -> Rows<'static> {
         sp(c.name_str(sim.roster()).to_string(), theme::title()),
         sp(format!("  {}", c.tag(sim.roster())), theme::label()),
         sp(if pinned { format!(" {}", glyphs::DIAMOND) } else { String::new() }, Style::default().fg(theme::ACCENT).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+        quirk_badge(sim, c),
         state,
     ]));
     let (sex_g, sex_name) = match c.sex {
@@ -63,6 +65,7 @@ pub(super) fn rows(sim: &Sim, c: &Creature, pinned: bool) -> Rows<'static> {
     rows.push(blank(1));
 
     rows.extend(family(sim, c));
+    rows.extend(quirks(sim, c));
     rows.extend(location(sim, c));
     rows.extend(if c.alive { vitals(sim, c) } else { death(sim, c, (age, max_age, age_t)) });
     rows.extend(timeline(sim, c));
@@ -87,6 +90,43 @@ fn family(sim: &Sim, c: &Creature) -> Rows<'static> {
         ]),
         blank(1),
     ]
+}
+
+/// The badge beside the name: `Φ` for a legendary quirk, `φ` for any other.
+fn quirk_badge(sim: &Sim, c: &Creature) -> ratatui::text::Span<'static> {
+    let qp = &sim.params.quirks;
+    if c.quirks.is_empty() {
+        return sp("", theme::text());
+    }
+    let legendary = c.quirks.iter().any(|i| qp.catalog.get(i).is_some_and(|d| d.tier == QuirkTier::Legendary));
+    let (g, col) = if legendary { (glyphs::QUIRK_LEGEND, theme::MAGENTA) } else { (glyphs::QUIRK, theme::INFO) };
+    sp(format!(" {g}"), Style::default().fg(col).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD))
+}
+
+/// The Quirks block: one line per quirk with its effects. Absent when quirks are off.
+fn quirks(sim: &Sim, c: &Creature) -> Rows<'static> {
+    let qp = &sim.params.quirks;
+    if !qp.enabled {
+        return Rows::new();
+    }
+    let mut rows = vec![section("Quirks")];
+    if c.quirks.is_empty() {
+        rows.push(one(" none", theme::dim_text()));
+    }
+    for d in c.quirks.iter().filter_map(|i| qp.catalog.get(i)) {
+        let (g, col) = match d.tier {
+            QuirkTier::Legendary => (glyphs::QUIRK_LEGEND, theme::MAGENTA),
+            QuirkTier::Rare => (glyphs::QUIRK, theme::INFO),
+            QuirkTier::Common => (glyphs::QUIRK, theme::TEXT),
+        };
+        rows.push(line(vec![
+            sp(format!(" {g} "), Style::default().fg(col).bg(theme::PANEL_BG)),
+            sp(format!("{:<13}", d.name), Style::default().fg(col).bg(theme::PANEL_BG).add_modifier(Modifier::BOLD)),
+            sp(d.summary(), theme::dim_text()),
+        ]));
+    }
+    rows.push(blank(1));
+    rows
 }
 
 /// The identity panel's location block.
@@ -254,7 +294,7 @@ fn timeline(sim: &Sim, c: &Creature) -> Rows<'static> {
         None => "placed as a founder".to_string(),
     };
     events.push((glyphs::BIRTH, theme::GOOD, i64::from(c.born_day), born_text));
-    let adult_day = i64::from(c.born_day) + i64::from(adult_age_days(sim.species_params(c.species), &c.genome, &sim.params.genetics));
+    let adult_day = i64::from(c.born_day) + i64::from(c.adult_age_days(sim.species_params(c.species), &sim.params.genetics));
     if c.adult && adult_day >= 0 {
         events.push((glyphs::UP, theme::INFO, adult_day, "reached adulthood".to_string()));
     }

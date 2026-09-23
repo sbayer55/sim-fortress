@@ -3,7 +3,7 @@
 //! day boundary.
 
 use crate::sim::creatures::{
-    adult_age_days, Cause, Creature, CreatureId, CreatureStore, Death, DeathTallies,
+    Cause, Creature, CreatureId, CreatureStore, Death, DeathTallies,
 };
 use crate::sim::events::{Event, EventKind, EventRing};
 use crate::sim::genetics::{self, TickView};
@@ -108,7 +108,7 @@ pub fn day_boundary(
     // 1. Age death + adult re-evaluation (FR3, FR7).
     for c in store.living_mut() {
         let age = c.age_days(day_index);
-        c.adult = age >= adult_age_days(roster.get(c.species), &c.genome, gp);
+        c.adult = age >= c.adult_age_days(roster.get(c.species), gp);
         if age >= c.max_age_days(cp, gp) {
             kill(c, Cause::Age, world, events, time, roster, tallies, lineage, None, 0, None);
         }
@@ -317,7 +317,7 @@ pub(crate) fn needs(c: &mut Creature, world: &World, time: &Time, cp: &Creatures
     let season_metabolism = ep.season_metabolism.get(&time.season()).copied().unwrap_or(1.0);
     let pregnancy = if c.pregnant_due.is_some() { gp.pregnancy_hunger_factor } else { 1.0 };
     // C7 FR6: `hunger_factor` carries the resistance cost, fever and parasite tax.
-    c.hunger = (c.hunger + cp.hunger_per_hour(c.genome.size(), c.genome.metabolism(), season_metabolism) * pregnancy * hunger_factor).min(2.0);
+    c.hunger = (c.hunger + cp.hunger_per_hour(c.genome.size(), c.genome.metabolism(), season_metabolism) * pregnancy * hunger_factor * c.qm.hunger).min(2.0);
     c.thirst = (c.thirst + cp.thirst_per_hour).min(2.0);
 
     if is_resting(c) {

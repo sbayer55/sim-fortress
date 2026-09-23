@@ -67,6 +67,7 @@ event kinds for claimed, usurped and abandoned feeding S07 and the chronicle pro
 
 - **The player's hand.** A small set of interventions: place a water hole, plant a forest, cull or introduce a founder group, start a fire. Turns pure observation into experimentation, and the headless runner could take the same commands from a script.
 - **Chronicle screen.** An auto-written history of the world: "Year 3, the voles of the eastern meadow vanished; the foxes followed by winter." Generated from the event ring buffer, in the Dwarf Fortress legends style.
+- **Quirks** *(built 2026-09-22, [quirks-plan.md](quirks-plan.md))*. WorldBox / CK3-style named birth oddities (Giant, Albino, Undying, Cannibal …), 44 in a `[[quirks.catalog]]`, off by default and switched on at world creation.
 - **Named notable creatures.** The oldest, the most prolific, the best hunter, automatically named and tracked, with an obituary event on death.
 - **Replay and time scrubbing.** Save periodic snapshots and let the charts screen jump the map back to any year.
 

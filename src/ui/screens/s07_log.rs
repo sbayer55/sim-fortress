@@ -98,7 +98,8 @@ impl ChipFilter {
         match kind {
             EventKind::Birth => self.kinds[0],
             EventKind::DeathStarved | EventKind::DeathThirst | EventKind::DeathPredation | EventKind::DeathAge | EventKind::DeathDisease => self.kinds[1],
-            EventKind::Mutation => self.kinds[2],
+            // Quirks are birth oddities too: they share the mutation chip.
+            EventKind::Mutation | EventKind::Quirk => self.kinds[2],
             EventKind::Migration => self.kinds[3],
             EventKind::Extinction => self.kinds[4],
             EventKind::Drought | EventKind::DroughtEased => self.kinds[5],

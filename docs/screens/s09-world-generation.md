@@ -38,7 +38,7 @@ flowchart LR
             direction TB
             F1["World: 9 fields"]
             F2["Initial species: one row per species + total"]
-            F3["Evolution: 4 fields + note"]
+            F3["Evolution: 5 fields + note"]
             F4["Presets: 5 rows"]
             F5["Generate note"]
             F6["[ Generate ] [ Randomize seed ] [ Back ] (bottom row)"]
@@ -98,9 +98,10 @@ unfocused values are bright text on the plain background.
    highlighted across the full width. Prototype defaults: Voles 240, Hares 180, Deer 90,
    Foxes 30, Wolves 24, Lynxes 12. A dim total line follows:
    `total <n>   prey <p>   predators <q>   ratio <p/q>:1`.
-4. **Evolution section** — four adjustable fields: `Mutation rate` (0.04, `per
+4. **Evolution section** — five adjustable fields: `Mutation rate` (0.04, `per
    trait/birth`), `Mutation strength` (0.06, `mutation sd`), `Predation difficulty`
-   (normal, `easy/norm/hard`), `Regrowth rate` (1.0, `veg multiplier`); then a two-line
+   (normal, `easy/norm/hard`), `Regrowth rate` (1.0, `veg multiplier`), `Quirks` (off,
+   `birth oddities`; `←` `→` or `Space` toggles it, see [quirks](../quirks-plan.md)); then a two-line
    `¶` note: `Higher mutation strength speeds adaptation but raises the chance of unviable
    offspring.`
 5. **Presets section** — five rows, the active one marked `♦` (label colour, name in the

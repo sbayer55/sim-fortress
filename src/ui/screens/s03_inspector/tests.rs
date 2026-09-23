@@ -138,3 +138,28 @@ fn s03_scroll_clamps_to_content() {
     // Identity fits in its panel, so scrolling past the end leaves it unchanged.
     assert_eq!(top(&before), top(&after), "{after}");
 }
+
+#[test]
+fn s03_quirks_section_only_when_on() {
+    let mut app = AppState::new(Params::default());
+    app.sim = Some(Sim::new(7, Params::default()));
+    let id = app.sim.as_ref().unwrap().creatures.living_ids()[0];
+    assert!(!screen_text(&app, &Inspector::new(id)).contains("Quirks"), "hidden while quirks are off");
+
+    let mut p = Params::default();
+    p.quirks.enabled = true;
+    let mut sim = Sim::new(7, p);
+    let qp = sim.params.quirks.clone();
+    let mut set = crate::sim::quirks::QuirkSet::default();
+    set.insert(qp.position("Swift").unwrap());
+    set.insert(qp.position("Undying").unwrap());
+    let c = sim.creatures.get_mut(id).unwrap();
+    c.quirks = set;
+    c.qm = crate::sim::quirks::fold(set, &qp);
+    app.sim = Some(sim);
+    let text = screen_text(&app, &Inspector::new(id));
+    assert!(text.contains("─ Quirks ─"), "{text}");
+    assert!(text.contains("Swift") && text.contains("speed +30%"), "{text}");
+    assert!(text.contains("Undying") && text.contains("lifespan +300%"), "{text}");
+    assert!(text.contains(glyphs::QUIRK_LEGEND), "legendary badge: {text}");
+}

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::sim::disease::{Infection, PathogenId};
 use crate::sim::params::{CreaturesParams, GeneticsParams, Roster, SpeciesParams};
+use crate::sim::quirks::{QuirkMods, QuirkSet};
 use crate::sim::rng::Rng;
 use crate::sim::species::{Genome, SpeciesId, IDX_RESISTANCE};
 use crate::sim::world::World;
@@ -249,6 +250,10 @@ pub struct Creature {
     pub adult: bool,
     /// Born sterile (a high-Mutability cost): never eligible to mate.
     pub sterile: bool,
+    /// Quirks rolled at birth (all empty when `quirks.enabled` is off).
+    pub quirks: QuirkSet,
+    /// The quirks' multipliers, folded once at birth for the hot loops.
+    pub qm: QuirkMods,
     pub goal: Goal,
     pub target: Option<(usize, usize)>,
     pub replan_at: u64,
@@ -351,6 +356,32 @@ pub struct Creature {
 }
 
 impl Creature {
+    /// Effective Sense: the genome's value scaled by quirks (Keen-eyed, Myopic …).
+    pub fn sense(&self) -> f32 {
+        crate::sim::quirks::scaled(self.genome.sense(), self.qm.sense)
+    }
+
+    /// Sense range in map cells, from the effective Sense.
+    pub fn sense_cells(&self) -> u16 {
+        2 + crate::cast!((self.sense() * 10.0) => u16)
+    }
+
+    /// Effective Camouflage (Albino, Melanistic, Ghost …).
+    pub fn camouflage(&self) -> f32 {
+        crate::sim::quirks::scaled(self.genome.camouflage(), self.qm.camouflage)
+    }
+
+    /// Effective Sociality (Loner, Gregarious, Alpha …).
+    pub fn sociality(&self) -> f32 {
+        crate::sim::quirks::scaled(self.genome.sociality(), self.qm.sociality)
+    }
+
+    /// Days to adulthood: the genome's age scaled by the Precocious / Late Bloomer quirks.
+    pub fn adult_age_days(&self, sp: &SpeciesParams, gp: &GeneticsParams) -> u32 {
+        let days = adult_age_days(sp, &self.genome, gp);
+        if (self.qm.maturity - 1.0).abs() < f32::EPSILON { days } else { crate::cast!((crate::cast!(days => f32) * self.qm.maturity).round() => u32) }
+    }
+
     /// `v#001`: the species glyph and the creature id.
     pub fn tag(&self, roster: &Roster) -> String {
         format!("{}#{:03}", roster.get(self.species).glyph, self.id.0)
@@ -384,7 +415,8 @@ impl Creature {
     /// Maximum lifespan in days, from longevity, the C3 params and the maturity
     /// trait (a slow life history lives longer).
     pub fn max_age_days(&self, params: &CreaturesParams, gp: &GeneticsParams) -> u32 {
-        max_age_days(&self.genome, params, gp)
+        let days = max_age_days(&self.genome, params, gp);
+        if (self.qm.lifespan - 1.0).abs() < f32::EPSILON { days } else { crate::cast!((crate::cast!(days => f32) * self.qm.lifespan).round() => u32) }
     }
 }
 
@@ -424,6 +456,11 @@ impl CreatureStore {
     }
 
     /// Insert a creature, assigning a fresh id (ignoring any id on the input).
+    /// The id the next inserted creature will get: ids at or above it are newer.
+    pub const fn next_id(&self) -> CreatureId {
+        CreatureId(self.next_id)
+    }
+
     pub fn insert(&mut self, mut c: Creature) -> CreatureId {
         let id = CreatureId(self.next_id);
         self.next_id += 1;
@@ -565,6 +602,8 @@ fn founder(species: SpeciesId, n_species: usize, name: NameId, sex: Sex, pos: (u
                 contests_lost: 0,
                 droughts_survived: 0,
                 winters_survived: 0,
+                quirks: QuirkSet(0),
+                qm: QuirkMods::IDENTITY,
                 nickname: None,
             }
 }

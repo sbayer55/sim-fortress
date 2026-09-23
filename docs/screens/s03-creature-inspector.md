@@ -161,6 +161,10 @@ classDiagram
    shows `<age/360> years old` (one decimal) and `generation <n>`.
 4. **Family section.** `mother <name tag>   father <name tag>`, then `offspring <n>` and a
    dim reminder `¶ lineage: [l]`.
+4a. **Quirks section** (only while `quirks.enabled`, see [quirks](../quirks-plan.md)). One
+   row per quirk: `φ` (common, text colour; rare, info colour) or `Φ` (legendary, magenta),
+   the name in 13 columns, then the dim effect summary (`speed +30%, hunger +10%`), or a dim
+   `none`. A creature with any quirk also gets the badge beside its tag on the name line.
 5. **Location section.** `(x, y)`, region name (title style), terrain glyph in its terrain
    colour and the terrain name. For living creatures add: `goal <goal text>`; `target ♦
    (x, y)  <d> cells <compass>` or `none`; and `trail` listing the five most recent

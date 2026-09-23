@@ -122,9 +122,9 @@ pub fn group_census(store: &CreatureStore, sp: &SocialParams, n_species: usize) 
     for c in store.living() {
         let i = c.species.index();
         let list = &mut clusters[i];
-        let sociality = c.genome.sociality();
+        let sociality = c.sociality();
         let join = if sociality >= sp.cohesion_min {
-            nearest_group(c.x, c.y, c.genome.sense_cells(), Cluster::kin_cap(sp, sociality), list)
+            nearest_group(c.x, c.y, c.sense_cells(), Cluster::kin_cap(sp, sociality), list)
         } else {
             None
         };
