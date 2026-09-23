@@ -216,3 +216,30 @@ fn helpers_rank_format_and_shorten() {
     assert_eq!(Stat::Age.fmt(730.0, 360), "2y");
     assert_eq!(Stat::Kills.fmt(12.4, 360), "12");
 }
+
+#[test]
+fn n_opens_the_rename_modal_and_a_named_line_shows_its_name() {
+    let mut app = app_after(3);
+    let mut s = DynastiesScreen::new();
+    draw(&app, &s);
+    assert!(matches!(key(&mut s, &mut app, KeyCode::Char('n')), Action::Push(_)), "n names the focused line");
+    let root = selected_root(&s, &app).expect("a line is selected");
+    assert!(app.sim.as_mut().is_some_and(|sim| sim.rename_dynasty(root, "Grey Court")));
+    let rows = draw(&app, &s);
+    assert!(rows.iter().any(|r| r.contains("Grey Court")), "the rename rebuilds the cached ranking the same day");
+    key(&mut s, &mut app, KeyCode::Tab);
+    assert!(matches!(key(&mut s, &mut app, KeyCode::Char('n')), Action::Push(_)), "n names the focused member");
+}
+
+#[test]
+fn founder_line_keeps_a_multi_word_name() {
+    assert_eq!(founder_line("Ash w#003"), "Ash line");
+    assert_eq!(founder_line("Old Grey w#003"), "Old Grey line");
+    assert_eq!(name_and_tag("Old Grey w#003"), ("Old Grey", "w#003"));
+    let app = app_after(1);
+    let mut d = crate::sim::lineage::dynasties::rank(app.sim.as_ref().unwrap()).remove(0);
+    d.name = Some("The Ash Court".into());
+    assert_eq!(the_line(&d), "The Ash Court", "no doubled article");
+    d.name = Some("Ash Court".into());
+    assert_eq!(the_line(&d), "the Ash Court");
+}

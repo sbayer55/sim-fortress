@@ -101,6 +101,7 @@ pub(super) fn test_creature(x: usize, y: usize) -> Creature {
         contests_lost: 0,
         droughts_survived: 0,
         winters_survived: 0,
+        nickname: None,
     }
 }
 

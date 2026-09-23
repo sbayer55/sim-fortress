@@ -42,4 +42,4 @@
 ║                                                  ║║ Mutability  [░░░░░░░░▒█▒▒░░░░░░░░] 0.43..0.57    ║║                                                 ║
 ║                                                  ║║ Diet breadth[░░░░░░░░░░░░░░░▒█▒▒░] 0.80..0.93    ║║                                                 ║
 ╚══════════════════════════════════════════════════╝╚══════════════════════════════════════════════════╝╚═════════════════════════════════════════════════╝
- [f] follow  [l] lineage  [Tab] next creature  [←→] panel  [↑↓] scroll  [Esc] back                             Birch d#422  Year 2, Day 1 of Spring  06:00 
+ [f] follow  [l] lineage  [n] name  [Tab] next creature  [←→] panel  [↑↓] scroll  [Esc] back                   Birch d#422  Year 2, Day 1 of Spring  06:00 

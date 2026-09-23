@@ -91,6 +91,9 @@ pub struct Dynasty {
     pub died_out_day: Option<u32>,
     /// Closed years, oldest first, at most `YEARS_KEPT`.
     pub years: Vec<YearRow>,
+    /// The player's name for the line (`Sim::rename_dynasty`); `None` shows
+    /// `<Founder> line`. Display only (save 20).
+    pub name: Option<String>,
 }
 
 impl Dynasty {
@@ -107,6 +110,7 @@ impl Dynasty {
             dead: Tally::default(),
             died_out_day: None,
             years: Vec::new(),
+            name: None,
         }
     }
 
@@ -137,6 +141,21 @@ impl Dynasties {
 
     pub fn is_empty(&self) -> bool {
         self.lines.is_empty()
+    }
+
+    /// Set or clear the player's name for the line rooted at `root`; false
+    /// when no such line is kept.
+    pub fn rename(&mut self, root: CreatureId, name: Option<String>) -> bool {
+        let Some(line) = self.lines.get_mut(&root) else { return false };
+        line.name = name;
+        true
+    }
+
+    /// Re-label the founder after the player renamed it (`Name tag`).
+    pub fn relabel_founder(&mut self, root: CreatureId, label: String) {
+        if let Some(line) = self.lines.get_mut(&root) {
+            line.founder = label;
+        }
     }
 
     /// A predator was recorded: found the line when `root == c.id`, else join it.
@@ -241,6 +260,8 @@ pub struct DynastyView {
     pub root: CreatureId,
     pub species: SpeciesId,
     pub founder: String,
+    /// The player's name for the line, if any.
+    pub name: Option<String>,
     pub founded_day: i32,
     pub generations: u32,
     pub members_ever: u32,
@@ -308,6 +329,7 @@ pub fn rank(sim: &Sim) -> Vec<DynastyView> {
                 root: d.root,
                 species: d.species,
                 founder: d.founder.clone(),
+                name: d.name.clone(),
                 founded_day: d.founded_day,
                 generations: d.generations(),
                 members_ever: d.members_ever,

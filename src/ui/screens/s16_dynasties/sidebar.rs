@@ -13,7 +13,7 @@ use crate::widgets::{Bar, Component, Divider, Histogram, Panel};
 use crate::{glyphs, theme};
 
 use super::rank::top_pct;
-use super::{age_str, bold, fg, line_name, put, signed, Pin, Stat, View};
+use super::{age_str, bold, fg, name_and_tag, the_line, put, signed, Pin, Stat, View};
 
 fn section(buf: &mut Buffer, inner: Rect, y: u16, title: &str) -> u16 {
     Divider::new(title).render(buf, Rect::new(inner.x, y, inner.width, 1));
@@ -25,7 +25,7 @@ fn head(buf: &mut Buffer, inner: Rect, y: u16, v: &View<'_>, m: &DynastyMember) 
     let sp = d.species;
     let x = inner.x + 1;
     put(buf, x, y, 1, &v.sim.roster().adult_glyph(sp).to_string(), bold(v.color(sp)));
-    let (name, tag) = m.label.split_once(' ').unwrap_or((m.label.as_str(), ""));
+    let (name, tag) = name_and_tag(&m.label);
     put(buf, x + 2, y, crate::cast!(name.chars().count() => u16), name, bold(theme::TITLE));
     put(buf, x + 3 + crate::cast!(name.chars().count() => u16), y, 8, tag, fg(theme::DIM));
     let sex = format!("{} {}", super::sex_glyph(m.sex), v.sim.roster().name(sp).to_lowercase());
@@ -33,7 +33,7 @@ fn head(buf: &mut Buffer, inner: Rect, y: u16, v: &View<'_>, m: &DynastyMember) 
     put(buf, inner.right().saturating_sub(sw + 1), y, sw, &sex, fg(v.color(sp)));
     let carries = d.members.first().is_some_and(|c| c.id == m.id);
     let rank = d.members.iter().position(|o| o.id == m.id).map_or(1, |p| p + 1);
-    let line = if carries { format!("carries the {}", line_name(d)) } else { format!("of the {}, #{rank} by kills", line_name(d)) };
+    let line = if carries { format!("carries {}", the_line(d)) } else { format!("of {}, #{rank} by kills", the_line(d)) };
     put(buf, x, y + 1, inner.width - 1, &line, fg(if carries { theme::ACCENT } else { theme::TEXT }));
     put(buf, x, y + 2, inner.width - 1, &format!("{} living · age {} · gen {}", glyphs::BIRTH, age_str(m.stats.age, v.year_days), m.generation), fg(theme::GOOD));
     y + 3

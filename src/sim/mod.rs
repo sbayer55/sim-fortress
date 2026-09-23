@@ -11,6 +11,7 @@ pub mod genetics;
 pub mod geom;
 pub mod hunt_watch;
 pub mod lineage;
+pub mod naming;
 pub mod params;
 pub mod predation;
 pub mod rng;
@@ -144,6 +145,10 @@ pub struct Sim {
     /// step, outside the checksum; saved so a loaded world shows the same ribbons.
     #[serde(default)]
     pub hunts: HuntWatch,
+    /// Bumped by every player rename so screens can drop cached labels; never
+    /// serialised, never read by the step.
+    #[serde(skip)]
+    pub names_rev: u32,
 }
 
 impl Sim {
@@ -215,6 +220,7 @@ impl Sim {
             disease,
             chronicle: Vec::new(),
             hunts: HuntWatch::default(),
+            names_rev: 0,
         }
     }
 

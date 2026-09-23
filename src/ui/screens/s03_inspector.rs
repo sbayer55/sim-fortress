@@ -15,6 +15,7 @@ use ratatui::Frame;
 use crate::sim::creatures::{Cause, Creature, CreatureId, Goal};
 use crate::sim::Kind;
 use crate::ui::app::AppState;
+use crate::ui::screens::rename::{RenameModal, RenameTarget};
 use crate::ui::screens::s08_lineage::LineageScreen;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::SpeciesStyle;
@@ -122,6 +123,10 @@ impl Screen for Inspector {
                 Action::None
             }
             KeyCode::Char('l') => Action::Push(Box::new(LineageScreen::new(self.id))),
+            KeyCode::Char('n') => match &app.sim {
+                Some(sim) => Action::Push(Box::new(RenameModal::new(RenameTarget::Animal(self.id), sim))),
+                None => Action::None,
+            },
             KeyCode::Left => {
                 self.focus = self.focus.prev();
                 Action::None
@@ -195,7 +200,7 @@ impl Screen for Inspector {
         self.measured.set((content, visible));
 
         let right_text = format!("{} {}  {}", c.name_str(sim.roster()), c.tag(sim.roster()), sim.time.clock_label());
-        StatusBar::new(&[("f", "follow"), ("l", "lineage"), ("Tab", "next creature"), ("←→", "panel"), ("↑↓", "scroll"), ("Esc", "back")]).right(&right_text).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
+        StatusBar::new(&[("f", "follow"), ("l", "lineage"), ("n", "name"), ("Tab", "next creature"), ("←→", "panel"), ("↑↓", "scroll"), ("Esc", "back")]).right(&right_text).render(f.buffer_mut(), Rect::new(area.x, status_row, area.width, 1));
     }
 }
 
