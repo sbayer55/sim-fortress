@@ -121,6 +121,7 @@ fn adult(x: usize, y: usize, sex: Sex) -> Creature {
         winters_survived: 0,
         quirks: crate::sim::quirks::QuirkSet(0),
         qm: crate::sim::quirks::QuirkMods::IDENTITY,
+        nickname: None,
     }
 }
 

@@ -52,6 +52,8 @@ impl LivingRanks {
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Ranked {
     pub day: u64,
+    /// `Sim::names_rev` at build time: a rename rebuilds the labels.
+    pub names_rev: u32,
     /// Lines with a living member, kills descending.
     pub dynasties: Vec<DynastyView>,
     /// Parallel to `dynasties`.
@@ -87,7 +89,7 @@ impl Ranked {
         dynasties.retain(|d| !d.members.is_empty());
         let standing = dynasties.iter().map(|d| standing_of(&dynasties, d)).collect();
         let living = living_ranks(&dynasties);
-        Self { day: sim.time.day_index(), dynasties, standing, living }
+        Self { day: sim.time.day_index(), names_rev: sim.names_rev, dynasties, standing, living }
     }
 }
 

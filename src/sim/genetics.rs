@@ -341,6 +341,7 @@ fn newborn(
                 winters_survived: 0,
                 quirks: crate::sim::quirks::QuirkSet(0),
                 qm: crate::sim::quirks::QuirkMods::IDENTITY,
+                nickname: None,
             }
 }
 

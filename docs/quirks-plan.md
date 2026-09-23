@@ -49,7 +49,7 @@ living creature with `id ≥ next_id` from before the tick.
 - the mask is hashed into `Sim::checksum` only while enabled.
 
 So `checksum_is_fnv_stable` keeps `0xf9ea_eb02_3e27_c085`. The save format is
-version 20.
+version 21.
 
 **Hooks.** Hot loops read `c.qm`, never the catalogue.
 

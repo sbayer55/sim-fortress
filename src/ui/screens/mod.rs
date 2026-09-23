@@ -10,6 +10,7 @@ use crate::widgets::util;
 pub mod common;
 pub mod confirm;
 pub mod load_world;
+pub mod rename;
 pub mod s00_title;
 pub mod s01_map;
 pub mod s03_inspector;

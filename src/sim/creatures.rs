@@ -350,6 +350,9 @@ pub struct Creature {
     pub droughts_survived: u16,
     /// Springs reached alive. Every winter counts: the sim has no winter severity.
     pub winters_survived: u16,
+    /// A name the player gave it (`Sim::rename_creature`); `None` shows the
+    /// species name pool's. Display only: no step reads it (save 20).
+    pub nickname: Option<String>,
 }
 
 impl Creature {
@@ -384,9 +387,9 @@ impl Creature {
         format!("{}#{:03}", roster.get(self.species).glyph, self.id.0)
     }
 
-    /// Display name, resolved from the species' name pool.
-    pub fn name_str<'r>(&self, roster: &'r Roster) -> &'r str {
-        roster.name_for(self.species, self.name)
+    /// Display name: the player's name if it has one, else the species' name pool's.
+    pub fn name_str<'a>(&'a self, roster: &'a Roster) -> &'a str {
+        self.nickname.as_deref().unwrap_or_else(|| roster.name_for(self.species, self.name))
     }
 
     /// `Clover v#001`: name and tag, as event text refers to a creature.
@@ -601,6 +604,7 @@ fn founder(species: SpeciesId, n_species: usize, name: NameId, sex: Sex, pos: (u
                 winters_survived: 0,
                 quirks: QuirkSet(0),
                 qm: QuirkMods::IDENTITY,
+                nickname: None,
             }
 }
 

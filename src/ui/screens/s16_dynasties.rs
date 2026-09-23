@@ -18,6 +18,8 @@ use ratatui::Frame;
 use crate::sim::lineage::dynasties::{DynastyMember, DynastyView, Tally, YearRow};
 use crate::sim::{CreatureId, Sex, Sim, SpeciesId};
 use crate::ui::app::AppState;
+use crate::ui::screens::common::clip;
+use crate::ui::screens::rename::{RenameModal, RenameTarget};
 use crate::ui::screens::s08_lineage::LineageScreen;
 use crate::ui::screens::{Action, Screen};
 use crate::ui::style::SpeciesStyle;
@@ -192,7 +194,7 @@ impl DynastiesScreen {
     }
 
     fn ranked<'a>(&'a self, sim: &Sim) -> std::cell::Ref<'a, Option<Ranked>> {
-        let stale = self.cache.borrow().as_ref().is_none_or(|r| r.day != sim.time.day_index());
+        let stale = self.cache.borrow().as_ref().is_none_or(|r| r.day != sim.time.day_index() || r.names_rev != sim.names_rev);
         if stale {
             *self.cache.borrow_mut() = Some(Ranked::build(sim));
         }
@@ -330,6 +332,14 @@ impl DynastiesScreen {
                 let Some(id) = self.subject(&ranked) else { return Action::None };
                 return Action::Push(Box::new(LineageScreen::new(id)));
             }
+            KeyCode::Char('n') => {
+                let target = match self.focused_pin(&ranked) {
+                    Some(Pin::Dynasty(root)) => RenameTarget::Dynasty(root),
+                    Some(Pin::Member(id)) => RenameTarget::Animal(id),
+                    None => return Action::None,
+                };
+                return Action::Push(Box::new(RenameModal::new(target, sim)));
+            }
             _ => return Action::Unhandled,
         }
         Action::None
@@ -374,8 +384,10 @@ impl Screen for DynastiesScreen {
             members::draw(buf, inner, y, member_rows, &view);
         }
         sidebar::draw(buf, Rect::new(area.x + MAIN_W, area.y + WATCH_H, area.width - MAIN_W, body_h - WATCH_H), &view);
-        let keys = [("←→", "region"), ("↑↓", "pick"), ("Tab", "members"), ("s", "species"), ("p", "pin"), ("1-4", "watch"), ("f", "follow"), ("l", "lineage"), ("Esc", "back")];
-        let line = view.dynasty().map_or_else(String::new, line_name);
+        // `1-4` is hinted in the Watch title; the row has no room for it beside `n`.
+        let keys = [("←→", "region"), ("↑↓", "pick"), ("Tab", "members"), ("s", "species"), ("p", "pin"), ("n", "name"), ("f", "follow"), ("l", "lineage"), ("Esc", "back")];
+        // A player's name may be 20 characters; 16 keeps `[Esc] back` on the row.
+        let line = view.dynasty().map_or_else(String::new, |d| clip(&line_name(d), 16));
         let focus = match self.focus {
             Focus::Dynasties => "dynasties",
             Focus::Members => "members",
@@ -403,9 +415,26 @@ fn bold(c: Color) -> Style {
     fg(c).add_modifier(Modifier::BOLD)
 }
 
-/// `<Founder> line`.
+/// The player's name for the line, else `<Founder> line`.
 fn line_name(d: &DynastyView) -> String {
-    format!("{} line", d.founder.split(' ').next().unwrap_or(&d.founder))
+    d.name.clone().unwrap_or_else(|| founder_line(&d.founder))
+}
+
+/// The line name in running prose: `the Ember line`, but a player's
+/// `The Ash Court` keeps its own article.
+fn the_line(d: &DynastyView) -> String {
+    let name = line_name(d);
+    if name.get(..4).is_some_and(|w| w.eq_ignore_ascii_case("the ")) { name } else { format!("the {name}") }
+}
+
+/// `Ash w#003` → `Ash line`; the founder's name may have spaces, its tag not.
+pub fn founder_line(founder: &str) -> String {
+    format!("{} line", founder.rsplit_once(' ').map_or(founder, |(name, _)| name))
+}
+
+/// `Old Grey w#003` → (`Old Grey`, `w#003`): the tag is the last word.
+fn name_and_tag(label: &str) -> (&str, &str) {
+    label.rsplit_once(' ').unwrap_or((label, ""))
 }
 
 /// The region's name, or `All regions` at the ninth stop.

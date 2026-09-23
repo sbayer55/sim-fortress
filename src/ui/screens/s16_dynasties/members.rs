@@ -8,7 +8,7 @@ use crate::widgets::{Bar, Column, Component, Divider, Table, TableCell, TableRow
 use crate::{glyphs, theme};
 
 use super::rank::top_pct;
-use super::{bold, fg, put, Focus, Pin, Stat, View};
+use super::{bold, fg, name_and_tag, put, Focus, Pin, Stat, View};
 
 const BAR_W: u16 = 22;
 
@@ -55,7 +55,7 @@ pub(super) fn draw(buf: &mut Buffer, inner: Rect, y: u16, rows: u16, v: &View<'_
         .iter()
         .take(shown)
         .map(|m| {
-            let (name, tag) = m.label.split_once(' ').unwrap_or((m.label.as_str(), ""));
+            let (name, tag) = name_and_tag(&m.label);
             let kills = Stat::Kills.of(&m.stats);
             let (rank, n) = ranks.map_or((1, 1), |r| r.rank(Stat::Kills, kills));
             TableRow::new([

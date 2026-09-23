@@ -46,6 +46,8 @@ pub struct LineageNode {
     pub infections_survived: u8,
     /// Quirks the creature was born with (empty when quirks are off).
     pub quirks: crate::sim::quirks::QuirkSet,
+    /// The player's name for it, mirrored from `Creature::nickname` (save 20).
+    pub nickname: Option<String>,
 }
 
 impl LineageNode {
@@ -53,8 +55,8 @@ impl LineageNode {
         self.died_day.is_none()
     }
 
-    pub fn name_str<'r>(&self, roster: &'r Roster) -> &'r str {
-        roster.name_for(self.species, self.name)
+    pub fn name_str<'a>(&'a self, roster: &'a Roster) -> &'a str {
+        self.nickname.as_deref().unwrap_or_else(|| roster.name_for(self.species, self.name))
     }
 
     pub fn mother(&self) -> Option<CreatureId> {
@@ -144,6 +146,18 @@ impl Lineage {
         &self.dynasties
     }
 
+    /// The dynasties, for the player's renames (`Sim::rename_*`) only.
+    pub const fn dynasties_mut(&mut self) -> &mut Dynasties {
+        &mut self.dynasties
+    }
+
+    /// Mirror a player's rename onto the node; false when it was pruned.
+    pub fn set_nickname(&mut self, id: CreatureId, nickname: Option<String>) -> bool {
+        let Some(n) = self.nodes.get_mut(&id) else { return false };
+        n.nickname = nickname;
+        true
+    }
+
     /// Close a year of every dynasty (S16); see `Dynasties::close_year`.
     pub fn close_year(&mut self, year: u32, day: u32, year_days: u32, living: &BTreeMap<CreatureId, dynasties::Tally>) {
         self.dynasties.close_year(year, day, year_days, living);
@@ -185,6 +199,7 @@ impl Lineage {
                 outbreak: None,
                 infections_survived: 0,
                 quirks: c.quirks,
+                nickname: c.nickname.clone(),
             },
         );
         if roster.kind(c.species) == crate::sim::species::Kind::Predator {
