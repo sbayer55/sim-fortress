@@ -43,9 +43,11 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// winters survived tallies; version 19 added the hunt traces (`Sim.hunts`, one per
 /// predator that has hunted, for S17 Hunt Watch); version 20 added the player's
 /// names: `Creature::nickname`, `LineageNode::nickname` and `Dynasty::name`;
-/// version 21 added `Params.succession` and the per-cell `thrive_days` /
+/// version 21 added quirks (the `[quirks]` table, each creature's quirk mask
+/// and folded multipliers, the lineage node's mask and the `Quirk` event kind);
+/// version 22 added `Params.succession` and the per-cell `thrive_days` /
 /// `wear_days` counters (C2 FR12 succession and trampling).
-pub const VERSION: u16 = 21;
+pub const VERSION: u16 = 22;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 

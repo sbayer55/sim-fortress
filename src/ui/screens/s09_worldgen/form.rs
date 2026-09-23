@@ -118,6 +118,7 @@ fn evolution_section(form: &WorldGenForm) -> Rows<'static> {
         ("Mutation strength", shown(form, tail + T_MUTATION_STRENGTH, format!("{:.2}", form.genetics.mutation_strength)), "mutation sd"),
         ("Predation difficulty", difficulty_name(form.predation.difficulty).to_string(), "easy/norm/hard"),
         ("Regrowth rate", shown(form, tail + T_REGROWTH, format!("{:.1}", form.regrowth_rate)), "veg multiplier"),
+        ("Quirks", (if form.quirks.enabled { "on" } else { "off" }).to_string(), "birth oddities"),
     ];
     let mut rows: Rows<'static> = vec![Box::new(Divider::new("Evolution"))];
     for (i, (label, value, hint)) in evo.into_iter().enumerate() {

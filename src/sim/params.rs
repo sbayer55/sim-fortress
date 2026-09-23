@@ -20,6 +20,7 @@ pub use pathogen::{DiseaseParams, PathogenParams};
 pub use presets::{PRESETS, Preset};
 pub use species::{BaseGenome, Roster, SpeciesParams};
 pub use ai::{AiConfig, AiFeatures, GatewayToken};
+pub use quirks::{QuirkDef, QuirkKinds, QuirkParams, QuirkSpecial, QuirkTier};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
@@ -43,6 +44,8 @@ pub struct Params {
     pub succession: SuccessionParams,
     /// The species roster (`[[species]]`); position is the `SpeciesId`.
     pub species: Roster,
+    /// Quirks: named birth oddities (`[quirks]`), off unless chosen at world creation.
+    pub quirks: QuirkParams,
 }
 
 impl Params {
@@ -101,6 +104,7 @@ mod territory;
 mod succession;
 mod ecology;
 mod pathogen;
+mod quirks;
 mod docs;
 mod presets;
 mod toml_util;

@@ -33,6 +33,8 @@ pub enum EventKind {
     /// C5 FR13: a territorial contest between two same-species predators;
     /// the subject is the winner, `detail` is `winner:loser:region`.
     Contest,
+    /// A pup born with a rare or legendary quirk (quirks on only).
+    Quirk,
 }
 
 impl EventKind {
@@ -66,6 +68,7 @@ impl EventKind {
             Self::Recovery => "recovery",
             Self::Wary => "wary",
             Self::Contest => "contest",
+            Self::Quirk => "quirk",
         }
     }
 }

@@ -12,7 +12,7 @@ added (the S14 tab had the room); `--summary` reports `forest_pct` and `bare_pct
 of the land, and the acceptance test `grazed_ground_wears_and_recovers` asserts on bare
 cells and the two note kinds rather than a margin; `trample_w` defaults to 0.25, not 0.5,
 after the sweep (see Result). Checksum re-baselined to
-`0x10cd_7594_03e3_d96c`, save `VERSION = 21`; the succession-neutral tripwire pins the old
+`0x10cd_7594_03e3_d96c`, save `VERSION = 22 (21 on main is quirks; both landed the same day)`; the succession-neutral tripwire pins the old
 value and the territory tripwire now applies both neutral overlays. Results are in
 [C2 FR12](chunks/c2-ecology.md#fr12-succession-and-trampling-2026-09-22) and summarised at
 the end of this document.*
@@ -173,7 +173,7 @@ to the bit, no cell ever flips and no draw is made, so the run is today's run ex
 step 2 pins that against the *old* checksum. No `enabled` flag, in the spirit of the diet
 and territory neutral overlays.
 
-**D7 — Save `VERSION = 21`, checksum re-baselined, and the territory tripwire.** The two
+**D7 — Save `VERSION = 22 (21 on main is quirks; both landed the same day)`, checksum re-baselined, and the territory tripwire.** The two
 `Cell` fields and `Params.succession` are serde-visible. Under defaults the pinned checksum
 moves on the first day trampling touches a trafficked cell. The existing territory tripwire
 `neutral_territory_reproduces_the_old_checksum` pins the pre-territory value
@@ -266,7 +266,7 @@ where it is; step 2 is the only one that moves it.
   `ecology.max_vegetation` does); `validate` rejects negative rates, `climb_veg ≤ wear_veg`,
   `trample_high < trample_low`, and a `climb_days` or `climb_moisture` table missing any of
   the four rungs above Dirt.
-- `save::VERSION = 21`. The version tests build their files synthetically and need no
+- `save::VERSION = 22 (21 on main is quirks; both landed the same day)`. The version tests build their files synthetically and need no
   fixture change.
 - `scripts/affected-tests.sh`: the `src/sim/ecology.rs)` line becomes `src/sim/ecology*)`
   so the new child module maps to `units[sim::ecology]` and `chunks[ecology]`.
@@ -325,7 +325,7 @@ where it is; step 2 is the only one that moves it.
 - `cargo test --lib -- --ignored regenerate_screen_renders` for S02k and S14; every glyph
   through `all_glyphs_are_cp437` (`UP` and `DOWN` are already in the table).
 - `docs/chunks/c2-ecology.md`: FR12 and the struck decision (D9);
-  `docs/chunks/c5-predators.md`: one status line; `AGENTS.md`: `VERSION = 21`, the
+  `docs/chunks/c5-predators.md`: one status line; `AGENTS.md`: `VERSION = 22 (21 on main is quirks; both landed the same day)`, the
   checksum, the affected-tests glob; `docs/PERFORMANCE.md` only if step 5 measures more
   than a 1 % change.
 - Tier: `just test-unit ui`; `cargo test --test components` only if a widget changed.

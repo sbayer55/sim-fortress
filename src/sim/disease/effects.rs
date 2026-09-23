@@ -71,7 +71,8 @@ pub(super) fn susceptibility(c: &Creature, p: PathogenId, day: u32, dp: &Disease
             s *= 1.0 - dp.spillover_cross_immunity;
         }
     }
-    s.max(0.0)
+    // Quirks (Hardy, Sickly, Plague-proof …); exactly 1 without them.
+    (s * c.qm.susceptibility).max(0.0)
 }
 
 /// Build a fresh infection of `p` for `c` in the given stage.

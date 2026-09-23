@@ -194,7 +194,7 @@ code changes: every consumer of `Terrain` reads it fresh.
 6. **Screens.** S02k succession overlay (a `Succession` base row on S14, see
    [S02](../screens/s02-map-overlay.md)); the S06 Terrain composition table already lists
    every terrain and starts moving; S01 look mode names the flipped cell.
-7. **`[succession]`** (`SuccessionParams`, after `territory`; save `VERSION = 21`):
+7. **`[succession]`** (`SuccessionParams`, after `territory`; save `VERSION = 22 (21 on main is quirks; both landed the same day)`):
 
    | key | default | role |
    |---|---:|---|
