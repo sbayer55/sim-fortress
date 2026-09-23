@@ -14,6 +14,7 @@ pub use genetics::GeneticsParams;
 pub use social::SocialParams;
 pub use diet::DietParams;
 pub use territory::TerritoryParams;
+pub use succession::SuccessionParams;
 pub use ecology::EcologyParams;
 pub use pathogen::{DiseaseParams, PathogenParams};
 pub use presets::{PRESETS, Preset};
@@ -38,6 +39,8 @@ pub struct Params {
     pub diet: DietParams,
     /// Territory: the scent grid, scent avoidance and the contest (C5 FR13).
     pub territory: TerritoryParams,
+    /// Succession and trampling: how grazing reshapes the terrain (C2 FR12).
+    pub succession: SuccessionParams,
     /// The species roster (`[[species]]`); position is the `SpeciesId`.
     pub species: Roster,
 }
@@ -95,6 +98,7 @@ mod genetics;
 mod social;
 mod diet;
 mod territory;
+mod succession;
 mod ecology;
 mod pathogen;
 mod docs;

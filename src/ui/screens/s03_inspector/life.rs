@@ -77,6 +77,7 @@ impl Component for Header<'_> {
             selected_region: None,
             species_color: theme::TEXT,
             creature_tint: None,
+            succession: map::SuccessionScale::default(),
         };
         if !mm_inner.is_empty() {
             map::render(buf, mm_inner, sim, &opts);

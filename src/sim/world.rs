@@ -87,6 +87,34 @@ impl Terrain {
         !matches!(self, Self::DeepWater | Self::Rock)
     }
 
+    /// C2 FR12: on the succession ladder Dirt → sparse grass → grassland →
+    /// meadow → forest. Sand, marsh, rock and water never change.
+    pub const fn on_ladder(self) -> bool {
+        matches!(self, Self::Dirt | Self::GrassSparse | Self::Grass | Self::GrassDense | Self::Forest)
+    }
+
+    /// The next rung up the ladder, or `None` at the top or off it.
+    pub const fn climb(self) -> Option<Self> {
+        match self {
+            Self::Dirt => Some(Self::GrassSparse),
+            Self::GrassSparse => Some(Self::Grass),
+            Self::Grass => Some(Self::GrassDense),
+            Self::GrassDense => Some(Self::Forest),
+            _ => None,
+        }
+    }
+
+    /// The next rung down the ladder, or `None` on Dirt or off it.
+    pub const fn wear(self) -> Option<Self> {
+        match self {
+            Self::GrassSparse => Some(Self::Dirt),
+            Self::Grass => Some(Self::GrassSparse),
+            Self::GrassDense => Some(Self::Grass),
+            Self::Forest => Some(Self::GrassDense),
+            _ => None,
+        }
+    }
+
     pub const fn name(self) -> &'static str {
         match self {
             Self::DeepWater => "deep water",
@@ -123,6 +151,21 @@ pub struct Cell {
     pub dried_from: Option<Terrain>,
     /// C7: parasite contamination 0..=1, shed by carriers, decays daily.
     pub parasite_load: f32,
+    /// C2 FR12: days (consecutive-ish) this cell has been lush and lightly used.
+    pub thrive_days: u16,
+    /// C2 FR12: days (consecutive-ish) this cell has been grazed bare and trodden.
+    pub wear_days: u16,
+}
+
+impl Cell {
+    /// C2 FR12: the rung this cell would climb into, or `None` at the top of
+    /// its ladder (forest, or meadow in a treeless biome) or off it.
+    pub const fn next_rung(&self) -> Option<Terrain> {
+        match self.terrain.climb() {
+            Some(Terrain::Forest) if !self.biome.allows_forest() => None,
+            next => next,
+        }
+    }
 }
 
 /// One cell of one predator species' scent (C5 FR13): how strong the mark is

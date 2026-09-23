@@ -93,6 +93,16 @@ pub(super) fn disease_legend(stack: &OverlayStack, sim: &Sim) -> Rows<'static> {
     ]))]
 }
 
+/// The S02k legend ramp: wearing ground on the heat ramp over the left half,
+/// climbing ground on the vegetation ramp over the right.
+pub(super) fn succession_ramp(t: f32) -> Color {
+    if t < 0.5 {
+        theme::heat(1.0 - 2.0 * t)
+    } else {
+        theme::veg(2.0 * t - 1.0)
+    }
+}
+
 /// The legend rows of one layer (S14 item 12): a ramp sample, the health
 /// bands, the region swatches, the disease counts, a ring note, or the dim
 /// `terrain and creatures only` for the None base.
@@ -111,6 +121,7 @@ pub fn layer_legend(layer: Layer, stack: &OverlayStack, sim: &Sim) -> Rows<'stat
             let color = sim.roster().color(stack.species);
             ramp_rows(&move |t| theme::species_ramp(color, t))
         }
+        Layer::Base(Base::Succession) => ramp_rows(&succession_ramp),
         Layer::Sense => vec![Box::new(Text::new(format!(" {} ring edge   tinted cells are in range", glyphs::RING)).style(theme::dim_text()))],
         Layer::Regions => region_legend(sim),
         Layer::Health => health_legend(),

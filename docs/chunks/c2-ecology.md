@@ -155,6 +155,125 @@ region is below `strained`, the line `! scarcity: N regions below forage line`.
 Header `day,biomass_total,veg_mean,water_cells,water_level,moisture_mean,seeds,drought_regions,
 veg_<region>×8,moist_<region>×8`, one row per sampled day (`--ticks 17280` → 720 rows).
 
+### FR12 Succession and trampling (2026-09-22)
+Plan: [succession-plan.md](../succession-plan.md). Animals change the map: prey traffic
+lowers the vegetation target (**trampling**) and a land cell's terrain climbs or wears one
+rung of the ladder `Dirt → GrassSparse → Grass → GrassDense → Forest` (**succession**).
+Sand, Marsh, Rock and water are never on the ladder; a `dried_from` cell is Sand and so is
+excluded; Dirt is the floor; Forest is the ceiling only where `cell.biome.allows_forest()`
+(tundra, steppe and desert stop at meadow). No worldgen, grazing, movement, cover or diet
+code changes: every consumer of `Terrain` reads it fresh.
+
+1. **Trampling** (step 3): `target = max_vegetation[terrain] × biome.vegetation_scale() ×
+   season_cap × min(1, moisture / 0.5) × (1 − trample_w × prey_pressure)`, clamped. Pure
+   arithmetic, no draw. `warm_up` sees no creature and is unchanged. Predator traffic is not
+   counted.
+2. **Two day counters per cell**, `Cell.thrive_days` and `Cell.wear_days` (`u16`, zero at
+   generation, not fed to the checksum). Every on-ladder cell is classified once a day in
+   sub-step **8b**, after the regrowth sites and before the series sample, with `target` the
+   untrampled target step 3 computed and `trampled = target × (1 − trample_w × pressure)`:
+   - **thriving** when the cell has a rung to climb into, `moisture ≥ climb_moisture[next]`,
+     `vegetation ≥ climb_veg × trampled` and `prey_pressure < trample_low`:
+     `thrive_days += 1`, `wear_days = 0`;
+   - **worn** when `vegetation < wear_veg × target` and `prey_pressure ≥ trample_high`:
+     `wear_days += 1`, `thrive_days = 0`;
+   - otherwise both counters fall by `relax_per_day` toward zero.
+   Wear needs pressure, so drought alone never wears a cell.
+3. **The flip**, in row-major order: a cell with `thrive_days ≥ climb_days[next]` and
+   `moisture ≥ climb_moisture[next]` rolls `rng.chance(flip_chance)` on the ecology stream and
+   on success climbs one rung; a cell above Dirt with `wear_days ≥ wear_days_needed` rolls the
+   same chance and drops one rung. On any flip both counters reset and
+   `vegetation = min(vegetation, max_vegetation[new])`; nothing else on the cell changes. The
+   roll is skipped entirely while `flip_chance == 0`, so the neutral overlay makes no draw.
+4. **Events.** One `Note` per region per day per direction: `Scrub is closing over <region>`
+   on the first climb, `Grazing wears <region> back` on the first drop. No new chip.
+5. **Series and CSV.** `Sample.forest_cells` and `Sample.bare_cells` (Dirt + Sand), the CSV
+   columns `forest_cells,bare_cells` at the end, `--summary` columns `forest_pct` and
+   `bare_pct` (shares of the land cells at the end of the run). `bench_c5` takes
+   `trample_w`, `flip_chance`, `climb_days_forest`, `wear_days` and `succession=off`.
+6. **Screens.** S02k succession overlay (a `Succession` base row on S14, see
+   [S02](../screens/s02-map-overlay.md)); the S06 Terrain composition table already lists
+   every terrain and starts moving; S01 look mode names the flipped cell.
+7. **`[succession]`** (`SuccessionParams`, after `territory`; save `VERSION = 21`):
+
+   | key | default | role |
+   |---|---:|---|
+   | `trample_w` | 0.25 | weight of `prey_pressure` against the vegetation target (the plan said 0.5; see the result) |
+   | `climb_veg` | 0.9 | vegetation ≥ this × today's trampled target counts as thriving |
+   | `wear_veg` | 0.5 | vegetation < this × the untrampled target counts as worn |
+   | `trample_low` | 0.10 | pressure below this allows thriving |
+   | `trample_high` | 0.30 | pressure at or above this allows wear |
+   | `relax_per_day` | 1 | counter decay on a day that is neither |
+   | `climb_days` | Sparse 60, Grass 90, Dense 120, Forest 360 | thriving days needed to climb *into* each rung |
+   | `climb_moisture` | Sparse 0.15, Grass 0.25, Dense 0.35, Forest 0.40 | cell moisture needed to climb *into* each rung |
+   | `wear_days_needed` | 45 | worn days needed to drop one rung |
+   | `flip_chance` | 0.10 | daily roll once a cell is ripe |
+
+   `trample_w = 0` and `flip_chance = 0` is the **neutral control**: the target is unchanged
+   to the bit and no draw is made, so the run is the pre-succession run.
+   `ecology::tests::neutral_succession_reproduces_the_old_checksum` pins the pre-FR12 value
+   `0xf9ea_eb02_3e27_c085` under it; the territory tripwire now applies both neutral
+   overlays and keeps pinning the pre-territory value. The default checksum was re-baselined
+   to `0x10cd_7594_03e3_d96c`.
+
+**Result (2026-09-22).** Six seeds, one, two and five years, the planned `trample_w = 0.5`
+(`on`) against the neutral overlay (`off`), plus `trample_w = 0.25` (`w25`), which became
+the default. End counts vole, hare, deer, fox, wolf, lynx; extinctions; forest and
+bare shares of the land.
+
+| seed | run | y1 counts | y1 ext | y1 forest / bare | y2 counts | y2 ext | y2 forest / bare | y5 counts | y5 ext | y5 forest / bare |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | on | 29, 18, 4, 5, 3, 0 | 1 | 19.1 / 18.5 | 1, 11, 1, 0, 0, 0 | 3 | 25.2 / 5.7 | 0, 62, 0, 0, 0, 0 | 5 | 52.0 / 5.5 |
+| 1 | w25 | 0, 48, 24, 6, 2, 1 | 1 | 19.1 / 19.8 | | | | 0, 108, 177, 0, 0, 0 | 4 | 32.0 / 10.1 |
+| 1 | off | 0, 65, 47, 15, 6, 0 | 2 | 19.1 / 27.9 | 0, 2, 41, 0, 0, 0 | 4 | 19.1 / 27.9 | 0, 0, 256, 0, 0, 0 | 5 | 19.1 / 27.9 |
+| 2 | on | 31, 22, 21, 0, 0, 0 | 3 | 18.8 / 17.8 | 0, 1, 10, 0, 0, 0 | 4 | 27.7 / 6.2 | 0, 0, 0, 0, 0, 0 | 6 | 59.5 / 5.2 |
+| 2 | w25 | 10, 1, 31, 0, 0, 0 | 3 | 19.1 / 12.4 | | | | 0, 0, 104, 0, 0, 0 | 5 | 45.7 / 7.5 |
+| 2 | off | 80, 101, 59, 0, 0, 0 | 3 | 19.1 / 20.6 | 16, 67, 65, 0, 0, 0 | 3 | 19.1 / 20.6 | 0, 13, 134, 0, 0, 0 | 4 | 19.1 / 20.6 |
+| 3 | on | 9, 202, 41, 11, 4, 3 | 0 | 17.8 / 23.6 | 0, 190, 22, 8, 1, 0 | 2 | 17.8 / 20.6 | 0, 206, 8, 0, 0, 0 | 4 | 19.9 / 19.5 |
+| 3 | w25 | 13, 129, 41, 14, 1, 2 | 0 | 18.5 / 19.9 | | | | 0, 43, 269, 0, 0, 0 | 4 | 16.0 / 21.1 |
+| 3 | off | 36, 189, 68, 8, 2, 1 | 0 | 19.0 / 21.2 | 0, 214, 100, 3, 1, 0 | 2 | 19.0 / 21.2 | 0, 162, 175, 0, 0, 0 | 4 | 19.0 / 21.2 |
+| 4 | on | 1, 163, 29, 24, 7, 3 | 0 | 18.0 / 29.8 | 0, 31, 45, 6, 0, 0 | 3 | 18.0 / 14.2 | 0, 0, 246, 0, 0, 0 | 5 | 19.4 / 13.8 |
+| 4 | w25 | 0, 227, 58, 19, 4, 3 | 1 | 16.6 / 33.8 | | | | 0, 96, 120, 0, 0, 0 | 4 | 16.0 / 27.1 |
+| 4 | off | 2, 185, 60, 28, 9, 3 | 0 | 19.1 / 25.2 | 0, 0, 49, 0, 8, 0 | 4 | 19.1 / 25.2 | 0, 0, 311, 0, 0, 0 | 5 | 19.1 / 25.2 |
+| 5 | on | 36, 87, 4, 2, 4, 3 | 0 | 19.3 / 21.6 | 20, 103, 0, 1, 1, 1 | 1 | 22.4 / 16.5 | 0, 270, 0, 0, 0, 0 | 5 | 30.7 / 19.0 |
+| 5 | w25 | 0, 80, 10, 12, 3, 2 | 1 | 19.1 / 21.4 | | | | 0, 0, 0, 0, 0, 0 | 6 | 62.9 / 5.0 |
+| 5 | off | 2, 128, 15, 19, 7, 3 | 0 | 19.4 / 22.6 | 0, 0, 1, 0, 0, 0 | 5 | 19.4 / 22.6 | 0, 0, 0, 0, 0, 0 | 6 | 19.4 / 22.6 |
+| 6 | on | 0, 12, 8, 32, 10, 4 | 1 | 15.2 / 46.4 | 0, 0, 0, 0, 0, 0 | 6 | 15.2 / 5.0 | 0, 0, 0, 0, 0, 0 | 6 | 50.7 / 5.0 |
+| 6 | w25 | 0, 24, 44, 39, 7, 4 | 1 | 14.8 / 41.7 | | | | 0, 0, 296, 0, 0, 0 | 5 | 9.7 / 25.6 |
+| 6 | off | 0, 12, 32, 41, 10, 5 | 1 | 18.9 / 28.0 | 0, 0, 4, 0, 0, 0 | 5 | 18.9 / 28.0 | 0, 0, 227, 0, 0, 0 | 5 | 18.9 / 28.0 |
+
+- **The neutral run is today's run.** The tripwire holds the pre-FR12 checksum exactly, and
+  the `off` rows' terrain shares never move from generation (drought's sand aside).
+- **The map moves.** Claim met on 6 of 6 seeds: by year five forest or bare share differs
+  from the neutral run by at least two points of the land everywhere, and by far more where
+  the grazers are gone (forest 50–60 % on seeds 1, 2 and 6, bare down to 5 %). An emptied
+  world reforests in about two years from meadow and about four from dirt (the `climb_days`
+  ladder sums to 630 thriving days). Seed 42 differs from its neutral twin on 863 cells
+  after one year and 2 482 after two.
+- **Trampling hits the herds.** Deer are lower at year one on every seed under defaults
+  (4 vs 47, 21 vs 59, 41 vs 68, 29 vs 60, 4 vs 15, 8 vs 32), and by year five they are gone
+  on seeds 1, 2 and 6 where the neutral run keeps 134–256. Hares are lower on four seeds at
+  year one. The cause is the C8 herd-grazing rule: a herd stacks on one cell, `prey_pressure`
+  saturates within a few ticks, and the herd's own cells lose half their cap. On seed 1 the
+  year's starvation deaths are 345 with trampling against 131 without (102 with succession
+  but no trampling); on seed 3 they are 18 against 377, because fewer deer are born. Claim 3
+  (starvation not above the neutral run by more than the seed-to-seed spread of 246) holds,
+  but the deer decline was the balance cost of the planned weight. At `trample_w = 0.25`
+  the deer loss halves at year one (24, 31, 41, 58, 10, 44) and the herds survive to year
+  five on five of six seeds (177, 104, 269, 120, 0, 296) with year-five extinctions 28
+  against 31 at 0.5 and 29 neutral, while the map still moves (forest 32 %, 46 %, 63 % on
+  the emptied seeds, 10–16 % where the deer stayed and grazed it back). **The default was
+  set to 0.25** on that read; it does nothing for voles.
+- **Voles: the hoped-for result, on some seeds.** Year-one voles 29 vs 0 (seed 1) and 36
+  vs 2 (seed 5), worse on seeds 2 and 3 (31 vs 80, 9 vs 36), flat on 4 and 6. Year-two
+  extinctions 19 with succession against 23 without; year-five 31 against 29. The C5
+  collapse is unchanged: every predator is gone by year five under both conditions.
+- **Cost.** Ecology step 0.0196 s per 1 000 ticks against 0.0162 (seed 1, 30 000 ticks),
+  under 1 % of the step either way; not recorded in `PERFORMANCE.md`.
+- **Follow-ups.** A herd that rotates off trampled ground (the graze score already prefers
+  the best cell in sense range, but the C8 herd rule overrides it); `climb_days[Forest]`
+  if reforestation should take longer than two years; the rest of the plant brainstorm.
+
 ## Acceptance criteria
 - Seed 42, default params, 720 days headless: `veg_mean` summer maximum ÷ winter minimum
   in year 2 is between 1.4 and 3.0 (the model's structural value is ≈ 1/season_cap.winter ≈ 2.2); no cell leaves 0..1; a Dry-rainfall world has ≥ 1
@@ -186,12 +305,21 @@ veg_<region>×8,moist_<region>×8`, one row per sampled day (`--ticks 17280` →
 - `ui::tests::{s07_chip_sets, s06_status_rule}`
 - `tests/ecology.rs::{yearly_cycle_ratio, dry_world_has_drought, wet_world_has_none,
   daily_update_is_deterministic, csv_row_count}`
+- FR12: `sim::params::succession::tests::*`, `sim::world::tests::succession_ladder_walks_both_ways_and_stops_off_it`,
+  `sim::ecology::tests::{trampled_cell_grows_toward_a_lower_target, thriving_meadow_climbs_after_climb_days,
+  worn_grass_drops_after_wear_days, drought_alone_never_wears, relax_decays_both_counters,
+  forest_needs_a_wooded_biome, climb_needs_moisture, sand_marsh_rock_and_water_never_flip,
+  one_note_per_region_per_day_per_direction, neutral_succession_reproduces_the_old_checksum}`,
+  `ui::screens::s01_map::tests::s02k_succession_overlay_render`,
+  `tests/ecology.rs::{ungrazed_meadows_close_into_forest, grazed_ground_wears_and_recovers}`
 
 ## Decisions made here
 - Vegetation is continuous 0..1 per cell with a seasonal target; the map glyph still comes
   from the terrain type, the overlay from the value.
-- Terrain changes only through drought (shallow water ⇄ sand); grazing does not change
-  terrain (C3 may revisit).
+- ~~Terrain changes only through drought (shallow water ⇄ sand); grazing does not change
+  terrain (C3 may revisit).~~ *Revisited 2026-09-22: FR12 lets grazing pressure and its
+  absence move a land cell one rung along the dirt-to-forest ladder; drought's rule is
+  unchanged and the two never touch the same cell.*
 - Rain is per region per day. Within-region moisture therefore homogenises after year 1
   (the S02c overlay becomes eight flat blocks plus a shore halo); if the user wants texture at
   the checkpoint, the agreed extension is `Cell.rain_factor = 0.5 + base_moisture` multiplying

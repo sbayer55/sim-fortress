@@ -69,7 +69,14 @@ fn checksum_is_fnv_stable() {
     // creature stream, so predator trajectories and every later draw move.
     // `behavior::tests_territory::neutral_territory_reproduces_the_old_checksum`
     // still pins the previous value under the neutral overlay.
-    assert_eq!(a.checksum(), 0xf9ea_eb02_3e27_c085);
+    // Re-baselined for succession and trampling (C2 FR12): prey traffic
+    // scales the vegetation target, so every grazed cell's biomass moves
+    // from the first day, and ripe cells roll a flip on the ecology stream,
+    // so rain and regrowth draws shift. Deliberate. (Re-baselined once more
+    // when `trample_w` went from the planned 0.5 to 0.25 on the sweep's evidence.)
+    // `ecology::tests::neutral_succession_reproduces_the_old_checksum`
+    // pins the previous value under the succession-neutral overlay.
+    assert_eq!(a.checksum(), 0x10cd_7594_03e3_d96c);
 }
 
 #[test]

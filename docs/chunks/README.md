@@ -11,7 +11,7 @@ checkpoint demo script, tests and the decisions it depends on.
 | Chunk | Title | Checkpoint: what the user can observe | Doc |
 |-------|-------|----------------------------------------|-----|
 | C1 | Simulation core, world generation and app shell | Generate worlds from a seed, watch the clock, seasons and day/night pass over a living-free map; pause, speed, help, controls | [c1-core-and-shell.md](c1-core-and-shell.md) |
-| C2 | Vegetation, water and seasons | Vegetation grows and dies back with the seasons, droughts dry water cells; overlays, ecology screen, event log and charts show it | [c2-ecology.md](c2-ecology.md) |
+| C2 | Vegetation, water and seasons | Vegetation grows and dies back with the seasons, droughts dry water cells; overlays, ecology screen, event log and charts show it; since FR12 (2026-09-22) grazing wears meadow to dirt and untrodden ground closes into forest, visible on S02k and the S06 terrain table | [c2-ecology.md](c2-ecology.md) |
 | C3 | Herbivores: needs, movement, perception, death | Prey creatures wander, graze, drink, rest, age and die; look, follow, inspect, zoom | [c3-herbivores.md](c3-herbivores.md) |
 | C4 | Reproduction, genetics and evolution | Populations sustain themselves, traits drift, species browser and lineage tree fill in | [c4-evolution.md](c4-evolution.md) |
 | C5 | Predators, predation and extinction | Predator–prey oscillations, sense overlay, hunt stats, phase plot, extinction alerts, migration | [c5-predators.md](c5-predators.md) |

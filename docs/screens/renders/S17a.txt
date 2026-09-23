@@ -1,20 +1,20 @@
  S17a  Hunt Watch - lanes with details                                                                                                                     
-╔ Chase Lanes · Scoreboard · hunter | ribbon | prey ═══════════════════════════════════════════════════════════ 1 hunting · 1 tracked · Y2 D1 06:00 ☼ day ╗
-║» Fenrir w#953                        │             │                                                            ┤ │Dill d#450                           ║
-║  energy [█████████████░░░░░░░░░░░░]  │         ■─►─│                                                            ┤ │energy [████████████░░░░░░░░░░░░░]   ║
-║  need   DESPERATE                    │             │                                                            ┤ │level  CHALLENGE                     ║
+╔ Chase Lanes · Scoreboard · hunter | ribbon | prey ═══════════════════════════════════════════════════════════ 2 hunting · 3 tracked · Y2 D1 06:00 ☼ day ╗
+║» Dusk w#829                          │             │→─                                                          ┤ │no prey                              ║
+║  energy [██████████████████░░░░░░░]  │             │                                                            ┤ │last: Hazel h#593                    ║
+║  need   DESPERATE                    │             │       hunt cooldown: 1 h before Dusk can hunt again        ┤ │escaped 01:00                        ║
+║  state  COOLDOWN 1h                  │             │                                                            ┤ │hunt cooldown: 1 h before Dusk can   ║
+║  where  Lower Forest                 │             │                    10                  20                  ┤ │hunt again                           ║
+║  Sable w#1795                        │           ►─│                                                            ┤ │Tansy h#1118                         ║
+║  energy [█████████████████████████]  │             │                                                            ┤ │energy [███████████████░░░░░░░░░░]   ║
+║  need   HUNGRY                       │             │                                                            ┤ │level  FAIR CHASE                    ║
 ║  state  STALK                        │             │                                                            ┤ │goal   fleeing                       ║
-║  where  Southern Savanna             │             │                    10                  20                  ┤ │gap    7  W······D                   ║
-║  row 2 · free                                                                                                                                           ║
-║                                                                                                                                                         ║
-║                                                                                                                                                         ║
-║                                                                                                                                                         ║
-║                                                                                                                                                         ║
-║  row 3 · free                                                                                                                                           ║
-║                                                                                                                                                         ║
-║                                                                                                                                                         ║
-║                                                                                                                                                         ║
-║                                                                                                                                                         ║
+║  where  Western Forest               │             │                    10                  20                  ┤ │gap    10  W·········                ║
+║  Ember w#1805                        │             │                                                            ┤ │Tansy h#1175                         ║
+║  energy [█████████████████████████]  │             │                                                            ┤ │energy [██████████████████░░░░░░░]   ║
+║  need   IN NEED                      │             │                                                            ┤ │level  FAIR CHASE                    ║
+║  state  STALK                        │           ►─│                                                            ┤ │goal   wary                          ║
+║  where  Northern Tundra              │             │                    10                  20                  ┤ │gap    4  W···H                      ║
 ║  row 4 · free                                                                                                                                           ║
 ║                                                                                                                                                         ║
 ║                                                                                                                                                         ║
@@ -25,19 +25,19 @@
 ║                                                                                                                                                         ║
 ║                                                                                                                                                         ║
 ║                                                                                                                                                         ║
-║─ Details · Fenrir w#953 ► Dill d#450 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────║
-║  Hunter                                             Prey                                              Odds at contact 45%                               ║
-║  Fenrir w#953  wolf adult ♂                         Dill d#450  deer adult ♀                          ██████████████████████│▒▒▒▒▒▒▒▒░░░░░░░░░░░░░░░░░░ ║
-║  hunger [██████████████████]   100% DESPERATE       speed edge: slower by .04 (.69 vs .72)            base +.35 · speed +.04 · aggression +.24 · prey   ║
-║  speed .72  aggression .80  sense 8 cells           ground: Eastern Forest, sparse grass · cover 0.6  size -.18 = 45%                                   ║
-║  kills 21 of 45 attempts (47%) · avg chase 2,       x camo .40 = .24 vs sense 8: seen                 escape by gap 86% · clock 0% · legs 0%            ║
-║  longest 5 (Y1)                                     record: escaped 20 of 21 chases · size .89        ─ Play by play ────────────────────────────────── ║
-║  last 12 · · ■ ■ ■ · · ■ · ■ · ■  6 kills           stamina: 20 flight ticks vs a 30-tick clock:       -1 Fenrir picks out Dill at 7 cells in Southern  ║
-║  last kill: prey #474, 15 days ago, Northern        tiring                                                Savanna; it has not noticed                   ║
-║  Forest                                             challenge: CHALLENGE at 45% odds                  now Dill sees Fenrir and bolts                    ║
-║  hunting alone: no pack bonus                       kin: 5 nearby                                     now Dill keeps to the sparse grass                ║
-║  reserves: 43 chase ticks in the legs               goal: fleeing, 8 cells at 2x energy cost                                                            ║
-║  other prey in range: 11 · starvation is days away                                                                                                      ║
+║─ Details · Dusk w#829 · cooldown 1h ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────║
+║  Hunter                                             Last prey                                         Last hunt                                         ║
+║  Dusk w#829  wolf adult ♀                           Hazel h#593  hare adult ♀                         the prey won; no chase running                    ║
+║  hunger [██████████████████]   100% DESPERATE       speed edge: faster by .02 (.85 vs .82)            ─ Play by play ────────────────────────────────── ║
+║  speed .82  aggression .67  sense 8 cells           ground: Lower Forest, grass · cover 0.8 x camo     -5 Dusk is already on Hazel: 0 cells, 0 ticks    ║
+║  kills 23 of 41 attempts (56%) · avg chase 1,       .55 = .44 vs sense 8: seen                            on the clock                                  ║
+║  longest 5 (Y1)                                     record: escaped 33 of 34 chases · size .24         -5 CONTACT: Dusk lunges and misses; Hazel        ║
+║  last 12 · · ■ · · · · ■ ■ ■ · ■  5 kills           outcome: escaped at contact 01:00                     breaks free                                   ║
+║  last kill: prey #930, 9 days ago, Lower Forest     kin: 4 nearby                                      -4 Hazel flees 8 cells; Dusk gives up for 6      ║
+║  hunting alone: no pack bonus                       goal: fleeing; back to its day                        hours                                         ║
+║  reserves: 60 chase ticks in the legs                                                                 now hunt cooldown: 1 h before Dusk can hunt       ║
+║  other prey in range: 4 · starvation is days away                                                         again                                         ║
+║                                                                                                                                                         ║
 ║                                                                                                                                                         ║
 ║                                                                                                                                                         ║
 ║  key: ribbon: the rope marker per chase tick, ESCAPE top, KILL bottom, ┤ the clock out; grey = stalk · ♦ pinned: row held                               ║

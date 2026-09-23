@@ -225,7 +225,7 @@ fn s02i_parasite_ramp_and_cells() {
     // The ramp and the cell shading.
     assert_eq!(theme::parasite(0.5), theme::WARN);
     assert_eq!(theme::parasite(1.0), theme::BAD);
-    let cell = |terrain: Terrain, load: f32| Cell { terrain, biome: crate::sim::world::Biome::Grassland, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: load };
+    let cell = |terrain: Terrain, load: f32| Cell { terrain, biome: crate::sim::world::Biome::Grassland, elevation: 0.5, moisture: 0.5, temperature: 0.5, vegetation: 0.5, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: load, thrive_days: 0, wear_days: 0 };
     let (g, fg, _) = map::parasite_cell(&cell(Terrain::Dirt, 0.9));
     assert_eq!((g, fg), (glyphs::shade(0.9), theme::parasite(0.9)));
     assert_eq!(map::parasite_cell(&cell(Terrain::Dirt, 0.0)).0, glyphs::DIRT, "an empty shade shows the dirt glyph");
@@ -406,4 +406,50 @@ fn s02j_scent_overlay_render() {
     screen.handle_key(KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE), &mut app);
     assert_eq!(app.overlay.species, crate::sim::SpeciesId(4));
     assert_eq!(app.overlay.base, Base::Scent);
+}
+
+#[test]
+fn s02k_succession_overlay_render() {
+    // C2 FR12: a climbing cell in view is shaded on the vegetation ramp and a
+    // ripe one carries the up arrow; the sidebar reads the tallies.
+    let mut sim = Sim::new(7, Params::default());
+    let w = sim.world.width();
+    let need = sim.params.succession.climb_days[&Terrain::GrassDense];
+    let mut picked = Vec::new();
+    for i in 0..sim.world.cells.len() {
+        let (x, y) = (i % w, i.div_euclid(w));
+        if sim.world.cells[i].terrain == Terrain::Grass && x < 110 && y < 40 {
+            picked.push((x, y));
+            if picked.len() == 2 {
+                break;
+            }
+        }
+    }
+    let [(ax, ay), (bx, by)] = picked[..] else { panic!("two grassland cells in the viewport") };
+    sim.world.cells[ay * w + ax].thrive_days = crate::cast!(need.div_euclid(2) => u16);
+    sim.world.cells[by * w + bx].thrive_days = crate::cast!(need => u16);
+    sim.world.cells[by * w + bx].biome = crate::sim::world::Biome::Grassland;
+
+    let mut app = AppState::new(Params::default());
+    app.sim = Some(sim);
+    app.overlay = OverlayStack { base: Base::Succession, ..OverlayStack::PLAIN };
+    let screen = WorldMap::new("Test".into());
+    let buf = draw(&screen, &app);
+    assert!(row_text(&buf, 0).contains("overlay: succession"), "{}", row_text(&buf, 0));
+    let sim = app.sim.as_ref().unwrap();
+    let free = |x: usize, y: usize| !sim.creatures.living().any(|c| (c.x, c.y) == (x, y));
+    if free(ax, ay) {
+        let cell = &buf[(crate::cast!(ax => u16) + 1, crate::cast!(ay => u16) + 1)];
+        assert_eq!(cell.fg, theme::veg(0.5), "half way to the next rung is shaded half way up the vegetation ramp");
+    }
+    if free(bx, by) {
+        let cell = &buf[(crate::cast!(bx => u16) + 1, crate::cast!(by => u16) + 1)];
+        assert_eq!(cell.symbol(), glyphs::UP.to_string(), "a ripe cell carries the up arrow");
+    }
+    let side: Vec<String> = (1..41).map(|y| row_text(&buf, y).chars().skip(112).collect::<String>()).collect();
+    assert!(side.iter().any(|l| l.contains("Succession")), "{side:?}");
+    assert!(side.iter().any(|l| l.contains("By region")));
+    assert!(side.iter().any(|l| l.contains("climbing") && l.contains("wearing")), "{side:?}");
+    assert!(side.iter().any(|l| l.contains("forest") && l.contains("bare")), "{side:?}");
+    assert_stack_section(&side, &["1. Succession (base)"]);
 }

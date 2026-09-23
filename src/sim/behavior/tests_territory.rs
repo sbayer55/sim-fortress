@@ -353,10 +353,16 @@ fn mutual_border_challenge_resolves_once() {
 /// The neutral overlay switches every part of the mechanic off, so a run
 /// under it is bit for bit the pre-territory run: the checksum that
 /// `sim::tests::checksum_is_fnv_stable` pinned before FR13 landed.
+/// Succession (C2 FR12) shipped after territory and is on by default, so
+/// its neutral overlay is applied too: the claim is "with both mechanisms
+/// off, the run is the pre-territory run". Its own tripwire,
+/// `ecology::tests::neutral_succession_reproduces_the_old_checksum`, pins
+/// the value between the two.
 #[test]
 fn neutral_territory_reproduces_the_old_checksum() {
     let mut p = Params::default();
     p.territory.neutral();
+    p.succession.neutral();
     let mut sim = Sim::new(7, p);
     for _ in 0..8640 {
         sim.step();

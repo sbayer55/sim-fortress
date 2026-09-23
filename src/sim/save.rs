@@ -42,8 +42,10 @@ pub const MAGIC: [u8; 4] = *b"SIMF";
 /// predator dynasties (S16 Top Dynasties) and the per-creature droughts and
 /// winters survived tallies; version 19 added the hunt traces (`Sim.hunts`, one per
 /// predator that has hunted, for S17 Hunt Watch); version 20 added the player's
-/// names: `Creature::nickname`, `LineageNode::nickname` and `Dynasty::name`.
-pub const VERSION: u16 = 20;
+/// names: `Creature::nickname`, `LineageNode::nickname` and `Dynasty::name`;
+/// version 21 added `Params.succession` and the per-cell `thrive_days` /
+/// `wear_days` counters (C2 FR12 succession and trampling).
+pub const VERSION: u16 = 21;
 /// Padding code used to fill a title-screen terrain strip out to 120 columns.
 pub const BLANK_TERRAIN: u8 = u8::MAX;
 

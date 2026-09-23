@@ -294,6 +294,9 @@ pub struct Sample {
     pub carcasses: usize,
     pub drought_regions: usize,
     pub drought_flags: [bool; 8],
+    /// C2 FR12: forest cells and bare (dirt + sand) cells, the succession tally.
+    pub forest_cells: usize,
+    pub bare_cells: usize,
     /// Mean vegetation over land cells, per region.
     pub region_veg: [f32; 8],
     /// Mean moisture over all cells (water = 1.0), per region.
@@ -419,6 +422,8 @@ impl Series {
         for i in 0..8 {
             let _ = write!(out, ",active_p{i}");
         }
+        // C2 FR12: the succession tally.
+        out.push_str(",forest_cells,bare_cells");
         out.push('\n');
         out
     }
@@ -464,6 +469,7 @@ impl Series {
         for i in 0..8 {
             let _ = write!(out, ",{}", s.active_by_pathogen[i]);
         }
+        let _ = write!(out, ",{},{}", s.forest_cells, s.bare_cells);
         out.push('\n');
     }
 

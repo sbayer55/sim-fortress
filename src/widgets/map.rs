@@ -18,7 +18,7 @@ mod palette;
 pub mod stack;
 
 pub use labels::region_label_origin;
-pub use overlay::{condition_color, density_cell, density_field, disease_tint, overlay_cell, parasite_cell, parasite_tint};
+pub use overlay::{condition_color, density_cell, density_field, disease_tint, overlay_cell, parasite_cell, parasite_tint, succession_cell, SuccessionScale};
 pub use palette::{legend, terrain_base, terrain_cell, terrain_code_cell, world_cell};
 pub use stack::{Base, Disease, Layer, OverlayStack};
 
@@ -69,6 +69,9 @@ pub struct MapOptions {
     /// sim (see `disease_tint` / `parasite_tint`), Disease first when both are
     /// on (S14 item 17); a living creature with no entry draws as usual.
     pub creature_tint: Option<HashMap<CreatureId, (Color, bool)>>,
+    /// The `[succession]` day counts the S02k base normalises against; the
+    /// default (all zero) paints every cell as neither climbing nor wearing.
+    pub succession: SuccessionScale,
 }
 
 impl Default for MapOptions {
@@ -85,6 +88,7 @@ impl Default for MapOptions {
             selected_region: None,
             species_color: theme::TEXT,
             creature_tint: None,
+            succession: SuccessionScale::default(),
         }
     }
 }
@@ -130,8 +134,10 @@ pub fn render(buf: &mut Buffer, area: Rect, source: &dyn MapSource, opts: &MapOp
         Base::Scent => Some((stack.species, opts.species_color, overlay::scent_field(world, stack.species))),
         _ => None,
     };
+    // The succession field (S02k), signed: climbing above zero, wearing below.
+    let succession = (stack.base == Base::Succession).then(|| overlay::succession_field(world, &opts.succession));
 
-    draw_terrain(buf, area, world, opts, density.as_ref());
+    draw_terrain(buf, area, world, opts, density.as_ref(), succession.as_deref());
 
     // Region tint (under everything else).
     if stack.regions {
@@ -187,22 +193,25 @@ fn put_cell(buf: &mut Buffer, area: Rect, ox: usize, oy: usize, wx: usize, wy: u
 }
 
 /// The glyph and colours of one cell before the marks: the base heatmap
-/// (S02a/b/c/f/i rules), or the terrain.
-fn base_cell(world: &World, wx: usize, wy: usize, opts: &MapOptions, density: Option<&(SpeciesId, Color, Vec<f32>)>) -> (char, Color, Color) {
+/// (S02a/b/c/f/i/k rules), or the terrain.
+fn base_cell(world: &World, wx: usize, wy: usize, opts: &MapOptions, density: Option<&(SpeciesId, Color, Vec<f32>)>, succession: Option<&[f32]>) -> (char, Color, Color) {
     let cell = world.cell(wx, wy);
+    if let Some(field) = succession {
+        return succession_cell(cell, field[wy * world.width() + wx]);
+    }
     match (density, opts.stack.base) {
         (Some((sp, color, field)), _) => density_cell(cell, field[wy * world.width() + wx], *sp, *color),
         (None, base @ (Base::Vegetation | Base::Pressure | Base::Moisture | Base::Parasites)) => overlay_cell(cell, base).unwrap_or_else(|| world_cell(world, wx, wy, opts.winter)),
         // Health and Disease over plain terrain draw the terrain without the
         // waterfall mark, as the single overlays did.
-        (None, Base::None | Base::Species | Base::Scent) if opts.stack.health || opts.stack.disease.is_on() => terrain_cell(cell, opts.winter),
-        (None, Base::None | Base::Species | Base::Scent) => world_cell(world, wx, wy, opts.winter),
+        (None, Base::None | Base::Species | Base::Scent | Base::Succession) if opts.stack.health || opts.stack.disease.is_on() => terrain_cell(cell, opts.winter),
+        (None, Base::None | Base::Species | Base::Scent | Base::Succession) => world_cell(world, wx, wy, opts.winter),
     }
 }
 
 /// The terrain / overlay layer under everything else: the base cell, then
 /// the Health dim (S02g item 19) and the Disease ground tint (S02h item 20).
-fn draw_terrain(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions, density: Option<&(SpeciesId, Color, Vec<f32>)>) {
+fn draw_terrain(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions, density: Option<&(SpeciesId, Color, Vec<f32>)>, succession: Option<&[f32]>) {
     let (ox, oy) = opts.origin;
     let dim = opts.stack.health || opts.stack.disease.is_on();
     let ground_tint = opts.stack.disease.is_on();
@@ -215,7 +224,7 @@ fn draw_terrain(buf: &mut Buffer, area: Rect, world: &World, opts: &MapOptions, 
                 c.set_style(Style::default().bg(theme::BG));
                 continue;
             }
-            let (g, mut fg, mut bg) = base_cell(world, wx, wy, opts, density);
+            let (g, mut fg, mut bg) = base_cell(world, wx, wy, opts, density, succession);
             if dim {
                 fg = theme::dim(fg, HEALTH_TERRAIN_DIM);
                 bg = theme::dim(bg, HEALTH_TERRAIN_DIM);

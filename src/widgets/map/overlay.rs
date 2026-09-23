@@ -1,4 +1,4 @@
-//! Per-cell and per-creature colour rules for the single overlays (S02a–i):
+//! Per-cell and per-creature colour rules for the single overlays (S02a–k):
 //! heatmap cells, the species-density field, and the health, disease and
 //! parasite creature tints. Moved verbatim from `map.rs`.
 
@@ -9,7 +9,9 @@ use crate::sim::species::SpeciesId;
 use crate::sim::world::{Cell, Terrain, World};
 use crate::{glyphs, theme};
 
-use super::{Base, MapCreature, DENSITY_CAP, DENSITY_RADIUS, HEALTHY_FADE, PARASITE_HEAVY, PARASITE_LIGHT};
+use crate::sim::params::SuccessionParams;
+
+use super::{terrain_base, Base, MapCreature, DENSITY_CAP, DENSITY_RADIUS, HEALTHY_FADE, PARASITE_HEAVY, PARASITE_LIGHT};
 
 /// Glyph and colors for a cell under a base heatmap (before creatures are
 /// drawn); `None` for the `None` and `Species` bases.
@@ -25,7 +27,7 @@ pub fn overlay_cell(cell: &Cell, base: Base) -> Option<(char, Color, Color)> {
             (t, theme::water(t))
         }
         Base::Parasites => return Some(parasite_cell(cell)),
-        Base::None | Base::Species | Base::Scent => return None,
+        Base::None | Base::Species | Base::Scent | Base::Succession => return None,
     };
     if cell.terrain == Terrain::DeepWater && base != Base::Moisture {
         return Some((glyphs::DEEP_WATER, theme::dim(theme::DEEP_WATER_FG, 0.4), theme::dim(theme::DEEP_WATER_BG, 0.4)));
@@ -159,3 +161,82 @@ pub fn parasite_tint(species: Color, load: f32) -> (Color, bool) {
         (theme::dim(species, HEALTHY_FADE), false)
     }
 }
+
+/// The day counts the S02k succession overlay normalises a cell's counters against.
+///
+/// A copy of the `[succession]` tables, so the widget never reads `Params`.
+/// A zero entry means "no rung to climb into".
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SuccessionScale {
+    /// Thriving days needed to climb *into* each terrain, by `terrain as usize`.
+    pub climb_days: [u32; Terrain::COUNT],
+    /// Worn days needed to drop one rung.
+    pub wear_days: u32,
+}
+
+impl From<&SuccessionParams> for SuccessionScale {
+    fn from(sp: &SuccessionParams) -> Self {
+        let mut climb_days = [0u32; Terrain::COUNT];
+        for (t, days) in &sp.climb_days {
+            climb_days[crate::cast!(*t => usize)] = *days;
+        }
+        Self { climb_days, wear_days: sp.wear_days_needed }
+    }
+}
+
+/// The S02k field: one value per cell, `+thrive_days / climb_days[next]` for
+/// a cell climbing, `−wear_days / wear_days` for one wearing, clamped to
+/// ±1, and 0 for ground that is neither or off the ladder.
+pub(super) fn succession_field(world: &World, scale: &SuccessionScale) -> Vec<f32> {
+    world
+        .cells
+        .iter()
+        .map(|c| {
+            if !c.terrain.on_ladder() {
+                return 0.0;
+            }
+            if c.thrive_days > 0 {
+                if let Some(next) = c.next_rung() {
+                    let need = scale.climb_days[crate::cast!(next => usize)];
+                    if need > 0 {
+                        return (f32::from(c.thrive_days) / crate::cast!(need => f32)).min(1.0);
+                    }
+                }
+            }
+            if c.wear_days > 0 && scale.wear_days > 0 && c.terrain.wear().is_some() {
+                return -(f32::from(c.wear_days) / crate::cast!(scale.wear_days => f32)).min(1.0);
+            }
+            0.0
+        })
+        .collect()
+}
+
+/// Glyph and colours for a cell under the succession overlay (S02k).
+///
+/// Given the field value `t`: climbing ground on the vegetation ramp, wearing
+/// ground on the heat ramp, an arrow once it is ripe to flip; ground that
+/// is neither, and ground off the ladder, keeps a dimmed terrain glyph.
+pub fn succession_cell(cell: &Cell, t: f32) -> (char, Color, Color) {
+    if cell.terrain == Terrain::DeepWater {
+        return (glyphs::DEEP_WATER, theme::dim(theme::DEEP_WATER_FG, 0.4), theme::dim(theme::DEEP_WATER_BG, 0.4));
+    }
+    if cell.terrain == Terrain::Rock {
+        return (glyphs::ROCK, theme::dim(theme::ROCK_FG, 0.5), theme::dim(theme::ROCK_BG, 0.5));
+    }
+    if t > 0.0 {
+        let c = theme::veg(t.min(1.0));
+        let g = if t >= 1.0 { glyphs::UP } else { glyphs::shade(t) };
+        let g = if g == ' ' { glyphs::DIRT } else { g };
+        return (g, c, theme::dim(c, 0.75));
+    }
+    if t < 0.0 {
+        let c = theme::heat((-t).min(1.0));
+        let g = if t <= -1.0 { glyphs::DOWN } else { glyphs::shade(-t) };
+        let g = if g == ' ' { glyphs::DIRT } else { g };
+        return (g, c, theme::dim(c, 0.75));
+    }
+    let (g, fg, bg) = terrain_base(cell.terrain, false);
+    let fade = if cell.terrain.on_ladder() { 0.6 } else { 0.45 };
+    (g, theme::dim(fg, fade), theme::dim(bg, fade))
+}
+

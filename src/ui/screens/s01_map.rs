@@ -315,6 +315,7 @@ fn map_options(sim: &Sim, app: &AppState, stack: &OverlayStack, origin: (usize, 
             Disease::Off if stack.base == Base::Parasites => Some(parasite_tints(sim)),
             Disease::Off => None,
         },
+        succession: map::SuccessionScale::from(&sim.params.succession),
     }
 }
 
@@ -412,5 +413,6 @@ mod disease_overlay;
 mod parasites;
 mod regions;
 mod scent;
+mod succession;
 #[cfg(test)]
 mod tests;

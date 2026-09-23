@@ -167,7 +167,7 @@ fn totals(f: &mut Frame<'_>, area: Rect, sim: &crate::sim::Sim, world: &World) {
     let max = crate::cast!(counts.iter().copied().max().unwrap_or(1).max(1) => f32);
     for t in kinds {
         let n = counts[crate::cast!(t => usize)];
-        let (g, fg, _bg) = map::terrain_cell(&crate::sim::Cell { terrain: t, biome: crate::sim::world::Biome::Grassland, elevation: 0.0, moisture: 0.0, temperature: 0.5, vegetation: 0.0, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0 }, false);
+        let (g, fg, _bg) = map::terrain_cell(&crate::sim::Cell { terrain: t, biome: crate::sim::world::Biome::Grassland, elevation: 0.0, moisture: 0.0, temperature: 0.5, vegetation: 0.0, prey_pressure: 0.0, pred_pressure: 0.0, dried_from: None, parasite_load: 0.0, thrive_days: 0, wear_days: 0 }, false);
         let buf = f.buffer_mut();
         let y = inner.y + row;
         buf.set_stringn(inner.x + 1, y, format!("{g} "), 2, Style::default().fg(fg).bg(theme::PANEL_BG));

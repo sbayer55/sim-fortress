@@ -112,6 +112,8 @@ fn field_docs_complete() {
         "ecology.season_metabolism",
         "ecology.rain_chance_per_day",
         "diet.terrain_position",
+        "succession.climb_days",
+        "succession.climb_moisture",
     ];
     let mut leaves: Vec<String> = Vec::new();
     collect_leaves(&value, "", map_fields, &mut leaves);

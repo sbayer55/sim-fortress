@@ -370,6 +370,7 @@ impl EventLog {
                 selected_region: None,
                 species_color: theme::TEXT,
                 creature_tint: None,
+                succession: map::SuccessionScale::default(),
             };
             map::render(f.buffer_mut(), mini_inner, sim, &opts);
         }
