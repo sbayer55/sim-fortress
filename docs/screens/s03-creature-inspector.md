@@ -283,7 +283,7 @@ classDiagram
     `cousin`, `unrelated`).
 
 ### Status bar
-26. Key hints `[f] follow  [l] lineage  [Tab] next creature  [←→] panel  [↑↓] scroll
+26. Key hints `[f] follow  [l] lineage  [n] name  [Tab] next creature  [←→] panel  [↑↓] scroll
     [Esc] back`; right text
     `<name> <tag>  <clock label>`.
 
@@ -309,11 +309,25 @@ classDiagram
 |-------|---------------------------------------------------------|---------|
 | `f`   | follow this creature on the map                         | [S01e World Map, follow mode](s01-world-map.md) |
 | `l`   | open the family tree focused on this creature           | [S08 Lineage](s08-lineage.md) |
+| `n`   | name this creature (see *Naming* below)                 | rename modal |
 | `Tab` | inspect the next creature (see open questions for order); resets every panel's scroll | stays on S03 |
 | `← →` | move the focus (double border in `border_focus`) between the three panels | stays on S03 |
 | `↑ ↓` | scroll the focused panel one row; `PgUp` / `PgDn` a page; `Home` / `End` to the top / bottom | stays on S03 |
 | `Esc` | back to the map                                         | [S01 World Map](s01-world-map.md) |
 | `e`   | (hinted in the Life panel, not in the status bar) open the event log filtered to this creature | [S07 Event Log](s07-event-log.md) |
+
+### Naming
+`n` opens a 52×9 rename modal (`src/ui/screens/rename.rs`): the subject line
+(`Ash w#003 · Wolf`), a `Name [ … ]` text field seeded with the player's current name for
+it, and `Empty restores "<pool name>".` Enter keeps the name, `Del` empties the field, Esc
+cancels. While it is up it consumes every key, so Space and letters type rather than
+pause or switch screens. Names are printable ASCII (non-ASCII keys are dropped), runs of
+spaces collapse, at most 12 characters (`sim::naming::ANIMAL_NAME_MAX`); an empty name
+clears it back to the species name pool's. The name lives on `Creature::nickname` and the
+lineage node (save 20), so every screen, the log text written from then on and the
+S12 extinction record use it; lines already in the log keep the old name. It never
+changes the run: no RNG, not in the checksum. Renaming a predator founder re-labels its
+dynasty's founder too.
 
 `l` overrides nothing global; `f` is the same key the map uses for follow. `s g y w` keep
 their global meaning. For a corpse `f` has no live position to follow: it should either

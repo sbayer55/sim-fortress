@@ -42,4 +42,4 @@
 ║                                                                                                              ║║                                         ║
 ║                                                                                                              ║║ [f] follow on map  [l] lineage          ║
 ╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝╚═════════════════════════════════════════╝
- [←→] region  [↑↓] pick  [Tab] members  [s] species  [p] pin  [1-4] watch  [f] follow  [l] lineage  [Esc] back        W. Forest · Cinder line · dynasties  
+ [←→] region  [↑↓] pick  [Tab] members  [s] species  [p] pin  [n] name  [f] follow  [l] lineage  [Esc] back           W. Forest · Cinder line · dynasties  

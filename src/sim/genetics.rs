@@ -339,6 +339,7 @@ fn newborn(
                 contests_lost: 0,
                 droughts_survived: 0,
                 winters_survived: 0,
+                nickname: None,
             }
 }
 

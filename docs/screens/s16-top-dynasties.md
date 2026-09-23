@@ -107,7 +107,7 @@ Main panel, inner rows (inner row 0 is screen row 4, inner columns from the left
 ║                                                                                                              ║║                                         ║
 ║                                                                                                              ║║ [f] follow on map  [l] lineage          ║
 ╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════╝╚═════════════════════════════════════════╝
- [←→] region  [↑↓] pick  [Tab] members  [s] species  [p] pin  [1-4] watch  [f] follow  [l] lineage  [Esc] back        W. Forest · Cinder line · dynasties
+ [←→] region  [↑↓] pick  [Tab] members  [s] species  [p] pin  [n] name  [f] follow  [l] lineage  [Esc] back              W. Forest · Cinder line · dynasties
 
 ```
 *S16a: seed 7 after one year, region 1, its first line by kills, the dynasty list focused, nothing pinned. The 44-row harness shows the member rows the height leaves; two lines live in this one.*
@@ -259,13 +259,15 @@ best living animal of its species with a `│` marker at the species mean, and t
 | `1`–`4` | jump to that pin: its region, the line, and the member when the pin is an animal | — |
 | `f` | follow the sidebar's subject on the map | [S01e](s01-world-map.md) |
 | `l` | lineage of the sidebar's subject | [S08](s08-lineage.md) |
+| `n` | name the focused dynasty (list focus) or member (member focus): the rename modal of [S03](s03-creature-inspector.md#naming). A dynasty name is up to 20 characters and replaces `<Founder> line` everywhere the line is named; an empty name restores it | rename modal |
 | `Esc` | back to the screen S16 was opened from | [S01](s01-world-map.md) |
 
-`s` and `p` are consumed here (the global `s` Species Browser and `p` Controls are
+`s`, `p` and `n` are consumed here (the global `s` Species Browser and `p` Controls are
 reachable after `Esc`), as S04 consumes `s` for sort. Every other key falls through to the
 global table. The status bar reads `[←→] region  [↑↓] pick  [Tab] members  [s] species
-[p] pin  [1-4] watch  [f] follow  [l] lineage  [Esc] back`, with `<Region short> · <Line> ·
-dynasties|members` on the right.
+[p] pin  [n] name  [f] follow  [l] lineage  [Esc] back`, with `<Region short> · <Line> ·
+dynasties|members` on the right, the line cut to 16 cells. `1-4` is hinted in the Watch
+title only: the row has no room for it beside `n` and `Esc`.
 
 **Effects on other screens:**
 - `d` is added to the global table next to `t`.

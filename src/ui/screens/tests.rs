@@ -680,3 +680,13 @@ fn s09_species_counts_step_one_individual_at_a_time() {
     }
     assert_eq!(counts(&s)[last], 0, "counts clamp at zero");
 }
+
+#[test]
+fn s03_n_opens_the_rename_modal() {
+    let mut app = state();
+    let sim = Sim::new(1, Params::default());
+    let id = sim.creatures.living_ids()[0];
+    app.sim = Some(sim);
+    let mut s = s03_inspector::Inspector::new(id);
+    assert!(matches!(s.handle_key(key(KeyCode::Char('n')), &mut app), Action::Push(_)));
+}
