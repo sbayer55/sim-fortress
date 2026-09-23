@@ -81,7 +81,7 @@ fn d_toggles_the_details_panel_and_the_lane_count() {
     let mut s = HuntWatch::new();
     // Select the predator that is mid-hunt: the first lane is whoever was
     // tracked first, and the header reads `Prey` only for a live hunt.
-    s.selected = model::collect(app.sim.as_ref().unwrap(), &[]).iter().find(|v| v.status == Status::Hunting).map(model::HuntView::id);
+    s.selected = model::collect(app.sim.as_ref().unwrap(), &[]).iter().find(|v| v.status == Status::Hunting).map(HuntView::id);
     let rows = draw(&app, &s);
     assert!(rows.iter().any(|r| r.contains("Details ·")), "the details divider is drawn");
     assert!(rows.iter().any(|r| r.contains("Hunter") && r.contains("Prey")), "the details header");
